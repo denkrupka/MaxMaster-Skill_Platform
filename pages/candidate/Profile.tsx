@@ -102,22 +102,32 @@ export const CandidateProfilePage = () => {
 
         const updates: any = { 
             phone: formData.phone,
-            ...contractData // Include contract data in main save
+            ...contractData 
         };
         
+        // AUTO-UPDATE STATUS: Jeśli kandydat uzupełnia dane po prośbie HR, zmień status na "Przesłane"
+        if (currentUser.role === Role.CANDIDATE && (currentUser.status === UserStatus.DATA_REQUESTED || currentUser.status === UserStatus.OFFER_SENT)) {
+            updates.status = UserStatus.DATA_SUBMITTED;
+        }
+        
         updateUser(currentUser.id, updates);
-        logCandidateAction(currentUser.id, 'Zaktualizowano profil (Dane osobowe/kontaktowe)');
+        
+        const actionMsg = updates.status === UserStatus.DATA_SUBMITTED 
+            ? 'Przesłano kompletne dane do umowy (Status: Dane przesłane)' 
+            : 'Zaktualizowano profil (Dane osobowe/kontaktowe)';
+            
+        logCandidateAction(currentUser.id, actionMsg);
         
         // Notify HR about update
         const hrLink = currentUser.role === Role.EMPLOYEE ? '/hr/employees' : (currentUser.status === UserStatus.TRIAL ? '/hr/trial' : '/hr/candidates');
         triggerNotification(
             'status_change', 
             'Aktualizacja Danych', 
-            `Użytkownik ${currentUser.first_name} ${currentUser.last_name} zaktualizował swoje dane.`, 
+            `Użytkownik ${currentUser.first_name} ${currentUser.last_name} zaktualizował swoje dane osobowe.`, 
             hrLink
         );
 
-        setSuccessMsg('Dane zostały zapisane.');
+        setSuccessMsg(updates.status === UserStatus.DATA_SUBMITTED ? 'Dane zostały przesłane do działu HR.' : 'Dane zostały zapisane.');
         setTimeout(() => setSuccessMsg(''), 3000);
         setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
     };
@@ -162,20 +172,11 @@ export const CandidateProfilePage = () => {
                         </button>
                     )}
                 </div>
-                <div className="h-12 flex justify-center items-center gap-2 mt-2">
-                    {fileViewer.urls.map((_, idx) => (
-                        <div 
-                            key={idx} 
-                            className={`w-2 h-2 rounded-full ${idx === fileViewer.index ? 'bg-white' : 'bg-white/30'}`}
-                        />
-                    ))}
-                </div>
             </div>
         );
     };
 
-    // HISTORY TAB RENDERING
-    const history = state.candidateHistory.filter(h => h.candidate_id === currentUser.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const history = state.candidateHistory.filter(h => h.candidate_id === currentUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return (
         <div className="p-6 max-w-3xl mx-auto pb-24">
@@ -194,13 +195,11 @@ export const CandidateProfilePage = () => {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-slate-900">{currentUser.first_name} {currentUser.last_name}</h2>
-                        <p className="text-sm text-slate-500">Kandydat • {currentUser.email}</p>
+                        <p className="text-sm text-slate-500">Użytkownik • {currentUser.email}</p>
                     </div>
                  </div>
                  
                  <div className="p-8 space-y-6">
-                     
-                     {/* Contract Data Section - Visible if Requested or Submitted */}
                      {(isDataRequested || isDataSubmitted || currentUser.status === UserStatus.TRIAL || currentUser.status === UserStatus.ACTIVE) && (
                          <>
                             <div className="mb-6">
@@ -209,12 +208,11 @@ export const CandidateProfilePage = () => {
                                 </h3>
                                 
                                 <div className="space-y-6">
-                                    {/* Row 1 */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">STANOWISKO</label>
                                             <input 
-                                                className="w-full border p-2 rounded bg-slate-50 text-slate-600" 
+                                                className="w-full border p-2 rounded bg-slate-50 text-slate-600 font-medium" 
                                                 value={currentUser.target_position || '-'} 
                                                 disabled 
                                             />
@@ -226,14 +224,13 @@ export const CandidateProfilePage = () => {
                                                 value={contractData.pesel} 
                                                 onChange={handlePeselChange} 
                                                 maxLength={11} 
-                                                disabled={isDataSubmitted || (!!currentUser.pesel && currentUser.pesel.length > 0)} 
+                                                disabled={isDataSubmitted || (!!currentUser.pesel && currentUser.pesel.length > 10)} 
                                                 placeholder="XXXXXXXXXXX"
                                             />
-                                            {(!!currentUser.pesel && currentUser.pesel.length > 0) && <span className="text-[10px] text-slate-400">Edycja zablokowana</span>}
+                                            {(!!currentUser.pesel && currentUser.pesel.length > 10) && <span className="text-[10px] text-slate-400">Edycja zablokowana</span>}
                                         </div>
                                     </div>
 
-                                    {/* Row 2 */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">DATA URODZENIA</label>
@@ -248,7 +245,7 @@ export const CandidateProfilePage = () => {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">OBYWATELSTWO</label>
                                             <select 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.citizenship} 
                                                 onChange={e => setContractData({...contractData, citizenship: e.target.value})}
                                                 disabled={isDataSubmitted}
@@ -262,12 +259,11 @@ export const CandidateProfilePage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Row 3 */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">RODZAJ DOKUMENTU</label>
                                             <select 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.document_type} 
                                                 onChange={e => setContractData({...contractData, document_type: e.target.value})}
                                                 disabled={isDataSubmitted}
@@ -280,7 +276,7 @@ export const CandidateProfilePage = () => {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR DOKUMENTU</label>
                                             <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.document_number} 
                                                 onChange={e => setContractData({...contractData, document_number: e.target.value})}
                                                 disabled={isDataSubmitted} 
@@ -288,26 +284,22 @@ export const CandidateProfilePage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Address Header */}
                                     <div className="pt-4 pb-2 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">Adres Zamieszkania</div>
 
-                                    {/* Row 4 */}
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">ULICA</label>
-                                        <input 
-                                            className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
-                                            value={contractData.street} 
-                                            onChange={e => setContractData({...contractData, street: e.target.value})}
-                                            disabled={isDataSubmitted} 
-                                        />
-                                    </div>
-
-                                    {/* Row 5 */}
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">ULICA</label>
+                                            <input 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
+                                                value={contractData.street} 
+                                                onChange={e => setContractData({...contractData, street: e.target.value})}
+                                                disabled={isDataSubmitted} 
+                                            />
+                                        </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR DOMU</label>
                                             <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.house_number} 
                                                 onChange={e => setContractData({...contractData, house_number: e.target.value})}
                                                 disabled={isDataSubmitted} 
@@ -316,20 +308,16 @@ export const CandidateProfilePage = () => {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR LOKALU</label>
                                             <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.apartment_number} 
                                                 onChange={e => setContractData({...contractData, apartment_number: e.target.value})}
                                                 disabled={isDataSubmitted} 
                                             />
                                         </div>
-                                    </div>
-
-                                    {/* Row 6 */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">KOD POCZTOWY</label>
                                             <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.zip_code} 
                                                 onChange={handleZipCodeChange}
                                                 disabled={isDataSubmitted} 
@@ -339,7 +327,7 @@ export const CandidateProfilePage = () => {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MIASTO</label>
                                             <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" 
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
                                                 value={contractData.city} 
                                                 onChange={e => setContractData({...contractData, city: e.target.value})}
                                                 disabled={isDataSubmitted} 
@@ -347,14 +335,12 @@ export const CandidateProfilePage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Bank Header */}
                                     <div className="pt-4 pb-2 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">Bankowość</div>
 
-                                    {/* Row 7 */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR KONTA BANKOWEGO</label>
                                         <input 
-                                            className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-mono tracking-wide" 
+                                            className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-mono tracking-wide font-bold" 
                                             value={contractData.bank_account} 
                                             onChange={handleBankAccountChange}
                                             disabled={isDataSubmitted} 
@@ -368,16 +354,17 @@ export const CandidateProfilePage = () => {
 
                      <div className="border-t border-slate-100 my-6"></div>
 
-                     {/* Editable Fields */}
                      <div>
-                         <h3 className="font-bold text-slate-900 mb-4">Dane Kontaktowe i Bezpieczeństwo</h3>
+                         <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                             <Phone size={18} className="text-slate-400"/> Dane Kontaktowe i Bezpieczeństwo
+                         </h3>
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                              <div className="md:col-span-2">
                                 <label className="block text-sm font-bold text-slate-700 mb-1">Numer Telefonu</label>
                                 <div className="relative">
                                     <Phone size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"/>
                                     <input 
-                                        className="w-full border border-slate-300 rounded-lg p-3 pl-10 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full border border-slate-300 rounded-lg p-3 pl-10 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
                                         value={formData.phone}
                                         onChange={e => setFormData({...formData, phone: e.target.value})}
                                         placeholder="+48 000 000 000"
@@ -417,13 +404,12 @@ export const CandidateProfilePage = () => {
                  </div>
 
                  <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-end">
-                     <Button onClick={handleSave}>
+                     <Button onClick={handleSave} className="shadow-lg shadow-blue-500/20 px-8 py-2.5 h-12">
                          <Save size={18} className="mr-2"/> Zapisz Zmiany
                      </Button>
                  </div>
              </div>
 
-             {/* History Section */}
              <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                  <div className="p-6 border-b border-slate-100 bg-slate-50">
                      <h3 className="font-bold text-slate-900 text-lg">Historia Aktywności</h3>
@@ -433,30 +419,16 @@ export const CandidateProfilePage = () => {
                         {history.map(h => {
                             let typeBadge = null;
                             const lowerAction = h.action.toLowerCase();
-                            
-                            // Determine type badge
-                            if (lowerAction.includes('test')) {
-                                typeBadge = <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200 uppercase font-bold ml-2">Teoria</span>;
-                            } else if (lowerAction.includes('praktyk') || lowerAction.includes('weryfikacj')) {
-                                typeBadge = <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200 uppercase font-bold ml-2">Praktyka</span>;
-                            }
-
-                            // Determine if negative (rejected/failed)
+                            if (lowerAction.includes('test')) typeBadge = <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200 uppercase font-bold ml-2">Teoria</span>;
+                            else if (lowerAction.includes('praktyk') || lowerAction.includes('weryfikacj')) typeBadge = <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200 uppercase font-bold ml-2">Praktyka</span>;
                             const isNegative = lowerAction.includes('odrzucono') || lowerAction.includes('niezaliczony') || lowerAction.includes('failed') || lowerAction.includes('błąd');
-                            
                             return (
                                 <div key={h.id} className={`flex gap-4 p-3 border-b border-slate-100 last:border-0 rounded-lg transition-colors ${isNegative ? 'bg-red-50/50' : 'hover:bg-slate-50'}`}>
                                     <div className="text-slate-400 text-xs w-24 flex-shrink-0 pt-1">
-                                        <div className="font-mono">{new Date(h.date).toLocaleDateString()}</div>
-                                        <div className="font-mono">{new Date(h.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                        <div className="font-mono">{new Date(h.created_at).toLocaleDateString()}</div>
+                                        <div className="font-mono">{new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                                     </div>
-                                    <div>
-                                        <div className="flex items-center flex-wrap">
-                                            <span className={`text-sm font-medium ${isNegative ? 'text-red-700' : 'text-slate-900'}`}>{h.action}</span>
-                                            {typeBadge}
-                                        </div>
-                                        <div className="text-xs text-slate-500 mt-1">Użytkownik: <span className="font-semibold">{h.performed_by}</span></div>
-                                    </div>
+                                    <div><div className="flex items-center flex-wrap"><span className={`text-sm font-medium ${isNegative ? 'text-red-700' : 'text-slate-900'}`}>{h.action}</span>{typeBadge}</div><div className="text-xs text-slate-500 mt-1">Wykonał: <span className="font-semibold">{h.performed_by}</span></div></div>
                                 </div>
                             );
                         })}
@@ -464,7 +436,6 @@ export const CandidateProfilePage = () => {
                     </div>
                  </div>
              </div>
-
              {renderFileViewer()}
         </div>
     );

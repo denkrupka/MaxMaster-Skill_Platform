@@ -102,22 +102,27 @@ export const HRTrialPage = () => {
         setIsHireModalOpen(true);
     };
 
-    const confirmHire = () => {
+    const confirmHire = async () => {
         if (!hireConfig.user) return;
         
-        hireCandidate(
-            hireConfig.user.id, 
-            hireConfig.hiredDate, 
-            hireConfig.isIndefinite ? undefined : hireConfig.contractEndDate
-        );
+        try {
+            await hireCandidate(
+                hireConfig.user.id, 
+                hireConfig.hiredDate, 
+                hireConfig.isIndefinite ? undefined : hireConfig.contractEndDate
+            );
 
-        setIsHireModalOpen(false);
-        setSuccessModal({
-            isOpen: true,
-            title: 'Pracownik Zatrudniony',
-            message: `Pracownik ${hireConfig.user.first_name} ${hireConfig.user.last_name} został zatrudniony na stałe.`
-        });
-        setSelectedUser(null);
+            setIsHireModalOpen(false);
+            setSuccessModal({
+                isOpen: true,
+                title: 'Pracownik Zatrudniony',
+                message: `Pracownik ${hireConfig.user.first_name} ${hireConfig.user.last_name} został zatrudniony na stałe.`
+            });
+            setSelectedUser(null);
+        } catch (error) {
+            console.error("Error hiring employee:", error);
+            alert("Wystąpił błąd podczas zatrudniania pracownika.");
+        }
     };
 
     const handleFireClick = (user: User) => {
@@ -132,42 +137,47 @@ export const HRTrialPage = () => {
         setConfirmModal({ isOpen: true, type: 'pay_referral', user: referralUser });
     };
 
-    const executeConfirmation = () => {
+    const executeConfirmation = async () => {
         const { type, user } = confirmModal;
         if (!user || !type) return;
 
-        if (type === 'fire') {
-            // Move to Candidate Archive
-            updateUser(user.id, { 
-                status: UserStatus.REJECTED, 
-                role: Role.CANDIDATE 
-            });
-            logCandidateAction(user.id, 'Rozwiązano umowę w trakcie okresu próbnego (Archiwizacja)');
-            
-            // Trigger Notification
-            triggerNotification('termination', 'Rozwiązanie Umowy (Trial)', `Rozwiązano umowę z pracownikiem ${user.first_name} ${user.last_name} w trakcie okresu próbnego.`, '/hr/trial');
+        try {
+            if (type === 'fire') {
+                // Move to Candidate Archive or Inactive
+                await updateUser(user.id, { 
+                    status: UserStatus.INACTIVE, 
+                    role: Role.CANDIDATE 
+                });
+                await logCandidateAction(user.id, 'Rozwiązano umowę w trakcie okresu próbnego (Archiwizacja)');
+                
+                // Trigger Notification
+                triggerNotification('termination', 'Rozwiązanie Umowy (Trial)', `Rozwiązano umowę z pracownikiem ${user.first_name} ${user.last_name} w trakcie okresu próbnego.`, '/hr/trial');
 
-            setSuccessModal({
-                isOpen: true,
-                title: 'Umowa Rozwiązana',
-                message: `Pracownik ${user.first_name} ${user.last_name} został przeniesiony do archiwum kandydatów.`
-            });
-            setSelectedUser(null);
-        } else if (type === 'reminder') {
-            // Simulate sending reminder
-            logCandidateAction(user.id, `Wysłano przypomnienie o końcu okresu próbnego (Email: ${user.email})`);
-            setSuccessModal({
-                isOpen: true,
-                title: 'Przypomnienie Wysłane',
-                message: `Wysłano powiadomienie do ${user.email}.`
-            });
-        } else if (type === 'pay_referral') {
-            payReferralBonus(user.id);
-            setSuccessModal({
-                isOpen: true,
-                title: 'Bonus Wypłacony',
-                message: `Pomyślnie zarejestrowano wypłatę bonusu za polecenie.`
-            });
+                setSuccessModal({
+                    isOpen: true,
+                    title: 'Umowa Rozwiązana',
+                    message: `Pracownik ${user.first_name} ${user.last_name} został przeniesiony do archiwum kandydatów.`
+                });
+                setSelectedUser(null);
+            } else if (type === 'reminder') {
+                // Simulate sending reminder
+                await logCandidateAction(user.id, `Wysłano przypomnienie o końcu okresu próbnego (Email: ${user.email})`);
+                setSuccessModal({
+                    isOpen: true,
+                    title: 'Przypomnienie Wysłane',
+                    message: `Wysłano powiadomienie do ${user.email}.`
+                });
+            } else if (type === 'pay_referral') {
+                await payReferralBonus(user.id);
+                setSuccessModal({
+                    isOpen: true,
+                    title: 'Bonus Wypłacony',
+                    message: `Pomyślnie zarejestrowano wypłatę bonusu za polecenie.`
+                });
+            }
+        } catch (error) {
+            console.error("Action error:", error);
+            alert("Wystąpił błąd podczas wykonywania akcji.");
         }
         setConfirmModal({ isOpen: false, type: null, user: null });
     };
@@ -189,7 +199,7 @@ export const HRTrialPage = () => {
         }
     };
 
-    const saveEditUser = () => {
+    const saveEditUser = async () => {
         if (selectedUser) {
             const changes = [];
             if(selectedUser.first_name !== editFormData.first_name) changes.push(`Imię: ${selectedUser.first_name} -> ${editFormData.first_name}`);
@@ -204,35 +214,39 @@ export const HRTrialPage = () => {
                  changes.push(`Brygadzista: ${oldBrig ? oldBrig.first_name + ' ' + oldBrig.last_name : 'Brak'} -> ${newBrig ? newBrig.first_name + ' ' + newBrig.last_name : 'Brak'}`);
             }
 
-            updateUser(selectedUser.id, editFormData);
-            
-            // If brigadir changed
-            if (editFormData.assigned_brigadir_id !== selectedUser.assigned_brigadir_id && editFormData.assigned_brigadir_id) {
-                assignBrigadir(selectedUser.id, editFormData.assigned_brigadir_id);
-            }
+            try {
+                await updateUser(selectedUser.id, editFormData);
+                
+                // If brigadir changed
+                if (editFormData.assigned_brigadir_id !== selectedUser.assigned_brigadir_id && editFormData.assigned_brigadir_id) {
+                    assignBrigadir(selectedUser.id, editFormData.assigned_brigadir_id);
+                }
 
-            setSelectedUser({ ...selectedUser, ...editFormData } as User);
-            setIsEditModalOpen(false);
-            
-            if(changes.length > 0) {
-                 logCandidateAction(selectedUser.id, `Zaktualizowano dane pracownika (Trial): ${changes.join(', ')}`);
+                setSelectedUser({ ...selectedUser, ...editFormData } as User);
+                setIsEditModalOpen(false);
+                
+                if(changes.length > 0) {
+                     await logCandidateAction(selectedUser.id, `Zaktualizowano dane pracownika (Trial): ${changes.join(', ')}`);
+                }
+            } catch (error) {
+                alert("Błąd podczas zapisywania zmian.");
             }
         }
     };
 
-    const updateContractType = (type: ContractType) => {
+    const updateContractType = async (type: ContractType) => {
         if (selectedUser) {
-            updateUser(selectedUser.id, { contract_type: type });
-            logCandidateAction(selectedUser.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
+            await updateUser(selectedUser.id, { contract_type: type });
+            await logCandidateAction(selectedUser.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
             setSelectedUser({ ...selectedUser, contract_type: type } as User);
             setIsContractPopoverOpen(false);
         }
     };
 
-    const toggleStudentStatus = (isStudent: boolean) => {
+    const toggleStudentStatus = async (isStudent: boolean) => {
         if (selectedUser) {
-            updateUser(selectedUser.id, { is_student: isStudent });
-            logCandidateAction(selectedUser.id, `Zmiana statusu studenta: ${isStudent ? 'Tak' : 'Nie'}`);
+            await updateUser(selectedUser.id, { is_student: isStudent });
+            await logCandidateAction(selectedUser.id, `Zmiana statusu studenta: ${isStudent ? 'Tak' : 'Nie'}`);
             setSelectedUser({ ...selectedUser, is_student: isStudent } as User);
         }
     };
@@ -277,7 +291,7 @@ export const HRTrialPage = () => {
         setNewDocData(prev => ({ ...prev, files: prev.files.filter((_, i) => i !== index) }));
     };
 
-    const handleSaveDocument = () => {
+    const handleSaveDocument = async () => {
         if(!selectedUser) return;
         
         const selectedType = BONUS_DOCUMENT_TYPES.find(t => t.id === newDocData.typeId);
@@ -304,26 +318,30 @@ export const HRTrialPage = () => {
 
         if (!editingDocId) docPayload.bonus_value = bonus;
 
-        if (editingDocId) {
-            updateCandidateDocumentDetails(editingDocId, docPayload);
-        } else {
-            addCandidateDocument(selectedUser.id, {
-                skill_id: 'doc_generic',
-                status: SkillStatus.PENDING,
-                ...docPayload
-            });
+        try {
+            if (editingDocId) {
+                await updateCandidateDocumentDetails(editingDocId, docPayload);
+            } else {
+                await addCandidateDocument(selectedUser.id, {
+                    skill_id: 'doc_generic',
+                    status: SkillStatus.PENDING,
+                    ...docPayload
+                });
+            }
+            setIsDocModalOpen(false);
+        } catch (error) {
+            alert("Błąd podczas zapisywania dokumentu.");
         }
-        setIsDocModalOpen(false);
     };
 
-    const handleDocStatusChange = (docId: string, newStatus: SkillStatus) => {
-        updateUserSkillStatus(docId, newStatus);
+    const handleDocStatusChange = async (docId: string, newStatus: SkillStatus) => {
+        await updateUserSkillStatus(docId, newStatus);
         setStatusPopoverDocId(null);
     };
 
     const openFileViewer = (doc: any) => {
         const urls = doc.document_urls && doc.document_urls.length > 0 ? doc.document_urls : (doc.document_url ? [doc.document_url] : []);
-        setFileViewer({ isOpen: true, urls, title: doc.custom_name || 'Dokument', index: 0 });
+        setFileViewer({ isOpen: true, urls, title: doc.docName, index: 0 });
     };
 
     // --- Skills Logic ---
@@ -334,11 +352,11 @@ export const HRTrialPage = () => {
         }
     };
 
-    const changeSkillStatus = (skillId: string, newStatus: SkillStatus, reason?: string) => {
+    const changeSkillStatus = async (skillId: string, newStatus: SkillStatus, reason?: string) => {
         if (selectedUser) {
             const us = state.userSkills.find(us => us.user_id === selectedUser.id && us.skill_id === skillId);
             if (us) {
-                updateUserSkillStatus(us.id, newStatus, reason);
+                await updateUserSkillStatus(us.id, newStatus, reason);
             }
         }
         setStatusPopoverSkillId(null);
@@ -489,7 +507,7 @@ export const HRTrialPage = () => {
                             const isExpired = daysLeft <= 0;
 
                             return (
-                                <tr key={user.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedUser(user)}>
+                                <tr key={user.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleOpenDetail(user)}>
                                     <td className="px-6 py-4 font-medium text-slate-900">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
@@ -748,7 +766,7 @@ export const HRTrialPage = () => {
 
         return (
             <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl max-sm w-full p-6 animate-in fade-in zoom-in duration-200">
                      <div className="flex flex-col text-center">
                         <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto ${btnVariant === 'danger' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'} ${confirmModal.type === 'pay_referral' ? 'hidden' : ''}`}>
                             <AlertTriangle size={32} />
@@ -769,7 +787,7 @@ export const HRTrialPage = () => {
         if (!successModal.isOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-xl shadow-2xl max-sm w-full p-6 animate-in fade-in zoom-in duration-200">
                     <div className="flex flex-col items-center text-center"><div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-4"><CheckCircle size={32} /></div><h3 className="text-xl font-bold text-slate-900 mb-2">{successModal.title}</h3><p className="text-slate-500 mb-6">{successModal.message}</p><Button fullWidth onClick={() => setSuccessModal({ ...successModal, isOpen: false })}>OK</Button></div>
                 </div>
             </div>
@@ -780,7 +798,7 @@ export const HRTrialPage = () => {
         if (!resetModal.isOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+                <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6">
                     <div className="flex flex-col items-center text-center">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4"><RotateCcw size={24} /></div>
                         <h3 className="text-lg font-bold text-slate-900 mb-2">Resetuj Postęp</h3>
@@ -817,7 +835,7 @@ export const HRTrialPage = () => {
         const totalRateWithContract = salaryData.total + contractBonus + studentBonus;
 
         const docs = state.userSkills.filter(us => us.user_id === selectedUser.id && (state.skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT || us.skill_id.startsWith('doc_')));
-        const history = state.candidateHistory.filter(h => h.candidate_id === selectedUser.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const history = state.candidateHistory.filter(h => h.candidate_id === selectedUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         
         const relevantUserSkills = state.userSkills.filter(us => us.user_id === selectedUser.id && us.skill_id && !us.skill_id.startsWith('doc_'));
         
@@ -825,7 +843,6 @@ export const HRTrialPage = () => {
             const skill = state.skills.find(s => s.id === us.skill_id);
             if (!skill) return null;
             
-            // FIX: Correctly check pass rate for theory status
             const isTheoryPassed = us.theory_score !== undefined && us.theory_score >= (skill.required_pass_rate || 80);
             const theoryStatus = us.theory_score !== undefined 
                 ? (isTheoryPassed ? 'Zaliczona' : 'Niezaliczona') 
@@ -877,7 +894,6 @@ export const HRTrialPage = () => {
                     <ArrowRight className="transform rotate-180 mr-2" size={18} /> Wróć do listy
                 </Button>
 
-                {/* ... (Header block remains same) ... */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
                     <div className="flex justify-between items-start">
                         <div className="flex gap-4">
@@ -1162,8 +1178,8 @@ export const HRTrialPage = () => {
                                 {history.map(h => (
                                     <div key={h.id} className="flex gap-4 p-3 border-b border-slate-100 last:border-0">
                                         <div className="text-slate-400 text-xs w-24 flex-shrink-0">
-                                            <div>{new Date(h.date).toLocaleDateString()}</div>
-                                            <div>{new Date(h.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                            <div>{new Date(h.created_at).toLocaleDateString()}</div>
+                                            <div>{new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                                         </div>
                                         <div>
                                             <div className="text-sm font-medium text-slate-900">{h.action}</div>

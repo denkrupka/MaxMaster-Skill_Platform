@@ -16,7 +16,7 @@ const QUALIFICATIONS_LIST = [
 
 export const HRCandidatesPage = () => {
     const { state, moveCandidateToTrial, updateUser, addCandidate, logCandidateAction, resetTestAttempt, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus, archiveCandidateDocument, restoreCandidateDocument, hireCandidate, triggerNotification } = useAppContext();
-    const { systemConfig } = state;
+    const { systemConfig, tests, skills, userSkills, testAttempts } = state;
     const location = useLocation();
     
     const [selectedCandidate, setSelectedCandidate] = useState<User | null>(null);
@@ -122,7 +122,6 @@ export const HRCandidatesPage = () => {
     useEffect(() => {
         if (location.state && (location.state as any).openAddCandidate) {
              setIsSelectionModalOpen(true);
-             // Clear the state so it doesn't reopen on refresh if possible
              window.history.replaceState({}, document.title);
         }
     }, [location]);
@@ -161,7 +160,6 @@ export const HRCandidatesPage = () => {
     // --- Input Mask Handlers ---
     
     const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Mask: XX-XXX
         let val = e.target.value.replace(/\D/g, '');
         if (val.length > 5) val = val.slice(0, 5);
         if (val.length > 2) val = val.slice(0, 2) + '-' + val.slice(2);
@@ -169,9 +167,7 @@ export const HRCandidatesPage = () => {
     };
 
     const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Mask: XX XXXX ... (Spaces every 4 chars)
         let val = e.target.value.replace(/\D/g, '');
-        // Standard PL IBAN is 26 digits (ignoring PL prefix for now)
         if (val.length > 26) val = val.slice(0, 26);
         val = val.replace(/(.{4})/g, '$1 ').trim();
         setPersonalData({ ...personalData, bank_account: val });
@@ -183,7 +179,13 @@ export const HRCandidatesPage = () => {
         setPersonalData({ ...personalData, pesel: val });
     };
 
-    const candidates = state.users.filter(u => u.role === Role.CANDIDATE);
+    // ROBUST FILTERING: Candidate list only includes people with Role.CANDIDATE AND NOT IN TRIAL/ACTIVE/INACTIVE
+    const candidates = state.users.filter(u => 
+        u.role === Role.CANDIDATE && 
+        u.status !== UserStatus.TRIAL && 
+        u.status !== UserStatus.ACTIVE && 
+        u.status !== UserStatus.INACTIVE
+    );
     const employeesList = state.users.filter(u => u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR || u.role === Role.HR);
     const brigadirsList = state.users.filter(u => u.role === Role.BRIGADIR || u.target_position === 'Brygadzista');
     
@@ -197,10 +199,8 @@ export const HRCandidatesPage = () => {
         return matchesStatus && matchesSearch;
     });
 
-    // Helper to parse phone
     const parsePhone = (fullPhone: string) => {
         if (!fullPhone) return { prefix: '+48', number: '' };
-        // Clean phone
         const clean = fullPhone.replace(/[\s-]/g, '');
         const prefixes = ['+48', '+380', '+49', '+375', '+995'];
         const prefix = prefixes.find(p => clean.startsWith(p)) || '+48';
@@ -253,7 +253,7 @@ export const HRCandidatesPage = () => {
             `;
 
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
+                model: 'gemini-3-flash-preview',
                 contents: {
                     parts: [filePart, { text: prompt }]
                 },
@@ -351,32 +351,28 @@ export const HRCandidatesPage = () => {
     }, [isEditModalOpen, selectedCandidate]);
 
     const calculateProjectedRate = (candidate: User) => {
-        const passedTests = state.testAttempts.filter(ta => ta.user_id === candidate.id && ta.passed);
+        const passedTests = testAttempts.filter(ta => ta.user_id === candidate.id && ta.passed);
         const uniqueSkillIds = new Set<string>();
         passedTests.forEach(ta => {
-             const test = state.tests.find(t => t.id === ta.test_id);
+             const test = tests.find(t => t.id === ta.test_id);
              test?.skill_ids.forEach(sid => uniqueSkillIds.add(sid));
         });
         let calculatedBonus = 0;
         uniqueSkillIds.forEach(sid => {
-             const skill = state.skills.find(s => s.id === sid);
+             const skill = skills.find(s => s.id === sid);
              if(skill) calculatedBonus += skill.hourly_bonus;
         });
 
-        // Add Qualification Bonus from Candidate Object
         const qualBonus = QUALIFICATIONS_LIST
             .filter(q => candidate.qualifications?.includes(q.id))
             .reduce((acc, q) => {
-                // Check if the document for this qualification has been rejected
                 const expectedDocName = `Certyfikat ${q.label}`;
-                // Check if a document with this name exists and has FAILED status
-                const doc = state.userSkills.find(d => 
+                const doc = userSkills.find(d => 
                     d.user_id === candidate.id && 
                     d.custom_name === expectedDocName
                 );
                 
                 if (doc && doc.status === SkillStatus.FAILED) {
-                    // Do NOT add bonus if rejected
                     return acc;
                 }
                 return acc + q.value;
@@ -389,7 +385,7 @@ export const HRCandidatesPage = () => {
             base, 
             skillBonus: calculatedBonus, 
             qualBonus,
-            contractBonus: contractBonus + studentBonus, // Merging display logic
+            contractBonus: contractBonus + studentBonus,
             studentBonus,
             total: base + calculatedBonus + qualBonus + contractBonus + studentBonus
         };
@@ -429,45 +425,54 @@ export const HRCandidatesPage = () => {
         return sourceType;
     };
 
-    const handleSaveCandidate = (sendInvite: boolean = false) => {
+    const handleSaveCandidate = async (sendInvite: boolean = false) => {
         if (!validateForm()) return;
         
         const finalSource = constructSourceString();
         const fullPhone = `${phonePrefix} ${phoneNumber}`;
         const dataToSave = { ...formData, source: finalSource, phone: fullPhone };
 
-        if (isEditModalOpen && selectedCandidate) {
-            updateUser(selectedCandidate.id, dataToSave);
-            setIsEditModalOpen(false);
-            setSelectedCandidate({ ...selectedCandidate, ...dataToSave } as User);
-            logCandidateAction(selectedCandidate.id, `Zaktualizowano dane kandydata`);
-        } else {
-            const newUser = addCandidate(dataToSave as User);
-            if (sendInvite) {
-                logCandidateAction(newUser.id, `Wysłano link do portalu (Email: ${dataToSave.email}, SMS: ${dataToSave.phone})`);
-                updateUser(newUser.id, { status: UserStatus.INVITED });
-                triggerNotification('candidate_link', 'Wysłano Link', `Wysłano zaproszenie do ${dataToSave.first_name} ${dataToSave.last_name}.`);
-                setSuccessModal({
-                    isOpen: true,
-                    title: 'Kandydat Utworzony',
-                    message: `Dodano kandydata i wysłano zaproszenie na ${formData.email} oraz SMS na ${fullPhone}`
-                });
+        try {
+            if (isEditModalOpen && selectedCandidate) {
+                await updateUser(selectedCandidate.id, dataToSave);
+                setIsEditModalOpen(false);
+                setSelectedCandidate({ ...selectedCandidate, ...dataToSave } as User);
+                await logCandidateAction(selectedCandidate.id, `Zaktualizowano dane kandydata`);
+            } else {
+                const newUser = await addCandidate(dataToSave as User);
+                if (sendInvite) {
+                    await logCandidateAction(newUser.id, `Wysłano link do portalu (Email: ${dataToSave.email}, SMS: ${dataToSave.phone})`);
+                    await updateUser(newUser.id, { status: UserStatus.INVITED });
+                    triggerNotification('candidate_link', 'Wysłano Link', `Wysłano zaproszenie do ${dataToSave.first_name} ${dataToSave.last_name}.`);
+                    setSuccessModal({
+                        isOpen: true,
+                        title: 'Kandydat Utworzony',
+                        message: `Dodano kandydata i wysłano zaproszenie na ${formData.email} oraz SMS na ${fullPhone}`
+                    });
+                }
+                setIsAddModalOpen(false);
+                setFormData({ first_name: '', last_name: '', email: '', phone: '', source: '', notes: '', resume_url: '', target_position: '' });
             }
-            setIsAddModalOpen(false);
-            setFormData({ first_name: '', last_name: '', email: '', phone: '', source: '', notes: '', resume_url: '', target_position: '' });
+        } catch (e) {
+            alert('Wystąpił błąd podczas zapisywania danych.');
+            console.error(e);
         }
     };
 
-    const handleSavePersonalData = () => {
+    const handleSavePersonalData = async () => {
         if (selectedCandidate) {
-            updateUser(selectedCandidate.id, personalData);
-            logCandidateAction(selectedCandidate.id, 'Zaktualizowano dane osobowe (HR)');
-            setSelectedCandidate({ ...selectedCandidate, ...personalData } as User);
-            setSuccessModal({
-                isOpen: true,
-                title: 'Zapisano',
-                message: 'Dane osobowe zostały zaktualizowane.'
-            });
+            try {
+                await updateUser(selectedCandidate.id, personalData);
+                await logCandidateAction(selectedCandidate.id, 'Zaktualizowano dane osobowe (HR)');
+                setSelectedCandidate({ ...selectedCandidate, ...personalData } as User);
+                setSuccessModal({
+                    isOpen: true,
+                    title: 'Zapisano',
+                    message: 'Dane osobowe zostały zaktualizowane.'
+                });
+            } catch (e) {
+                alert('Błąd podczas zapisywania danych osobowych.');
+            }
         }
     };
 
@@ -479,44 +484,30 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const updateContractType = (type: ContractType) => {
+    const updateContractType = async (type: ContractType) => {
         if (selectedCandidate) {
-            updateUser(selectedCandidate.id, { contract_type: type });
-            logCandidateAction(selectedCandidate.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
+            await updateUser(selectedCandidate.id, { contract_type: type });
+            await logCandidateAction(selectedCandidate.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
             setSelectedCandidate({ ...selectedCandidate, contract_type: type } as User);
             setIsContractPopoverOpen(false);
         }
     };
 
-    const toggleStudentStatus = (isStudent: boolean) => {
+    const toggleStudentStatus = async (isStudent: boolean) => {
         if (selectedCandidate) {
-            updateUser(selectedCandidate.id, { is_student: isStudent });
-            logCandidateAction(selectedCandidate.id, `Zmiana statusu studenta: ${isStudent ? 'Tak' : 'Nie'}`);
+            await updateUser(selectedCandidate.id, { is_student: isStudent });
+            await logCandidateAction(selectedCandidate.id, `Zmiana statusu studenta: ${isStudent ? 'Tak' : 'Nie'}`);
             setSelectedCandidate({ ...selectedCandidate, is_student: isStudent } as User);
         }
     };
 
-    const toggleQual = (id: string) => {
-        if (!selectedCandidate) return;
-        const currentQuals = selectedCandidate.qualifications || [];
-        let newQuals;
-        if (currentQuals.includes(id)) {
-            newQuals = currentQuals.filter(q => q !== id);
-        } else {
-            newQuals = [...currentQuals, id];
-        }
-        updateUser(selectedCandidate.id, { qualifications: newQuals });
-        setSelectedCandidate({ ...selectedCandidate, qualifications: newQuals } as User);
-    };
-
-    // ... (Button Handlers, Confirm Actions - No changes) ...
     const handleSendLinkClick = (candidate: User) => { setConfirmModal({ isOpen: true, type: 'link', candidate }); };
     const handleRejectClick = (candidate: User) => { setConfirmModal({ isOpen: true, type: 'reject', candidate }); };
     const handleRestoreClick = (candidate: User) => { setConfirmModal({ isOpen: true, type: 'restore', candidate }); };
     
-    const handleRequestData = (candidate: User) => {
-        updateUser(candidate.id, { status: UserStatus.DATA_REQUESTED });
-        logCandidateAction(candidate.id, `Wysłano prośbę o dane do umowy. Status zmieniony na: ${USER_STATUS_LABELS[UserStatus.DATA_REQUESTED]}`);
+    const handleRequestData = async (candidate: User) => {
+        await updateUser(candidate.id, { status: UserStatus.DATA_REQUESTED });
+        await logCandidateAction(candidate.id, `Wysłano prośbę o dane do umowy. Status zmieniony na: ${USER_STATUS_LABELS[UserStatus.DATA_REQUESTED]}`);
         triggerNotification('status_change', 'Oczekiwanie na dane', `Wysłano prośbę o dane do kandydata ${candidate.first_name} ${candidate.last_name}.`);
         if (selectedCandidate) {
             setSelectedCandidate({ ...selectedCandidate, status: UserStatus.DATA_REQUESTED });
@@ -541,48 +532,59 @@ export const HRCandidatesPage = () => {
     const handleFireClick = (candidate: User) => { setConfirmModal({ isOpen: true, type: 'fire', candidate }); };
     const handleHireClick = (candidate: User) => { setConfirmModal({ isOpen: true, type: 'hire', candidate }); };
 
-    const executeConfirmationAction = () => {
+    const executeConfirmationAction = async () => {
         const { type, candidate, data } = confirmModal;
         if (!candidate || !type) return;
 
-        if (type === 'reject') {
-            updateUser(candidate.id, { status: UserStatus.REJECTED });
-            logCandidateAction(candidate.id, 'Odrzucono kandydata (Archiwizacja)');
-            setSelectedCandidate(null);
-            setSuccessModal({ isOpen: true, title: 'Kandydat Zarchiwizowany', message: `Kandydat ${candidate.first_name} ${candidate.last_name} został przeniesiony do archiwum.` });
-        } else if (type === 'restore') {
-            updateUser(candidate.id, { status: UserStatus.STARTED });
-            logCandidateAction(candidate.id, 'Przywrócono kandydata z archiwum');
-            setSelectedCandidate(null);
-            setViewMode('active');
-            setSuccessModal({ isOpen: true, title: 'Kandydat Przywrócony', message: `Kandydat ${candidate.first_name} ${candidate.last_name} został przywrócony.` });
-        } else if (type === 'link') {
-            logCandidateAction(candidate.id, `Wysłano link do portalu (Email: ${candidate.email})`);
-            updateUser(candidate.id, { status: UserStatus.INVITED });
-            triggerNotification('candidate_link', 'Wysłano Link', `Wysłano zaproszenie do ${candidate.first_name} ${candidate.last_name}.`);
-            if (selectedCandidate?.id === candidate.id) setSelectedCandidate({ ...selectedCandidate, status: UserStatus.INVITED });
-            setSuccessModal({ isOpen: true, title: 'Link Wysłany', message: `Pomyślnie wysłano zaproszenie do testów.` });
-        } else if (type === 'hire') {
-            hireCandidate(candidate.id);
-            if (selectedCandidate) setSelectedCandidate({ ...selectedCandidate, role: Role.EMPLOYEE, status: UserStatus.ACTIVE });
-            setSuccessModal({ isOpen: true, title: 'Pracownik Zatrudniony', message: `Kandydat ${candidate.first_name} został zatrudniony na stałe.` });
-        } else if (type === 'reset_test' && data) {
-            resetTestAttempt(data);
+        try {
+            if (type === 'reject') {
+                await updateUser(candidate.id, { status: UserStatus.REJECTED });
+                await logCandidateAction(candidate.id, 'Odrzucono kandydata (Archiwizacja)');
+                setSelectedCandidate(null);
+                setSuccessModal({ isOpen: true, title: 'Kandydat Zarchiwizowany', message: `Kandydat ${candidate.first_name} ${candidate.last_name} został przeniesiony do archiwum.` });
+            } else if (type === 'restore') {
+                await updateUser(candidate.id, { status: UserStatus.STARTED });
+                await logCandidateAction(candidate.id, 'Przywrócono kandydata z archiwum');
+                setSelectedCandidate(null);
+                setViewMode('active');
+                setSuccessModal({ isOpen: true, title: 'Kandydat Przywrócony', message: `Kandydat ${candidate.first_name} został przywrócony.` });
+            } else if (type === 'link') {
+                await logCandidateAction(candidate.id, `Wysłano link do portalu (Email: ${candidate.email})`);
+                await updateUser(candidate.id, { status: UserStatus.INVITED });
+                triggerNotification('candidate_link', 'Wysłano Link', `Wysłano zaproszenie do ${candidate.first_name} ${candidate.last_name}.`);
+                if (selectedCandidate?.id === candidate.id) setSelectedCandidate({ ...selectedCandidate, status: UserStatus.INVITED });
+                setSuccessModal({ isOpen: true, title: 'Link Wysłany', message: `Pomyślnie wysłano zaproszenie do testów.` });
+            } else if (type === 'hire') {
+                await hireCandidate(candidate.id);
+                if (selectedCandidate) setSelectedCandidate({ ...selectedCandidate, role: Role.EMPLOYEE, status: UserStatus.ACTIVE });
+                setSuccessModal({ isOpen: true, title: 'Pracownik Zatrudniony', message: `Kandydat ${candidate.first_name} został zatrudniony na stałe.` });
+            } else if (type === 'reset_test' && data) {
+                await resetTestAttempt(data);
+            }
+        } catch (e) {
+            alert('Wystąpił błąd podczas wykonywania akcji.');
         }
         setConfirmModal({ isOpen: false, type: null, candidate: null });
     };
 
-    // ... (Trial Config Save, Doc logic - No changes) ...
-    const handleSaveTrialConfig = () => {
+    const handleSaveTrialConfig = async () => {
         if (!selectedCandidate) return;
         if (!trialConfig.startDate || !trialConfig.endDate || !trialConfig.brigadirId) {
             alert('Wypełnij wszystkie pola.');
             return;
         }
-        moveCandidateToTrial(selectedCandidate.id, trialConfig.brigadirId, trialConfig.startDate, trialConfig.endDate, trialConfig.rate);
-        setIsTrialModalOpen(false);
-        setSelectedCandidate(null);
-        setSuccessModal({ isOpen: true, title: 'Rozpoczęto Okres Próbny', message: `Kandydat został przeniesiony do listy "Okres Próbny".` });
+        try {
+            await moveCandidateToTrial(selectedCandidate.id, trialConfig.brigadirId, trialConfig.startDate, trialConfig.endDate, trialConfig.rate);
+            setIsTrialModalOpen(false);
+            setSelectedCandidate(null); // Clear selection as user moved to Trial page
+            setSuccessModal({ 
+                isOpen: true, 
+                title: 'Rozpoczęto Okres Próbny', 
+                message: `Kandydat został pomyślnie przeniesiony do listy "Okres Próbny".` 
+            });
+        } catch (e) {
+            alert('Wystąpił błąd podczas przenoszenia do okresu próbnego.');
+        }
     };
 
     const handleAddDocument = () => {
@@ -593,7 +595,7 @@ export const HRCandidatesPage = () => {
     };
 
     const handleEditDocument = (docId: string) => {
-        const doc = state.userSkills.find(us => us.id === docId);
+        const doc = userSkills.find(us => us.id === docId);
         if(!doc) return;
         setEditingDocId(docId);
         setNewDocData({
@@ -614,7 +616,7 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const handleSaveDocument = () => {
+    const handleSaveDocument = async () => {
         if(!selectedCandidate || !newDocData.name) return;
         
         let finalUrl = newDocData.fileUrl;
@@ -631,24 +633,29 @@ export const HRCandidatesPage = () => {
             expires_at: newDocData.indefinite ? undefined : newDocData.expires_at,
             is_indefinite: newDocData.indefinite,
         };
-        if (editingDocId) {
-            updateCandidateDocumentDetails(editingDocId, docPayload);
-        } else {
-            addCandidateDocument(selectedCandidate.id, { skill_id: 'doc_generic', status: SkillStatus.PENDING, ...docPayload });
+
+        try {
+            if (editingDocId) {
+                await updateCandidateDocumentDetails(editingDocId, docPayload);
+            } else {
+                await addCandidateDocument(selectedCandidate.id, { skill_id: 'doc_generic', status: SkillStatus.PENDING, ...docPayload });
+            }
+            setIsDocModalOpen(false);
+        } catch (e) {
+            alert('Błąd podczas zapisywania dokumentu.');
         }
-        setIsDocModalOpen(false);
     };
 
-    const handleDocStatusChange = (docId: string, newStatus: SkillStatus) => {
-        updateUserSkillStatus(docId, newStatus);
+    const handleDocStatusChange = async (docId: string, newStatus: SkillStatus) => {
+        await updateUserSkillStatus(docId, newStatus);
         setStatusPopoverDocId(null);
     };
 
-    const changeStatus = (newStatus: UserStatus) => {
+    const changeStatus = async (newStatus: UserStatus) => {
         if(selectedCandidate) {
-            updateUser(selectedCandidate.id, { status: newStatus });
+            await updateUser(selectedCandidate.id, { status: newStatus });
             setSelectedCandidate({...selectedCandidate, status: newStatus});
-            logCandidateAction(selectedCandidate.id, `Ręczna zmiana statusu na: ${USER_STATUS_LABELS[newStatus]}`);
+            await logCandidateAction(selectedCandidate.id, `Ręczna zmiana statusu na: ${USER_STATUS_LABELS[newStatus]}`);
             setIsStatusEditOpen(false);
         }
     };
@@ -672,9 +679,6 @@ export const HRCandidatesPage = () => {
         setFileViewer({ isOpen: true, urls, title: doc.custom_name || 'Dokument', index: 0 });
     };
 
-    // --- RENDERERS ---
-    
-    // ... (Previous Modal Renderers unchanged) ...
     const renderSelectionModal = () => {
         if (!isSelectionModalOpen) return null;
         return (
@@ -725,17 +729,17 @@ export const HRCandidatesPage = () => {
 
     const renderInviteModal = () => {
         if (!isInviteModalOpen) return null;
-        const inviteLink = `${window.location.origin}/#/candidate/register`;
+        const inviteLink = `${window.location.origin}/#/candidate/welcome`;
         
         const handleCopy = () => {
             navigator.clipboard.writeText(inviteLink);
             setInviteCopied(true);
-            setTimeout(() => setInviteCopied(false), 2000);
+            setTimeout(() => setInviteCopied(false), 2000); 
         };
 
-        const handleSendInvite = () => {
+        const handleSendInvite = async () => {
             if (inviteEmail) {
-                const newUser = addCandidate({
+                const newUser = await addCandidate({
                     first_name: 'Kandydat',
                     last_name: '(Zaproszony)',
                     email: inviteEmail,
@@ -744,8 +748,8 @@ export const HRCandidatesPage = () => {
                     target_position: 'Nieokreślone',
                     notes: 'Oczekuje na rejestrację.'
                 });
-                updateUser(newUser.id, { status: UserStatus.INVITED });
-                logCandidateAction(newUser.id, `Wysłano zaproszenie na email: ${inviteEmail}`);
+                await updateUser(newUser.id, { status: UserStatus.INVITED });
+                await logCandidateAction(newUser.id, `Wysłano zaproszenie na email: ${inviteEmail}`);
                 
                 setIsInviteModalOpen(false);
                 setInviteEmail('');
@@ -776,7 +780,9 @@ export const HRCandidatesPage = () => {
                         </div>
                         <div className="flex gap-2">
                             <input className="flex-1 border p-2 rounded bg-slate-50 text-sm text-slate-500" readOnly value={inviteLink} />
-                            <Button variant="secondary" onClick={handleCopy}>{inviteCopied ? <CheckCircle size={18} className="text-green-600"/> : <Copy size={18}/>}</Button>
+                            <button onClick={handleCopy} className={`p-2 rounded-lg border transition-all ${inviteCopied ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                {inviteCopied ? <CheckCircle size={18}/> : <Copy size={18}/>}
+                            </button>
                         </div>
                     </div>
                     <div className="flex justify-end mt-6 gap-2">
@@ -807,7 +813,6 @@ export const HRCandidatesPage = () => {
                             </select>
                         </div>
                         <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors" onClick={() => aiFileInputRef.current?.click()}>
-                            {/* Fixed: changed aiFileInputRef prop to ref to use correctly as a React ref */}
                             <input type="file" ref={aiFileInputRef} className="hidden" accept=".pdf,image/*" onChange={(e) => setAiFile(e.target.files?.[0] || null)} />
                             {aiFile ? <div className="text-center"><FileText size={32} className="mx-auto text-green-600 mb-2"/><span className="text-sm font-medium text-green-700">{aiFile.name}</span></div> : <div className="text-center text-slate-400"><Upload size={32} className="mx-auto mb-2"/><span className="text-sm">Kliknij, aby wybrać plik</span></div>}
                         </div>
@@ -847,7 +852,7 @@ export const HRCandidatesPage = () => {
                             {sourceType === 'Polecenie' && (<div className="pl-4 border-l-2 border-slate-300 mt-2 space-y-2"><div className="flex gap-4"><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="radio" name="recType" value="employee" checked={recommendationType === 'employee'} onChange={() => setRecommendationType('employee')} /> Pracownik</label><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="radio" name="recType" value="other" checked={recommendationType === 'other'} onChange={() => setRecommendationType('other')} /> Inna osoba</label></div>{recommendationType === 'employee' && (<select className="w-full border p-2 rounded bg-white text-sm" value={recommenderId} onChange={e => setRecommenderId(e.target.value)}><option value="">Wybierz pracownika...</option>{employeesList.map(emp => (<option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>))}</select>)}{recommendationType === 'other' && (<input className="w-full border p-2 rounded text-sm" placeholder="Imię i Nazwisko polecającego" value={customSourceDetail} onChange={e => setCustomSourceDetail(e.target.value)} />)}</div>)}
                             {sourceType === 'Inne' && (<input className="w-full border p-2 rounded mt-2 text-sm" placeholder="Opisz źródło..." value={customSourceDetail} onChange={e => setCustomSourceDetail(e.target.value)} />)}
                         </div>
-                        <div><label className="block text-sm font-bold text-slate-700 mb-1">CV / Resume</label><div className="flex items-center gap-3"><input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={handleResumeUpload} /><Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload size={16} className="mr-2"/> Wybierz plik</Button>{formData.resume_url ? (<div className="text-sm text-green-600 flex items-center gap-1"><CheckCircle size={14}/> <span>Plik dodany</span><button onClick={() => window.open(formData.resume_url, '_blank')} className="text-xs text-blue-600 underline ml-2">Podgląd</button></div>) : (<span className="text-xs text-slate-400">Brak pliku</span>)}</div></div>
+                        <div><label className="block text-sm font-bold text-slate-700 mb-1">CV / Resume</label><div className="flex items-center gap-3"><input type="file" ref={fileInputRef} className="hidden" accept=".pdf,.doc,.docx,image/*" onChange={handleResumeUpload} /><Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}><Upload size={16} className="mr-2"/> Wybierz plik</Button>{formData.resume_url ? (<div className="text-sm text-green-600 flex items-center gap-1"><CheckCircle size={14}/> <span>Plik dodany</span><button onClick={() => window.open(formData.resume_url!, '_blank')} className="text-xs text-blue-600 underline ml-2">Podgląd</button></div>) : (<span className="text-xs text-slate-400">Brak pliku</span>)}</div></div>
                         <div><label className="block text-sm font-bold text-slate-700 mb-1">Notatki (Krótki opis)</label><textarea className="w-full border p-2 rounded" rows={3} value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} /></div>
                     </div>
                     <div className="flex justify-end mt-6 gap-2 pt-4 border-t border-slate-100"><Button variant="ghost" onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }}>Anuluj</Button>{!isEdit && (<Button variant="secondary" onClick={() => handleSaveCandidate(true)} className="border-blue-200 text-blue-700 hover:bg-blue-50"><Send size={16} className="mr-2"/> Zapisz i Wyślij Zaproszenie</Button>)}<Button onClick={() => handleSaveCandidate(false)}>Zapisz</Button></div>
@@ -860,7 +865,7 @@ export const HRCandidatesPage = () => {
         if (!isDocModalOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-xl shadow-xl max-md w-full p-6 animate-in fade-in zoom-in duration-200">
                     <div className="flex justify-between items-center mb-4">
                         <h2 className="text-xl font-bold text-slate-900">{editingDocId ? 'Edytuj Dokument' : 'Dodaj Dokument'}</h2>
                         <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
@@ -871,7 +876,7 @@ export const HRCandidatesPage = () => {
                             <input className="w-full border p-2 rounded" placeholder="np. Certyfikat SEP" value={newDocData.name} onChange={e => setNewDocData({...newDocData, name: e.target.value})} />
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Plik</label>
+                            <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
                             <div className="flex items-center gap-3">
                                 <input type="file" ref={docFileInputRef} className="hidden" onChange={handleDocFileSelect} />
                                 <Button size="sm" variant="outline" onClick={() => docFileInputRef.current?.click()}><Upload size={16} className="mr-2"/> Wybierz plik</Button>
@@ -909,7 +914,7 @@ export const HRCandidatesPage = () => {
         if (!isTrialModalOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/50 z-[90] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                <div className="bg-white rounded-xl shadow-xl max-md w-full p-6">
                     <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold">Skieruj na Okres Próbny</h2><button onClick={() => setIsTrialModalOpen(false)}><X size={24} className="text-slate-400"/></button></div>
                     <div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-slate-700 mb-1">Data Startu</label><input type="date" className="w-full border p-2 rounded" value={trialConfig.startDate} onChange={e => setTrialConfig({...trialConfig, startDate: e.target.value})} /></div><div><label className="block text-sm font-bold text-slate-700 mb-1">Data Końca</label><input type="date" className="w-full border p-2 rounded" value={trialConfig.endDate} onChange={e => setTrialConfig({...trialConfig, endDate: e.target.value})} /></div></div><div><label className="block text-sm font-bold text-slate-700 mb-1">Stawka Początkowa (PLN/h)</label><input type="number" className="w-full border p-2 rounded" value={trialConfig.rate} onChange={e => setTrialConfig({...trialConfig, rate: Number(e.target.value)})} /></div><div><label className="block text-sm font-bold text-slate-700 mb-1">Przydziel Brygadzista</label><select className="w-full border p-2 rounded bg-white" value={trialConfig.brigadirId} onChange={e => setTrialConfig({...trialConfig, brigadirId: e.target.value})}><option value="">Wybierz...</option>{brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)}</select></div></div>
                     <div className="flex justify-end gap-2 mt-6"><Button variant="ghost" onClick={() => setIsTrialModalOpen(false)}>Anuluj</Button><Button onClick={handleSaveTrialConfig} disabled={!trialConfig.brigadirId}>Rozpocznij Okres Próbny</Button></div>
@@ -922,7 +927,7 @@ export const HRCandidatesPage = () => {
         if (!successModal.isOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-2xl max-sm w-full p-6 animate-in fade-in zoom-in duration-200">
+                <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6 animate-in fade-in zoom-in duration-200">
                     <div className="flex flex-col items-center text-center"><div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-4"><CheckCircle size={32} /></div><h3 className="text-xl font-bold text-slate-900 mb-2">{successModal.title}</h3><p className="text-slate-500 mb-6">{successModal.message}</p><Button fullWidth onClick={() => setSuccessModal({ ...successModal, isOpen: false })}>OK</Button></div>
                 </div>
             </div>
@@ -988,111 +993,11 @@ export const HRCandidatesPage = () => {
         );
     };
 
-    // --- RENDER LIST VIEW ---
-    const renderList = () => (
-        <>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-slate-900">Kandydaci</h1>
-                <div className="flex gap-2">
-                    <div className="bg-white border border-slate-200 rounded-lg flex p-1">
-                        <button 
-                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'active' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                            onClick={() => setViewMode('active')}
-                        >
-                            Aktywni
-                        </button>
-                        <button 
-                            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'archived' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                            onClick={() => setViewMode('archived')}
-                        >
-                            Archiwum
-                        </button>
-                    </div>
-                    <Button onClick={() => setIsSelectionModalOpen(true)}>
-                        <Plus size={18} className="mr-2"/> Dodaj Kandydata
-                    </Button>
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-                    <input 
-                        type="text" 
-                        placeholder="Szukaj kandydata (imię, nazwisko)..." 
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                </div>
-                <select 
-                    className="border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm"
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                >
-                    <option value="all">Wszystkie statusy</option>
-                    {Object.values(UserStatus).map(s => (
-                        <option key={s} value={s}>{USER_STATUS_LABELS[s] || s}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4">Kandydat</th>
-                            <th className="px-6 py-4">Stanowisko</th>
-                            <th className="px-6 py-4">Kontakt</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4">Data Aplikacji</th>
-                            <th className="px-6 py-4 text-right">Akcje</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filteredCandidates.map(candidate => (
-                            <tr key={candidate.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedCandidate(candidate)}>
-                                <td className="px-6 py-4 font-medium text-slate-900">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold text-xs">
-                                            {candidate.first_name[0]}{candidate.last_name[0]}
-                                        </div>
-                                        <div>{candidate.first_name} {candidate.last_name}</div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500">{candidate.target_position || '-'}</td>
-                                <td className="px-6 py-4">
-                                    <div className="text-slate-900">{candidate.email}</div>
-                                    <div className="text-slate-500 text-xs">{candidate.phone}</div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${USER_STATUS_COLORS[candidate.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                        {USER_STATUS_LABELS[candidate.status] || candidate.status}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500">{new Date(candidate.hired_date).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <Button size="sm" variant="ghost"><ChevronRight size={18}/></Button>
-                                </td>
-                            </tr>
-                        ))}
-                        {filteredCandidates.length === 0 && (
-                            <tr><td colSpan={6} className="p-8 text-center text-slate-400">Brak kandydatów spełniających kryteria.</td></tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </>
-    );
-
-    // ... (Main Render Return - Updated with renderFileViewer) ...
     const renderDetails = () => {
-        // ... (Existing renderDetails logic)
-        
         if (!selectedCandidate) return null;
         
-        const candidateDocs = state.userSkills.filter(us => us.user_id === selectedCandidate.id && (state.skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT || us.skill_id.startsWith('doc_')));
-        const history = state.candidateHistory.filter(h => h.candidate_id === selectedCandidate.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const candidateDocs = userSkills.filter(us => us.user_id === selectedCandidate.id && (skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT || us.skill_id.startsWith('doc_')));
+        const history = state.candidateHistory.filter(h => h.candidate_id === selectedCandidate.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const projectedRate = calculateProjectedRate(selectedCandidate);
 
         const showRequestDataButton = selectedCandidate.status === UserStatus.INTERESTED;
@@ -1111,9 +1016,7 @@ export const HRCandidatesPage = () => {
                     <ArrowRight className="transform rotate-180 mr-2" size={18} /> Wróć do listy
                 </Button>
 
-                {/* HEADER */}
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 mb-6 p-6 relative z-20">
-                    {/* ... (Header content unchanged) ... */}
                     <div className="flex flex-col md:flex-row justify-between items-start gap-6">
                         <div className="flex items-center space-x-4">
                             <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xl font-bold">
@@ -1162,7 +1065,6 @@ export const HRCandidatesPage = () => {
                                     </span>
                                     {isStatusEditOpen && (
                                         <div className="absolute top-full right-0 mt-2 bg-white border border-slate-200 shadow-xl rounded-lg z-[100] flex flex-col py-1 w-64 max-h-96 overflow-y-auto">
-                                            {/* ... status options ... */}
                                             <div className="px-4 py-2 text-xs font-bold text-slate-400 uppercase bg-slate-50">Proces</div>
                                             <button className="text-left px-4 py-2 hover:bg-slate-50 text-sm text-slate-700" onClick={() => changeStatus(UserStatus.INVITED)}>{USER_STATUS_LABELS[UserStatus.INVITED]}</button>
                                             <button className="text-left px-4 py-2 hover:bg-slate-50 text-sm text-slate-700" onClick={() => changeStatus(UserStatus.STARTED)}>{USER_STATUS_LABELS[UserStatus.STARTED]}</button>
@@ -1259,8 +1161,6 @@ export const HRCandidatesPage = () => {
 
                         {activeTab === 'personal' && (
                             <div>
-                                {/* ... (Personal Data Form from previous state - omitted for brevity but conceptually here) ... */}
-                                {/* Keeping existing logic for personal tab rendering if provided in previous state/context */}
                                 <div className="flex justify-between items-center mb-6">
                                     <h3 className="font-bold text-slate-900">Dane Osobowe do Umowy</h3>
                                     <Button size="sm" onClick={handleSavePersonalData}>
@@ -1268,10 +1168,18 @@ export const HRCandidatesPage = () => {
                                     </Button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 max-w-4xl">
-                                    {/* ... Input fields as defined in state ... */}
                                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">PESEL</label><input className="w-full border p-2 rounded" value={personalData.pesel || ''} onChange={handlePeselChange} maxLength={11}/></div>
                                     <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data Urodzenia</label><input type="date" className="w-full border p-2 rounded" value={personalData.birth_date || ''} onChange={e => setPersonalData({...personalData, birth_date: e.target.value})} /></div>
-                                    {/* ... etc ... */}
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Obywatelstwo</label><input className="w-full border p-2 rounded" value={personalData.citizenship || ''} onChange={e => setPersonalData({...personalData, citizenship: e.target.value})} /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rodzaj Dokumentu</label><select className="w-full border p-2 rounded" value={personalData.document_type} onChange={e => setPersonalData({...personalData, document_type: e.target.value})}><option value="Dowód osobisty">Dowód osobisty</option><option value="Paszport">Paszport</option></select></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nr Dokumentu</label><input className="w-full border p-2 rounded" value={personalData.document_number || ''} onChange={e => setPersonalData({...personalData, document_number: e.target.value})} /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Kod Pocztowy</label><input className="w-full border p-2 rounded" value={personalData.zip_code || ''} onChange={handleZipCodeChange} placeholder="XX-XXX" /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Miasto</label><input className="w-full border p-2 rounded" value={personalData.city || ''} onChange={e => setPersonalData({...personalData, city: e.target.value})} /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ulica</label><input className="w-full border p-2 rounded" value={personalData.street || ''} onChange={e => setPersonalData({...personalData, street: e.target.value})} /></div>
+                                    {/* Fixed Error on line 1181: Changed undefined setContractData to setPersonalData */}
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nr Domu</label><input className="w-full border p-2 rounded" value={personalData.house_number || ''} onChange={e => setPersonalData({...personalData, house_number: e.target.value})} /></div>
+                                    <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nr Lokalu</label><input className="w-full border p-2 rounded" value={personalData.apartment_number || ''} onChange={e => setPersonalData({...personalData, apartment_number: e.target.value})} /></div>
+                                    <div className="col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nr Konta</label><input className="w-full border p-2 rounded font-mono" value={personalData.bank_account || ''} onChange={handleBankAccountChange} placeholder="00 0000 0000 0000 0000 0000 0000" /></div>
                                 </div>
                             </div>
                         )}
@@ -1280,19 +1188,14 @@ export const HRCandidatesPage = () => {
                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200" onClick={() => setIsContractPopoverOpen(false)}>
                                 <h3 className="font-bold text-slate-900 mb-6">Symulacja Wynagrodzenia</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
-                                    {/* 1. Baza */}
                                     <div className="bg-white p-4 rounded-lg shadow-sm">
                                         <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Baza</div>
                                         <div className="text-2xl font-bold text-slate-900">{projectedRate.base} zł</div>
                                     </div>
-
-                                    {/* 2. Umiejętności */}
                                     <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100">
                                         <div className="text-xs text-green-600 uppercase tracking-wider mb-1">Umiejętności</div>
                                         <div className="text-2xl font-bold text-green-600">+{projectedRate.skillBonus + projectedRate.qualBonus} zł</div>
                                     </div>
-
-                                    {/* 3. Forma Zatrudnienia */}
                                     <div className="relative">
                                         <div 
                                             className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition-colors h-full flex flex-col justify-center"
@@ -1310,7 +1213,6 @@ export const HRCandidatesPage = () => {
                                                 {projectedRate.contractBonus > 0 ? `+${projectedRate.contractBonus} zł/h` : 'Bez dodatku'}
                                             </div>
                                         </div>
-                                        
                                         {isContractPopoverOpen && (
                                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-xl rounded-lg z-10 flex flex-col py-1">
                                                 <button className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700" onClick={() => updateContractType(ContractType.UOP)}>Umowa o Pracę</button>
@@ -1318,12 +1220,7 @@ export const HRCandidatesPage = () => {
                                                 <button className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700" onClick={() => updateContractType(ContractType.UZ)}>Umowa Zlecenie</button>
                                                 {selectedCandidate.contract_type === ContractType.UZ && (
                                                     <div className="px-4 py-2 flex items-center gap-2 bg-blue-50">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            checked={selectedCandidate.is_student}
-                                                            onChange={(e) => toggleStudentStatus(e.target.checked)}
-                                                            className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                                                        />
+                                                        <input type="checkbox" checked={selectedCandidate.is_student} onChange={(e) => toggleStudentStatus(e.target.checked)} className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
                                                         <span className="text-xs text-slate-700 font-medium">Student &lt; 26 lat (+3 zł)</span>
                                                     </div>
                                                 )}
@@ -1332,8 +1229,6 @@ export const HRCandidatesPage = () => {
                                             </div>
                                         )}
                                     </div>
-
-                                    {/* 4. Stawka Total */}
                                     <div className="bg-slate-900 p-4 rounded-lg shadow-sm text-white">
                                         <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Stawka Total</div>
                                         <div className="text-2xl font-bold">{projectedRate.total.toFixed(2)} zł/h netto</div>
@@ -1353,40 +1248,20 @@ export const HRCandidatesPage = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {state.testAttempts.filter(ta => ta.user_id === selectedCandidate.id).map(ta => (
+                                    {testAttempts.filter(ta => ta.user_id === selectedCandidate.id).map(ta => (
                                         <tr key={ta.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4 font-medium text-slate-900">
-                                                {state.tests.find(t => t.id === ta.test_id)?.title || 'Nieznany test'}
-                                            </td>
-                                            <td className="px-6 py-4 font-bold text-slate-900">
-                                                {ta.score}%
-                                            </td>
+                                            <td className="px-6 py-4 font-medium text-slate-900">{tests.find(t => t.id === ta.test_id)?.title || 'Nieznany test'}</td>
+                                            <td className="px-6 py-4 font-bold text-slate-900">{ta.score}%</td>
                                             <td className="px-6 py-4">
-                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${
-                                                    ta.passed 
-                                                    ? 'bg-green-100 text-green-700 border-green-200' 
-                                                    : 'bg-red-100 text-red-700 border-red-200'
-                                                }`}>
-                                                    {ta.passed ? 'ZALICZONY' : 'NIEZALICZONY'}
-                                                </span>
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${ta.passed ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}>{ta.passed ? 'ZALICZONY' : 'NIEZALICZONY'}</span>
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setConfirmModal({ isOpen: true, type: 'reset_test', candidate: selectedCandidate, data: ta.id });
-                                                    }}
-                                                    className="text-slate-400 hover:text-red-500 transition-colors text-xs font-medium"
-                                                >
-                                                    Reset
-                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); setConfirmModal({ isOpen: true, type: 'reset_test', candidate: selectedCandidate, data: ta.id }); }} className="text-slate-400 hover:text-red-500 transition-colors text-xs font-medium">Reset</button>
                                             </td>
                                         </tr>
                                     ))}
-                                    {state.testAttempts.filter(ta => ta.user_id === selectedCandidate.id).length === 0 && (
-                                        <tr>
-                                            <td colSpan={4} className="p-8 text-center text-slate-400 italic">Brak podejść do testów.</td>
-                                        </tr>
+                                    {testAttempts.filter(ta => ta.user_id === selectedCandidate.id).length === 0 && (
+                                        <tr><td colSpan={4} className="p-8 text-center text-slate-400 italic">Brak podejść do testów.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -1395,14 +1270,12 @@ export const HRCandidatesPage = () => {
                         {activeTab === 'docs' && (
                             <div onClick={() => setStatusPopoverDocId(null)}>
                                 <div className="flex justify-between mb-4">
-                                     {/* ... (Search & Filter) ... */}
                                      <div className="relative w-64"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Szukaj..." className="w-full pl-9 pr-2 py-1.5 border rounded text-sm" value={docSearch} onChange={(e) => setDocSearch(e.target.value)} /></div>
                                      <div className="flex gap-2">
                                          <Button size="sm" variant={docsViewMode === 'active' ? 'secondary' : 'primary'} onClick={() => setDocsViewMode(prev => prev === 'active' ? 'archived' : 'active')}>{docsViewMode === 'active' ? 'Archiwum' : 'Aktywne'}</Button>
                                          <Button size="sm" onClick={handleAddDocument}><Plus size={16} className="mr-2"/> Dodaj</Button>
                                      </div>
                                 </div>
-
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-slate-50 text-slate-500">
                                         <tr>
@@ -1415,12 +1288,11 @@ export const HRCandidatesPage = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {candidateDocs.filter(d => docsViewMode === 'active' ? !d.is_archived : d.is_archived).map(d => {
-                                            const fileCount = d.document_urls ? d.document_urls.length : (d.document_url ? 1 : 0);
+                                            const fileCount = d.document_urls ? d.document_urls.length : (d.document_url ? [d.document_url] : []);
                                             return (
                                                 <tr key={d.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleEditDocument(d.id)}>
                                                     <td className="px-4 py-3 font-medium">{d.custom_name}</td>
                                                     <td className="px-4 py-3">
-                                                        {/* Status Badge */}
                                                         <span className={`px-2 py-1 rounded text-xs uppercase font-bold ${SKILL_STATUS_LABELS[d.status] ? 'bg-slate-100' : ''}`}>{SKILL_STATUS_LABELS[d.status]}</span>
                                                     </td>
                                                     <td className="px-4 py-3">{d.issue_date}</td>
@@ -1433,7 +1305,7 @@ export const HRCandidatesPage = () => {
                                                                 setFileViewer({ isOpen: true, urls, title: d.custom_name || 'Dokument', index: 0 });
                                                             }}
                                                         >
-                                                            <Eye size={16}/> Zobacz {fileCount > 1 ? `(${fileCount})` : ''}
+                                                            <Eye size={16}/> Zobacz {fileCount.length > 1 ? `(${fileCount.length})` : ''}
                                                         </Button>
                                                     </td>
                                                     <td className="px-4 py-3 text-right">
@@ -1449,18 +1321,20 @@ export const HRCandidatesPage = () => {
 
                         {activeTab === 'history' && (
                             <div className="space-y-4">
-                                {history.map(h => (
+                                {history.length > 0 ? history.map(h => (
                                     <div key={h.id} className="flex gap-4 p-3 border-b border-slate-100 last:border-0">
                                         <div className="text-slate-400 text-xs w-24 flex-shrink-0">
-                                            <div>{new Date(h.date).toLocaleDateString()}</div>
-                                            <div>{new Date(h.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                                            <div>{new Date(h.created_at).toLocaleDateString()}</div>
+                                            <div>{new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                                         </div>
                                         <div>
                                             <div className="text-sm font-medium text-slate-900">{h.action}</div>
-                                            <div className="text-xs text-slate-500">Użytkownik: {h.performed_by}</div>
+                                            <div className="text-xs text-slate-500">Wykonał: {h.performed_by}</div>
                                         </div>
                                     </div>
-                                ))}
+                                )) : (
+                                    <div className="p-8 text-center text-slate-400 italic">Brak zarejestrowanej historii działań.</div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1477,96 +1351,45 @@ export const HRCandidatesPage = () => {
                         <h1 className="text-2xl font-bold text-slate-900">Kandydaci</h1>
                         <div className="flex gap-2">
                             <div className="bg-white border border-slate-200 rounded-lg flex p-1">
-                                <button 
-                                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'active' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                                    onClick={() => setViewMode('active')}
-                                >
-                                    Aktywni
-                                </button>
-                                <button 
-                                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'archived' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-                                    onClick={() => setViewMode('archived')}
-                                >
-                                    Archiwum
-                                </button>
+                                <button className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'active' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setViewMode('active')}>Aktywni</button>
+                                <button className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${viewMode === 'archived' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setViewMode('archived')}>Archiwum</button>
                             </div>
-                            <Button onClick={() => setIsSelectionModalOpen(true)}>
-                                <Plus size={18} className="mr-2"/> Dodaj Kandydata
-                            </Button>
+                            <Button onClick={() => setIsSelectionModalOpen(true)}><Plus size={18} className="mr-2"/> Dodaj Kandydata</Button>
                         </div>
                     </div>
 
-                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4">
+                    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-                            <input 
-                                type="text" 
-                                placeholder="Szukaj kandydata (imię, nazwisko)..." 
-                                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                            />
+                            <input type="text" placeholder="Szukaj kandydata..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value={search} onChange={e => setSearch(e.target.value)} />
                         </div>
-                        <select 
-                            className="border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm"
-                            value={statusFilter}
-                            onChange={e => setStatusFilter(e.target.value)}
-                        >
+                        <select className="border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                             <option value="all">Wszystkie statusy</option>
-                            {Object.values(UserStatus).map(s => (
-                                <option key={s} value={s}>{USER_STATUS_LABELS[s] || s}</option>
-                            ))}
+                            {Object.values(UserStatus).map(s => (<option key={s} value={s}>{USER_STATUS_LABELS[s] || s}</option>))}
                         </select>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <table className="w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-4">Kandydat</th>
-                                    <th className="px-6 py-4">Stanowisko</th>
-                                    <th className="px-6 py-4">Kontakt</th>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4">Data Aplikacji</th>
-                                    <th className="px-6 py-4 text-right">Akcje</th>
-                                </tr>
+                                <tr><th className="px-6 py-4">Kandydat</th><th className="px-6 py-4">Stanowisko</th><th className="px-6 py-4">Kontakt</th><th className="px-6 py-4">Status</th><th className="px-6 py-4 text-right">Akcje</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredCandidates.map(candidate => (
                                     <tr key={candidate.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedCandidate(candidate)}>
-                                        <td className="px-6 py-4 font-medium text-slate-900">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold text-xs">
-                                                    {candidate.first_name[0]}{candidate.last_name[0]}
-                                                </div>
-                                                <div>{candidate.first_name} {candidate.last_name}</div>
-                                            </div>
-                                        </td>
+                                        <td className="px-6 py-4 font-medium text-slate-900"><div className="flex items-center gap-3"><div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center text-purple-600 font-bold text-xs">{candidate.first_name[0]}{candidate.last_name[0]}</div><div>{candidate.first_name} {candidate.last_name}</div></div></td>
                                         <td className="px-6 py-4 text-slate-500">{candidate.target_position || '-'}</td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-slate-900">{candidate.email}</div>
-                                            <div className="text-slate-500 text-xs">{candidate.phone}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${USER_STATUS_COLORS[candidate.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                                                {USER_STATUS_LABELS[candidate.status] || candidate.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-500">{new Date(candidate.hired_date).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <Button size="sm" variant="ghost"><ChevronRight size={18}/></Button>
-                                        </td>
+                                        <td className="px-6 py-4"><div>{candidate.email}</div><div className="text-slate-500 text-xs">{candidate.phone}</div></td>
+                                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded text-xs font-bold uppercase border ${USER_STATUS_COLORS[candidate.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>{USER_STATUS_LABELS[candidate.status] || candidate.status}</span></td>
+                                        <td className="px-6 py-4 text-right"><Button size="sm" variant="ghost"><ChevronRight size={18}/></Button></td>
                                     </tr>
                                 ))}
-                                {filteredCandidates.length === 0 && (
-                                    <tr><td colSpan={6} className="p-8 text-center text-slate-400">Brak kandydatów spełniających kryteria.</td></tr>
-                                )}
+                                {filteredCandidates.length === 0 && (<tr><td colSpan={5} className="p-8 text-center text-slate-400">Brak kandydatów.</td></tr>)}
                             </tbody>
                         </table>
                     </div>
                 </>
              )}
-            
             {renderSelectionModal()}
             {renderInviteModal()}
             {renderAIModal()}
@@ -1576,13 +1399,7 @@ export const HRCandidatesPage = () => {
             {renderTrialModal()}
             {renderSuccessModal()}
             {renderQualModal()}
-            <DocumentViewerModal 
-                isOpen={fileViewer.isOpen}
-                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })}
-                urls={fileViewer.urls}
-                initialIndex={fileViewer.index}
-                title={fileViewer.title}
-            />
+            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
         </div>
     );
 };

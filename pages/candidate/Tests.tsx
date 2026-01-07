@@ -169,10 +169,9 @@ export const CandidateTestsPage = () => {
         const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
         
-        // Submit Logic (Global State) - PASS DURATION
-        activeTest.skill_ids.forEach(sid => {
-            submitTest(sid, calculatedScore, durationSeconds);
-        });
+        // Submit Logic (Global State) - Pass results to state
+        // Fix: Use correct arguments for submitTest (testId, answers, score, passed) to match AppContext signature and call once per test attempt
+        submitTest(activeTest.id, answers, calculatedScore, passed);
 
         setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
         setTestStarted(false); // Stop "running" mode
@@ -241,7 +240,7 @@ export const CandidateTestsPage = () => {
                         const skillName = skills.find(s => s.id === test.skill_ids[0])?.name_pl || test.title;
                         
                         let statusIcon = <Circle size={18} className="text-slate-300"/>;
-                        let itemClass = "text-slate-500 hover:bg-slate-50";
+                        let itemClass = "text-slate-500 hover:bg-slate-100";
                         let statusText = "Oczekuje";
 
                         if (index < currentTestIndex) {

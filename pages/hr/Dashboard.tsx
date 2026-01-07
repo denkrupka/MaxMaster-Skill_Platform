@@ -18,7 +18,6 @@ export const HRDashboard = () => {
     const trialCount = state.users.filter(u => u.status === UserStatus.TRIAL).length;
     
     // 3. Pracownicy (Employees + Brigadirs, Active ONLY)
-    // Exclude Trial users as they have their own tile, ensuring consistency with the Employees list.
     const employeesCount = state.users.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.ACTIVE).length;
     
     // 4. Dokumenty (Pending)
@@ -46,7 +45,7 @@ export const HRDashboard = () => {
             title: h.action,
             subtitle: `Wykonał: ${performedByLabel}`,
             message: h.action, // For modal
-            date: h.date,
+            date: h.created_at,
             icon: Activity,
             colorClass: 'text-slate-400'
         };
@@ -143,7 +142,6 @@ export const HRDashboard = () => {
             <h1 className="text-2xl font-bold text-slate-900 mb-6">Dashboard HR</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                {/* 1. Kandydaci */}
                 <StatCard 
                     title="Kandydaci" 
                     count={candidatesCount} 
@@ -162,8 +160,6 @@ export const HRDashboard = () => {
                         </button>
                     }
                 />
-                
-                {/* 2. Kandydaci na okresie próbnym */}
                 <StatCard 
                     title="Kandydaci na okresie próbnym" 
                     count={trialCount} 
@@ -171,8 +167,6 @@ export const HRDashboard = () => {
                     colorClass="text-orange-500" 
                     path="/hr/trial"
                 />
-
-                {/* 3. Pracownicy */}
                 <StatCard 
                     title="Pracownicy" 
                     count={employeesCount} 
@@ -180,8 +174,6 @@ export const HRDashboard = () => {
                     colorClass="text-blue-500" 
                     path="/hr/employees"
                 />
-
-                {/* 4. Dokumenty do sprawdzenia */}
                 <StatCard 
                     title="Dokumenty do sprawdzenia" 
                     count={pendingDocs} 

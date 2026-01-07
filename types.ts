@@ -273,6 +273,7 @@ export interface TestAttempt {
   passed: boolean;
   completed_at: string;
   duration_seconds?: number;
+  answers?: any;
 }
 
 // Added PracticalCheckItem and PracticalCheckTemplate interfaces
@@ -328,7 +329,7 @@ export interface LibraryResource {
 export interface CandidateHistoryEntry {
     id: string;
     candidate_id: string;
-    date: string;
+    created_at: string;
     action: string;
     performed_by: string;
 }

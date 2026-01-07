@@ -1,14 +1,19 @@
-
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Settings, Briefcase, Users, Shield, ExternalLink, Clock, Network } from 'lucide-react';
+import { Mail, Lock, AlertCircle, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Button } from '../components/Button';
 import { Role, UserStatus } from '../types';
 
 export const LoginPage = () => {
-  const { login, loginAsUser, state } = useAppContext();
+  const { login, state } = useAppContext();
   const navigate = useNavigate();
+
+  // Form states
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.currentUser) {
@@ -28,14 +33,20 @@ export const LoginPage = () => {
     }
   }, [state.currentUser, navigate]);
 
-  const handleTrialLogin = () => {
-      // Find the trial user from constants or use the specific ID 'u1_trial'
-      const trialUser = state.users.find(u => u.id === 'u1_trial');
-      if (trialUser) {
-          loginAsUser(trialUser);
-      } else {
-          alert("Brak użytkownika testowego (u1_trial).");
-      }
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) return;
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      await login(email, password);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError('Błędny adres e-mail lub hasło.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -44,41 +55,56 @@ export const LoginPage = () => {
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-4">M</div>
           <h1 className="text-2xl font-bold text-slate-900">MaxMaster Skills</h1>
-          <p className="text-slate-500 mt-2">Wybierz rolę do wersji demonstracyjnej</p>
+          <p className="text-slate-500 mt-2">Zaloguj się do platformy zarządzania</p>
         </div>
 
-        <div className="space-y-3">
-          <Button fullWidth onClick={() => login(Role.ADMIN)} className="justify-start pl-6 bg-slate-800 hover:bg-slate-900">
-             <Settings className="mr-3" size={18} /> Admin (Techniczny)
-          </Button>
-          <Button fullWidth onClick={() => login(Role.HR)} className="justify-start pl-6 bg-purple-600 hover:bg-purple-700">
-             <Briefcase className="mr-3" size={18} /> HR Manager
-          </Button>
-          <div className="h-px bg-slate-200 my-4"></div>
-          <Button fullWidth onClick={() => login(Role.COORDINATOR)} className="justify-start pl-6 bg-orange-600 hover:bg-orange-700">
-             <Network className="mr-3" size={18} /> Koordynator Robót
-          </Button>
-          <Button fullWidth onClick={() => login(Role.EMPLOYEE)} className="justify-start pl-6">
-            <Users className="mr-3" size={18} /> Pracownik (Jan)
-          </Button>
-          
-          <Button fullWidth onClick={handleTrialLogin} className="justify-start pl-6 bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-200">
-            <Clock className="mr-3" size={18} /> Panel: Okres Próbny (Adam)
-          </Button>
-
-          <Button fullWidth variant="outline" onClick={() => login(Role.BRIGADIR)} className="justify-start pl-6">
-            <Shield className="mr-3" size={18} /> Brygadzista (Tomasz)
-          </Button>
-          <Button fullWidth variant="ghost" onClick={() => login(Role.CANDIDATE)} className="justify-start pl-6">
-            <Users className="mr-3" size={18} /> Kandydat
-          </Button>
-          
-          {/* Temporary Link for testing the Welcome Page */}
-          <div className="pt-2 text-center">
-              <Link to="/candidate/welcome" className="inline-flex items-center text-xs text-blue-500 hover:text-blue-700 hover:underline">
-                  <ExternalLink size={12} className="mr-1"/> Strona Powitalna (Landing)
-              </Link>
+        {error && (
+          <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-600 text-sm animate-in fade-in zoom-in">
+            <AlertCircle size={18} />
+            {error}
           </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4 mb-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">ADRES EMAIL</label>
+            <div className="relative">
+              <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="email" 
+                required
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                placeholder="twoj@email.pl"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">HASŁO</label>
+            <div className="relative">
+              <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="password" 
+                required
+                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <Button type="submit" fullWidth disabled={isLoading} className="h-12 text-base font-bold shadow-lg shadow-blue-600/20">
+            {isLoading ? 'Logowanie...' : 'Zaloguj się'}
+          </Button>
+        </form>
+        
+        <div className="pt-6 text-center border-t border-slate-50 mt-4">
+            <Link to="/candidate/welcome" className="inline-flex items-center text-xs text-blue-500 hover:text-blue-700 hover:underline">
+                <ExternalLink size={12} className="mr-1"/> Przejdź do strony powitalnej dla kandydatów
+            </Link>
         </div>
       </div>
     </div>

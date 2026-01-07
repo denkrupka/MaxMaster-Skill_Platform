@@ -1,5 +1,5 @@
 {
-  "name": "maxmaster-skills",
+  "name": "maxmaster-skills-_-platform",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -16,7 +16,7 @@
     "recharts": "^3.5.0",
     "@google/genai": "^1.32.0",
     "pdfjs-dist": "4.0.379",
-    "@supabase/supabase-js": "^2.48.1"
+    "@supabase/supabase-js": "2.45.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
