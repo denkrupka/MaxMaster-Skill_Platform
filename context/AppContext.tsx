@@ -300,8 +300,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUser = async (userId: string, updates: Partial<User>) => {
-    const { data, error } = await supabase.from('users').update(updates).eq('id', userId).select().single();
-    if (error) throw error;
+    console.log('Updating user', userId, 'with:', updates);
+
+    // Sanitize data: Convert empty strings to null for nullable fields
+    const sanitizedUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
+      // Convert empty strings to null for date and nullable text fields
+      if (value === '') {
+        acc[key] = null;
+      } else {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as any);
+
+    const { data, error } = await supabase.from('users').update(sanitizedUpdates).eq('id', userId).select().single();
+    if (error) {
+      console.error('Update user error:', error);
+      throw error;
+    }
     if (data) {
         setState(prev => ({
             ...prev,
