@@ -2,14 +2,25 @@
 
 ## 🔧 Notification Settings UUID Error Fix
 
-### ❌ Error Message
+### ❌ Error Messages You Might See
+
+**Error 1: UUID Type Error**
 ```
 "Error saving notification settings:"
 "{\"code\":\"22P02\",\"details\":null,\"hint\":null,\"message\":\"invalid input syntax for type uuid: \\\"hr_cand_reg\\\"\"}"
 ```
 
-### 🔍 Root Cause
-The notification settings feature had corrupted data where `setting_type` values (like "hr_cand_reg") were incorrectly stored in the `target_role` UUID field, causing PostgreSQL type validation errors.
+**Error 2: Constraint Error**
+```
+"Error saving notification settings:"
+"{\"code\":\"42P10\",\"details\":null,\"hint\":null,\"message\":\"there is no unique or exclusion constraint matching the ON CONFLICT specification\"}"
+```
+
+### 🔍 Root Causes
+
+**Error 1 (22P02):** The notification settings feature had corrupted data where `setting_type` values (like "hr_cand_reg") were incorrectly stored in the `target_role` UUID field, causing PostgreSQL type validation errors.
+
+**Error 2 (42P10):** The `notification_settings` table is missing the required unique constraint `notification_settings_user_id_setting_type_key` on columns `(user_id, setting_type)`. This constraint is needed for proper data integrity and upsert operations.
 
 ### ✅ Solution Applied
 
@@ -31,36 +42,52 @@ The notification settings feature had corrupted data where `setting_type` values
 
 ## 🚀 REQUIRED: Database Setup
 
-**⚠️ YOU MUST RUN THIS SQL SCRIPT TO FIX THE ERROR**
+**⚠️ YOU MUST RUN A SQL SCRIPT TO FIX THE ERROR**
 
-### Step 1: Open Supabase SQL Editor
+### Option 1: Quick Fix (Recommended)
+
+See **`scripts/QUICK_FIX.md`** for the fastest solution - this recreates the table from scratch.
+
+### Option 2: Detailed Fix with Verification
+
+Follow these steps:
+
+#### Step 1: Open Supabase SQL Editor
 
 1. Go to your Supabase project: https://supabase.com/dashboard
 2. Select your project: **MaxMaster-Skill_Platform**
 3. Navigate to: **SQL Editor** (left sidebar)
 4. Click: **+ New query**
 
-### Step 2: Run the Fix Script
+#### Step 2: Run the Complete Fix Script
 
-1. Open the file: `scripts/seed_notification_settings.sql`
+1. Open the file: `scripts/complete_fix.sql`
 2. Copy the **ENTIRE** contents of that file
 3. Paste into the Supabase SQL Editor
 4. Click: **Run** (or press `Ctrl+Enter`)
 
-### Step 3: Verify Success
+This script will:
+- Drop and recreate the table with correct structure
+- Add the missing unique constraint
+- Insert 6 default notification settings
+- Verify everything is set up correctly
 
-You should see output showing:
-- Current data (may show corrupted entries)
-- "After deletion - should be 0 rows" → should show `0`
-- "Final verification - should be 6 rows" → should show **6 clean rows**:
+#### Step 3: Verify Success
+
+If using `complete_fix.sql`, you should see multiple verification steps in the output showing:
+- Table structure (columns and data types)
+- Current constraints
+- Final verification showing **6 clean rows**:
   - Zmiana statusu
   - Zaliczony test
   - Nowy dokument
   - Wysłanie linku
   - Koniec okresu próbnego
   - Zwolnienie pracownika
+- Data type verification (all should be correct)
+- Final constraint check (should show PRIMARY KEY and UNIQUE constraints)
 
-### Step 4: Restart Your Application
+#### Step 4: Restart Your Application
 
 After running the SQL script:
 ```bash
@@ -69,7 +96,7 @@ After running the SQL script:
 npm run dev
 ```
 
-### Step 5: Test the Fix
+#### Step 5: Test the Fix
 
 1. Log in as **HR** user
 2. Go to: **Ustawienia** (Settings)
@@ -118,7 +145,30 @@ create table public.notification_settings (
 
 ## 🐛 Troubleshooting
 
-### Error still occurs after running script
+### Error 42P10 (Constraint Missing)
+
+If you see `"there is no unique or exclusion constraint matching the ON CONFLICT specification"`:
+
+1. **The table is missing the unique constraint**. Run the complete fix script from `QUICK_FIX.md` which recreates the table with all necessary constraints.
+
+2. **Verify the constraint exists**:
+   ```sql
+   SELECT constraint_name, constraint_type
+   FROM information_schema.table_constraints
+   WHERE table_name = 'notification_settings';
+   ```
+   You should see:
+   - `notification_settings_pkey` (PRIMARY KEY)
+   - `notification_settings_user_id_setting_type_key` (UNIQUE)
+
+3. **If constraint is missing**, add it manually:
+   ```sql
+   ALTER TABLE notification_settings
+   ADD CONSTRAINT notification_settings_user_id_setting_type_key
+   UNIQUE (user_id, setting_type);
+   ```
+
+### Error 22P02 (UUID Type Error) - still occurs after running script
 
 1. **Check if script ran completely**:
    ```sql
