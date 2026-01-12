@@ -133,14 +133,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     employeeNotes: [],
     employeeBadges: [],
     toast: null,
-    notificationSettings: [
-      { id: 'status_change', label: 'Zmiana statusu', system: true, email: true, sms: false },
-      { id: 'test_passed', label: 'Zaliczony test', system: true, email: false, sms: false },
-      { id: 'doc_uploaded', label: 'Nowy dokument', system: true, email: true, sms: false },
-      { id: 'candidate_link', label: 'Wysłanie linku', system: false, email: true, sms: true },
-      { id: 'trial_ending', label: 'Koniec okresu próbnego', system: true, email: true, sms: false },
-      { id: 'termination', label: 'Zwolnienie pracownika', system: true, email: true, sms: false }
-    ],
+    notificationSettings: [],
     isLoading: true
   });
 
@@ -157,7 +150,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { data: incidents },
         { data: notes },
         { data: badges },
-        { data: positions }
+        { data: positions },
+        { data: notificationSettings }
       ] = await Promise.all([
         supabase.from('users').select('*'),
         supabase.from('skills').select('*').eq('is_archived', false),
@@ -169,7 +163,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('quality_incidents').select('*'),
         supabase.from('employee_notes').select('*'),
         supabase.from('employee_badges').select('*'),
-        supabase.from('positions').select('*')
+        supabase.from('positions').select('*'),
+        supabase.from('notification_settings').select('*').is('user_id', null)
       ]);
 
       setState(prev => ({
@@ -185,6 +180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         employeeNotes: notes || [],
         employeeBadges: badges || [],
         positions: positions || [],
+        notificationSettings: notificationSettings || [],
         isLoading: false
       }));
     } catch (error) {
@@ -261,7 +257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const triggerNotification = (type: string, title: string, message: string, link?: string) => {
-      const setting = state.notificationSettings.find(s => s.id === type);
+      const setting = state.notificationSettings.find(s => s.setting_type === type);
       if (setting?.system) {
           const newNotif: AppNotification = { id: `notif_${Date.now()}`, title, message, isRead: false, createdAt: new Date().toISOString(), link };
           setState(prev => ({ ...prev, appNotifications: [newNotif, ...prev.appNotifications], toast: { title, message } }));
@@ -632,7 +628,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateSystemConfig = (config: SystemConfig) => setState(prev => ({ ...prev, systemConfig: config }));
-  const updateNotificationSettings = (settings: NotificationSetting[]) => setState(prev => ({ ...prev, notificationSettings: settings }));
+
+  const updateNotificationSettings = async (settings: NotificationSetting[]) => {
+    try {
+      // Update each notification setting in the database
+      for (const setting of settings) {
+        const { error } = await supabase
+          .from('notification_settings')
+          .update({
+            system: setting.system,
+            email: setting.email,
+            sms: setting.sms
+          })
+          .eq('id', setting.id);
+
+        if (error) {
+          console.error('Error saving notification settings:', error);
+          throw error;
+        }
+      }
+
+      // Update local state after successful save
+      setState(prev => ({ ...prev, notificationSettings: settings }));
+    } catch (error) {
+      console.error('Error saving notification settings:', error);
+      throw error;
+    }
+  };
+
   const markNotificationAsRead = (id: string) => setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => n.id === id ? { ...n, isRead: true } : n) }));
   const markAllNotificationsAsRead = () => setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => ({ ...n, isRead: true })) }));
   const clearToast = () => setState(prev => ({ ...prev, toast: null }));

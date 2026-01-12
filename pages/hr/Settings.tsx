@@ -41,7 +41,15 @@ export const HRSettingsPage = () => {
     // --- HANDLERS ---
     const showSuccess = (msg: string) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000); };
     const handleSaveGeneral = () => { if (currentUser) { if (profileData.password && profileData.password !== profileData.confirmPassword) return alert("Hasła nie są identyczne!"); updateUser(currentUser.id, profileData); showSuccess('Zaktualizowano profil.'); } };
-    const handleSaveNotifications = () => { updateNotificationSettings(localNotifSettings); showSuccess('Zaktualizowano preferencje powiadomień.'); };
+    const handleSaveNotifications = async () => {
+        try {
+            await updateNotificationSettings(localNotifSettings);
+            showSuccess('Zaktualizowano preferencje powiadomień.');
+        } catch (error) {
+            console.error('Error saving notification settings:', error);
+            alert('Błąd podczas zapisywania ustawień powiadomień');
+        }
+    };
     const toggleNotif = (id: string, channel: 'system' | 'email' | 'sms') => { setLocalNotifSettings(prev => prev.map(n => n.id === id ? { ...n, [channel]: !n[channel] } : n)); };
     
     const handleSaveSystem = () => { updateSystemConfig(localSystemConfig); showSuccess('Konfiguracja systemowa zapisana.'); };

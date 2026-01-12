@@ -9,11 +9,15 @@ export interface AppNotification {
 }
 
 export interface NotificationSetting {
-    id: string;
+    id: string; // UUID in database
+    setting_type: string; // e.g., "hr_cand_reg", "status_change"
     label: string;
     system: boolean;
     email: boolean;
     sms: boolean;
+    user_id?: string;
+    category?: string;
+    target_role?: string;
 }
 
 export enum Role {
