@@ -8,6 +8,9 @@ import { AppLayout } from './components/AppLayout';
 
 // Pages
 import { LoginPage } from './pages/Login';
+import { SetupPasswordPage } from './pages/SetupPassword';
+import { ForgotPasswordPage } from './pages/ForgotPassword';
+import { ResetPasswordPage } from './pages/ResetPassword';
 import { AdminUsersPage } from './pages/admin/Users';
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
@@ -92,6 +95,9 @@ export default function App() {
       <AppProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/setup-password" element={<SetupPasswordPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           

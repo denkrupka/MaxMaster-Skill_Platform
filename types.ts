@@ -11,9 +11,15 @@ export interface AppNotification {
 export interface NotificationSetting {
     id: string;
     label: string;
+    category: 'rekrutacja' | 'trial' | 'skills' | 'quality' | 'referrals' | 'system';
+    target_role: Role | 'work_manager'; 
     system: boolean;
     email: boolean;
     sms: boolean;
+}
+
+export interface NotificationSettingUpdate extends Partial<NotificationSetting> {
+    id: string;
 }
 
 export enum Role {
@@ -26,29 +32,26 @@ export enum Role {
 }
 
 export enum UserStatus {
-  // Candidate Stages
-  INVITED = 'invited', // Zaproszony, nie wszedł
-  STARTED = 'started', // Zarejestrowany / Wszedł do panelu
-  TESTS_IN_PROGRESS = 'tests_in_progress', // Rozpoczął testy
-  TESTS_COMPLETED = 'tests_completed', // Zakończył testy
-  INTERESTED = 'interested', // Zainteresowany współpracą
-  NOT_INTERESTED = 'not_interested', // Rezygnacja
-  REJECTED = 'rejected', // Odrzucony przez HR
-  OFFER_SENT = 'offer_sent', // Oferta wysłana
-  DATA_REQUESTED = 'data_requested', // Prośba o dane
-  DATA_SUBMITTED = 'data_submitted', // Dane przesłane
-  PORTAL_BLOCKED = 'portal_blocked', // Zablokowany dostęp
-
-  // Employee Stages
-  TRIAL = 'trial', // Okres Próbny
-  ACTIVE = 'active', // Aktywny pracownik
-  INACTIVE = 'inactive', // Zwolniony / Były pracownik
+  INVITED = 'invited',
+  STARTED = 'started',
+  TESTS_IN_PROGRESS = 'tests_in_progress',
+  TESTS_COMPLETED = 'tests_completed',
+  INTERESTED = 'interested',
+  NOT_INTERESTED = 'not_interested',
+  REJECTED = 'rejected',
+  OFFER_SENT = 'offer_sent',
+  DATA_REQUESTED = 'data_requested',
+  DATA_SUBMITTED = 'data_submitted',
+  PORTAL_BLOCKED = 'portal_blocked',
+  TRIAL = 'trial',
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
 }
 
 export enum ContractType {
-  UOP = 'uop', // Umowa o Pracę (+0)
-  UZ = 'uz',   // Umowa Zlecenie (+1)
-  B2B = 'b2b'  // B2B (+7)
+  UOP = 'uop',
+  UZ = 'uz',
+  B2B = 'b2b'
 }
 
 export enum SkillCategory {
@@ -73,12 +76,34 @@ export enum VerificationType {
 
 export enum SkillStatus {
   LOCKED = 'locked',
-  PENDING = 'pending', // Not started
-  THEORY_PASSED = 'theory_passed', // Theory OK, waiting for practice
-  PRACTICE_PENDING = 'practice_pending', // Check created, waiting for Brigadir
+  PENDING = 'pending',
+  THEORY_PASSED = 'theory_passed',
+  PRACTICE_PENDING = 'practice_pending',
   CONFIRMED = 'confirmed',
   FAILED = 'failed',
   SUSPENDED = 'suspended'
+}
+
+/**
+ * Added GradingStrategy enum to support test evaluation logic and fix imports in HR and Candidate pages.
+ */
+export enum GradingStrategy {
+  ALL_CORRECT = 'all_correct',
+  ANY_CORRECT = 'any_correct',
+  MIN_2_CORRECT = 'min_2_correct'
+}
+
+/**
+ * Added Question interface to define the structure of test questions.
+ */
+export interface Question {
+  id: string;
+  text: string;
+  options: string[];
+  correctOptionIndices: number[];
+  gradingStrategy: GradingStrategy;
+  timeLimit?: number;
+  imageUrl?: string;
 }
 
 export interface Skill {
@@ -89,15 +114,9 @@ export interface Skill {
   verification_type: VerificationType;
   hourly_bonus: number;
   required_pass_rate: number;
-  criteria?: string[]; // New field for detailed criteria
-  is_active?: boolean; // New field for activation status
-  is_archived?: boolean; // Soft delete
-}
-
-export interface BrigadierBonus {
-  id: string;
-  name: string;
-  amount: number;
+  criteria?: string[];
+  is_active?: boolean;
+  is_archived?: boolean;
 }
 
 export interface Position {
@@ -105,9 +124,8 @@ export interface Position {
   name: string;
   responsibilities: string[];
   required_skill_ids: string[];
-  min_monthly_rate?: number; // For Coordinator/Work Manager
-  max_monthly_rate?: number; // For Coordinator/Work Manager
-  brigadier_bonuses?: BrigadierBonus[]; // Specific for Brigadier
+  min_monthly_rate?: number;
+  max_monthly_rate?: number;
   order: number;
 }
 
@@ -118,35 +136,25 @@ export interface User {
   last_name: string;
   role: Role;
   status: UserStatus;
-  
-  // Financials
-  base_rate?: number; // Base hourly rate
+  base_rate?: number;
   contract_type?: ContractType;
   is_student?: boolean;
-
-  // HR Data
   phone?: string;
   hired_date: string;
   contract_end_date?: string;
-  trial_end_date?: string; // If in trial
+  trial_end_date?: string;
   assigned_brigadir_id?: string;
-  
-  // Referral System
-  referred_by_id?: string; // ID of the employee who invited this user
-  referral_bonus_paid?: boolean; // Payment status
-  referral_bonus_paid_date?: string; // Payment timestamp
-
-  // Candidate Data
-  source?: string; // Skąd przyszedł (OLX, Polecenie, etc.)
+  referred_by_id?: string;
+  referral_bonus_paid?: boolean;
+  referral_bonus_paid_date?: string;
+  source?: string;
   notes?: string;
   resume_url?: string;
-  target_position?: string; // Stanowisko na ktore aplikuje
-
-  // Personal Data (For Contract)
+  target_position?: string;
   pesel?: string;
   birth_date?: string;
   citizenship?: string;
-  document_type?: string; // Dowód / Paszport
+  document_type?: string;
   document_number?: string;
   zip_code?: string;
   city?: string;
@@ -154,49 +162,11 @@ export interface User {
   house_number?: string;
   apartment_number?: string;
   bank_account?: string;
-  nip?: string; // Optional for B2B
-
-  // Termination
+  nip?: string;
   termination_date?: string;
   termination_reason?: string;
   termination_initiator?: 'employee' | 'company';
-
-  // Qualifications Selection (Candidate)
-  qualifications?: string[]; // IDs from QUALIFICATIONS_LIST
-}
-
-export interface ChecklistItemState {
-    checked: boolean;
-    image_url?: string;
-    checkedBy?: string; // Name of user who checked
-    checkedByRole?: Role; 
-    checkedAt?: string; // ISO Date
-}
-
-export interface VerificationAttachment {
-    id: string;
-    url: string;
-    type: 'photo' | 'file';
-    name: string;
-    uploadedBy: string;
-    createdAt: string;
-}
-
-export interface VerificationNote {
-    id: string;
-    text: string;
-    author: string;
-    role: Role;
-    createdAt: string;
-}
-
-export interface VerificationLog {
-    id: string;
-    action: string; // e.g., "Started", "Checked Item", "Approved"
-    by: string;
-    role: Role;
-    at: string;
-    details?: string;
+  qualifications?: string[];
 }
 
 export interface UserSkill {
@@ -204,59 +174,31 @@ export interface UserSkill {
   user_id: string;
   skill_id: string;
   status: SkillStatus;
-  
-  // Details
   theory_score?: number;
-  practice_checked_by?: string; // Brigadir ID
+  practice_checked_by?: string;
   practice_date?: string;
   confirmed_at?: string;
   rejection_reason?: string;
-  
-  // Checklist Progress
-  checklist_progress?: Record<number, ChecklistItemState>;
-
-  // Enhanced Verification Data
-  verification_attachments?: VerificationAttachment[];
-  verification_notes?: VerificationNote[];
-  verification_logs?: VerificationLog[];
-
-  // For Documents
-  document_url?: string; // Legacy single file
-  document_urls?: string[]; // Multiple files support
+  checklist_progress?: Record<number, any>;
+  document_url?: string;
+  document_urls?: string[];
   expiry_date?: string;
-  
-  // For Custom/Extra Documents (Candidate Uploads)
   custom_name?: string;
+  custom_type?: string;
   is_indefinite?: boolean;
   issue_date?: string;
   expires_at?: string;
-  bonus_value?: number; // For non-standard skills/docs
-
-  is_archived?: boolean; // Soft delete
-  effective_from?: string; // Date when rate increase starts (M+1 logic)
+  bonus_value?: number;
+  is_archived?: boolean;
+  effective_from?: string;
 }
 
-// Added GradingStrategy enum
-export enum GradingStrategy {
-    ALL_CORRECT = 'all_correct',
-    MIN_2_CORRECT = 'min_2_correct',
-    ANY_CORRECT = 'any_correct'
-}
-
-// Fixed Question interface to use GradingStrategy and provided properties
-export interface Question {
-  id: string;
-  text: string;
-  options: string[];
-  correctOptionIndices: number[];
-  gradingStrategy: GradingStrategy;
-  imageUrl?: string;
-  timeLimit?: number; // in seconds
-}
-
+/**
+ * Updated Test interface to use the Question interface for stronger typing.
+ */
 export interface Test {
   id: string;
-  skill_ids: string[]; // One test can cover multiple skills (e.g. SEP theory covers multiple)
+  skill_ids: string[];
   title: string;
   questions: Question[];
   time_limit_minutes: number;
@@ -264,7 +206,9 @@ export interface Test {
   is_archived?: boolean;
 }
 
-// Added TestAttempt interface
+/**
+ * Added TestAttempt interface to track user performance on qualification tests.
+ */
 export interface TestAttempt {
   id: string;
   user_id: string;
@@ -273,59 +217,27 @@ export interface TestAttempt {
   passed: boolean;
   completed_at: string;
   duration_seconds?: number;
-  answers?: any;
 }
 
-// Added PracticalCheckItem and PracticalCheckTemplate interfaces
-export interface PracticalCheckItem {
-    id: number;
-    text_pl: string;
-    required: boolean;
-    points?: number;
-}
-
-export interface PracticalCheckTemplate {
-    id: string;
-    skill_id: string;
-    title_pl: string;
-    min_points_to_pass: number;
-    items: PracticalCheckItem[];
-}
-
+/**
+ * Added BonusDocumentType for HR system configuration.
+ */
 export interface BonusDocumentType {
   id: string;
   label: string;
   bonus: number;
 }
 
-// Added SalaryHistoryEntry interface
-export interface SalaryHistoryEntry {
-  id: string;
-  user_id: string;
-  change_date: string;
-  reason: string;
-  old_rate: number;
-  new_rate: number;
-  changed_by_id: string;
+export interface SystemConfig {
+    baseRate: number;
+    contractBonuses: Record<string, number>;
+    studentBonus: number;
+    bonusDocumentTypes: BonusDocumentType[];
+    bonusPermissionTypes: BonusDocumentType[];
+    terminationReasons: string[];
+    positions: string[];
 }
 
-// Added LibraryResource interface
-export interface LibraryResource {
-  id: string;
-  title: string;
-  description?: string;
-  type: 'pdf' | 'video' | 'link' | 'mixed';
-  category?: SkillCategory; // for backward compatibility
-  categories?: SkillCategory[];
-  skill_ids: string[];
-  url: string;
-  videoUrl?: string;
-  imageUrl?: string;
-  textContent?: string;
-  is_archived: boolean;
-}
-
-// Added CandidateHistoryEntry interface
 export interface CandidateHistoryEntry {
     id: string;
     candidate_id: string;
@@ -334,7 +246,6 @@ export interface CandidateHistoryEntry {
     performed_by: string;
 }
 
-// Added QualityIncident interface
 export interface QualityIncident {
     id: string;
     user_id: string;
@@ -346,7 +257,6 @@ export interface QualityIncident {
     image_url?: string;
 }
 
-// Added Note enums and interface
 export enum NoteCategory {
     GENERAL = 'Ogólna',
     ATTITUDE = 'Postawa',
@@ -355,10 +265,13 @@ export enum NoteCategory {
     SAFETY = 'BHP'
 }
 
+/**
+ * Added NoteSeverity enum for employee evaluation notes.
+ */
 export enum NoteSeverity {
-    INFO = 'info',
-    WARNING = 'warning',
-    CRITICAL = 'critical'
+  INFO = 'info',
+  WARNING = 'warning',
+  CRITICAL = 'critical'
 }
 
 export interface EmployeeNote {
@@ -366,12 +279,10 @@ export interface EmployeeNote {
     employee_id: string;
     author_id: string;
     category: NoteCategory;
-    severity?: NoteSeverity;
     text: string;
     created_at: string;
 }
 
-// Added Badge enums and interface
 export enum BadgeType {
     SPEED = 'Szybkość',
     QUALITY = 'Jakość',
@@ -384,33 +295,13 @@ export interface EmployeeBadge {
     id: string;
     employee_id: string;
     author_id: string;
-    month: string; // YYYY-MM
+    month: string;
     type: BadgeType;
     description: string;
     visible_to_employee: boolean;
     created_at: string;
 }
 
-// Added Notification enums and interfaces
-export enum NotificationChannel {
-    SYSTEM = 'system',
-    EMAIL = 'email',
-    SMS = 'sms',
-    BOTH = 'both'
-}
-
-export interface NotificationTemplate {
-    id: string;
-    code: string;
-    channel: NotificationChannel;
-    subject: string;
-    body: string;
-    variables: string[];
-    is_active: boolean;
-    created_at: string;
-}
-
-// Added MonthlyBonus interface
 export interface MonthlyBonus {
     kontrola_pracownikow: boolean;
     realizacja_planu: boolean;
@@ -419,16 +310,95 @@ export interface MonthlyBonus {
     staz_pracy_years: number;
 }
 
-export interface SystemConfig {
-    baseRate: number;
-    contractBonuses: Record<string, number>;
-    studentBonus: number;
-    bonusDocumentTypes: BonusDocumentType[];
-    bonusPermissionTypes: BonusDocumentType[];
-    terminationReasons: string[];
-    positions: string[]; // Legacy
-    notificationProviders?: {
-        email: { enabled: boolean; provider: 'postmark'; apiKey: string; fromEmail: string; fromName: string; };
-        sms: { enabled: boolean; provider: 'smsapi'; apiKey: string; senderId: string; quietHoursStart: number; quietHoursEnd: number; };
-    };
+export interface LibraryResource {
+  id: string;
+  title: string;
+  description?: string;
+  type: 'pdf' | 'video' | 'link' | 'mixed';
+  category?: SkillCategory;
+  categories?: SkillCategory[];
+  skill_ids: string[];
+  url: string;
+  videoUrl?: string;
+  imageUrl?: string;
+  textContent?: string;
+  is_archived: boolean;
+}
+
+/**
+ * Added missing interfaces for practical verification and coordinator workflows.
+ */
+
+export interface PracticalCheckItem {
+  id: number;
+  text_pl: string;
+  required: boolean;
+  points: number;
+}
+
+export interface PracticalCheckTemplate {
+  id: string;
+  skill_id: string;
+  title_pl: string;
+  min_points_to_pass: number;
+  items: PracticalCheckItem[];
+}
+
+export interface ChecklistItemState {
+  checked: boolean;
+  image_url?: string;
+}
+
+export interface VerificationAttachment {
+  id: string;
+  url: string;
+  type: string;
+  created_at: string;
+}
+
+export interface VerificationNote {
+  id: string;
+  text: string;
+  author_id: string;
+  created_at: string;
+}
+
+export interface VerificationLog {
+  id: string;
+  action: string;
+  performed_by: string;
+  created_at: string;
+}
+
+/**
+ * Added Notification related interfaces for HR settings.
+ */
+
+export enum NotificationChannel {
+  SYSTEM = 'system',
+  EMAIL = 'email',
+  SMS = 'sms',
+  BOTH = 'both'
+}
+
+export interface NotificationTemplate {
+  id: string;
+  code: string;
+  channel: NotificationChannel;
+  subject: string;
+  body: string;
+  variables: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
+/**
+ * Added SalaryHistoryEntry for rate change tracking.
+ */
+export interface SalaryHistoryEntry {
+  id: string;
+  user_id: string;
+  date: string;
+  rate: number;
+  change_reason: string;
 }

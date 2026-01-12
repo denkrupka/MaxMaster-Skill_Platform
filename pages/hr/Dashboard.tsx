@@ -23,7 +23,11 @@ export const HRDashboard = () => {
     // 4. Dokumenty (Pending)
     const pendingDocs = state.userSkills.filter(us => {
         const skill = state.skills.find(s => s.id === us.skill_id);
-        const isDoc = skill?.verification_type === VerificationType.DOCUMENT || us.skill_id.startsWith('doc_');
+        // Robust document identification
+        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || 
+                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || 
+                      !!us.custom_type || 
+                      !us.skill_id;
         return isDoc && us.status === SkillStatus.PENDING && !us.is_archived;
     }).length;
 

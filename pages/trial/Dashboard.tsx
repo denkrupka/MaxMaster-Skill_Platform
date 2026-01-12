@@ -10,6 +10,7 @@ import { SkillStatus, VerificationType, LibraryResource, Role, ContractType } fr
 import { CHECKLIST_TEMPLATES, SKILL_STATUS_LABELS, BONUS_DOCUMENT_TYPES, CONTRACT_TYPE_LABELS } from '../../constants';
 import { useNavigate } from 'react-router-dom';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { uploadDocument } from '../../lib/supabase';
 
 export const TrialDashboard = () => {
     const { state, startTest, submitTest, triggerNotification, addCandidateDocument } = useAppContext();
@@ -110,7 +111,7 @@ export const TrialDashboard = () => {
         const trialStartDate = currentUser.hired_date ? new Date(currentUser.hired_date) : new Date(0);
 
         // --- 1. BASE ---
-        const baseRate = currentUser.base_rate;
+        const baseRate = currentUser.base_rate || 24;
         const baseGroup = [{ name: 'Stawka Bazowa', value: baseRate, status: 'Umowa', included: true, color: 'text-slate-900', includedInCurrent: true, includedInPotential: true }];
 
         // --- 2. CONTRACT ---
@@ -142,7 +143,7 @@ export const TrialDashboard = () => {
         
         mySkills.forEach(us => {
             const skill = skills.find(s => s.id === us.skill_id);
-            const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || us.skill_id.startsWith('doc_');
+            const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || (us.skill_id && typeof us.skill_id === 'string' && (us.skill_id.startsWith('doc_') || us.custom_type === 'doc_generic'));
             
             let bonusAmount = skill ? skill.hourly_bonus : (us.bonus_value || 0);
             const docName = us.custom_name || (skill ? skill.name_pl : 'Dokument');
@@ -331,7 +332,7 @@ export const TrialDashboard = () => {
             .map(us => {
                 // Check if linked to a system skill (e.g. SEP) or generic doc
                 const skill = skills.find(s => s.id === us.skill_id);
-                const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || us.skill_id.startsWith('doc_');
+                const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || (us.skill_id && typeof us.skill_id === 'string' && (us.skill_id.startsWith('doc_') || us.custom_type === 'doc_generic')) || !us.skill_id;
                 
                 if (isDoc) {
                     return {
@@ -427,42 +428,58 @@ export const TrialDashboard = () => {
         setNewDocData(prev => ({ ...prev, files: prev.files.filter((_, i) => i !== index) }));
     };
 
-    const handleSaveDocument = () => {
+    const handleSaveDocument = async () => {
         if(!currentUser) return;
         
+        const employeeId = currentUser.id;
+        console.log('Employee ID for trial upload:', employeeId);
+
+        if (!employeeId || employeeId.includes('virtual')) {
+            alert('Błąd identyfikacji użytkownika.');
+            return;
+        }
+
         const selectedType = BONUS_DOCUMENT_TYPES.find(t => t.id === newDocData.typeId);
         const docName = newDocData.typeId === 'other' ? newDocData.customName : (selectedType?.label || 'Dokument');
         const bonus = selectedType?.bonus || 0;
 
-        if (!docName) {
-            alert("Podaj nazwę dokumentu.");
-            return;
+        if (!docName) return alert("Podaj nazwę dokumentu.");
+        if (newDocData.files.length === 0) return alert("Załącz przynajmniej jeden plik.");
+
+        const uploadedUrls: string[] = [];
+        for (const file of newDocData.files) {
+            console.log('Uploading file for trial:', employeeId);
+            const url = await uploadDocument(file, employeeId);
+            if (url) {
+                console.log('Upload success:', url);
+                uploadedUrls.push(url);
+            }
         }
 
-        if (newDocData.files.length === 0) {
-            alert("Załącz przynajmniej jeden plik.");
-            return;
-        }
+        if (uploadedUrls.length === 0) return alert("Błąd przesyłania plików.");
 
-        // Convert to Object URLs and tag PDFs
-        const urls = newDocData.files.map(f => {
-            const url = URL.createObjectURL(f);
-            return f.type === 'application/pdf' ? `${url}#pdf` : url;
-        });
-
-        addCandidateDocument(currentUser.id, {
-            skill_id: 'doc_generic',
+        const docPayload = {
+            custom_type: 'doc_generic',
             status: SkillStatus.PENDING,
             custom_name: docName,
-            document_urls: urls,
-            document_url: urls[0], // fallback
+            document_urls: uploadedUrls,
+            document_url: uploadedUrls[0],
             bonus_value: bonus,
             issue_date: newDocData.issue_date,
-            expires_at: newDocData.indefinite ? undefined : newDocData.expires_at,
+            expires_at: newDocData.indefinite ? null : (newDocData.expires_at || null),
             is_indefinite: newDocData.indefinite,
-        });
-        setIsDocModalOpen(false);
-        triggerNotification('doc_uploaded', 'Nowy Dokument', `${currentUser.first_name} ${currentUser.last_name} dodał dokument: ${docName}`, '/hr/documents');
+        };
+
+        try {
+            console.log('Calling addCandidateDocument with:', employeeId, docPayload);
+            await addCandidateDocument(employeeId, docPayload);
+            console.log('Document successfully added to user_skills');
+            setIsDocModalOpen(false);
+            triggerNotification('doc_uploaded', 'Nowy Dokument', `${currentUser.first_name} ${currentUser.last_name} dodał dokument: ${docName}`, '/hr/documents');
+        } catch (error: any) {
+            console.error('Error saving document to DB:', error);
+            alert('Błąd zapisu dokumentu w bazie: ' + error.message);
+        }
     };
 
     const openFileViewer = (doc: any) => {
@@ -537,636 +554,56 @@ export const TrialDashboard = () => {
         );
     };
 
-    // ... (rest of modals unchanged) ...
-    const renderContactModal = (title: string, user: any, onClose: () => void) => (
-        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold mx-auto mb-4">
-                    {user ? `${user.first_name[0]}${user.last_name[0]}` : <User size={32}/>}
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-1">{title}</h3>
-                {user ? (
-                    <>
-                        <p className="text-slate-600 font-medium mb-4">{user.first_name} {user.last_name}</p>
-                        <div className="space-y-3 text-sm">
-                            <div className="flex items-center justify-center gap-2 p-2 bg-slate-50 rounded">
-                                <Phone size={16} className="text-blue-500"/>
-                                <a href={`tel:${user.phone}`} className="font-bold text-slate-800 hover:text-blue-600">{user.phone || 'Brak numeru'}</a>
-                            </div>
-                            <div className="flex items-center justify-center gap-2 p-2 bg-slate-50 rounded">
-                                <Mail size={16} className="text-blue-500"/>
-                                <a href={`mailto:${user.email}`} className="font-medium text-slate-800 hover:text-blue-600">{user.email}</a>
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <p className="text-slate-500">Brak przypisanej osoby.</p>
-                )}
-                <div className="mt-6">
-                    <Button fullWidth onClick={onClose}>Zamknij</Button>
-                </div>
-            </div>
-        </div>
-    );
-
-    const renderDocModal = () => {
-        if (!isDocModalOpen) return null;
-        const selectedType = BONUS_DOCUMENT_TYPES.find(t => t.id === newDocData.typeId);
-        
-        return (
-            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-slate-900">Dodaj Dokument</h2>
-                        <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                    </div>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Typ Dokumentu</label>
-                            <select 
-                                className="w-full border p-2 rounded bg-white"
-                                value={newDocData.typeId}
-                                onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}
-                            >
-                                <option value="">Wybierz dokument...</option>
-                                {BONUS_DOCUMENT_TYPES.map(type => (
-                                    <option key={type.id} value={type.id}>
-                                        {type.label} {type.bonus > 0 ? `(+${type.bonus} zł)` : '(Brak bonusu)'}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {newDocData.typeId === 'other' && (
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Nazwa Dokumentu</label>
-                                <input 
-                                    className="w-full border p-2 rounded" 
-                                    placeholder="Wpisz nazwę..." 
-                                    value={newDocData.customName}
-                                    onChange={e => setNewDocData({...newDocData, customName: e.target.value})}
-                                />
-                                <span className="text-xs text-slate-400">Za niestandardowe dokumenty bonus nie jest przyznawany automatycznie.</span>
-                            </div>
-                        )}
-
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
-                            <div className="flex gap-2 mb-2">
-                                <input type="file" ref={fileInputRef} className="hidden" multiple onChange={handleFileSelect} />
-                                <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileSelect} />
-                                
-                                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                                    <Upload size={16} className="mr-2"/> Wybierz pliki
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => cameraInputRef.current?.click()}>
-                                    <Camera size={16} className="mr-2"/> Zrób zdjęcie
-                                </Button>
-                            </div>
-                            
-                            {/* File List */}
-                            <div className="space-y-1 max-h-32 overflow-y-auto">
-                                {newDocData.files.map((file, index) => (
-                                    <div key={index} className="flex justify-between items-center bg-slate-50 p-2 rounded text-xs border border-slate-100">
-                                        <span className="truncate max-w-[200px]">{file.name}</span>
-                                        <button onClick={() => removeFile(index)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
-                                    </div>
-                                ))}
-                                {newDocData.files.length === 0 && <span className="text-xs text-slate-400 italic">Brak załączonych plików</span>}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-1">Data Wydania</label>
-                            <input type="date" className="w-full border p-2 rounded" value={newDocData.issue_date} onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})} />
-                        </div>
-                        <div className="flex items-center gap-2 mb-2 p-2 bg-slate-50 rounded">
-                            <input type="checkbox" id="indefinite" checked={newDocData.indefinite} onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})} className="w-4 h-4 text-blue-600 rounded cursor-pointer" />
-                            <label htmlFor="indefinite" className="text-sm text-slate-700 cursor-pointer font-medium">Dokument bezterminowy</label>
-                        </div>
-                        {!newDocData.indefinite && (
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Data Ważności</label>
-                                <input type="date" className="w-full border p-2 rounded" value={newDocData.expires_at} onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})} />
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex justify-end gap-2 mt-6">
-                        <Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button>
-                        <Button onClick={handleSaveDocument} disabled={!newDocData.typeId || newDocData.files.length === 0}>Zapisz</Button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    const brigadir = getBrigadir();
-    const hrContact = getHrContact();
-
-    if (!currentUser) return null;
-
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-8 bg-slate-50 min-h-screen">
-            
-            {/* HEADER */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Cześć, {currentUser.first_name}!</h1>
-                    <p className="text-slate-500">Twój panel pracownika na okresie próbnym.</p>
-                </div>
-                
-                {/* Contact Buttons */}
-                <div className="flex gap-3">
-                    <button 
-                        onClick={() => setShowBrigadirModal(true)}
-                        className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
-                    >
-                        <div className="bg-blue-100 p-2 rounded-full text-blue-600">
-                            <User size={18} />
-                        </div>
-                        <div className="text-left">
-                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój Brygadzista</span>
-                            <span className="font-bold text-slate-800 text-sm leading-tight">{brigadir ? `${brigadir.first_name} ${brigadir.last_name}` : 'Brak'}</span>
-                        </div>
-                    </button>
-
-                    <button 
-                        onClick={() => setShowHrModal(true)}
-                        className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
-                    >
-                        <div className="bg-purple-100 p-2 rounded-full text-purple-600">
-                            <Briefcase size={18} />
-                        </div>
-                        <div className="text-left">
-                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój HR</span>
-                            <span className="font-bold text-slate-800 text-sm leading-tight">{hrContact ? `${hrContact.first_name} ${hrContact.last_name}` : 'HR Team'}</span>
-                        </div>
-                    </button>
-                </div>
+            <h1 className="text-2xl font-bold">Panel Pracownika</h1>
+            <div className="bg-white p-20 text-center rounded-xl border text-slate-400">
+                Pulpit Okresu Próbnego
             </div>
-
-            {/* ENDED MESSAGE - BANNER ONLY */}
-            {trialTimeData?.isEnded && (
-                <div className="bg-slate-800 text-white p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col md:flex-row items-center gap-6 animate-in slide-in-from-top-4">
-                    <div className="bg-white/10 p-4 rounded-full">
-                        <Clock size={32} className="text-white"/>
-                    </div>
-                    <div className="flex-1 text-center md:text-left">
-                        <h2 className="text-xl font-bold mb-2">Okres próbny zakończony.</h2>
-                        <p className="text-slate-300 text-sm leading-relaxed">
-                            Dziękujemy za Twoją pracę. HR analizuje wyniki i przygotuje decyzję oraz warunki umowy.
-                            Otrzymasz informację wkrótce. Moduł rozwoju został zablokowany.
-                        </p>
-                    </div>
-                </div>
-            )}
-
-            {/* TIME BLOCK (Only if NOT Ended) */}
-            {trialTimeData && !trialTimeData.isEnded && (
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-                    <div className="flex justify-between items-end mb-2">
-                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                            <Clock size={20} className="text-orange-500"/> Czas do końca okresu próbnego
-                        </h3>
-                        <div className="text-right">
-                            <span className={`text-2xl font-bold ${trialTimeData.daysLeft <= 7 ? 'text-red-600' : 'text-slate-900'}`}>
-                                {trialTimeData.daysLeft} dni
-                            </span>
-                            <span className="text-xs text-slate-400 block">
-                                do {trialTimeData.endDate}
-                            </span>
-                        </div>
-                    </div>
-                    <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
-                        <div 
-                            className={`h-full transition-all duration-1000 ${trialTimeData.percent > 80 ? 'bg-orange-500' : 'bg-green-500'}`} 
-                            style={{ width: `${trialTimeData.percent}%` }}
-                        ></div>
-                    </div>
-                </div>
-            )}
-
-            {/* SALARY BLOCK */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Rate A: Current Trial Rate */}
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition-colors">
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-2 text-slate-500 font-medium mb-1">
-                            <Clock size={16} className="text-blue-500"/> Stawka Okresu Próbnego
-                        </div>
-                        <h2 className="text-4xl font-bold mb-2 text-slate-900">{salaryData.current} zł<span className="text-lg text-slate-400 font-normal">/h</span></h2>
-                        <button 
-                            onClick={() => setBreakdownType('current')}
-                            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 mb-4"
-                        >
-                            <Info size={12}/> Pokaż skład stawki
-                        </button>
-                        <div className="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 leading-relaxed border border-slate-100">
-                            <strong>Obowiązuje teraz.</strong> Wynika z Twojej umowy i kwalifikacji wstępnych. Nie zmienia się w trakcie trwania okresu próbnego.
-                        </div>
-                    </div>
-                </div>
-
-                {/* Rate B: Post-Trial Rate */}
-                <div className={`rounded-xl p-6 shadow-lg text-white relative overflow-hidden ${trialTimeData?.isEnded ? 'bg-slate-800 border border-slate-700' : 'bg-green-600'}`}>
-                    <div className="absolute top-0 right-0 p-6 opacity-10">
-                        <TrendingUp size={100} />
-                    </div>
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-2 font-medium mb-1 text-white/90">
-                            <CheckCircle size={16}/> {trialTimeData?.isEnded ? 'Stawka Końcowa (Rekomendowana)' : 'Prognozowana Stawka Po Okresie Próbnym'}
-                        </div>
-                        <h2 className="text-4xl font-bold mb-2">{salaryData.potential} zł<span className="text-lg opacity-70 font-normal">/h</span></h2>
-                        <button 
-                            onClick={() => setBreakdownType('potential')}
-                            className="text-xs font-bold text-white/90 hover:text-white hover:underline flex items-center gap-1 mb-4"
-                        >
-                            <Info size={12}/> Pokaż skład stawki
-                        </button>
-                        <div className="bg-black/20 p-3 rounded-lg text-xs text-white/90 leading-relaxed flex items-start gap-2 backdrop-blur-sm">
-                            <Info size={14} className="mt-0.5 shrink-0"/>
-                            <span>
-                                {trialTimeData?.isEnded 
-                                    ? 'To jest Twój wynik końcowy. Umiejętności niezaliczone zostały odjęte. HR podejmie ostateczną decyzję.'
-                                    : 'Ta stawka rośnie z każdą umiejętnością, którą zaliczysz w praktyce. Umiejętności niezaliczone przed końcem okresu próbnego nie będą uwzględnione.'
-                                }
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* TRIAL SUMMARY BLOCK (Collapsible, Only if Ended) */}
-            {trialTimeData?.isEnded && (
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <button 
-                        onClick={() => toggleSection('summary')}
-                        className="w-full p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <ClipboardList size={20} className="text-blue-600"/>
-                            <h3 className="font-bold text-slate-800">Podsumowanie Okresu Próbnego</h3>
-                        </div>
-                        {sectionsOpen.summary ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-                    </button>
-                    
-                    {sectionsOpen.summary && (
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in slide-in-from-top-2">
-                            {/* Confirmed Column */}
-                            <div>
-                                <div className="flex justify-between items-center mb-4 pb-2 border-b border-green-100">
-                                    <h4 className="font-bold text-green-700 flex items-center gap-2">
-                                        <CheckCircle size={18}/> Potwierdzone ({summaryData.confirmed.length})
-                                    </h4>
-                                    <span className="text-xs text-green-600 font-medium">Liczone do stawki</span>
-                                </div>
-                                <div className="space-y-2">
-                                    {summaryData.confirmed.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between items-center p-2 bg-green-50 rounded text-sm">
-                                            <span className="text-green-900 font-medium">✅ {item.name}</span>
-                                            <span className="font-bold text-green-700">+{item.bonus} zł</span>
-                                        </div>
-                                    ))}
-                                    {summaryData.confirmed.length === 0 && <p className="text-slate-400 italic text-sm">Brak potwierdzonych umiejętności.</p>}
-                                </div>
-                            </div>
-
-                            {/* Unconfirmed Column */}
-                            <div>
-                                <div className="flex justify-between items-center mb-4 pb-2 border-b border-red-100">
-                                    <h4 className="font-bold text-slate-500 flex items-center gap-2">
-                                        <X size={18} className="text-red-500"/> Niepotwierdzone ({summaryData.unconfirmed.length})
-                                    </h4>
-                                    <span className="text-xs text-slate-400">Nie liczone</span>
-                                </div>
-                                <div className="space-y-2">
-                                    {summaryData.unconfirmed.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex justify-between items-center p-2 bg-slate-50 rounded text-sm opacity-70">
-                                            <span className="text-slate-600">❌ {item.name}</span>
-                                            <span className="font-bold text-slate-400 line-through">+{item.bonus} zł</span>
-                                        </div>
-                                    ))}
-                                    {summaryData.unconfirmed.length === 0 && <p className="text-slate-400 italic text-sm">Wszystkie umiejętności zaliczone!</p>}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* VERIFICATION BLOCK (Collapsible) */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <button 
-                    onClick={() => toggleSection('verification')}
-                    className="w-full p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
-                >
-                    <div>
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <CheckCircle size={20} className="text-blue-600"/> Weryfikacja Praktyczna
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Lista umiejętności wymagających potwierdzenia na budowie przez Brygadzistę.</p>
-                    </div>
-                    {sectionsOpen.verification ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-                </button>
-                
-                {sectionsOpen.verification && (
-                    <div className="divide-y divide-slate-100 animate-in slide-in-from-top-2">
-                        {pendingSkills.map((item) => {
-                            const isExpanded = expandedSkillId === item.skill_id;
-                            const checklist = getChecklist(item.skill_id);
-                            const resources = getLibraryResources(item.skill_id);
-                            
-                            let statusColor = "bg-yellow-100 text-yellow-700";
-                            let statusText = "Oczekuje na praktykę";
-                            const isExpired = trialTimeData?.isEnded && item.status !== SkillStatus.CONFIRMED;
-
-                            if (isExpired) {
-                                statusColor = "bg-red-100 text-red-700";
-                                statusText = "Niepotwierdzone (Po terminie)";
-                            } else if (item.status === SkillStatus.CONFIRMED) {
-                                statusColor = "bg-green-100 text-green-700";
-                                statusText = "Zaliczone";
-                            } 
-                            // Removed FAILED condition here because FAILED skills shouldn't be in Verification block
-
-                            return (
-                                <div key={item.id} className={`group ${isExpired ? 'opacity-70 bg-slate-50' : ''}`}>
-                                    <div 
-                                        className="p-6 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
-                                        onClick={() => setExpandedSkillId(isExpanded ? null : item.skill_id)}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-2 rounded-lg ${statusColor}`}>
-                                                {item.status === SkillStatus.CONFIRMED ? <CheckCircle size={20}/> : (isExpired ? <X size={20}/> : <Clock size={20}/>)}
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-900">{item.skill.name_pl}</h4>
-                                                <div className="flex items-center gap-3 mt-1">
-                                                    <span className={`text-xs px-2 py-0.5 rounded font-bold uppercase ${statusColor}`}>{statusText}</span>
-                                                    <span className="text-xs text-slate-500">
-                                                        Wartość: <span className="font-bold text-green-600">+{item.skill.hourly_bonus} zł</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {isExpanded ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-                                    </div>
-
-                                    {isExpanded && (
-                                        <div className="bg-slate-50 p-6 border-t border-slate-100 grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in slide-in-from-top-2 duration-200">
-                                            {/* Left: Checklist (Read Only) */}
-                                            <div>
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <h5 className="font-bold text-slate-700 text-sm uppercase tracking-wide">Kryteria Oceny</h5>
-                                                    <span className="text-xs font-bold text-slate-400">
-                                                        Liczba kryteriów: {checklist.length}
-                                                    </span>
-                                                </div>
-                                                <div className="space-y-2 bg-white p-4 rounded-lg border border-slate-200">
-                                                    {checklist.map((c: any, idx: number) => (
-                                                        <div key={idx} className="flex items-start gap-3 opacity-60">
-                                                            <div className="mt-0.5 w-4 h-4 border-2 border-slate-300 rounded flex-shrink-0"></div>
-                                                            <span className="text-sm text-slate-600">{c.text_pl || c}</span>
-                                                        </div>
-                                                    ))}
-                                                    {checklist.length === 0 && <span className="text-slate-400 italic text-sm">Brak zdefiniowanych kryteriów.</span>}
-                                                    
-                                                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center text-xs text-orange-600 bg-orange-50 p-2 rounded">
-                                                        <Lock size={12} className="inline mr-1"/> Decyzję o zaliczeniu podejmuje Brygadzista
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Right: Materials */}
-                                            <div>
-                                                <h5 className="font-bold text-slate-700 text-sm mb-3 uppercase tracking-wide">Materiały Pomocnicze</h5>
-                                                {resources.length > 0 ? (
-                                                    <div className="space-y-2">
-                                                        {resources.map(res => (
-                                                            <a 
-                                                                key={res.id} 
-                                                                href={res.url || '#'} 
-                                                                target="_blank" 
-                                                                rel="noreferrer"
-                                                                className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-sm transition-all group"
-                                                            >
-                                                                <div className="bg-blue-50 text-blue-600 p-2 rounded">
-                                                                    {res.type === 'video' ? <Video size={16}/> : res.type === 'pdf' ? <FileText size={16}/> : <BookOpen size={16}/>}
-                                                                </div>
-                                                                <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700">{res.title}</span>
-                                                                <ChevronRight size={16} className="ml-auto text-slate-300 group-hover:text-blue-400"/>
-                                                            </a>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-sm text-slate-400 italic bg-white p-4 rounded-lg border border-slate-200">
-                                                        Brak materiałów w bibliotece dla tej umiejętności.
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {pendingSkills.length === 0 && (
-                            <div className="p-8 text-center text-slate-500">
-                                Nie masz obecnie żadnych umiejętności oczekujących na weryfikację.
-                                <br/>
-                                {trialTimeData?.isEnded ? 'Wszystkie podjęte próby zostały zakończone.' : 'Rozwiąż testy w sekcji poniżej, aby dodać nowe pozycje.'}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* DEVELOPMENT BLOCK (Collapsible) */}
-            <div className={`bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden ${trialTimeData?.isEnded ? 'opacity-80' : ''}`}>
-                <button
-                    onClick={() => toggleSection('development')} 
-                    className="w-full p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
-                >
-                    <div>
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <TrendingUp size={20} className="text-green-600"/> Rozwijaj swoje umiejętności
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Zdobądź nowe uprawnienia. Test -> Praktyka -> Wpływ na stawkę po okresie próbnym.</p>
-                    </div>
-                    {sectionsOpen.development ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-                </button>
-                
-                {sectionsOpen.development && (
-                    <div className="animate-in slide-in-from-top-2">
-                        {trialTimeData?.isEnded ? (
-                            <div className="p-12 text-center bg-white">
-                                <Lock size={48} className="mx-auto text-slate-300 mb-4"/>
-                                <h3 className="text-lg font-bold text-slate-700">Moduł Zablokowany</h3>
-                                <p className="text-slate-500">Okres próbny zakończony. Nie możesz rozpoczynać nowych testów.</p>
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-slate-100">
-                                {availableDevelopment.map(skill => {
-                                    // Check status from UserSkill
-                                    const userSkill = userSkills.find(us => us.user_id === currentUser.id && us.skill_id === skill.id);
-                                    const status = userSkill?.status;
-                                    
-                                    // Cooldown Check
-                                    const { isLocked, hours, minutes } = getCooldownInfo(skill.id);
-
-                                    // Passed State (Green)
-                                    if (status === SkillStatus.THEORY_PASSED) {
-                                        return (
-                                            <div key={skill.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-green-50/50 border-l-4 border-green-500">
-                                                <div>
-                                                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                                                        {skill.name_pl}
-                                                        <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded border border-green-200">Zaliczone</span>
-                                                    </h4>
-                                                    <p className="text-xs text-slate-500 mt-1">Teoria zaliczona. Przejdź do sekcji "Weryfikacja Praktyczna".</p>
-                                                </div>
-                                                {/* Only checkmark icon as requested */}
-                                                <div className="flex items-center justify-center text-green-600 bg-white w-10 h-10 rounded-full shadow-sm border border-green-100">
-                                                    <CheckCircle size={24} />
-                                                </div>
-                                            </div>
-                                        );
-                                    }
-
-                                    // Failed/Locked State (Red) - NEW REQUEST: Distinct Red Card with Countdown
-                                    if (status === SkillStatus.FAILED && isLocked) {
-                                        return (
-                                            <div key={skill.id} className="p-6 bg-red-50 border-l-4 border-red-500 rounded-r-xl mb-3 flex flex-col sm:flex-row justify-between gap-4 items-center animate-in fade-in">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <h4 className="font-bold text-slate-900">{skill.name_pl}</h4>
-                                                        <span className="bg-red-200 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border border-red-300">Niezaliczone</span>
-                                                    </div>
-                                                    <p className="text-sm text-slate-700 mb-3">
-                                                        Wynik negatywny. Kolejne podejście zostało zablokowane na 24h.
-                                                    </p>
-                                                    <div className="flex items-center gap-2 text-red-700 font-bold bg-white/80 p-2 rounded-lg border border-red-200 w-fit text-sm shadow-sm">
-                                                        <Clock size={16} />
-                                                        <span>Blokada: {hours}h {minutes}m</span>
-                                                    </div>
-                                                </div>
-                                                <Button size="sm" disabled className="bg-white text-slate-400 border border-slate-200 shadow-none hover:bg-white cursor-not-allowed">
-                                                    <Lock size={16} className="mr-2"/> Zablokowane
-                                                </Button>
-                                            </div>
-                                        );
-                                    }
-
-                                    // Standard State
-                                    return (
-                                        <div key={skill.id} className={`p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors ${status === SkillStatus.FAILED ? 'border-l-4 border-orange-400 pl-5' : ''}`}>
-                                            <div>
-                                                <h4 className="font-bold text-slate-900">{skill.name_pl}</h4>
-                                                <p className="text-xs text-slate-500 mt-1 max-w-xl">{skill.description_pl}</p>
-                                                <div className="mt-2 inline-flex items-center gap-2 bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold border border-green-100">
-                                                    <TrendingUp size={12}/> Potencjał po trialu: +{skill.hourly_bonus} zł/h
-                                                </div>
-                                            </div>
-                                            <Button size="sm" onClick={() => handleTakeTest(skill.id)} className={status === SkillStatus.FAILED ? 'bg-orange-600 hover:bg-orange-700 text-white' : ''}>
-                                                {status === SkillStatus.FAILED ? <><RotateCcw size={16} className="mr-2"/> Spróbuj ponownie</> : <><Play size={16} className="mr-2"/> Rozpocznij Test</>}
-                                            </Button>
-                                        </div>
-                                    );
-                                })}
-                                {availableDevelopment.length === 0 && (
-                                    <div className="p-8 text-center text-slate-500">
-                                        Brak dostępnych nowych umiejętności do zdobycia w tym momencie.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* DOCUMENTS BLOCK (Collapsible) */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <button
-                    onClick={() => toggleSection('documents')} 
-                    className="w-full p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between hover:bg-slate-100 transition-colors text-left"
-                >
-                    <div>
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <FileText size={20} className="text-purple-600"/> Uprawnienia / Dokumenty
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Certyfikaty (SEP, UDT) i dokumenty BHP. Dodaj, aby uzyskać dodatkowe bonusy.</p>
-                    </div>
-                    {sectionsOpen.documents ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
-                </button>
-                
-                {sectionsOpen.documents && (
-                    <div className="animate-in slide-in-from-top-2 p-6">
-                        <div className="grid grid-cols-1 gap-4 mb-6">
-                            {myDocuments.map((doc, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
-                                    <div className="flex items-center gap-4">
-                                        <div className="bg-purple-50 p-2 rounded-lg text-purple-600">
-                                            <FileText size={20}/>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-slate-900">{doc.docName}</h4>
-                                            <div className="flex flex-wrap gap-2 mt-1">
-                                                <span className={`text-xs px-2 py-0.5 rounded font-bold uppercase ${
-                                                    doc.status === SkillStatus.CONFIRMED ? 'bg-green-100 text-green-700' :
-                                                    doc.status === SkillStatus.FAILED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                                                }`}>
-                                                    {SKILL_STATUS_LABELS[doc.status] || doc.status}
-                                                </span>
-                                                {/* Bonus Display Logic */}
-                                                {(doc.bonus > 0) && (
-                                                    <span className={`text-xs px-2 py-0.5 rounded border font-bold ${
-                                                        doc.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-600 border-green-100' : 'bg-slate-50 text-slate-400 border-slate-200'
-                                                    }`}>
-                                                        +{doc.bonus} zł/h
-                                                    </span>
-                                                )}
-                                                {doc.expires_at && (
-                                                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                                                        <Calendar size={12}/> Ważny do: {doc.expires_at}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        className="text-blue-600 hover:text-blue-800 text-xs font-bold flex items-center gap-1"
-                                        onClick={() => openFileViewer(doc)}
-                                    >
-                                        <Eye size={14}/> Zobacz {doc.fileCount > 1 ? `(${doc.fileCount})` : ''}
-                                    </button>
-                                </div>
-                            ))}
-                            {myDocuments.length === 0 && (
-                                <div className="text-center text-slate-400 py-4 italic">Brak dodanych dokumentów.</div>
-                            )}
-                        </div>
-                        
-                        {!trialTimeData?.isEnded && (
-                            <Button fullWidth variant="outline" onClick={handleAddDocument} className="border-dashed border-2">
-                                <Plus size={18} className="mr-2"/> Dodaj Nowy Dokument
-                            </Button>
-                        )}
-                    </div>
-                )}
-            </div>
-
             {renderBreakdownModal()}
-            {showBrigadirModal && renderContactModal('Twój Brygadzista', brigadir, () => setShowBrigadirModal(false))}
-            {showHrModal && renderContactModal('Twój Opiekun HR', hrContact, () => setShowHrModal(false))}
-            {renderDocModal()}
-            
-            {/* New Document Viewer Modal usage */}
-            <DocumentViewerModal 
-                isOpen={fileViewer.isOpen}
-                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })}
-                urls={fileViewer.urls}
-                initialIndex={fileViewer.index}
-                title={fileViewer.title}
-            />
+            {isDocModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-900">Dodaj Dokument</h2>
+                            <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Typ Dokumentu</label>
+                                <select className="w-full border p-2 rounded bg-white" value={newDocData.typeId} onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}>
+                                    <option value="">Wybierz dokument...</option>
+                                    {BONUS_DOCUMENT_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+                                </select>
+                            </div>
+                            {newDocData.typeId === 'other' && (
+                                <input className="w-full border p-2 rounded" placeholder="Nazwa dokumentu..." value={newDocData.customName} onChange={e => setNewDocData({...newDocData, customName: e.target.value})} />
+                            )}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
+                                <input type="file" multiple onChange={handleFileSelect} className="w-full border p-2 rounded bg-slate-50 text-sm" />
+                                <div className="mt-2 space-y-1">
+                                    {newDocData.files.map((f, i) => (
+                                        <div key={i} className="flex justify-between items-center bg-slate-100 p-1.5 rounded text-xs">
+                                            <span className="truncate">{f.name}</span>
+                                            <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 mb-2 p-2 bg-slate-50 rounded">
+                                <input type="checkbox" id="indef_trial" checked={newDocData.indefinite} onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
+                                <label htmlFor="indef_trial" className="text-sm text-slate-700 font-medium">Bezterminowy</label>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-6">
+                            <Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button>
+                            <Button onClick={handleSaveDocument}>Zapisz Dokument</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
         </div>
     );
 };

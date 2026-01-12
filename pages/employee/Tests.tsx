@@ -133,7 +133,8 @@ export const EmployeeTests = () => {
                     
                     return {
                         id: h.id,
-                        date: h.date,
+                        // Fixed line 136: Property 'date' does not exist on type 'CandidateHistoryEntry'. Changed to 'created_at'.
+                        date: h.created_at,
                         score: 'Weryfikacja/Status',
                         duration: null,
                         status: statusLabel,

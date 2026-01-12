@@ -1,16 +1,16 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { 
     CheckSquare, Search, User, Clock, CheckCircle, XCircle, 
     AlertTriangle, Filter, ChevronDown, Calendar, ArrowRight, X,
-    Phone, FileText, Video, BookOpen, ExternalLink, Camera, Save, Eye
+    Phone, FileText, Video, BookOpen, ExternalLink, Camera, Save, Eye, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { SkillStatus, VerificationType, UserStatus, Skill, LibraryResource, ChecklistItemState } from '../../types';
 import { CHECKLIST_TEMPLATES, SKILL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { uploadDocument } from '../../lib/supabase';
 
 export const BrigadirChecksPage = () => {
     const { state, confirmSkillPractice, saveSkillChecklistProgress, updateUserSkillStatus, triggerNotification } = useAppContext();
@@ -25,9 +25,9 @@ export const BrigadirChecksPage = () => {
 
     // Modal State
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
-    // Modified: checklistStatus now holds detailed state including image
     const [checklistState, setChecklistState] = useState<Record<number, ChecklistItemState>>({});
     const [rejectReason, setRejectReason] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
     
     // Confirmation Modal
     const [confirmRejectModal, setConfirmRejectModal] = useState(false);
@@ -158,13 +158,8 @@ export const BrigadirChecksPage = () => {
         return skill?.criteria?.map((c, i) => ({ id: i, text_pl: c, required: true })) || [];
     };
 
-    const getResources = (skillId: string) => {
-        return libraryResources.filter(r => r.skill_ids.includes(skillId) && !r.is_archived);
-    };
-
     const handleOpenCheck = (item: any) => {
         setSelectedItem(item);
-        // Initialize checklist state from saved progress or empty
         setChecklistState(item.checklist_progress || {});
         setRejectReason('');
     };
@@ -181,30 +176,38 @@ export const BrigadirChecksPage = () => {
         cameraInputRef.current?.click();
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file && activeChecklistId !== null) {
-            const url = URL.createObjectURL(file);
-            setChecklistState(prev => ({
-                ...prev,
-                [activeChecklistId]: { ...prev[activeChecklistId], image_url: url, checked: true } // Auto-check if image added
-            }));
+        if (file && activeChecklistId !== null && selectedItem) {
+            setIsUploading(true);
+            try {
+                const url = await uploadDocument(file, selectedItem.user_id);
+                if (url) {
+                    setChecklistState(prev => ({
+                        ...prev,
+                        [activeChecklistId]: { ...prev[activeChecklistId], image_url: url, checked: true }
+                    }));
+                }
+            } catch (error) {
+                console.error("Upload failed", error);
+                alert("Nie udało się przesłać zdjęcia.");
+            } finally {
+                setIsUploading(false);
+            }
         }
-        if (cameraInputRef.current) cameraInputRef.current.value = ''; // Reset input
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
     };
 
     const handleSaveProgress = () => {
         if (!selectedItem) return;
         saveSkillChecklistProgress(selectedItem.id, checklistState);
-        setSelectedItem(null); // Close modal
+        setSelectedItem(null);
     };
 
     const handleApprove = () => {
         if (!selectedItem || !currentUser) return;
         
-        // Save final progress
         saveSkillChecklistProgress(selectedItem.id, checklistState);
-        // Confirm Skill
         confirmSkillPractice(selectedItem.id, currentUser.id);
         
         triggerNotification(
@@ -215,14 +218,6 @@ export const BrigadirChecksPage = () => {
         );
 
         setSelectedItem(null);
-    };
-
-    const initiateReject = () => {
-        if (!rejectReason) {
-            alert('Wymagany jest komentarz przy odrzuceniu.');
-            return;
-        }
-        setConfirmRejectModal(true);
     };
 
     const confirmReject = () => {
@@ -240,18 +235,7 @@ export const BrigadirChecksPage = () => {
         setSelectedItem(null);
     };
 
-    const openResource = (res: LibraryResource) => {
-        if (res.url) {
-            window.open(res.url, '_blank');
-        } else if (res.videoUrl) {
-             window.open(res.videoUrl, '_blank');
-        }
-    };
-
     const currentChecklist = selectedItem ? getChecklist(selectedItem.skill_id) : [];
-    const currentResources = selectedItem ? getResources(selectedItem.skill_id) : [];
-    
-    // Validate Approval: All items must be checked AND have an image
     const isReadyToApprove = currentChecklist.length > 0 && currentChecklist.every((c: any) => {
         const itemState = checklistState[c.id];
         return itemState?.checked && itemState?.image_url;
@@ -424,7 +408,7 @@ export const BrigadirChecksPage = () => {
                                 </button>
                             </div>
                             
-                            <div className="flex flex-wrap gap-4 items-center">
+                            <div className="flex items-center gap-6">
                                 <div className="flex items-center gap-3 pr-4 border-r border-slate-200">
                                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
                                         {selectedItem.user?.first_name[0]}{selectedItem.user?.last_name[0]}
@@ -445,6 +429,12 @@ export const BrigadirChecksPage = () => {
                         </div>
                         
                         <div className="overflow-y-auto p-6 flex-1 space-y-8 bg-slate-50/50">
+                            {isUploading && (
+                                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
+                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęcia do bazy...
+                                </div>
+                            )}
+
                             <div>
                                 <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide mb-3 flex items-center justify-between">
                                     <span>Lista Zadań (Wymagane zdjęcia)</span>
@@ -487,7 +477,7 @@ export const BrigadirChecksPage = () => {
                                                             variant="secondary" 
                                                             className="text-slate-500"
                                                             onClick={() => handleCameraClick(c.id)}
-                                                            disabled={selectedItem.status === SkillStatus.CONFIRMED}
+                                                            disabled={selectedItem.status === SkillStatus.CONFIRMED || isUploading}
                                                         >
                                                             <Camera size={16} className="mr-1"/> Foto
                                                         </Button>
@@ -496,15 +486,9 @@ export const BrigadirChecksPage = () => {
                                             </div>
                                         );
                                     })}
-                                    {currentChecklist.length === 0 && (
-                                        <div className="p-4 text-center text-slate-400 italic text-sm">
-                                            Brak zdefiniowanych kryteriów. Decyzja uznaniowa.
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
-                            {/* Hidden File Input for Camera */}
                             <input 
                                 type="file" 
                                 ref={cameraInputRef} 
@@ -533,7 +517,7 @@ export const BrigadirChecksPage = () => {
                             <div className="p-6 bg-white border-t border-slate-200 flex gap-4 items-center">
                                 <Button 
                                     variant="danger" 
-                                    onClick={initiateReject}
+                                    onClick={() => setConfirmRejectModal(true)}
                                     className="px-6"
                                 >
                                     <XCircle size={18} className="mr-2"/> Odrzuć
@@ -547,7 +531,7 @@ export const BrigadirChecksPage = () => {
                                     </Button>
                                     <Button 
                                         onClick={handleApprove}
-                                        disabled={!isReadyToApprove}
+                                        disabled={!isReadyToApprove || isUploading}
                                         className={!isReadyToApprove ? 'bg-slate-300 cursor-not-allowed text-white' : 'bg-green-600 hover:bg-green-700 text-white'}
                                         title={!isReadyToApprove ? "Zaznacz wszystkie punkty i dodaj zdjęcia" : ""}
                                     >
@@ -566,10 +550,9 @@ export const BrigadirChecksPage = () => {
                 </div>
             )}
 
-            {/* Confirm Reject Modal */}
             {confirmRejectModal && (
                 <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6 text-center animate-in fade-in zoom-in duration-200">
                         <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
                             <AlertTriangle size={24}/>
                         </div>

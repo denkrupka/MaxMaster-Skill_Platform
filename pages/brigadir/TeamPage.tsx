@@ -1,16 +1,16 @@
-
 import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Users, Phone, Mail, Award, CheckSquare, Clock, AlertTriangle, 
     Lock, CheckCircle, TrendingUp, Calendar, ChevronRight, User as UserIcon,
-    StickyNote, X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera
+    StickyNote, X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus, SkillStatus, VerificationType, NoteCategory, User, BadgeType, QualityIncident } from '../../types';
 import { USER_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { uploadDocument } from '../../lib/supabase';
 
 export const BrigadirTeamPage = () => {
     const { state, addEmployeeNote, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge, addQualityIncident } = useAppContext();
@@ -19,6 +19,9 @@ export const BrigadirTeamPage = () => {
 
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [modalTab, setModalTab] = useState<'notes' | 'badges' | 'details' | 'quality'>('details');
+
+    // UI Feedback
+    const [isUploading, setIsUploading] = useState(false);
 
     // Note State
     const [noteText, setNoteText] = useState('');
@@ -132,10 +135,19 @@ export const BrigadirTeamPage = () => {
         setIsQualityFormOpen(false);
     };
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setIncidentImage(URL.createObjectURL(file));
+        if (file && selectedUser) {
+            setIsUploading(true);
+            try {
+                const url = await uploadDocument(file, selectedUser.id);
+                if (url) setIncidentImage(url);
+            } catch (error) {
+                console.error("Quality image upload failed", error);
+                alert("Błąd przesłania zdjęcia.");
+            } finally {
+                setIsUploading(false);
+            }
         }
     };
 
@@ -414,7 +426,7 @@ export const BrigadirTeamPage = () => {
                                             <div key={badge.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex items-center gap-2"><div className="bg-yellow-100 text-yellow-600 p-1.5 rounded-full"><Award size={16} /></div><div><div className="text-sm font-bold text-slate-800">{badge.type}</div><div className="text-xs text-slate-500">{badge.month}</div></div></div>
-                                                    {badge.visible_to_employee ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded border border-green-200 flex items-center gap-1"><Eye size={10}/> Widoczna</span> : <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 flex items-center gap-1"><Shield size={10}/> Ukryta</span>}
+                                                    {badge.visible_to_employee ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1"><Eye size={10}/> Widoczna</span> : <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 flex items-center gap-1"><Shield size={10}/> Ukryta</span>}
                                                 </div>
                                                 <p className="text-sm text-slate-700 mt-2 italic">"{badge.description}"</p>
                                                 {badge.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeBadge(badge.id)}><Trash2 size={16} /></button>)}
@@ -498,6 +510,12 @@ export const BrigadirTeamPage = () => {
                         </div>
                         
                         <div className="space-y-4">
+                            {isUploading && (
+                                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
+                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęcia...
+                                </div>
+                            )}
+
                             <p className="text-sm text-slate-600">
                                 Zgłaszasz błąd dla: <strong>{selectedUser.first_name} {selectedUser.last_name}</strong>
                                 <br/>
@@ -520,10 +538,10 @@ export const BrigadirTeamPage = () => {
                                 <div className="flex gap-3">
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                                     <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} />
-                                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} type="button">
+                                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} type="button" disabled={isUploading}>
                                         <Upload size={16} className="mr-2"/> Wybierz
                                     </Button>
-                                    <Button variant="secondary" size="sm" onClick={() => cameraInputRef.current?.click()} type="button">
+                                    <Button variant="secondary" size="sm" onClick={() => cameraInputRef.current?.click()} type="button" disabled={isUploading}>
                                         <Camera size={16} className="mr-2"/> Zdjęcie
                                     </Button>
                                 </div>
@@ -541,55 +559,10 @@ export const BrigadirTeamPage = () => {
                             <Button 
                                 variant={incidentPrediction?.isBlock ? 'danger' : 'primary'}
                                 onClick={handleSubmitIncident} 
-                                disabled={!incidentDescription || !incidentImage}
+                                disabled={!incidentDescription || !incidentImage || isUploading}
                             >
                                 Zatwierdź Zgłoszenie
                             </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* INCIDENT HISTORY MODAL */}
-            {viewIncidentSkillId && selectedUser && (
-                <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setViewIncidentSkillId(null)}>
-                    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
-                            <h2 className="text-xl font-bold text-slate-900">Historia Zgłoszeń</h2>
-                            <button onClick={() => setViewIncidentSkillId(null)}><X size={24} className="text-slate-400"/></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto space-y-4">
-                            {qualityIncidents
-                                .filter(inc => inc.user_id === selectedUser.id && inc.skill_id === viewIncidentSkillId)
-                                .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                                .map(inc => (
-                                    <div key={inc.id} className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                                        <div className="flex justify-between mb-2">
-                                            <span className="text-xs font-bold text-slate-500">{new Date(inc.date).toLocaleDateString()}</span>
-                                            {inc.incident_number >= 2 
-                                                ? <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">Blokada</span> 
-                                                : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-bold">Ostrzeżenie</span>
-                                            }
-                                        </div>
-                                        <p className="text-sm text-slate-800">{inc.description}</p>
-                                        <div className="text-xs text-slate-400 mt-2">Zgłosił: {inc.reported_by}</div>
-                                        {inc.image_url && (
-                                            <img 
-                                                src={inc.image_url} 
-                                                alt="Dowód" 
-                                                className="mt-2 h-20 rounded border border-slate-200 cursor-pointer hover:opacity-80" 
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openImagePreview(inc.image_url!);
-                                                }}
-                                            />
-                                        )}
-                                    </div>
-                                ))
-                            }
-                        </div>
-                        <div className="pt-4 mt-2 border-t border-slate-100 text-right">
-                            <Button onClick={() => setViewIncidentSkillId(null)}>Zamknij</Button>
                         </div>
                     </div>
                 </div>

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, ExternalLink } from 'lucide-react';
@@ -43,7 +44,14 @@ export const LoginPage = () => {
       await login(email, password);
     } catch (err: any) {
       console.error('Login error:', err);
-      setError('Błędny adres e-mail lub hasło.');
+      // Obsługa specyficznych komunikatów błędów z Supabase
+      if (err.message === 'Invalid login credentials') {
+        setError('Błędny adres e-mail lub hasło.');
+      } else if (err.message === 'Email not confirmed') {
+        setError('Adres e-mail nie został jeszcze potwierdzony.');
+      } else {
+        setError('Wystąpił błąd podczas logowania. Spróbuj ponownie.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -100,6 +108,12 @@ export const LoginPage = () => {
             {isLoading ? 'Logowanie...' : 'Zaloguj się'}
           </Button>
         </form>
+
+        <div className="text-center mt-4">
+          <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-700 hover:underline font-medium">
+            Zapomniałeś hasła?
+          </Link>
+        </div>
         
         <div className="pt-6 text-center border-t border-slate-50 mt-4">
             <Link to="/candidate/welcome" className="inline-flex items-center text-xs text-blue-500 hover:text-blue-700 hover:underline">

@@ -1,9 +1,11 @@
+
 import { createClient } from '@supabase/supabase-js'
 
 // Hardcoded for compatibility as requested
 const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY'
 
+// Klient dla standardowych operacji użytkownika
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
@@ -12,110 +14,77 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 })
 
-// ============================================================
-// AUTH HELPERS
-// ============================================================
-
-export const authHelpers = {
-  // Login with Email/Password
-  async signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-    
-    if (error) throw error
-    
-    // Fetch profile
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
-      .maybeSingle()
-    
-    return { user: data.user, profile }
-  },
-
-  // Logout
-  async signOut() {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-  },
-
-  // Get current session profile
-  async getCurrentUser() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-    
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-    
-    return profile
-  },
-
-  onAuthStateChange(callback: (user: any) => void) {
-    return supabase.auth.onAuthStateChange((_event, session) => {
-      callback(session?.user ?? null)
-    })
-  }
-}
-
-// ============================================================
-// DATABASE HELPERS
-// ============================================================
-
-export const db = {
-  users: {
-    async getAll() {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
-      if (error) throw error
-      return data || []
-    },
-    async getById(id: string) {
-      const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle()
-      if (error) throw error
-      return data
-    },
-    async update(id: string, updates: any) {
-      const { data, error } = await supabase.from('users').update(updates).eq('id', id).select().maybeSingle()
-      if (error) throw error
-      return data
-    },
-    async insert(userData: any) {
-      const { data, error } = await supabase.from('users').insert([userData]).select().maybeSingle()
-      if (error) throw error
-      return data
+// Klient Admin - inicjalizowany tylko jeśli klucz jest dostępny
+const getServiceKey = () => {
+    try {
+        // @ts-ignore
+        return import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+    } catch {
+        return '';
     }
-  }
-}
+};
+
+const serviceKey = getServiceKey();
+
+export const supabaseAdmin = serviceKey 
+    ? createClient(supabaseUrl, serviceKey, {
+        auth: {
+            autoRefreshToken: false,
+            persistSession: false
+        }
+      })
+    : null;
 
 // ============================================================
 // STORAGE HELPERS
 // ============================================================
 
-export const uploadDocument = async (file: File, userId: string) => {
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${userId}/${Date.now()}.${fileExt}`
+export const uploadDocument = async (file: File, userId: string): Promise<string | null> => {
+  try {
+    const timestamp = Date.now();
+    const fileNameParts = file.name.split('.');
+    const fileExt = fileNameParts.pop()?.toLowerCase();
+    const originalName = fileNameParts.join('.');
+    
+    // Improved sanitization of filename
+    const cleanName = originalName
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/ł/g, "l")
+      .replace(/Ł/g, "L")
+      .replace(/[^a-zA-Z0-9_-]/g, "_");
 
-  const { data, error } = await supabase.storage
-    .from('documents')
-    .upload(fileName, file)
+    const finalFileName = `${cleanName}_${timestamp}.${fileExt}`;
+    const filePath = `${userId}/${finalFileName}`;
 
-  if (error) {
-    console.error('Upload error:', error)
-    return null
+    // Map common extensions to MIME if browser fails
+    let contentType = file.type;
+    if (!contentType) {
+        if (fileExt === 'doc') contentType = 'application/msword';
+        else if (fileExt === 'docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (fileExt === 'pdf') contentType = 'application/pdf';
+    }
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: contentType || 'application/octet-stream'
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      return null;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
+  } catch (error) {
+    console.error('Upload error:', error);
+    return null;
   }
-
-  const { data: { publicUrl } } = supabase.storage
-    .from('documents')
-    .getPublicUrl(fileName)
-
-  return publicUrl
-}
+};

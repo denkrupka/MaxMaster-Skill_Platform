@@ -1,10 +1,10 @@
-
 import React, { useState, useMemo, useRef } from 'react';
-import { AlertTriangle, Lock, Camera, Upload, X, CheckCircle, Search, Calendar, Filter, Plus, User, Eye } from 'lucide-react';
+import { AlertTriangle, Lock, Camera, Upload, X, CheckCircle, Search, Calendar, Filter, Plus, User, Eye, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { SkillStatus, QualityIncident } from '../../types';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { uploadDocument } from '../../lib/supabase';
 
 export const BrigadirQualityPage = () => {
     const { state, addQualityIncident } = useAppContext();
@@ -14,6 +14,7 @@ export const BrigadirQualityPage = () => {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [monthFilter, setMonthFilter] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [isUploading, setIsUploading] = useState(false);
 
     // Modal State for viewing details
     const [selectedIncident, setSelectedIncident] = useState<QualityIncident | null>(null);
@@ -23,7 +24,6 @@ export const BrigadirQualityPage = () => {
     const [selectedUserId, setSelectedUserId] = useState('');
     const [selectedSkillId, setSelectedSkillId] = useState('');
     const [description, setDescription] = useState('');
-    const [imageFile, setImageFile] = useState<File | null>(null);
     const [imageUrl, setImageUrl] = useState<string>('');
     const [successMsg, setSuccessMsg] = useState('');
 
@@ -94,17 +94,24 @@ export const BrigadirQualityPage = () => {
 
     // --- ACTIONS ---
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setImageFile(file);
-            setImageUrl(URL.createObjectURL(file));
+        if (file && selectedUserId) {
+            setIsUploading(true);
+            try {
+                const url = await uploadDocument(file, selectedUserId);
+                if (url) setImageUrl(url);
+            } catch (error) {
+                console.error("Quality upload error", error);
+                alert("Nie udało się przesłać zdjęcia.");
+            } finally {
+                setIsUploading(false);
+            }
         }
     };
 
     const handleSubmit = () => {
-        if (!selectedUserId || !selectedSkillId || !description || !incidentPrediction) return;
-        if (!currentUser) return;
+        if (!selectedUserId || !selectedSkillId || !description || !incidentPrediction || !currentUser) return;
 
         addQualityIncident({
             user_id: selectedUserId,
@@ -119,114 +126,10 @@ export const BrigadirQualityPage = () => {
         setSelectedUserId('');
         setSelectedSkillId('');
         setDescription('');
-        setImageFile(null);
         setImageUrl('');
         setIsFormOpen(false);
         setSuccessMsg('Zgłoszenie zostało dodane pomyślnie.');
         setTimeout(() => setSuccessMsg(''), 3000);
-    };
-
-    const stats = useMemo(() => {
-        let warnings = 0;
-        let blocks = 0;
-        filteredIncidents.forEach(inc => {
-            if (inc.incident_number === 1) warnings++;
-            else blocks++;
-        });
-        return { warnings, blocks };
-    }, [filteredIncidents]);
-
-    const openImagePreview = (url: string) => {
-        setFileViewer({
-            isOpen: true,
-            urls: [url],
-            title: 'Dowód Zgłoszenia',
-            index: 0
-        });
-    };
-
-    // --- Detail Modal Renderer ---
-    const renderDetailModal = () => {
-        if (!selectedIncident) return null;
-        const user = users.find(u => u.id === selectedIncident.user_id);
-        const skill = skills.find(s => s.id === selectedIncident.skill_id);
-
-        return (
-            <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedIncident(null)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
-                        <h3 className="text-xl font-bold text-slate-900">Szczegóły Incydentu</h3>
-                        <button onClick={() => setSelectedIncident(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                    </div>
-                    
-                    <div className="space-y-4 overflow-y-auto pr-2">
-                        <div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Pracownik</span>
-                            <div className="font-bold text-slate-900 text-lg">{user ? `${user.first_name} ${user.last_name}` : 'Nieznany'}</div>
-                        </div>
-                        
-                        <div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Umiejętność</span>
-                            <div className="font-medium text-slate-800">{skill?.name_pl || 'Nieznana'}</div>
-                        </div>
-
-                        <div className="flex gap-4">
-                            <div>
-                                <span className="text-xs font-bold text-slate-400 uppercase">Data</span>
-                                <div className="text-sm text-slate-700">{new Date(selectedIncident.date).toLocaleDateString()} {new Date(selectedIncident.date).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                            </div>
-                            <div>
-                                <span className="text-xs font-bold text-slate-400 uppercase">Zgłosił</span>
-                                <div className="text-sm text-slate-700">{selectedIncident.reported_by}</div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Typ Zdarzenia</span>
-                            <div className="mt-1">
-                                {selectedIncident.incident_number === 1 ? (
-                                    <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded border border-yellow-200 flex items-center w-fit gap-1">
-                                        <AlertTriangle size={12}/> 1. Ostrzeżenie
-                                    </span>
-                                ) : (
-                                    <span className="bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded border border-red-200 flex items-center w-fit gap-1">
-                                        <Lock size={12}/> Blokada Miesiąca
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <span className="text-xs font-bold text-slate-400 uppercase">Opis</span>
-                            <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-100 mt-1">
-                                {selectedIncident.description}
-                            </p>
-                        </div>
-
-                        {selectedIncident.image_url && (
-                            <div>
-                                <span className="text-xs font-bold text-slate-400 uppercase">Zdjęcie / Dowód</span>
-                                <div 
-                                    className="mt-2 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-90 transition-opacity relative group"
-                                    onClick={() => openImagePreview(selectedIncident.image_url!)}
-                                >
-                                    <img src={selectedIncident.image_url} alt="Dowód" className="w-full object-contain max-h-[300px]" />
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="bg-white/90 p-2 rounded-full shadow-lg">
-                                            <Eye size={24} className="text-slate-700"/>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
-                        <Button onClick={() => setSelectedIncident(null)}>Zamknij</Button>
-                    </div>
-                </div>
-            </div>
-        );
     };
 
     return (
@@ -247,46 +150,6 @@ export const BrigadirQualityPage = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <div className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">Wszystkie zgłoszenia</div>
-                    <div className="text-3xl font-bold text-slate-900">{filteredIncidents.length}</div>
-                    <div className="text-xs text-slate-400 mt-2">W wybranym miesiącu</div>
-                </div>
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-yellow-200">
-                    <div className="text-sm font-bold text-yellow-600 uppercase tracking-wide mb-1">Ostrzeżenia (1. błąd)</div>
-                    <div className="text-3xl font-bold text-slate-900">{stats.warnings}</div>
-                    <div className="text-xs text-slate-400 mt-2">Brak wpływu na stawkę</div>
-                </div>
-                <div className="bg-white p-5 rounded-xl shadow-sm border border-red-200">
-                    <div className="text-sm font-bold text-red-600 uppercase tracking-wide mb-1">Blokady (2.+ błąd)</div>
-                    <div className="text-3xl font-bold text-slate-900">{stats.blocks}</div>
-                    <div className="text-xs text-slate-400 mt-2">Anulowane dodatki</div>
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-                    <input 
-                        type="text" 
-                        placeholder="Szukaj pracownika..." 
-                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
-                </div>
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                    <Calendar size={18} className="text-slate-400"/>
-                    <input 
-                        type="month" 
-                        className="border border-slate-300 rounded-lg px-3 py-2 bg-white text-sm w-full md:w-auto"
-                        value={monthFilter}
-                        onChange={e => setMonthFilter(e.target.value)}
-                    />
-                </div>
-            </div>
-
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
@@ -295,7 +158,7 @@ export const BrigadirQualityPage = () => {
                             <th className="px-6 py-4">Pracownik</th>
                             <th className="px-6 py-4">Umiejętność</th>
                             <th className="px-6 py-4">Skutek</th>
-                            <th className="px-6 py-4">Opis</th>
+                            <th className="px-6 py-4 text-right">Akcja</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -305,21 +168,10 @@ export const BrigadirQualityPage = () => {
                             const isBlock = inc.incident_number >= 2;
 
                             return (
-                                <tr 
-                                    key={inc.id} 
-                                    className="hover:bg-slate-50 cursor-pointer transition-colors"
-                                    onClick={() => setSelectedIncident(inc)}
-                                >
-                                    <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
-                                        {new Date(inc.date).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 font-medium text-slate-900">
-                                        {user ? `${user.first_name} ${user.last_name}` : 'Nieznany'}
-                                    </td>
-                                    <td className="px-6 py-4 text-slate-700">
-                                        {skill?.name_pl}
-                                        {skill && <div className="text-xs text-slate-400">Bonus: {skill.hourly_bonus} zł/h</div>}
-                                    </td>
+                                <tr key={inc.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelectedIncident(inc)}>
+                                    <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{new Date(inc.date).toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 font-bold text-slate-900">{user ? `${user.first_name} ${user.last_name}` : 'Nieznany'}</td>
+                                    <td className="px-6 py-4 text-slate-700">{skill?.name_pl}</td>
                                     <td className="px-6 py-4">
                                         {isBlock ? (
                                             <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200">
@@ -331,135 +183,47 @@ export const BrigadirQualityPage = () => {
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-slate-600 max-w-xs truncate" title={inc.description}>
-                                        {inc.description}
+                                    <td className="px-6 py-4 text-right">
+                                        <Button size="sm" variant="ghost" onClick={() => setSelectedIncident(inc)}><Eye size={16}/></Button>
                                     </td>
                                 </tr>
                             );
                         })}
-                        {filteredIncidents.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="p-8 text-center text-slate-400">
-                                    Brak zgłoszeń w wybranym okresie.
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
 
-            {/* ADD INCIDENT MODAL */}
             {isFormOpen && (
                 <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 flex flex-col max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
-                            <h2 className="text-xl font-bold text-slate-900">Nowe Zgłoszenie</h2>
-                            <button onClick={() => setIsFormOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                        </div>
-                        
-                        <div className="space-y-6 overflow-y-auto flex-1 pr-2">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Pracownik</label>
-                                <select 
-                                    className="w-full border border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={selectedUserId}
-                                    onChange={e => { setSelectedUserId(e.target.value); setSelectedSkillId(''); }}
-                                >
-                                    <option value="">Wybierz pracownika...</option>
-                                    {myTeam.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Umiejętność (tylko potwierdzone)</label>
-                                <select 
-                                    className="w-full border border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-50"
-                                    value={selectedSkillId}
-                                    onChange={e => setSelectedSkillId(e.target.value)}
-                                    disabled={!selectedUserId}
-                                >
-                                    <option value="">Wybierz umiejętność...</option>
-                                    {availableSkillsForForm.map((s: any) => <option key={s.id} value={s.id}>{s.name_pl} (+{s.hourly_bonus} zł)</option>)}
-                                </select>
-                                {!selectedSkillId && selectedUserId && availableSkillsForForm.length === 0 && (
-                                    <p className="text-xs text-slate-400 mt-1 italic">Ten pracownik nie ma jeszcze płatnych umiejętności.</p>
-                                )}
-                            </div>
-
-                            {incidentPrediction && (
-                                <div className={`p-4 rounded-lg border flex items-center gap-3 ${incidentPrediction.isBlock ? 'bg-red-50 border-red-200 text-red-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
-                                    {incidentPrediction.isBlock ? <Lock size={24}/> : <AlertTriangle size={24}/>}
-                                    <div>
-                                        <div className="font-bold uppercase text-xs tracking-wider">
-                                            Zgłoszenie nr {incidentPrediction.number} w tym miesiącu
-                                        </div>
-                                        <div className="font-bold text-sm mt-1">{incidentPrediction.label}</div>
-                                        <div className="text-xs opacity-90 mt-1">{incidentPrediction.description}</div>
-                                    </div>
+                        <div className="flex justify-between items-center mb-6 border-b pb-4"><h2 className="text-xl font-bold text-slate-900">Nowe Zgłoszenie</h2><button onClick={() => setIsFormOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button></div>
+                        <div className="space-y-6 overflow-y-auto flex-1">
+                            {isUploading && (
+                                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
+                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęcia...
                                 </div>
                             )}
 
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Opis błędu</label>
-                                <textarea 
-                                    className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-                                    rows={3}
-                                    placeholder="Opisz dokładnie na czym polegał błąd..."
-                                    value={description}
-                                    onChange={e => setDescription(e.target.value)}
-                                />
-                            </div>
-
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Pracownik</label><select className="w-full border border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={selectedUserId} onChange={e => { setSelectedUserId(e.target.value); setSelectedSkillId(''); }}><option value="">Wybierz pracownika...</option>{myTeam.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}</select></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Umiejętność (tylko potwierdzone)</label><select className="w-full border border-slate-300 rounded-lg p-3 bg-white focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-slate-50" value={selectedSkillId} onChange={e => setSelectedSkillId(e.target.value)} disabled={!selectedUserId}><option value="">Wybierz umiejętność...</option>{availableSkillsForForm.map((s: any) => <option key={s.id} value={s.id}>{s.name_pl} (+{s.hourly_bonus} zł)</option>)}</select></div>
+                            <div><label className="block text-sm font-bold text-slate-700 mb-2">Opis błędu</label><textarea className="w-full border border-slate-300 rounded-lg p-3 h-24 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Opisz dokładnie błąd..." value={description} onChange={e => setDescription(e.target.value)}/></div>
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Zdjęcie (Opcjonalne)</label>
-                                <div className="flex gap-3">
+                                <div className="flex gap-2">
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
                                     <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} />
-                                    
-                                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} type="button">
-                                        <Upload size={16} className="mr-2"/> Wybierz
-                                    </Button>
-                                    <Button variant="secondary" size="sm" onClick={() => cameraInputRef.current?.click()} type="button">
-                                        <Camera size={16} className="mr-2"/> Zdjęcie
-                                    </Button>
+                                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading}><Upload size={14} className="mr-1"/> Wybierz</Button>
+                                    <Button variant="secondary" size="sm" onClick={() => cameraInputRef.current?.click()} disabled={isUploading}><Camera size={14} className="mr-1"/> Zdjęcie</Button>
                                 </div>
-                                {imageUrl && (
-                                    <div className="mt-4 relative w-fit group">
-                                        <img src={imageUrl} alt="Dowód" className="h-24 w-auto rounded-lg border border-slate-200" />
-                                        <button 
-                                            onClick={() => { setImageUrl(''); setImageFile(null); }}
-                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"
-                                        >
-                                            <X size={12}/>
-                                        </button>
-                                    </div>
-                                )}
+                                {imageUrl && <div className="mt-2 relative w-fit group"><img src={imageUrl} alt="Dowód" className="h-20 w-auto rounded border border-slate-200" /><button onClick={() => setImageUrl('')} className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5"><X size={12}/></button></div>}
                             </div>
                         </div>
-
-                        <div className="pt-4 border-t border-slate-100 flex justify-end gap-3 mt-4">
-                            <Button variant="ghost" onClick={() => setIsFormOpen(false)}>Anuluj</Button>
-                            <Button 
-                                variant={incidentPrediction?.isBlock ? 'danger' : 'primary'}
-                                onClick={handleSubmit} 
-                                disabled={!selectedUserId || !selectedSkillId || !description}
-                            >
-                                Zatwierdź Zgłoszenie
-                            </Button>
-                        </div>
+                        <div className="pt-6 flex justify-end gap-3"><Button variant="ghost" onClick={() => setIsFormOpen(false)}>Anuluj</Button><Button variant={incidentPrediction?.isBlock ? 'danger' : 'primary'} onClick={handleSubmit} disabled={!selectedUserId || !selectedSkillId || !description || isUploading}>Zatwierdź Zgłoszenie</Button></div>
                     </div>
                 </div>
             )}
 
-            {renderDetailModal()}
-
-            <DocumentViewerModal 
-                isOpen={fileViewer.isOpen}
-                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })}
-                urls={fileViewer.urls}
-                initialIndex={fileViewer.index}
-                title={fileViewer.title}
-            />
+            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
         </div>
     );
 };

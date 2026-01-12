@@ -1,105 +1,149 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { 
-  User, Role, Skill, UserSkill, Test, TestAttempt, LibraryResource, 
-  CandidateHistoryEntry, AppNotification, NotificationSetting, SystemConfig, 
-  UserStatus, SkillStatus, VerificationType, MonthlyBonus, ContractType, QualityIncident, EmployeeNote, NoteCategory, NoteSeverity, EmployeeBadge, BadgeType, ChecklistItemState, Position
+  User, UserSkill, Skill, Test, TestAttempt, SystemConfig, 
+  AppNotification, NotificationSetting, Position, CandidateHistoryEntry, 
+  QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
+  Role, UserStatus, SkillStatus, ContractType
 } from '../types';
-import { 
-  TERMINATION_REASONS, BONUS_DOCUMENT_TYPES
-} from '../constants';
-import { supabase, authHelpers, db, uploadDocument as supabaseUpload } from '../lib/supabase';
 
-// Interface for State
 interface AppState {
   currentUser: User | null;
   users: User[];
-  skills: Skill[];
   userSkills: UserSkill[];
+  skills: Skill[];
   tests: Test[];
   testAttempts: TestAttempt[];
-  libraryResources: LibraryResource[];
   candidateHistory: CandidateHistoryEntry[];
   appNotifications: AppNotification[];
   systemConfig: SystemConfig;
+  notificationSettings: NotificationSetting[];
   positions: Position[];
   monthlyBonuses: Record<string, MonthlyBonus>;
   qualityIncidents: QualityIncident[];
   employeeNotes: EmployeeNote[];
   employeeBadges: EmployeeBadge[];
-  toast: { title: string; message: string } | null;
-  notificationSettings: NotificationSetting[];
-  isLoading: boolean;
+  toast: { title: string, message: string } | null;
+  libraryResources: LibraryResource[];
 }
 
-// Interface for Context
 interface AppContextType {
   state: AppState;
-  login: (email: string, password: string) => Promise<any>;
-  loginAsRole: (role: Role) => void;
-  loginAsUser: (user: User) => void;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  getUsers: () => Promise<void>;
-  addUser: (user: Partial<User>) => Promise<User>;
-  updateUser: (userId: string, data: Partial<User>) => Promise<User>;
-  deleteUser: (userId: string) => void;
-  uploadDocument: (file: File, userId: string) => Promise<string | null>;
-  addCandidate: (user: Partial<User>) => Promise<User>;
+  loginAsUser: (user: User) => void;
+  addUser: (userData: any) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  updateUser: (id: string, updates: any) => Promise<void>;
+  addCandidate: (userData: Partial<User>) => Promise<User>;
+  moveCandidateToTrial: (id: string, config: any) => Promise<void>;
   logCandidateAction: (candidateId: string, action: string) => Promise<void>;
-  startTest: (skillId: string) => void;
-  getSkills: () => Promise<Skill[]>;
-  submitTest: (testId: string, answers: any, score: number, passed: boolean) => Promise<TestAttempt>;
-  resetTestAttempt: (attemptId: string) => void;
-  addSkill: (skill: Omit<Skill, 'id'>) => Promise<void>;
-  updateSkill: (skillId: string, data: Partial<Skill>) => Promise<void>;
-  deleteSkill: (skillId: string) => Promise<void>;
-  addTest: (test: Omit<Test, 'id'>) => Promise<void>;
-  updateTest: (testId: string, data: Partial<Test>) => Promise<void>;
-  addLibraryResource: (resource: Omit<LibraryResource, 'id'>) => Promise<void>;
-  updateLibraryResource: (resourceId: string, data: Partial<LibraryResource>) => Promise<void>;
-  deleteLibraryResource: (resourceId: string) => Promise<void>;
-  addCandidateDocument: (userId: string, doc: Partial<UserSkill>) => Promise<void>;
-  updateCandidateDocumentDetails: (docId: string, data: Partial<UserSkill>) => Promise<void>;
+  resetTestAttempt: (testId: string, userId: string) => Promise<void>;
+  addCandidateDocument: (userId: string, docData: any) => Promise<void>;
+  updateCandidateDocumentDetails: (docId: string, updates: any) => Promise<void>;
+  updateUserSkillStatus: (userSkillId: string, status: SkillStatus, reason?: string) => Promise<void>;
   archiveCandidateDocument: (docId: string) => Promise<void>;
   restoreCandidateDocument: (docId: string) => Promise<void>;
-  updateUserSkillStatus: (userSkillId: string, status: SkillStatus, rejectionReason?: string) => Promise<void>;
-  moveCandidateToTrial: (candidateId: string, brigadirId: string, startDate: string, endDate: string, rate: number) => Promise<void>;
-  hireCandidate: (candidateId: string, hiredDate?: string, contractEndDate?: string) => Promise<void>;
-  assignBrigadir: (userId: string, brigadirId: string) => void;
-  resetSkillProgress: (userId: string, skillId: string, mode: 'theory'|'practice'|'both') => void;
-  
-  // Positions
-  addPosition: (pos: Omit<Position, 'id' | 'order'>) => void;
-  updatePosition: (id: string, data: Partial<Position>) => void;
-  deletePosition: (id: string) => void;
-  reorderPositions: (newPositions: Position[]) => void;
-
-  // Verification / Practice
-  confirmSkillPractice: (userSkillId: string, checkerId: string) => void;
-  saveSkillChecklistProgress: (userSkillId: string, progress: Record<number, ChecklistItemState>) => void;
-  updateVerificationDetails: (userSkillId: string, data: Partial<UserSkill>) => void;
-  
-  addQualityIncident: (incident: Omit<QualityIncident, 'id'>) => Promise<void>;
-
-  // Employee Notes
-  addEmployeeNote: (note: Omit<EmployeeNote, 'id' | 'created_at'>) => Promise<void>;
-  deleteEmployeeNote: (id: string) => Promise<void>;
-
-  // Employee Badges
-  addEmployeeBadge: (badge: Omit<EmployeeBadge, 'id' | 'created_at'>) => Promise<void>;
-  deleteEmployeeBadge: (id: string) => Promise<void>;
-
-  // Referral System
-  inviteFriend: (firstName: string, lastName: string, phone: string, targetPosition: string) => void;
-  payReferralBonus: (referralUserId: string) => void;
-
-  updateSystemConfig: (config: SystemConfig) => void;
-  updateNotificationSettings: (settings: NotificationSetting[]) => void;
+  hireCandidate: (userId: string, hiredDate: string, contractEndDate?: string) => Promise<void>;
   triggerNotification: (type: string, title: string, message: string, link?: string) => void;
+  assignBrigadir: (userId: string, brigadirId: string) => Promise<void>;
+  resetSkillProgress: (userId: string, skillId: string, mode: 'theory' | 'practice' | 'both') => Promise<void>;
+  addEmployeeNote: (note: any) => Promise<void>;
+  deleteEmployeeNote: (id: string) => Promise<void>;
+  payReferralBonus: (userId: string) => Promise<void>;
+  addSkill: (skill: Omit<Skill, 'id'>) => Promise<void>;
+  updateSkill: (id: string, skill: Partial<Skill>) => Promise<void>;
+  deleteSkill: (id: string) => Promise<void>;
+  addLibraryResource: (res: LibraryResource) => Promise<void>;
+  updateLibraryResource: (id: string, res: Partial<LibraryResource>) => Promise<void>;
+  deleteLibraryResource: (id: string) => Promise<void>;
+  addTest: (test: Omit<Test, 'id'>) => Promise<void>;
+  updateTest: (id: string, test: Partial<Test>) => Promise<void>;
+  startTest: (skillId: string) => void;
+  submitTest: (testId: string, answers: number[][], score: number, passed: boolean) => Promise<void>;
+  updateSystemConfig: (config: SystemConfig) => Promise<void>;
+  updateNotificationSettings: (settings: NotificationSetting[]) => Promise<void>;
+  addPosition: (pos: Omit<Position, 'id'>) => Promise<void>;
+  updatePosition: (id: string, pos: Partial<Position>) => Promise<void>;
+  deletePosition: (id: string) => Promise<void>;
+  reorderPositions: (positions: Position[]) => Promise<void>;
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
   clearToast: () => void;
+  inviteFriend: (firstName: string, lastName: string, phone: string, targetPosition: string) => void;
+  confirmSkillPractice: (userSkillId: string, brigadirId: string) => Promise<void>;
+  saveSkillChecklistProgress: (userSkillId: string, progress: any) => Promise<void>;
+  addEmployeeBadge: (badge: any) => Promise<void>;
+  deleteEmployeeBadge: (id: string) => Promise<void>;
+  addQualityIncident: (incident: any) => Promise<void>;
 }
+
+// DEFINICJA ZDARZEŃ I PRZYPISANIE DO RÓL
+const ALL_EVENT_TYPES = [
+    // --- REKRUTACJA ---
+    { code: 'cand_reg', label: 'Zarejestrowano w systemie', category: 'rekrutacja', roles: ['candidate', 'hr'] },
+    { code: 'cand_upd', label: 'Dane kandydata zostały zmienione', category: 'rekrutacja', roles: ['candidate', 'hr'] },
+    { code: 'cand_docs_req', label: 'Prośba o dane do umowy', category: 'rekrutacja', roles: ['candidate', 'hr'] },
+    { code: 'cand_docs_sent', label: 'Dane do umowy zostały wysłane', category: 'rekrutacja', roles: ['candidate', 'hr'] },
+    { code: 'doc_upl', label: 'Dokument został wgrany', category: 'rekrutacja', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'doc_stat', label: 'Dokument zatwierdzony / odrzucony', category: 'rekrutacja', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    
+    // --- UMOWY I TRIAL ---
+    { code: 'trial_start', label: 'Przeniesienie na okres próbny', category: 'trial', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'trial_rem', label: 'Przypomnienie o końcu okresu próbnego', category: 'trial', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'contract_perm', label: 'Przeniesienie na stały kontrakt', category: 'trial', roles: ['employee', 'brigadir', 'hr'] },
+    { code: 'contract_exp', label: 'Zbliżający się koniec umowy', category: 'trial', roles: ['employee', 'brigadir', 'hr'] },
+    { code: 'team_trial_rem', label: 'Okres próbny podwładnego kończy się', category: 'trial', roles: ['brigadir', 'coordinator', 'hr'] },
+    
+    // --- NAWYKI I TESTY ---
+    { code: 'test_ok', label: 'Test teoretyczny zaliczony', category: 'skills', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'prac_assigned', label: 'Wyznaczono praktykę (po teście)', category: 'skills', roles: ['employee', 'brigadir', 'hr'] },
+    { code: 'prac_stat', label: 'Praktyka zaliczona / odrzucona', category: 'skills', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'prac_verify_req', label: 'Nowa praktyka do sprawdzenia', category: 'skills', roles: ['brigadir', 'coordinator', 'hr'] },
+    { code: 'skill_stat', label: 'Nawyk zaliczony / odrzucony', category: 'skills', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    { code: 'rate_upd', label: 'Stawka godzinowa została zmieniona', category: 'skills', roles: ['candidate', 'employee', 'brigadir', 'hr'] },
+    
+    // --- JAKOŚĆ I FINANSE ---
+    { code: 'qual_warn', label: 'Ostrzeżenie dotyczące jakości (1/2)', category: 'quality', roles: ['employee', 'brigadir', 'coordinator', 'hr'] },
+    { code: 'qual_block', label: 'Blokada bonusu jakościowego (2/2)', category: 'quality', roles: ['employee', 'brigadir', 'coordinator', 'hr'] },
+    { code: 'team_qual_alert', label: 'Błąd jakościowy w nadzorowanym zespole', category: 'quality', roles: ['coordinator', 'work_manager', 'hr'] },
+    
+    // --- PROGRAM POLECEŃ ---
+    { code: 'ref_inv', label: 'Zaproszenie znajomego (Loyalty)', category: 'referrals', roles: ['employee', 'brigadir', 'hr'] },
+    { code: 'ref_bonus', label: 'Naliczono bonus za polecenie', category: 'referrals', roles: ['employee', 'brigadir', 'hr'] },
+    
+    // --- SYSTEM I ZESPÓŁ ---
+    { code: 'team_mod', label: 'Zmiana składu Twojej brygady', category: 'system', roles: ['brigadir', 'hr'] },
+    { code: 'doc_exp_alert', label: 'Wygasające dokumenty (SEP/UDT/Lekarskie)', category: 'system', roles: ['employee', 'brigadir', 'coordinator', 'work_manager', 'hr'] },
+    { code: 'sys_report', label: 'Raport okresowy gotowy', category: 'system', roles: ['coordinator', 'work_manager', 'hr'] },
+    { code: 'wm_crit_exp', label: 'Krytyczne wygaśnięcia w całej firmie', category: 'system', roles: ['work_manager', 'hr'] }
+];
+
+const CONFIG_ROLES = [Role.HR, Role.CANDIDATE, Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR, 'work_manager'];
+
+const generateDefaultSettings = (): NotificationSetting[] => {
+    const settings: NotificationSetting[] = [];
+    CONFIG_ROLES.forEach(role => {
+        ALL_EVENT_TYPES.forEach(event => {
+            if (event.roles.includes(role as any)) {
+                settings.push({
+                    id: `${role}_${event.code}`,
+                    label: event.label,
+                    category: event.category as any,
+                    target_role: role as any,
+                    system: false,
+                    email: false,
+                    sms: false
+                });
+            }
+        });
+    });
+    return settings;
+};
+
+const DEFAULT_NOTIFICATIONS = generateDefaultSettings();
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -107,501 +151,263 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [state, setState] = useState<AppState>({
     currentUser: null,
     users: [],
+    userSkills: [],
     skills: [],
-    userSkills: [], 
     tests: [],
     testAttempts: [],
-    libraryResources: [],
     candidateHistory: [],
     appNotifications: [],
     systemConfig: {
-      baseRate: 24.0,
+      baseRate: 24,
       contractBonuses: { [ContractType.UOP]: 0, [ContractType.UZ]: 1, [ContractType.B2B]: 7 },
-      studentBonus: 3.0,
-      bonusDocumentTypes: BONUS_DOCUMENT_TYPES,
-      bonusPermissionTypes: [
-          { id: 'sep_e', label: 'SEP E z pomiarami', bonus: 0.5 },
-          { id: 'sep_d', label: 'SEP D z pomiarami', bonus: 0.5 },
-          { id: 'udt_pod', label: 'UDT - Podnośniki (IP)', bonus: 1.0 },
-      ],
-      terminationReasons: TERMINATION_REASONS,
-      positions: ['Pomocnik', 'Elektromonter', 'Elektryk', 'Brygadzista', 'Kierownik Robót']
+      studentBonus: 3,
+      bonusDocumentTypes: [],
+      bonusPermissionTypes: [],
+      terminationReasons: [],
+      positions: ['Pomocnik', 'Elektromonter', 'Elektryk', 'Brygadzista', 'Koordynator Robót', 'Kierownik Robót']
     },
+    notificationSettings: [],
     positions: [],
     monthlyBonuses: {},
     qualityIncidents: [],
     employeeNotes: [],
     employeeBadges: [],
     toast: null,
-    notificationSettings: [
-      { id: 'status_change', label: 'Zmiana statusu', system: true, email: true, sms: false },
-      { id: 'test_passed', label: 'Zaliczony test', system: true, email: false, sms: false },
-      { id: 'doc_uploaded', label: 'Nowy dokument', system: true, email: true, sms: false },
-      { id: 'candidate_link', label: 'Wysłanie linku', system: false, email: true, sms: true },
-      { id: 'trial_ending', label: 'Koniec okresu próbnego', system: true, email: true, sms: false },
-      { id: 'termination', label: 'Zwolnienie pracownika', system: true, email: true, sms: false }
-    ],
-    isLoading: true
+    libraryResources: []
   });
 
-  const fetchInitialData = async () => {
+  const fetchData = async () => {
     try {
-      const [
-        { data: users },
-        { data: skills },
-        { data: userSkills },
-        { data: tests },
-        { data: testAttempts },
-        { data: resources },
-        { data: history },
-        { data: incidents },
-        { data: notes },
-        { data: badges },
-        { data: positions }
-      ] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('skills').select('*').eq('is_archived', false),
-        supabase.from('user_skills').select('*').eq('is_archived', false),
-        supabase.from('tests').select('*').eq('is_archived', false),
-        supabase.from('test_attempts').select('*'),
-        supabase.from('library_resources').select('*').eq('is_archived', false),
-        supabase.from('candidate_history').select('*').order('created_at', { ascending: false }),
-        supabase.from('quality_incidents').select('*'),
-        supabase.from('employee_notes').select('*'),
-        supabase.from('employee_badges').select('*'),
-        supabase.from('positions').select('*')
-      ]);
+      const { data: dbUsers } = await supabase.from('users').select('*');
+      const { data: dbSkills } = await supabase.from('skills').select('*');
+      const { data: dbUserSkills } = await supabase.from('user_skills').select('*');
+      const { data: dbHistory } = await supabase.from('candidate_history').select('*');
+      const { data: dbTests } = await supabase.from('tests').select('*');
+      const { data: dbAttempts } = await supabase.from('test_attempts').select('*');
+      const { data: dbNotifSettings } = await supabase.from('notification_settings').select('*');
 
       setState(prev => ({
         ...prev,
-        users: users || [],
-        skills: skills || [],
-        userSkills: userSkills || [],
-        tests: tests || [],
-        testAttempts: testAttempts || [],
-        libraryResources: resources || [],
-        candidateHistory: history || [],
-        qualityIncidents: incidents || [],
-        employeeNotes: notes || [],
-        employeeBadges: badges || [],
-        positions: positions || [],
-        isLoading: false
+        users: dbUsers || [],
+        skills: dbSkills || [],
+        userSkills: dbUserSkills || [],
+        candidateHistory: dbHistory || [],
+        tests: dbTests || [],
+        testAttempts: dbAttempts || [],
+        notificationSettings: (dbNotifSettings && dbNotifSettings.length > 0) ? dbNotifSettings : DEFAULT_NOTIFICATIONS
       }));
-    } catch (error) {
-      console.error('Error fetching initial data:', error);
-      setState(prev => ({ ...prev, isLoading: false }));
+    } catch (err) {
+      console.error('Error fetching data:', err);
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadUserProfile(session.user.id).then(() => fetchInitialData());
-      } else {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        loadUserProfile(session.user.id).then(() => fetchInitialData());
-      } else {
-        setState(prev => ({ ...prev, currentUser: null, isLoading: false }));
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    fetchData();
   }, []);
 
-  useEffect(() => {
-    const tables = ['users', 'user_skills', 'quality_incidents', 'employee_notes', 'employee_badges', 'test_attempts', 'candidate_history'];
-    const channels = tables.map(table => {
-      return supabase
-        .channel(`public:${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
-          setState(prev => {
-            const stateKey = table === 'library_resources' ? 'libraryResources' : 
-                             table === 'candidate_history' ? 'candidateHistory' : 
-                             table === 'test_attempts' ? 'testAttempts' :
-                             table === 'quality_incidents' ? 'qualityIncidents' :
-                             table === 'employee_notes' ? 'employeeNotes' :
-                             table === 'employee_badges' ? 'employeeBadges' :
-                             table === 'user_skills' ? 'userSkills' : table;
-            
-            let list = [...(prev[stateKey as keyof AppState] as any[])];
-            
-            if (payload.eventType === 'INSERT') {
-              if (!list.find(i => i.id === payload.new.id)) {
-                  list = [payload.new, ...list];
-              }
-            } else if (payload.eventType === 'UPDATE') {
-              list = list.map(item => item.id === payload.new.id ? payload.new : item);
-            } else if (payload.eventType === 'DELETE') {
-              list = list.filter(item => item.id !== payload.old.id);
-            }
-
-            const updatedState = { ...prev, [stateKey]: list };
-            if (table === 'users' && prev.currentUser?.id === payload.new?.id) {
-              updatedState.currentUser = { ...prev.currentUser, ...payload.new };
-            }
-            return updatedState;
-          });
-        })
-        .subscribe();
-    });
-
-    return () => {
-      channels.forEach(ch => supabase.removeChannel(ch));
-    };
-  }, []);
-
-  const loadUserProfile = async (userId: string) => {
-    const { data } = await supabase.from('users').select('*').eq('id', userId).maybeSingle();
+  const login = async (email: string, pass: string) => {
+    const { data: { user }, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error) throw error;
+    const { data } = await supabase.from('users').select('*').eq('id', user?.id).single();
     if (data) setState(prev => ({ ...prev, currentUser: data }));
   };
 
-  const triggerNotification = (type: string, title: string, message: string, link?: string) => {
-      const setting = state.notificationSettings.find(s => s.id === type);
-      if (setting?.system) {
-          const newNotif: AppNotification = { id: `notif_${Date.now()}`, title, message, isRead: false, createdAt: new Date().toISOString(), link };
-          setState(prev => ({ ...prev, appNotifications: [newNotif, ...prev.appNotifications], toast: { title, message } }));
-      }
-  };
-
-  const loginAsRole = (role: Role) => {
-      const user = state.users.find(u => u.role === role);
-      if (user) setState(prev => ({ ...prev, currentUser: user }));
-  };
-
-  const login = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (data.user) await loadUserProfile(data.user.id);
-    return data;
-  };
-
+  const logout = () => setState(prev => ({ ...prev, currentUser: null }));
   const loginAsUser = (user: User) => setState(prev => ({ ...prev, currentUser: user }));
-  
-  const logout = async () => {
-    await supabase.auth.signOut();
-    setState(prev => ({ ...prev, currentUser: null }));
-  };
 
-  const getUsers = async () => {
-    const { data } = await supabase.from('users').select('*').order('last_name');
-    if (data) setState(prev => ({ ...prev, users: data }));
-  };
-
-  const addUser = async (userData: Partial<User>) => {
-    const { data, error } = await supabase.from('users').insert([{ ...userData, id: crypto.randomUUID() }]).select().single();
-    if (error) throw error;
+  const addUser = async (userData: any) => {
+    const { data } = await supabase.from('users').insert([userData]).select().single();
     if (data) setState(prev => ({ ...prev, users: [data, ...prev.users] }));
-    return data;
+  };
+
+  const deleteUser = async (id: string) => {
+    await supabase.from('users').delete().eq('id', id);
+    setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== id) }));
   };
 
   const updateUser = async (userId: string, updates: Partial<User>) => {
-    const { data, error } = await supabase.from('users').update(updates).eq('id', userId).select().single();
+    const processedUpdates = { ...updates };
+    const { data, error } = await supabase.from('users').update(processedUpdates).eq('id', userId).select().single();
     if (error) throw error;
-    if (data) {
-        setState(prev => ({
-            ...prev,
-            users: prev.users.map(u => u.id === userId ? data : u),
-            currentUser: prev.currentUser?.id === userId ? data : prev.currentUser
-        }));
-    }
-    return data;
-  };
-
-  const deleteUser = async (userId: string) => {
-    const { error } = await supabase.from('users').delete().eq('id', userId);
-    if (!error) setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
-  };
-
-  const uploadDocument = async (file: File, userId: string) => {
-    return await supabaseUpload(file, userId);
+    if (data) setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? data : u), currentUser: prev.currentUser?.id === userId ? data : prev.currentUser }));
   };
 
   const addCandidate = async (userData: Partial<User>): Promise<User> => {
-      const { data, error } = await supabase.from('users').insert([{ 
-          ...userData, 
-          id: crypto.randomUUID(),
-          role: Role.CANDIDATE, 
-          status: UserStatus.STARTED, 
-          hired_date: new Date().toISOString() 
-      }]).select().single();
-      
-      if (error) throw error;
-      if (data) setState(prev => ({ ...prev, users: [data, ...prev.users] }));
-      await logCandidateAction(data.id, 'Dodano kandydata');
-      return data;
+    const response = await supabase.functions.invoke('create-candidate', { body: userData });
+    if (response.error) throw new Error(JSON.stringify(response.error));
+    const newCandidate = response.data.data;
+    setState(prev => ({ ...prev, users: [newCandidate, ...prev.users] }));
+    await logCandidateAction(newCandidate.id, 'Dodano kandydata');
+    return newCandidate;
+  };
+
+  const moveCandidateToTrial = async (id: string, config: any) => {
+    const updates = { status: UserStatus.TRIAL, ...config };
+    await updateUser(id, updates);
   };
 
   const logCandidateAction = async (candidateId: string, action: string) => {
-      const performedBy = state.currentUser ? `${state.currentUser.first_name} ${state.currentUser.last_name}` : 'System';
-      const newEntry = {
-          id: crypto.randomUUID(),
-          candidate_id: candidateId,
-          created_at: new Date().toISOString(),
-          action,
-          performed_by: performedBy
-      };
-      
-      const { data, error } = await supabase.from('candidate_history').insert([newEntry]).select().single();
-      if (error) {
-          console.error("History Log Error:", error);
-      } else if (data) {
-          setState(prev => ({ ...prev, candidateHistory: [data, ...prev.candidateHistory] }));
-      }
+    const newLog = { candidate_id: candidateId, action, created_at: new Date().toISOString(), performed_by: state.currentUser ? `${state.currentUser.first_name} ${state.currentUser.last_name}` : 'System' };
+    const { data } = await supabase.from('candidate_history').insert([newLog]).select().single();
+    if (data) setState(prev => ({ ...prev, candidateHistory: [data, ...prev.candidateHistory] }));
   };
 
-  const startTest = (skillId: string) => { 
-    if (!state.currentUser) return; 
-    logCandidateAction(state.currentUser.id, `Rozpoczęto test dla umiejętności ID: ${skillId}`); 
+  const resetTestAttempt = async (testId: string, userId: string) => {
+    setState(prev => ({ ...prev, testAttempts: prev.testAttempts.filter(ta => !(ta.test_id === testId && ta.user_id === userId)) }));
   };
 
-  const getSkills = async () => {
-    const { data } = await supabase.from('skills').select('*').eq('is_archived', false).order('category');
-    return data || [];
-  };
-
-  const submitTest = async (testId: string, answers: any, score: number, passed: boolean) => {
-    if (!state.currentUser) throw new Error("No current user");
-    
-    const { data, error } = await supabase.from('test_attempts').insert([{
-        id: crypto.randomUUID(),
-        user_id: state.currentUser.id,
-        test_id: testId,
-        score,
-        passed,
-        answers,
-        completed_at: new Date().toISOString()
-    }]).select().single();
-
+  const addCandidateDocument = async (userId: string, docData: any) => {
+    const payload = { user_id: userId, status: docData.status || SkillStatus.PENDING, is_archived: false, ...docData };
+    const { data, error } = await supabase.from('user_skills').insert([payload]).select().single();
     if (error) throw error;
-
-    if (data) setState(prev => ({ ...prev, testAttempts: [data, ...prev.testAttempts] }));
-    
-    const test = state.tests.find(t => t.id === testId);
-    if (test) {
-        for (const sid of test.skill_ids) {
-            const skill = state.skills.find(s => s.id === sid);
-            const status = passed ? (skill?.verification_type === VerificationType.THEORY_ONLY ? SkillStatus.CONFIRMED : SkillStatus.THEORY_PASSED) : SkillStatus.FAILED;
-            
-            const existing = state.userSkills.find(us => us.user_id === state.currentUser?.id && us.skill_id === sid);
-            if (existing) {
-                const { data: updatedUs } = await supabase.from('user_skills').update({ status, theory_score: score }).eq('id', existing.id).select().single();
-                if (updatedUs) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === updatedUs.id ? updatedUs : us) }));
-            } else {
-                const { data: newUs } = await supabase.from('user_skills').insert([{ id: crypto.randomUUID(), user_id: state.currentUser.id, skill_id: sid, status, theory_score: score }]).select().single();
-                if (newUs) setState(prev => ({ ...prev, userSkills: [newUs, ...prev.userSkills] }));
-            }
-        }
-    }
-
-    await logCandidateAction(state.currentUser.id, `Zakończono test: ${test?.title} - Wynik: ${score}% (${passed ? 'Zaliczony' : 'Niezaliczony'})`);
-    return data;
+    setState(prev => ({ ...prev, userSkills: [data, ...prev.userSkills] }));
   };
 
-  const resetTestAttempt = async (attemptId: string) => {
-    await supabase.from('test_attempts').delete().eq('id', attemptId);
-    setState(prev => ({ ...prev, testAttempts: prev.testAttempts.filter(ta => ta.id !== attemptId) }));
+  const updateCandidateDocumentDetails = async (docId: string, updates: any) => {
+    const { data, error } = await supabase.from('user_skills').update(updates).eq('id', docId).select().single();
+    if (error) throw error;
+    setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? data : us) }));
   };
 
-  const addSkill = async (skill: Omit<Skill, 'id'>) => {
-    const { data } = await supabase.from('skills').insert([{ ...skill, id: crypto.randomUUID() }]).select().single();
-    if (data) setState(prev => ({ ...prev, skills: [data, ...prev.skills] }));
-  };
-  
-  const updateSkill = async (skillId: string, data: Partial<Skill>) => {
-    const { data: updated } = await supabase.from('skills').update(data).eq('id', skillId).select().single();
-    if (updated) setState(prev => ({ ...prev, skills: prev.skills.map(s => s.id === skillId ? updated : s) }));
-  };
-  
-  const deleteSkill = async (skillId: string) => {
-    await supabase.from('skills').update({ is_archived: true }).eq('id', skillId);
-    setState(prev => ({ ...prev, skills: prev.skills.filter(s => s.id !== skillId) }));
-  };
-
-  const addTest = async (test: Omit<Test, 'id'>) => {
-    const { data } = await supabase.from('tests').insert([{ ...test, id: crypto.randomUUID() }]).select().single();
-    if (data) setState(prev => ({ ...prev, tests: [data, ...prev.tests] }));
-  };
-  
-  const updateTest = async (testId: string, data: Partial<Test>) => {
-    const { data: updated } = await supabase.from('tests').update(data).eq('id', testId).select().single();
-    if (updated) setState(prev => ({ ...prev, tests: prev.tests.map(t => t.id === testId ? updated : t) }));
-  };
-
-  const addLibraryResource = async (resource: Omit<LibraryResource, 'id'>) => {
-    const { data } = await supabase.from('library_resources').insert([{ ...resource, id: crypto.randomUUID() }]).select().single();
-    if (data) setState(prev => ({ ...prev, libraryResources: [data, ...prev.libraryResources] }));
-  };
-  
-  const updateLibraryResource = async (resourceId: string, data: Partial<LibraryResource>) => {
-    const { data: updated } = await supabase.from('library_resources').update(data).eq('id', resourceId).select().single();
-    if (updated) setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === resourceId ? updated : r) }));
-  };
-  
-  const deleteLibraryResource = async (resourceId: string) => {
-    await supabase.from('library_resources').update({ is_archived: true }).eq('id', resourceId);
-    setState(prev => ({ ...prev, libraryResources: prev.libraryResources.filter(r => r.id !== resourceId) }));
-  };
-
-  const addCandidateDocument = async (userId: string, doc: Partial<UserSkill>) => {
-      const newDoc = {
-          ...doc,
-          id: crypto.randomUUID(),
-          user_id: userId,
-          status: SkillStatus.PENDING,
-          created_at: new Date().toISOString()
-      };
-      
-      const { data, error } = await supabase.from('user_skills').insert([newDoc]).select().single();
-      if (error) {
-          console.error("Error adding document:", error);
-          throw error;
-      }
-      
-      if (data) {
-          setState(prev => ({ ...prev, userSkills: [data, ...prev.userSkills] }));
-      }
-      
-      await logCandidateAction(userId, `Dodano dokument: ${doc.custom_name}`);
-  };
-
-  const updateCandidateDocumentDetails = async (docId: string, data: Partial<UserSkill>) => {
-    const { data: updated } = await supabase.from('user_skills').update(data).eq('id', docId).select().single();
-    if (updated) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? updated : us) }));
-  };
-  
-  const archiveCandidateDocument = async (docId: string) => {
-    await supabase.from('user_skills').update({ is_archived: true }).eq('id', docId);
-    setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? { ...us, is_archived: true } : us) }));
-  };
-  
-  const restoreCandidateDocument = async (docId: string) => {
-    await supabase.from('user_skills').update({ is_archived: false }).eq('id', docId);
-    setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? { ...us, is_archived: false } : us) }));
-  };
-
-  const updateUserSkillStatus = async (userSkillId: string, status: SkillStatus, rejectionReason?: string) => {
-      const { data, error } = await supabase.from('user_skills').update({ 
-          status, 
-          rejection_reason: rejectionReason,
-          confirmed_at: status === SkillStatus.CONFIRMED ? new Date().toISOString() : null 
-      }).eq('id', userSkillId).select().single();
-      
-      if (error) throw error;
-      
-      if (data) {
-          setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? data : us) }));
-          const isDoc = data.skill_id.startsWith('doc_');
-          const skillName = data.custom_name || data.skill_id;
-          await logCandidateAction(data.user_id, status === SkillStatus.FAILED ? `Odrzucono ${isDoc ? 'dokument' : 'praktykę'}: ${skillName}` : `Zatwierdzono ${isDoc ? 'dokument' : 'praktykę'}: ${skillName}`);
-      }
-  };
-
-  const moveCandidateToTrial = async (candidateId: string, brigadirId: string, startDate: string, endDate: string, rate: number) => {
-      await updateUser(candidateId, { status: UserStatus.TRIAL, role: Role.EMPLOYEE, assigned_brigadir_id: brigadirId, hired_date: startDate, trial_end_date: endDate, base_rate: rate });
-      await logCandidateAction(candidateId, `Rozpoczęcie okresu próbnego. Brygadzista: ${brigadirId}`);
-  };
-
-  const hireCandidate = async (candidateId: string, hiredDate?: string, contractEndDate?: string) => {
-      await updateUser(candidateId, { status: UserStatus.ACTIVE, role: Role.EMPLOYEE, hired_date: hiredDate || new Date().toISOString(), contract_end_date: contractEndDate, trial_end_date: null });
-      await logCandidateAction(candidateId, 'Zatrudnienie na stałe');
-  };
-
-  const assignBrigadir = async (userId: string, brigadirId: string) => {
-    await updateUser(userId, { assigned_brigadir_id: brigadirId });
-  };
-
-  const resetSkillProgress = async (userId: string, skillId: string, mode: 'theory'|'practice'|'both') => {
-      if (mode === 'both' || mode === 'practice') {
-          await supabase.from('user_skills').delete().eq('user_id', userId).eq('skill_id', skillId);
-          setState(prev => ({ ...prev, userSkills: prev.userSkills.filter(us => !(us.user_id === userId && us.skill_id === skillId)) }));
-      }
-      if (mode === 'theory' || mode === 'both') {
-          const test = state.tests.find(t => t.skill_ids.includes(skillId));
-          if (test) {
-              await supabase.from('test_attempts').delete().eq('user_id', userId).eq('test_id', test.id);
-              setState(prev => ({ ...prev, testAttempts: prev.testAttempts.filter(ta => !(ta.user_id === userId && ta.test_id === test.id)) }));
-          }
-      }
-      await logCandidateAction(userId, `Reset postępu: ${skillId} (${mode})`);
-  };
-
-  const addPosition = async (posData: Omit<Position, 'id' | 'order'>) => {
-    const { data } = await supabase.from('positions').insert([{ ...posData, id: crypto.randomUUID(), order: state.positions.length + 1 }]).select().single();
-    if (data) setState(prev => ({ ...prev, positions: [...prev.positions, data] }));
-  };
-  
-  const updatePosition = async (id: string, data: Partial<Position>) => {
-    const { data: updated } = await supabase.from('positions').update(data).eq('id', id).select().single();
-    if (updated) setState(prev => ({ ...prev, positions: prev.positions.map(p => p.id === id ? updated : p) }));
-  };
-  
-  const deletePosition = async (id: string) => {
-    await supabase.from('positions').delete().eq('id', id);
-    setState(prev => ({ ...prev, positions: prev.positions.filter(p => p.id !== id) }));
-  };
-  
-  const reorderPositions = async (newPositions: Position[]) => {
-    for (let i = 0; i < newPositions.length; i++) {
-        await supabase.from('positions').update({ order: i + 1 }).eq('id', newPositions[i].id);
-    }
-    setState(prev => ({ ...prev, positions: newPositions }));
-  };
-
-  const confirmSkillPractice = async (userSkillId: string, checkerId: string) => {
-      const nowStr = new Date().toISOString();
-      const { data } = await supabase.from('user_skills').update({ 
-          status: SkillStatus.CONFIRMED, 
-          practice_checked_by: checkerId, 
-          practice_date: nowStr, 
-          confirmed_at: nowStr 
-      }).eq('id', userSkillId).select().single();
-      if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? data : us) }));
-  };
-
-  const saveSkillChecklistProgress = async (userSkillId: string, progress: Record<number, ChecklistItemState>) => {
-    const { data } = await supabase.from('user_skills').update({ checklist_progress: progress }).eq('id', userSkillId).select().single();
+  const updateUserSkillStatus = async (userSkillId: string, status: SkillStatus, reason?: string) => {
+    const { data } = await supabase.from('user_skills').update({ status, rejection_reason: reason }).eq('id', userSkillId).select().single();
     if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? data : us) }));
   };
-  
-  const updateVerificationDetails = async (userSkillId: string, data: Partial<UserSkill>) => {
-    const { data: updated } = await supabase.from('user_skills').update(data).eq('id', userSkillId).select().single();
-    if (updated) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? updated : us) }));
-  };
-  
-  const addQualityIncident = async (incident: Omit<QualityIncident, 'id'>) => {
-    const { data, error } = await supabase.from('quality_incidents').insert([{ ...incident, id: crypto.randomUUID() }]).select().single();
-    if (!error && data) {
-        setState(prev => ({ ...prev, qualityIncidents: [data, ...prev.qualityIncidents] }));
-    }
+
+  const archiveCandidateDocument = async (docId: string) => {
+    const { data } = await supabase.from('user_skills').update({ is_archived: true }).eq('id', docId).select().single();
+    if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? data : us) }));
   };
 
-  const addEmployeeNote = async (note: Omit<EmployeeNote, 'id' | 'created_at'>) => {
-    const newNote = {
-        ...note,
-        id: crypto.randomUUID(),
-        created_at: new Date().toISOString()
-    };
-    const { data, error } = await supabase.from('employee_notes').insert([newNote]).select().single();
-    if (error) {
-        console.error("Error adding note:", error);
-    } else if (data) {
-        setState(prev => ({ ...prev, employeeNotes: [data, ...prev.employeeNotes] }));
-    }
+  const restoreCandidateDocument = async (docId: string) => {
+    const { data } = await supabase.from('user_skills').update({ is_archived: false }).eq('id', docId).select().single();
+    if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === docId ? data : us) }));
   };
-  
+
+  const hireCandidate = async (userId: string, hiredDate: string, contractEndDate?: string) => {
+    const updates = { status: UserStatus.ACTIVE, hired_date: hiredDate, contract_end_date: contractEndDate };
+    await updateUser(userId, updates);
+  };
+
+  const triggerNotification = (type: string, title: string, message: string, link?: string) => {
+    const newNotif = { id: crypto.randomUUID(), title, message, isRead: false, createdAt: new Date().toISOString(), link };
+    setState(prev => ({ ...prev, appNotifications: [newNotif, ...prev.appNotifications], toast: { title, message } }));
+  };
+
+  const assignBrigadir = async (userId: string, brigadirId: string) => { await updateUser(userId, { assigned_brigadir_id: brigadirId }); };
+
+  const resetSkillProgress = async (userId: string, skillId: string, mode: 'theory' | 'practice' | 'both') => { console.log(`Resetting skill ${skillId} for user ${userId} mode: ${mode}`); };
+
+  const addEmployeeNote = async (note: any) => {
+    const { data } = await supabase.from('employee_notes').insert([{ ...note, created_at: new Date().toISOString() }]).select().single();
+    if (data) setState(prev => ({ ...prev, employeeNotes: [data, ...prev.employeeNotes] }));
+  };
+
   const deleteEmployeeNote = async (id: string) => {
     await supabase.from('employee_notes').delete().eq('id', id);
     setState(prev => ({ ...prev, employeeNotes: prev.employeeNotes.filter(n => n.id !== id) }));
   };
 
-  const addEmployeeBadge = async (badge: Omit<EmployeeBadge, 'id' | 'created_at'>) => {
-      const { data } = await supabase.from('employee_badges').insert([{ ...badge, id: crypto.randomUUID(), created_at: new Date().toISOString() }]).select().single();
-      if (data) setState(prev => ({ ...prev, employeeBadges: [data, ...prev.employeeBadges] }));
+  const payReferralBonus = async (userId: string) => { await updateUser(userId, { referral_bonus_paid: true, referral_bonus_paid_date: new Date().toISOString() }); };
+
+  const addSkill = async (skill: Omit<Skill, 'id'>) => {
+    const { data } = await supabase.from('skills').insert([skill]).select().single();
+    if (data) setState(prev => ({ ...prev, skills: [data, ...prev.skills] }));
+  };
+
+  const updateSkill = async (id: string, skill: Partial<Skill>) => {
+    const { data } = await supabase.from('skills').update(skill).eq('id', id).select().single();
+    if (data) setState(prev => ({ ...prev, skills: prev.skills.map(s => s.id === id ? data : s) }));
+  };
+
+  const deleteSkill = async (id: string) => {
+    await supabase.from('skills').delete().eq('id', id);
+    setState(prev => ({ ...prev, skills: prev.skills.filter(s => s.id !== id) }));
+  };
+
+  const addLibraryResource = async (res: LibraryResource) => {
+    const { data } = await supabase.from('library').insert([res]).select().single();
+    if (data) setState(prev => ({ ...prev, libraryResources: [data, ...prev.libraryResources] }));
+  };
+
+  const updateLibraryResource = async (id: string, res: Partial<LibraryResource>) => {
+    const { data } = await supabase.from('library').update(res).eq('id', id).select().single();
+    if (data) setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? data : r) }));
+  };
+
+  const deleteLibraryResource = async (id: string) => {
+    await supabase.from('library').delete().eq('id', id);
+    setState(prev => ({ ...prev, libraryResources: prev.libraryResources.filter(r => r.id !== id) }));
+  };
+
+  const addTest = async (test: Omit<Test, 'id'>) => {
+    const { data } = await supabase.from('tests').insert([test]).select().single();
+    if (data) setState(prev => ({ ...prev, tests: [data, ...prev.tests] }));
+  };
+
+  const updateTest = async (id: string, test: Partial<Test>) => {
+    const { data } = await supabase.from('tests').update(test).eq('id', id).select().single();
+    if (data) setState(prev => ({ ...prev, tests: prev.tests.map(t => t.id === id ? data : t) }));
+  };
+
+  const startTest = (skillId: string) => { console.log('Test started for skill:', skillId); };
+
+  const submitTest = async (testId: string, answers: number[][], score: number, passed: boolean) => {
+    const attempt = { user_id: state.currentUser?.id, test_id: testId, score, passed, completed_at: new Date().toISOString() };
+    const { data } = await supabase.from('test_attempts').insert([attempt]).select().single();
+    if (data) setState(prev => ({ ...prev, testAttempts: [data, ...prev.testAttempts] }));
+  };
+
+  const updateSystemConfig = async (config: SystemConfig) => { setState(prev => ({ ...prev, systemConfig: config })); };
+
+  const updateNotificationSettings = async (settings: NotificationSetting[]) => {
+    setState(prev => ({ ...prev, notificationSettings: settings }));
+    const { error } = await supabase.from('notification_settings').upsert(settings);
+    if (error) {
+        console.error("Error saving notification settings:", error);
+        throw error;
+    }
+  };
+
+  const addPosition = async (pos: Omit<Position, 'id'>) => {
+    const { data } = await supabase.from('positions').insert([pos]).select().single();
+    if (data) setState(prev => ({ ...prev, positions: [data, ...prev.positions] }));
+  };
+
+  const updatePosition = async (id: string, pos: Partial<Position>) => {
+    const { data } = await supabase.from('positions').update(pos).eq('id', id).select().single();
+    if (data) setState(prev => ({ ...prev, positions: prev.positions.map(p => p.id === id ? data : p) }));
+  };
+
+  const deletePosition = async (id: string) => {
+    await supabase.from('positions').delete().eq('id', id);
+    setState(prev => ({ ...prev, positions: prev.positions.filter(p => p.id !== id) }));
+  };
+
+  const reorderPositions = async (positions: Position[]) => { setState(prev => ({ ...prev, positions })); };
+
+  const markNotificationAsRead = (id: string) => { setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => n.id === id ? { ...n, isRead: true } : n) })); };
+
+  const markAllNotificationsAsRead = () => { setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => ({ ...n, isRead: true })) })); };
+
+  const clearToast = () => setState(prev => ({ ...prev, toast: null }));
+
+  const inviteFriend = (firstName: string, lastName: string, phone: string, targetPosition: string) => { console.log('Inviting friend:', firstName, lastName); };
+
+  const confirmSkillPractice = async (userSkillId: string, brigadirId: string) => {
+    const updates = { status: SkillStatus.CONFIRMED, practice_checked_by: brigadirId, practice_date: new Date().toISOString(), confirmed_at: new Date().toISOString() };
+    const { data } = await supabase.from('user_skills').update(updates).eq('id', userSkillId).select().single();
+    if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? data : us) }));
+  };
+
+  const saveSkillChecklistProgress = async (userSkillId: string, progress: any) => {
+    const { data } = await supabase.from('user_skills').update({ checklist_progress: progress }).eq('id', userSkillId).select().single();
+    if (data) setState(prev => ({ ...prev, userSkills: prev.userSkills.map(us => us.id === userSkillId ? data : us) }));
+  };
+
+  const addEmployeeBadge = async (badge: any) => {
+    const { data } = await supabase.from('employee_badges').insert([{ ...badge, created_at: new Date().toISOString() }]).select().single();
+    if (data) setState(prev => ({ ...prev, employeeBadges: [data, ...prev.employeeBadges] }));
   };
 
   const deleteEmployeeBadge = async (id: string) => {
@@ -609,37 +415,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, employeeBadges: prev.employeeBadges.filter(b => b.id !== id) }));
   };
 
-  const inviteFriend = (firstName: string, lastName: string, phone: string, targetPosition: string) => {
-    if (!state.currentUser) return;
-    addCandidate({
-        first_name: firstName,
-        last_name: lastName,
-        phone,
-        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@referral.pl`,
-        referred_by_id: state.currentUser.id,
-        target_position: targetPosition,
-        source: `Polecenie: ${state.currentUser.first_name} ${state.currentUser.last_name}`
-    });
-    triggerNotification('candidate_link', 'Wysłano Zaproszenie', `Polecenie dla ${firstName} ${lastName} zostało zapisane.`);
+  const addQualityIncident = async (incident: any) => {
+    const { data } = await supabase.from('quality_incidents').insert([incident]).select().single();
+    if (data) setState(prev => ({ ...prev, qualityIncidents: [data, ...prev.qualityIncidents] }));
   };
-
-  const payReferralBonus = async (referralUserId: string) => {
-    const { data } = await supabase.from('users').update({ 
-        referral_bonus_paid: true, 
-        referral_bonus_paid_date: new Date().toISOString() 
-    }).eq('id', referralUserId).select().single();
-    if (data) setState(prev => ({ ...prev, users: prev.users.map(u => u.id === referralUserId ? data : u) }));
-  };
-
-  const updateSystemConfig = (config: SystemConfig) => setState(prev => ({ ...prev, systemConfig: config }));
-  const updateNotificationSettings = (settings: NotificationSetting[]) => setState(prev => ({ ...prev, notificationSettings: settings }));
-  const markNotificationAsRead = (id: string) => setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => n.id === id ? { ...n, isRead: true } : n) }));
-  const markAllNotificationsAsRead = () => setState(prev => ({ ...prev, appNotifications: prev.appNotifications.map(n => ({ ...n, isRead: true })) }));
-  const clearToast = () => setState(prev => ({ ...prev, toast: null }));
 
   return (
-    <AppContext.Provider value={{
-      state, login, loginAsRole, loginAsUser, logout, getUsers, addUser, updateUser, deleteUser, uploadDocument, addCandidate, logCandidateAction, startTest, getSkills, submitTest, resetTestAttempt, addSkill, updateSkill, deleteSkill, addTest, updateTest, addLibraryResource, updateLibraryResource, deleteLibraryResource, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, moveCandidateToTrial, hireCandidate, assignBrigadir, resetSkillProgress, addPosition, updatePosition, deletePosition, reorderPositions, confirmSkillPractice, saveSkillChecklistProgress, updateVerificationDetails, addQualityIncident, addEmployeeNote, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge, inviteFriend, payReferralBonus, updateSystemConfig, updateNotificationSettings, triggerNotification, markNotificationAsRead, markAllNotificationsAsRead, clearToast
+    <AppContext.Provider value={{ 
+        state, setState, login, logout, loginAsUser, addUser, deleteUser, updateUser, addCandidate, moveCandidateToTrial, logCandidateAction,
+        resetTestAttempt, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus, archiveCandidateDocument, restoreCandidateDocument,
+        hireCandidate, triggerNotification, assignBrigadir, resetSkillProgress, addEmployeeNote, deleteEmployeeNote, payReferralBonus, addSkill,
+        updateSkill, deleteSkill, addLibraryResource, updateLibraryResource, deleteLibraryResource, addTest, updateTest, startTest, submitTest,
+        updateSystemConfig, updateNotificationSettings, addPosition, updatePosition, deletePosition, reorderPositions, markNotificationAsRead,
+        markAllNotificationsAsRead, clearToast, inviteFriend, confirmSkillPractice, saveSkillChecklistProgress, addEmployeeBadge, deleteEmployeeBadge, addQualityIncident
     }}>
       {children}
     </AppContext.Provider>

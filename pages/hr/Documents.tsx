@@ -1,11 +1,11 @@
-
 import React, { useState, useRef } from 'react';
-import { Upload, X, Archive, Search, Eye, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
+import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { VerificationType, SkillStatus, UserSkill } from '../../types';
 import { SKILL_STATUS_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { uploadDocument } from '../../lib/supabase';
 
 export const HRDocumentsPage = () => {
     const { state, updateUserSkillStatus, updateCandidateDocumentDetails, archiveCandidateDocument } = useAppContext();
@@ -32,8 +32,12 @@ export const HRDocumentsPage = () => {
     // 1. FILTERING: Only show PENDING documents
     const pendingDocs = state.userSkills.filter(us => {
         const skill = state.skills.find(s => s.id === us.skill_id);
-        // Check if it's a document verification type OR a generic document upload
-        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || us.skill_id.startsWith('doc_');
+        // Robust identification of what is a document record
+        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || 
+                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || 
+                      !!us.custom_type || 
+                      !us.skill_id;
+
         return isDoc && us.status === SkillStatus.PENDING && !us.is_archived;
     });
 
@@ -59,9 +63,13 @@ export const HRDocumentsPage = () => {
         setIsDocModalOpen(true);
     };
 
-    const handleSaveDocument = () => {
+    const handleSaveDocument = async () => {
         if (!editingDocId || !newDocData.customName) return;
         
+        const doc = state.userSkills.find(us => us.id === editingDocId);
+        const userId = doc?.user_id;
+        if (!userId) return;
+
         const docPayload: any = {
             custom_name: newDocData.customName,
             issue_date: newDocData.issue_date,
@@ -70,16 +78,24 @@ export const HRDocumentsPage = () => {
         };
 
         if (newDocData.files.length > 0) {
-             const urls = newDocData.files.map(f => {
-                 const url = URL.createObjectURL(f);
-                 return f.type === 'application/pdf' ? `${url}#pdf` : url;
-             });
-             docPayload.document_urls = urls;
-             docPayload.document_url = urls[0];
+             const uploadedUrls: string[] = [];
+             for (const file of newDocData.files) {
+                 const url = await uploadDocument(file, userId);
+                 if (url) uploadedUrls.push(url);
+             }
+             if (uploadedUrls.length > 0) {
+                 docPayload.document_urls = uploadedUrls;
+                 docPayload.document_url = uploadedUrls[0];
+             }
         }
 
-        updateCandidateDocumentDetails(editingDocId, docPayload);
-        setIsDocModalOpen(false);
+        try {
+            await updateCandidateDocumentDetails(editingDocId, docPayload);
+            setIsDocModalOpen(false);
+        } catch (error) {
+            console.error("Error updating document:", error);
+            alert("Błąd podczas aktualizacji dokumentu.");
+        }
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +110,14 @@ export const HRDocumentsPage = () => {
     };
 
     const openFileViewer = (doc: UserSkill) => {
-        const urls = doc.document_urls && doc.document_urls.length > 0 ? doc.document_urls : (doc.document_url ? [doc.document_url] : []);
+        // Robust URL detection
+        let urls: string[] = [];
+        if (Array.isArray(doc.document_urls) && doc.document_urls.length > 0) {
+            urls = doc.document_urls;
+        } else if (doc.document_url) {
+            urls = [doc.document_url];
+        }
+        
         setFileViewer({ isOpen: true, urls, title: doc.custom_name || 'Dokument', index: 0 });
     };
 
@@ -202,7 +225,7 @@ export const HRDocumentsPage = () => {
                             const skill = state.skills.find(s => s.id === doc.skill_id);
                             const bonus = doc.bonus_value || skill?.hourly_bonus || 0;
                             const displayName = doc.custom_name || skill?.name_pl || 'Dokument';
-                            const fileCount = doc.document_urls ? doc.document_urls.length : (doc.document_url ? 1 : 0);
+                            const urlsFound = Array.isArray(doc.document_urls) && doc.document_urls.length > 0 ? doc.document_urls.length : (doc.document_url ? 1 : 0);
 
                             return (
                                 <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleEditDocument(doc.id)}>
@@ -240,27 +263,34 @@ export const HRDocumentsPage = () => {
                                                     <CheckCircle size={14}/> Zatwierdź
                                                 </button>
                                                 <button className="text-left px-3 py-2 text-xs hover:bg-red-50 text-red-700 font-medium flex items-center gap-2" onClick={() => handleDocStatusChange(doc.id, SkillStatus.FAILED)}>
-                                                    <AlertTriangle size={14}/> Odrzuć
+                                                    <XCircle size={14}/> Odrzuć
                                                 </button>
                                             </div>
                                         )}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            <Button 
-                                                size="sm" 
-                                                variant="secondary"
+                                        <div className="flex justify-end gap-1">
+                                            <button 
                                                 onClick={(e) => { e.stopPropagation(); openFileViewer(doc); }}
+                                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                                                title={`Podgląd ${urlsFound > 1 ? `(${urlsFound})` : ''}`}
                                             >
-                                                <Eye size={16} className="mr-1"/> Podgląd {fileCount > 1 ? `(${fileCount})` : ''}
-                                            </Button>
-                                            <Button 
-                                                size="sm"
-                                                className="bg-green-600 hover:bg-green-700 text-white"
+                                                <Eye size={20}/>
+                                            </button>
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDocStatusChange(doc.id, SkillStatus.FAILED); }}
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
+                                                title="Odrzuć dokument"
+                                            >
+                                                <XCircle size={20}/>
+                                            </button>
+                                            <button 
                                                 onClick={(e) => { e.stopPropagation(); handleDocStatusChange(doc.id, SkillStatus.CONFIRMED); }}
+                                                className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-all"
+                                                title="Zatwierdź dokument"
                                             >
-                                                Zatwierdź
-                                            </Button>
+                                                <CheckCircle size={20}/>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>

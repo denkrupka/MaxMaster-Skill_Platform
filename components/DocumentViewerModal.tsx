@@ -1,10 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, Download, ExternalLink, ZoomIn, ZoomOut, Loader2, RotateCw, FileText } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Download, ExternalLink, ZoomIn, ZoomOut, Loader2, RotateCw, FileText, AlertCircle } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Ensure worker is set up correctly
-// Use the same version as the main library
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
 
 interface DocumentViewerModalProps {
@@ -18,12 +16,12 @@ interface DocumentViewerModalProps {
 export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({ 
   isOpen, 
   onClose, 
-  urls, 
+  urls = [], 
   initialIndex = 0, 
   title = 'Podgląd Dokumentu' 
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // PDF State
@@ -40,6 +38,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex);
+      setError(null);
     }
   }, [isOpen, initialIndex]);
 
@@ -50,14 +49,24 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
       return lower.endsWith('.pdf') || lower.includes('.pdf?') || lower.includes('#pdf') || (lower.startsWith('blob:') && lower.endsWith('#pdf'));
   };
 
-  const currentUrl = urls[currentIndex];
-  const isPdf = isPdfUrl(currentUrl);
+  const currentUrl = urls && urls.length > 0 ? urls[currentIndex] : null;
+  const isPdf = currentUrl ? isPdfUrl(currentUrl) : false;
 
   // Load Content
   useEffect(() => {
-    if (!isOpen || !currentUrl) return;
+    if (!isOpen) return;
     
-    // Reset state
+    if (!currentUrl) {
+      setPdfDoc(null);
+      setNumPages(0);
+      setIsLoading(false);
+      if (urls.length === 0) {
+        setError('Brak plików do wyświetlenia w tym dokumencie.');
+      }
+      return;
+    }
+    
+    // Reset state for new load
     setPdfDoc(null);
     setPageNum(1);
     setNumPages(0);
@@ -74,14 +83,13 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         setIsLoading(false);
       }, (reason) => {
         console.error('Error loading PDF:', reason);
-        setError('Nie udało się otworzyć pliku PDF. Plik może być uszkodzony lub niedostępny.');
+        setError('Nie udało się otworzyć pliku PDF. Sprawdź czy plik nie jest uszkodzony lub czy masz dostęp (CORS).');
         setIsLoading(false);
       });
     } else {
       // For images, loading is handled by the <img> onLoad event
-      // Just ensure we clear previous errors
+      // but we clear error here
       setError(null);
-      // We don't set isLoading(false) here, the img tag will do it
     }
 
     return () => {
@@ -89,7 +97,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             renderTaskRef.current.cancel();
         }
     };
-  }, [currentIndex, isOpen, currentUrl, isPdf]);
+  }, [currentIndex, isOpen, currentUrl, isPdf, urls]);
 
   // Render PDF Page
   useEffect(() => {
@@ -144,9 +152,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   };
 
   const handleDownload = () => {
+    if (!currentUrl) return;
     const link = document.createElement('a');
     link.href = currentUrl;
-    link.download = `Document_${currentIndex + 1}${isPdf ? '.pdf' : ''}`; // Simple heuristic
+    link.download = `Dokument_${currentIndex + 1}${isPdf ? '.pdf' : ''}`;
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
@@ -160,17 +169,23 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
       <div className="flex justify-between items-center px-6 py-4 bg-black/50 text-white backdrop-blur-sm" onClick={e => e.stopPropagation()}>
         <div className="flex flex-col">
             <h3 className="font-bold text-lg flex items-center gap-2">
-                {isPdf ? <FileText size={20}/> : null} {title}
+                {isPdf ? <FileText size={20} className="text-blue-400"/> : null} {title}
             </h3>
-            <span className="text-sm text-gray-400">Plik {currentIndex + 1} z {urls.length}</span>
+            <span className="text-sm text-gray-400">
+                Plik {urls.length > 0 ? currentIndex + 1 : 0} z {urls.length}
+            </span>
         </div>
         <div className="flex items-center gap-4">
-            <button onClick={handleDownload} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white" title="Pobierz">
-                <Download size={20}/>
-            </button>
-            <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white" title="Otwórz w nowej karcie">
-                <ExternalLink size={20}/>
-            </a>
+            {currentUrl && (
+              <button onClick={handleDownload} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white" title="Pobierz">
+                  <Download size={20}/>
+              </button>
+            )}
+            {currentUrl && (
+              <a href={currentUrl} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white" title="Otwórz w nowej karcie">
+                  <ExternalLink size={20}/>
+              </a>
+            )}
             <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-300 hover:text-white">
                 <X size={24}/>
             </button>
@@ -180,17 +195,12 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
       {/* BODY */}
       <div className="flex-1 flex items-center justify-center relative overflow-hidden p-4" onClick={e => e.stopPropagation()}>
         
-        {/* Navigation - Left */}
         {currentIndex > 0 && (
-            <button 
-                className="absolute left-4 z-20 bg-white/10 hover:bg-white/20 p-3 rounded-full text-white transition-colors backdrop-blur-sm"
-                onClick={handlePrev}
-            >
+            <button className="absolute left-4 z-20 bg-white/10 hover:bg-white/20 p-3 rounded-full text-white transition-colors backdrop-blur-sm" onClick={handlePrev}>
                 <ChevronLeft size={32}/>
             </button>
         )}
 
-        {/* Content Area */}
         <div className="w-full h-full flex items-center justify-center relative">
             {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center z-10">
@@ -199,27 +209,29 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             )}
             
             {error ? (
-                <div className="text-white bg-red-900/50 p-6 rounded-lg flex flex-col items-center gap-4 border border-red-500/50">
-                    <span className="font-bold text-lg">Błąd ładowania pliku</span>
-                    <span className="text-sm text-red-200">{error}</span>
-                    <a href={currentUrl} target="_blank" rel="noreferrer" className="text-blue-300 underline hover:text-blue-100 mt-2">
-                        Spróbuj otworzyć bezpośrednio
-                    </a>
+                <div className="text-white bg-slate-800/80 p-8 rounded-2xl flex flex-col items-center gap-4 border border-slate-700 max-w-md text-center shadow-2xl">
+                    <AlertCircle size={48} className="text-red-400"/>
+                    <span className="font-bold text-lg">{error}</span>
+                    <p className="text-sm text-slate-400">Spróbuj odświeżyć stronę lub pobrać plik bezpośrednio przyciskiem na górze.</p>
+                    {currentUrl && (
+                      <a href={currentUrl} target="_blank" rel="noreferrer" className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold transition-colors">
+                        Otwórz w nowym oknie
+                      </a>
+                    )}
                 </div>
-            ) : (
+            ) : currentUrl ? (
                 <>
                     {isPdf ? (
-                        <div className="max-w-full max-h-full overflow-auto flex flex-col items-center">
-                            <canvas ref={canvasRef} className="shadow-2xl max-w-full" />
-                            {/* PDF Controls */}
+                        <div key={currentUrl} className="max-w-full max-h-full overflow-auto flex flex-col items-center">
+                            <canvas ref={canvasRef} className="shadow-2xl max-w-full bg-white rounded shadow-2xl" />
                             {pdfDoc && (
                                 <div className="absolute bottom-8 flex items-center gap-4 bg-black/80 p-2 rounded-full text-white backdrop-blur-sm shadow-xl z-20 border border-white/10">
                                     <button onClick={() => setPageNum(p => Math.max(1, p - 1))} disabled={pageNum <= 1} className="p-1 hover:text-blue-400 disabled:opacity-30"><ChevronLeft size={20}/></button>
-                                    <span className="text-sm font-mono">{pageNum} / {numPages}</span>
+                                    <span className="text-sm font-mono min-w-[60px] text-center">{pageNum} / {numPages}</span>
                                     <button onClick={() => setPageNum(p => Math.min(numPages, p + 1))} disabled={pageNum >= numPages} className="p-1 hover:text-blue-400 disabled:opacity-30"><ChevronRight size={20}/></button>
                                     <div className="w-px h-4 bg-white/20 mx-1"></div>
                                     <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="p-1 hover:text-blue-400"><ZoomOut size={18}/></button>
-                                    <span className="text-xs w-8 text-center">{Math.round(scale * 100)}%</span>
+                                    <span className="text-xs w-10 text-center">{Math.round(scale * 100)}%</span>
                                     <button onClick={() => setScale(s => Math.min(3.0, s + 0.2))} className="p-1 hover:text-blue-400"><ZoomIn size={18}/></button>
                                     <button onClick={() => setRotation(r => (r + 90) % 360)} className="p-1 hover:text-blue-400 ml-1"><RotateCw size={18}/></button>
                                 </div>
@@ -227,39 +239,35 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                         </div>
                     ) : (
                         <img 
+                            key={currentUrl}
                             src={currentUrl} 
-                            alt={`Document ${currentIndex}`} 
+                            alt={`Dokument ${currentIndex + 1}`} 
                             className={`max-w-full max-h-full object-contain shadow-2xl transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
                             onLoad={() => setIsLoading(false)}
                             onError={() => { 
                                 setIsLoading(false); 
-                                setError('Nie udało się załadować obrazu. Format pliku może być nieobsługiwany.'); 
+                                setError('Nie udało się załadować obrazu. Sprawdź połączenie internetowe.'); 
                             }}
                         />
                     )}
                 </>
-            )}
+            ) : null}
         </div>
 
-        {/* Navigation - Right */}
         {currentIndex < urls.length - 1 && (
-            <button 
-                className="absolute right-4 z-20 bg-white/10 hover:bg-white/20 p-3 rounded-full text-white transition-colors backdrop-blur-sm"
-                onClick={handleNext}
-            >
+            <button className="absolute right-4 z-20 bg-white/10 hover:bg-white/20 p-3 rounded-full text-white transition-colors backdrop-blur-sm" onClick={handleNext}>
                 <ChevronRight size={32}/>
             </button>
         )}
       </div>
 
-      {/* FOOTER / THUMBNAILS */}
       {urls.length > 1 && (
-          <div className="h-16 bg-black/60 flex justify-center items-center gap-2 overflow-x-auto px-4 backdrop-blur-sm" onClick={e => e.stopPropagation()}>
+          <div className="h-20 bg-black/60 flex justify-center items-center gap-3 overflow-x-auto px-6 backdrop-blur-sm border-t border-white/5" onClick={e => e.stopPropagation()}>
             {urls.map((u, idx) => (
                 <button 
                     key={idx} 
                     onClick={() => setCurrentIndex(idx)}
-                    className={`w-3 h-3 rounded-full transition-all ${idx === currentIndex ? 'bg-blue-500 scale-125' : 'bg-white/30 hover:bg-white/50'}`}
+                    className={`w-3 h-3 rounded-full transition-all duration-300 ${idx === currentIndex ? 'bg-blue-500 scale-150 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 'bg-white/30 hover:bg-white/50'}`}
                     title={`Plik ${idx + 1}`}
                 />
             ))}
