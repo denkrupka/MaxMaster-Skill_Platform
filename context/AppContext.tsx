@@ -302,12 +302,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateUser = async (userId: string, updates: Partial<User>) => {
     console.log('Updating user', userId, 'with:', updates);
 
+    // UUID regex pattern for validation
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Fields that should contain UUIDs
+    const uuidFields = ['assigned_brigadir_id', 'referred_by_id'];
+
     // Sanitize data: Convert empty strings to null for nullable fields
     const sanitizedUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
-      // Convert empty strings to null for date and nullable text fields
+      // Convert empty strings to null
       if (value === '') {
         acc[key] = null;
-      } else {
+      }
+      // Validate UUID fields - convert invalid UUIDs to null
+      else if (uuidFields.includes(key) && typeof value === 'string' && !uuidPattern.test(value)) {
+        console.warn(`Invalid UUID for field ${key}: ${value}, converting to null`);
+        acc[key] = null;
+      }
+      else {
         acc[key] = value;
       }
       return acc;
