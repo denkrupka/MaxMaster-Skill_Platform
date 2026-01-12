@@ -33,7 +33,7 @@ CREATE TABLE notification_settings (
   created_at timestamp without time zone NULL DEFAULT now(),
   updated_at timestamp without time zone NULL DEFAULT now(),
   category text NULL,
-  target_role uuid NULL,
+  target_role text NULL,
 
   CONSTRAINT notification_settings_pkey PRIMARY KEY (id),
   CONSTRAINT notification_settings_user_id_setting_type_key UNIQUE (user_id, setting_type)

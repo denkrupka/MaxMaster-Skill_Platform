@@ -121,7 +121,7 @@ create table public.notification_settings (
   created_at timestamp without time zone null default now(),
   updated_at timestamp without time zone null default now(),
   category text null,                                    -- Optional grouping
-  target_role uuid null,                                 -- Optional role filtering
+  target_role text null,                                 -- Optional role filtering (e.g. 'hr', 'candidate')
 
   constraint notification_settings_pkey primary key (id),
   constraint notification_settings_user_id_setting_type_key unique (user_id, setting_type),
