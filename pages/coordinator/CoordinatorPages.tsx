@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -45,7 +46,7 @@ export const CoordinatorEmployees = () => {
     const [isAddingIncident, setIsAddingIncident] = useState(false);
     const [newIncidentSkillId, setNewIncidentSkillId] = useState('');
     const [newIncidentDesc, setNewIncidentDesc] = useState('');
-    const [newIncidentImage, setNewIncidentImage] = useState('');
+    const [newIncidentImages, setNewIncidentImages] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const incidentCameraRef = useRef<HTMLInputElement>(null);
 
@@ -107,22 +108,27 @@ export const CoordinatorEmployees = () => {
             incident_number: existingCount + 1,
             description: newIncidentDesc,
             reported_by: `${currentUser.first_name} ${currentUser.last_name}`,
-            image_url: newIncidentImage || undefined
+            image_urls: newIncidentImages,
+            image_url: newIncidentImages[0] || undefined
         });
 
         setIsAddingIncident(false);
         setNewIncidentSkillId('');
         setNewIncidentDesc('');
-        setNewIncidentImage('');
+        setNewIncidentImages([]);
     };
 
     const handleIncidentImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && selectedEmployee) {
+        const files = e.target.files;
+        if (files && files.length > 0 && selectedEmployee) {
             setIsUploading(true);
             try {
-                const url = await uploadDocument(file, selectedEmployee.id);
-                if (url) setNewIncidentImage(url);
+                const uploadedUrls: string[] = [];
+                for (let i = 0; i < files.length; i++) {
+                    const url = await uploadDocument(files[i], selectedEmployee.id);
+                    if (url) uploadedUrls.push(url);
+                }
+                setNewIncidentImages(prev => [...prev, ...uploadedUrls]);
             } catch (error) {
                 console.error("Incident image upload failed", error);
                 alert("Błąd przesłania zdjęcia.");
@@ -132,12 +138,28 @@ export const CoordinatorEmployees = () => {
         }
     };
 
+    const removeNewIncidentImage = (urlToRemove: string) => {
+        setNewIncidentImages(prev => prev.filter(url => url !== urlToRemove));
+    };
+
     const renderModalContent = () => {
         if (!selectedEmployee) return null;
         
-        const employeeSkillsList = userSkills.filter(us => us.user_id === selectedEmployee.id && !us.skill_id.startsWith('doc_') && skills.find(s => s.id === us.skill_id)?.verification_type !== VerificationType.DOCUMENT);
+        const employeeSkillsList = userSkills.filter(us => {
+            const skillIdStr = (us.skill_id && typeof us.skill_id === 'string') ? us.skill_id : '';
+            return us.user_id === selectedEmployee.id && 
+                   !skillIdStr.startsWith('doc_') && 
+                   skills.find(s => s.id === us.skill_id)?.verification_type !== VerificationType.DOCUMENT;
+        });
+
         const employeeConfirmedSkills = employeeSkillsList.filter(es => es.status === SkillStatus.CONFIRMED);
-        const employeeDocs = userSkills.filter(us => us.user_id === selectedEmployee.id && (us.skill_id.startsWith('doc_') || skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT));
+
+        const employeeDocs = userSkills.filter(us => {
+            const skillIdStr = (us.skill_id && typeof us.skill_id === 'string') ? us.skill_id : '';
+            return us.user_id === selectedEmployee.id && 
+                   (skillIdStr.startsWith('doc_') || skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT);
+        });
+
         const employeeIncidents = qualityIncidents.filter(qi => qi.user_id === selectedEmployee.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const employeeNotesList = employeeNotes.filter(en => en.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const employeeBadgesList = employeeBadges.filter(eb => eb.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -362,7 +384,7 @@ export const CoordinatorEmployees = () => {
                                         <div className="space-y-4">
                                             {isUploading && (
                                                 <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
-                                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęcia...
+                                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęć...
                                                 </div>
                                             )}
                                             <div>
@@ -388,15 +410,35 @@ export const CoordinatorEmployees = () => {
                                                     onChange={e => setNewIncidentDesc(e.target.value)}
                                                 />
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <input type="file" className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload} />
-                                                <Button size="sm" variant="secondary" onClick={() => incidentCameraRef.current?.click()} className="text-xs" disabled={isUploading}>
-                                                    <Camera size={14} className="mr-2"/> {newIncidentImage ? 'Zmień zdjęcie' : 'Załącz zdjęcie'}
-                                                </Button>
-                                                {newIncidentImage && <div className="text-[10px] text-green-600 font-bold flex items-center gap-1"><CheckCircle size={10}/> Zdjęcie dodane</div>}
+                                            <div className="space-y-3">
+                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-wider">Zdjęcia (Dowody)</label>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {newIncidentImages.map((url, idx) => (
+                                                        <div key={idx} className="relative w-20 h-20 group">
+                                                            <img src={url} alt="Dowód" className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" />
+                                                            <button 
+                                                                onClick={() => removeNewIncidentImage(url)}
+                                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <X size={12}/>
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <button 
+                                                        onClick={() => incidentCameraRef.current?.click()}
+                                                        disabled={isUploading}
+                                                        className="w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all bg-white"
+                                                    >
+                                                        <Camera size={20}/>
+                                                        <span className="text-[8px] font-bold mt-1 uppercase">Dodaj</span>
+                                                    </button>
+                                                </div>
+                                                <input type="file" multiple className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload} />
                                             </div>
                                             <div className="flex justify-end pt-2">
-                                                <Button onClick={handleSaveIncident} disabled={!newIncidentSkillId || !newIncidentDesc || isUploading}>Zatwierdź Zgłoszenie</Button>
+                                                <Button onClick={handleSaveIncident} disabled={!newIncidentSkillId || !newIncidentDesc || isUploading || newIncidentImages.length === 0}>
+                                                    Zatwierdź Zgłoszenie
+                                                </Button>
                                             </div>
                                         </div>
                                     </div>
@@ -426,6 +468,14 @@ export const CoordinatorEmployees = () => {
                                                     </div>
                                                     <div className="font-black text-slate-900 text-base mb-1">{skill?.name_pl}</div>
                                                     <p className="text-sm text-slate-700 truncate opacity-80">{inc.description}</p>
+                                                    <div className="flex gap-2 mt-3 overflow-hidden">
+                                                        {(inc.image_urls || (inc.image_url ? [inc.image_url] : [])).slice(0, 5).map((url, i) => (
+                                                            <div key={i} className="w-8 h-8 rounded border border-white shadow-sm flex-shrink-0">
+                                                                <img src={url} alt="Foto" className="w-full h-full object-cover rounded" />
+                                                            </div>
+                                                        ))}
+                                                        {(inc.image_urls?.length || 0) > 5 && <span className="text-[10px] text-slate-400 self-center">+{inc.image_urls!.length - 5}</span>}
+                                                    </div>
                                                     <div className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Zgłosił: {inc.reported_by}</div>
                                                 </div>
                                             );
@@ -483,6 +533,8 @@ export const CoordinatorEmployees = () => {
         if (!selectedIncident) return null;
         const skill = skills.find(s => s.id === selectedIncident.skill_id);
         const isWarning = selectedIncident.incident_number === 1;
+        const urls = selectedIncident.image_urls || (selectedIncident.image_url ? [selectedIncident.image_url] : []);
+
         return (
             <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedIncident(null)}>
                 <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -498,11 +550,19 @@ export const CoordinatorEmployees = () => {
                         </div>
                         <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Kwalifikacja kary</span><div className="mt-1.5">{isWarning ? (<span className="bg-amber-100 text-amber-800 text-[10px] font-black px-3 py-1 rounded-full border border-amber-200 flex items-center w-fit gap-2 uppercase"><AlertTriangle size={14}/> 1. Ostrzeżenie</span>) : (<span className="bg-red-100 text-red-800 text-[10px] font-black px-3 py-1 rounded-full border border-red-200 flex items-center w-fit gap-2 uppercase"><Lock size={14}/> Blokada Miesięczna</span>)}</div></div>
                         <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Szczegółowy Opis</span><p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-2 font-medium leading-relaxed">{selectedIncident.description}</p></div>
-                        {selectedIncident.image_url && (
+                        {urls.length > 0 && (
                             <div>
-                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dokumentacja fotograficzna</span>
-                                <div className="mt-3 rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50 cursor-pointer hover:opacity-90 transition-opacity shadow-inner" onClick={() => setFileViewer({isOpen: true, urls: [selectedIncident.image_url!], title: 'Dowód Jakości', index: 0})}>
-                                    <img src={selectedIncident.image_url} alt="Dowód" className="w-full object-contain max-h-[300px]" />
+                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dokumentacja fotograficzna ({urls.length})</span>
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                    {urls.map((url, i) => (
+                                        <div 
+                                            key={i}
+                                            className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-90 transition-opacity shadow-sm h-32"
+                                            onClick={() => setFileViewer({isOpen: true, urls, title: 'Dowód Jakości', index: i})}
+                                        >
+                                            <img src={url} alt={`Dowód ${i+1}`} className="w-full h-full object-cover" />
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -549,7 +609,7 @@ export const CoordinatorEmployees = () => {
                                     )}
                                 </td>
                                 <td className="px-6 py-4">
-                                    {user.status === UserStatus.TRIAL ? (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">Okres Próbny</span>) : (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">Pracownik</span>)}
+                                    {user.status === UserStatus.TRIAL ? (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">Okres Próbny</span>) : (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border-blue-200">Pracownik</span>)}
                                 </td>
                                 <td className="px-6 py-4 text-slate-600">
                                     <div className="text-xs font-bold text-slate-900">{user.hired_date || '-'}</div>
@@ -879,6 +939,7 @@ export const CoordinatorQuality = () => {
     const { state } = useAppContext();
     const { qualityIncidents, users, skills } = state;
     const [search, setSearch] = useState('');
+    const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
     const location = useLocation();
     
     // Handle incoming navigation state (from Dashboard)
@@ -921,13 +982,15 @@ export const CoordinatorQuality = () => {
                             <th className="px-6 py-4">Pracownik</th>
                             <th className="px-6 py-4">Umiejętność</th>
                             <th className="px-6 py-4">Zgłosił</th>
-                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4">Foto</th>
+                            <th className="px-6 py-4 text-right">Status</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {filteredIncidents.map(inc => {
                             const user = users.find(u => u.id === inc.user_id);
                             const skill = skills.find(s => s.id === inc.skill_id);
+                            const urls = inc.image_urls || (inc.image_url ? [inc.image_url] : []);
                             return (
                                 <tr key={inc.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-slate-500">{new Date(inc.date).toLocaleDateString()}</td>
@@ -935,6 +998,16 @@ export const CoordinatorQuality = () => {
                                     <td className="px-6 py-4 text-slate-700">{skill?.name_pl}</td>
                                     <td className="px-6 py-4 text-slate-500">{inc.reported_by}</td>
                                     <td className="px-6 py-4">
+                                        {urls.length > 0 ? (
+                                            <button 
+                                                onClick={() => setFileViewer({isOpen: true, urls, title: `Dowód - ${skill?.name_pl}`, index: 0})}
+                                                className="flex items-center gap-1 text-blue-600 hover:underline font-bold"
+                                            >
+                                                <ImageIcon size={16}/> {urls.length}
+                                            </button>
+                                        ) : '-'}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
                                         {inc.incident_number >= 2 ? 
                                             <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200 uppercase">Blokada</span> : 
                                             <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold border border-yellow-200 uppercase">Ostrzeżenie</span>
@@ -945,7 +1018,7 @@ export const CoordinatorQuality = () => {
                         })}
                         {filteredIncidents.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="p-12 text-center text-slate-400 italic">
+                                <td colSpan={6} className="p-12 text-center text-slate-400 italic">
                                     Brak zgłoszeń jakościowych.
                                 </td>
                             </tr>
@@ -953,6 +1026,7 @@ export const CoordinatorQuality = () => {
                     </tbody>
                 </table>
             </div>
+            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
         </div>
     );
 };

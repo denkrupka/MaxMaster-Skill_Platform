@@ -32,7 +32,8 @@ export const EmployeeSalaryPage = () => {
 
     // Split bonuses for summary tiles
     const matrycaBonus = useMemo(() => {
-        return salaryInfo.breakdown.details.activeSkills.reduce((acc, s) => {
+        const activeSkills = salaryInfo?.breakdown?.details?.activeSkills || [];
+        return activeSkills.reduce((acc, s) => {
             const skill = skills.find(sk => sk.name_pl === s.name);
             if (skill && skill.verification_type !== VerificationType.DOCUMENT) {
                 return acc + s.amount;
@@ -42,7 +43,8 @@ export const EmployeeSalaryPage = () => {
     }, [salaryInfo, skills]);
 
     const uprawnieniaBonus = useMemo(() => {
-        return salaryInfo.breakdown.details.activeSkills.reduce((acc, s) => {
+        const activeSkills = salaryInfo?.breakdown?.details?.activeSkills || [];
+        return activeSkills.reduce((acc, s) => {
             const skill = skills.find(sk => sk.name_pl === s.name);
             if (skill && skill.verification_type === VerificationType.DOCUMENT) {
                 return acc + s.amount;
@@ -60,8 +62,8 @@ export const EmployeeSalaryPage = () => {
     const studentBonus = (contractType === ContractType.UZ && currentUser.is_student) ? 3 : 0;
     const totalContractBonus = contractBonus + studentBonus;
 
-    const currentTotalRate = salaryInfo.total + totalContractBonus;
-    const nextMonthTotalRate = salaryInfo.nextMonthTotal + totalContractBonus;
+    const currentTotalRate = (salaryInfo?.total || 0) + totalContractBonus;
+    const nextMonthTotalRate = (salaryInfo?.nextMonthTotal || 0) + totalContractBonus;
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-8 pb-24">
@@ -108,7 +110,7 @@ export const EmployeeSalaryPage = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
                     <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Baza</div>
-                    <div className="text-xl font-black text-slate-800">{salaryInfo.breakdown.base} zł</div>
+                    <div className="text-xl font-black text-slate-800">{(salaryInfo?.breakdown?.base || 0)} zł</div>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm text-center">
                     <div className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">Matryca</div>
@@ -135,9 +137,9 @@ export const EmployeeSalaryPage = () => {
                             <span className="text-slate-700">Stawka Bazowa + Umowa</span>
                             <div className="text-[10px] text-slate-400 font-bold uppercase">{CONTRACT_TYPE_LABELS[contractType]} {studentBonus > 0 ? ' (Student < 26)' : ''}</div>
                         </div>
-                        <div className="font-black text-slate-900">{(salaryInfo.breakdown.base + totalContractBonus).toFixed(2)} zł</div>
+                        <div className="font-black text-slate-900">{((salaryInfo?.breakdown?.base || 0) + totalContractBonus).toFixed(2)} zł</div>
                     </div>
-                    {salaryInfo.breakdown.details.activeSkills.map((skill, idx) => (
+                    {(salaryInfo?.breakdown?.details?.activeSkills || []).map((skill, idx) => (
                         <div key={`active-${idx}`} className="p-4 px-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
                             <div className="flex items-center gap-3">
                                 {skill.isBlocked ? <div className="text-red-500 bg-red-50 p-1.5 rounded" title="Zablokowane jakościowo"><Lock size={16}/></div> : <div className="text-green-600 bg-green-50 p-1.5 rounded" title="Aktywne"><CheckCircle size={16}/></div>}
@@ -149,7 +151,7 @@ export const EmployeeSalaryPage = () => {
                             <div className={`font-black tabular-nums ${skill.isBlocked ? 'text-slate-300 line-through' : 'text-green-600'}`}>+{skill.amount.toFixed(2)} zł</div>
                         </div>
                     ))}
-                    {salaryInfo.breakdown.details.pendingSkills.map((skill, idx) => (
+                    {(salaryInfo?.breakdown?.details?.pendingSkills || []).map((skill, idx) => (
                         <div key={`pending-${idx}`} className="p-4 px-6 flex justify-between items-center bg-blue-50/30 border-l-4 border-blue-200">
                             <div className="flex items-center gap-3">
                                 <div className="text-blue-500 bg-white p-1.5 rounded shadow-sm"><Clock size={16}/></div>

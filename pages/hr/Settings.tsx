@@ -5,90 +5,91 @@ import {
     Shield, Check, Plus, Trash2, Briefcase, DollarSign, List, 
     ChevronUp, ChevronDown, Award, HardHat, TrendingUp, X, CheckCircle2, 
     ShieldCheck, Zap, ChevronRight, Star, Info, ShieldAlert, FileText,
-    UserPlus, CheckSquare, AlertTriangle, Network, Clock, Cloud, RefreshCw
+    UserPlus, CheckSquare, AlertTriangle, Network, Clock, Cloud, RefreshCw,
+    GripVertical, ArrowUp, ArrowDown, Layers
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { Role, ContractType, NotificationSetting, Position, Skill, SkillCategory, VerificationType, BonusDocumentType } from '../../types';
 
-type TabType = 'general' | 'notifications' | 'positions' | 'system';
-type NotifRoleTab = Role.HR | Role.CANDIDATE | Role.EMPLOYEE | Role.BRIGADIR | Role.COORDINATOR | 'work_manager';
+type TabType = 'general' | 'positions' | 'system';
 
 export const HRSettingsPage = () => {
-    const { state, updateUser, updateSystemConfig, updateNotificationSettings, addPosition, updatePosition, deletePosition, reorderPositions } = useAppContext();
-    const { currentUser, systemConfig, notificationSettings, positions, skills } = state;
-    const [activeTab, setActiveTab] = useState<TabType>('general');
-    const [activeNotifRoleTab, setActiveNotifRoleTab] = useState<NotifRoleTab>(Role.HR);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const { state, updateUser, updateSystemConfig, addPosition, updatePosition, deletePosition, reorderPositions } = useAppContext();
+    const { currentUser, systemConfig, positions, skills } = state;
+    const [activeTab, setActiveTab] = useState<TabType>('positions');
     const [successMsg, setSuccessMsg] = useState('');
 
     const roundToHalf = (num: number) => Math.round(num * 2) / 2;
 
-    // --- 1. GENERAL TAB STATE ---
     const [profileData, setProfileData] = useState({ first_name: '', last_name: '', email: '', phone: '', password: '', confirmPassword: '' });
     useEffect(() => { if (currentUser) setProfileData({ first_name: currentUser.first_name, last_name: currentUser.last_name, email: currentUser.email, phone: currentUser.phone || '', password: '', confirmPassword: '' }); }, [currentUser]);
 
-    // --- 3. POSITIONS TAB STATE ---
     const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
     const [editingPosition, setEditingPosition] = useState<Partial<Position> | null>(null);
+    const [newResp, setNewResp] = useState('');
+
     const sortedPositions = useMemo(() => [...positions].sort((a, b) => a.order - b.order), [positions]);
 
-    // --- 4. SYSTEM TAB STATE ---
     const [localSystemConfig, setLocalSystemConfig] = useState(systemConfig);
     const [newReason, setNewReason] = useState('');
     useEffect(() => { setLocalSystemConfig(systemConfig); }, [systemConfig]);
 
-    // --- HANDLERS ---
     const showSuccess = (msg: string) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000); };
-    const handleSaveGeneral = () => { if (currentUser) { if (profileData.password && profileData.password !== profileData.confirmPassword) return alert("Hasła nie są identyczne!"); updateUser(currentUser.id, profileData); showSuccess('Zaktualizowano profil.'); } };
     
-    // AUTOMATIC NOTIFICATION UPDATE
-    const handleToggleNotif = async (id: string, channel: 'system' | 'email' | 'sms') => {
-        setIsSyncing(true);
-        const updatedSettings = notificationSettings.map(n => 
-            n.id === id ? { ...n, [channel]: !n[channel] } : n
-        );
-        try {
-            await updateNotificationSettings(updatedSettings);
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setTimeout(() => setIsSyncing(false), 500);
-        }
+    const handleSaveGeneral = () => { 
+        if (currentUser) { 
+            if (profileData.password && profileData.password !== profileData.confirmPassword) return alert("Hasła nie są identyczne!"); 
+            updateUser(currentUser.id, profileData); 
+            showSuccess('Zaktualizowano profil.'); 
+        } 
     };
     
     const handleSaveSystem = () => { updateSystemConfig(localSystemConfig); showSuccess('Konfiguracja systemowa zapisana.'); };
 
     const calculateSalaryRange = (pos: Partial<Position>) => {
+        if (pos.salary_type === 'monthly') {
+            return { min: pos.min_monthly_rate || 0, max: pos.max_monthly_rate || 0, unit: 'zł/mc' };
+        }
         const base = localSystemConfig.baseRate;
         const reqSkills = skills.filter(s => pos.required_skill_ids?.includes(s.id));
         const reqBonusSum = reqSkills.reduce((acc, s) => acc + s.hourly_bonus, 0);
-        return { min: roundToHalf(base), max: roundToHalf(base + reqBonusSum), unit: 'zł/h' };
+        return { min: base, max: base + reqBonusSum, unit: 'zł/h' };
     };
 
-    const handleOpenPositionModal = (pos?: Position) => { setEditingPosition(pos ? { ...pos } : { name: '', responsibilities: [], required_skill_ids: [], order: 0 }); setIsPositionModalOpen(true); };
-    const handleSavePosition = () => { if (!editingPosition?.name) return; if (editingPosition.id) updatePosition(editingPosition.id, editingPosition); else addPosition(editingPosition as any); setIsPositionModalOpen(false); };
+    const handleOpenPositionModal = (pos?: Position) => { 
+        setEditingPosition(pos ? { ...pos } : { 
+            name: '', 
+            responsibilities: [], 
+            required_skill_ids: [], 
+            order: positions.length + 1,
+            salary_type: 'hourly',
+            min_monthly_rate: 4500,
+            max_monthly_rate: 6500
+        }); 
+        setNewResp('');
+        setIsPositionModalOpen(true); 
+    };
 
-    // --- NOTIFICATION GROUPING HELPER ---
-    const groupedNotifsByRole = useMemo(() => {
-        const roleItems = notificationSettings.filter(n => n.target_role === activeNotifRoleTab);
-        
-        const categories = {
-            'rekrutacja': { label: 'Rekrutacja i Kandydaci', icon: UserPlus, color: 'text-purple-600', bg: 'bg-purple-50' },
-            'trial': { label: 'Umowy i Okres Próbny', icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50' },
-            'skills': { label: 'Umiejętności i Testy', icon: CheckSquare, color: 'text-blue-600', bg: 'bg-blue-50' },
-            'quality': { label: 'Jakość i Finanse', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
-            'referrals': { label: 'Program Poleceń', icon: Network, color: 'text-green-600', bg: 'bg-green-50' },
-            'system': { label: 'Administracja i Zespół', icon: Shield, color: 'text-slate-600', bg: 'bg-slate-50' }
-        };
-        
-        return Object.entries(categories).map(([key, config]) => ({
-            ...config,
-            items: roleItems.filter(n => n.category === key)
-        })).filter(group => group.items.length > 0);
-    }, [notificationSettings, activeNotifRoleTab]);
+    const handleSavePosition = () => { 
+        if (!editingPosition?.name) return; 
+        if (editingPosition.id) updatePosition(editingPosition.id, editingPosition); 
+        else addPosition(editingPosition as any); 
+        setIsPositionModalOpen(false); 
+    };
 
-    // --- RENDERERS ---
+    const movePosition = (index: number, direction: 'up' | 'down') => {
+        const newPositions = [...sortedPositions];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= newPositions.length) return;
+        
+        const temp = newPositions[index];
+        newPositions[index] = newPositions[targetIndex];
+        newPositions[targetIndex] = temp;
+
+        const updated = newPositions.map((p, idx) => ({ ...p, order: idx + 1 }));
+        reorderPositions(updated);
+    };
 
     const renderGeneral = () => (
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 max-w-4xl animate-in fade-in duration-300">
@@ -101,9 +102,7 @@ export const HRSettingsPage = () => {
                     <p className="text-sm text-slate-500 font-medium">Zarządzaj swoimi danymi kontaktowymi.</p>
                 </div>
             </div>
-
             <div className="w-full h-px bg-slate-100 mb-8"></div>
-            
             <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                     <div className="space-y-1.5">
@@ -115,130 +114,112 @@ export const HRSettingsPage = () => {
                         <input className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.last_name} onChange={e => setProfileData({...profileData, last_name: e.target.value})}/>
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                     <div className="space-y-1.5">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ADRES EMAIL</label>
                         <div className="relative">
                             <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                            <input type="email" className="w-full bg-slate-50/50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.email} onChange={e => setProfileData({...profileData, email: e.target.value})}/>
+                            <input type="email" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.email} onChange={e => setProfileData({...profileData, email: e.target.value})}/>
                         </div>
                     </div>
                     <div className="space-y-1.5">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NUMER TELEFONU</label>
                         <div className="relative">
                             <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                            <input type="tel" className="w-full bg-slate-50/50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.phone} onChange={e => setProfileData({...profileData, phone: e.target.value})}/>
+                            <input type="tel" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.phone} onChange={e => setProfileData({...profileData, phone: e.target.value})}/>
                         </div>
                     </div>
                 </div>
             </div>
-
             <div className="flex justify-end mt-10">
-                <Button onClick={handleSaveGeneral} className="px-10 h-12 rounded-xl font-black shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-95">
-                    <Save size={20} className="mr-2"/> Zapisz Profil
-                </Button>
+                <Button onClick={handleSaveGeneral} className="px-10 h-12 rounded-xl font-black shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-95"><Save size={20} className="mr-2"/> Zapisz Profil</Button>
             </div>
-        </div>
-    );
-
-    const renderNotifications = () => (
-        <div className="max-w-6xl animate-in fade-in duration-300 space-y-6">
-            <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white flex justify-between items-center relative overflow-hidden">
-                <div className="absolute right-0 top-0 p-6 opacity-10"><Bell size={120}/></div>
-                <div className="relative z-10">
-                    <h2 className="text-2xl font-black tracking-tight mb-1">Konfiguracja Powiadomień</h2>
-                    <p className="text-blue-100 text-sm opacity-80">Wybierz kanały komunikacji dla każdej roli. Zmiany zapisywane są automatycznie.</p>
-                </div>
-                <div className="relative z-10 flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
-                    {isSyncing ? (
-                        <><RefreshCw size={16} className="animate-spin text-blue-200"/><span className="text-[10px] font-black uppercase">Synchronizacja...</span></>
-                    ) : (
-                        <><Cloud size={16} className="text-green-300"/><span className="text-[10px] font-black uppercase">Zapisano w chmurze</span></>
-                    )}
-                </div>
-            </div>
-
-            {/* NOTIFICATION ROLE SUB-TABS */}
-            <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-xl w-fit">
-                {[
-                    { id: Role.HR, label: 'DLA HR' },
-                    { id: Role.CANDIDATE, label: 'DLA KANDYDATA' },
-                    { id: Role.EMPLOYEE, label: 'DLA PRACOWNIKA' },
-                    { id: Role.BRIGADIR, label: 'DLA BRYGADZISTY' },
-                    { id: Role.COORDINATOR, label: 'DLA KOORDYNATORA' },
-                    { id: 'work_manager', label: 'DLA WORK MANAGERA' }
-                ].map(tab => (
-                    <button 
-                        key={tab.id}
-                        onClick={() => setActiveNotifRoleTab(tab.id as NotifRoleTab)}
-                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeNotifRoleTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            <div className="space-y-6">
-                {groupedNotifsByRole.map((group, gIdx) => (
-                    <div key={gIdx} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className={`p-4 ${group.bg} border-b border-slate-100 flex items-center gap-3`}>
-                            <div className={`p-2 rounded-lg bg-white shadow-sm ${group.color}`}>
-                                <group.icon size={20}/>
-                            </div>
-                            <h3 className={`font-black uppercase tracking-widest text-[11px] ${group.color}`}>{group.label}</h3>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
-                                    <tr>
-                                        <th className="px-6 py-4 w-1/2">Zdarzenie / Zmiana w systemie</th>
-                                        <th className="px-4 py-4 text-center">Wiadomość w Portalu</th>
-                                        <th className="px-4 py-4 text-center">Email</th>
-                                        <th className="px-4 py-4 text-center">SMS</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {group.items.map(s => (
-                                        <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-slate-700 text-sm">{s.label}</div>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <input type="checkbox" checked={s.system} onChange={() => handleToggleNotif(s.id, 'system')} className="w-5 h-5 rounded text-blue-600 cursor-pointer border-slate-300 focus:ring-blue-500 transition-all active:scale-90"/>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <input type="checkbox" checked={s.email} onChange={() => handleToggleNotif(s.id, 'email')} className="w-5 h-5 rounded text-blue-600 cursor-pointer border-slate-300 focus:ring-blue-500 transition-all active:scale-90"/>
-                                            </td>
-                                            <td className="px-4 py-4 text-center">
-                                                <input type="checkbox" checked={s.sms} onChange={() => handleToggleNotif(s.id, 'sms')} className="w-5 h-5 rounded text-blue-600 cursor-pointer border-slate-300 focus:ring-blue-500 transition-all active:scale-90"/>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {successMsg && (
-                <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 flex items-center gap-3">
-                    <CheckCircle2 size={20}/>
-                    <span className="font-bold">{successMsg}</span>
-                </div>
-            )}
         </div>
     );
 
     const renderPositions = () => (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <div><h2 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2"><Briefcase size={20} className="text-blue-600"/> Stanowiska</h2><p className="text-xs text-slate-500 mt-0.5">Definiuj wymagania i drabinkę płacową.</p></div>
-                <Button onClick={() => handleOpenPositionModal()} size="sm" className="rounded-lg h-9"><Plus size={16} className="mr-1.5"/> Nowe Stanowisko</Button>
+        <div className="space-y-8 animate-in fade-in duration-500 max-w-5xl">
+            {/* Header section updated according to request */}
+            <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3 uppercase">
+                        <Briefcase size={24} className="text-blue-600"/> Lista Stanowisk
+                    </h2>
+                    <p className="text-sm text-slate-500 mt-1 font-medium italic">Zarządzaj dostępnymi stanowiskami i wymaganiami w Twojej firmie.</p>
+                </div>
+                <Button onClick={() => handleOpenPositionModal()} className="rounded-xl h-11 px-6 font-black shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95">
+                    <Plus size={20} className="mr-2"/> Dodaj Stanowisko
+                </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {sortedPositions.map(pos => { const r = calculateSalaryRange(pos); return (<div key={pos.id} onClick={() => handleOpenPositionModal(pos)} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:border-blue-400 p-5 cursor-pointer group flex flex-col transition-all"><div className="flex justify-between mb-4"><div className="bg-blue-50 text-blue-600 p-2.5 rounded-lg"><HardHat size={20}/></div><div className="text-right"><div className="text-[9px] font-bold text-slate-400 uppercase">Prognoza Netto</div><div className="text-lg font-bold text-green-600 leading-none">{r.min}-{r.max} <span className="text-xs font-medium opacity-60">zł/h</span></div></div></div><h3 className="font-bold text-slate-900 text-base mb-3 group-hover:text-blue-600">{pos.name}</h3><div className="mt-auto text-xs text-slate-400 flex items-center gap-1"><ChevronRight size={14}/> Szczegóły stanowiska</div></div>); })}
+
+            {/* List from DB (state.positions) */}
+            <div className="relative pl-20 space-y-4">
+                {/* Vertical Line */}
+                <div className="absolute left-[40px] top-4 bottom-4 w-1 bg-slate-100 rounded-full"></div>
+
+                {sortedPositions.map((pos, idx) => {
+                    const range = calculateSalaryRange(pos);
+                    return (
+                        <div key={pos.id} className="relative group">
+                            {/* Circle with Index */}
+                            <div className="absolute -left-[64px] top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full border-4 border-slate-50 shadow-sm flex items-center justify-center text-slate-400 font-black text-lg z-10 group-hover:border-blue-100 group-hover:text-blue-500 transition-all">
+                                {idx + 1}
+                            </div>
+
+                            {/* Card */}
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all p-6 flex flex-col md:flex-row items-center gap-6 cursor-pointer" onClick={() => handleOpenPositionModal(pos)}>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase group-hover:text-blue-600 transition-colors">
+                                            {pos.name}
+                                        </h3>
+                                        <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded tracking-widest uppercase border border-blue-100">Aktywne</span>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
+                                        <div className="flex items-center gap-1.5"><Layers size={14}/> {pos.required_skill_ids?.length || 0} wymagań</div>
+                                        <div className="flex items-center gap-1.5"><List size={14}/> {pos.responsibilities?.length || 0} obowiązków</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-8">
+                                    <div className="text-right">
+                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">WYNAGRODZENIE</div>
+                                        <div className="text-2xl font-black text-green-600 leading-none">
+                                            {range.min.toFixed(0)}-{range.max.toFixed(0)} <span className="text-xs font-bold text-slate-400">{range.unit}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Reorder actions */}
+                                    <div className="flex flex-col gap-1" onClick={e => e.stopPropagation()}>
+                                        <button 
+                                            onClick={() => movePosition(idx, 'up')}
+                                            disabled={idx === 0}
+                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"
+                                        >
+                                            <ChevronUp size={20}/>
+                                        </button>
+                                        <button 
+                                            onClick={() => movePosition(idx, 'down')}
+                                            disabled={idx === sortedPositions.length - 1}
+                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"
+                                        >
+                                            <ChevronDown size={20}/>
+                                        </button>
+                                    </div>
+                                    
+                                    <ChevronRight className="text-slate-200 group-hover:text-blue-400 transition-colors" size={24} />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+                
+                {sortedPositions.length === 0 && (
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center ml-[-20px]">
+                        <Briefcase size={48} className="text-slate-300 mx-auto mb-4"/>
+                        <p className="text-slate-500 font-bold">Brak dodanych stanowisk. Kliknij przycisk powyżej, aby utworzyć pierwsze stanowisko.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -257,7 +238,6 @@ export const HRSettingsPage = () => {
                     </div>
                 </div>
             </div>
-
             <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-fit">
                 <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 uppercase tracking-tighter text-sm"><ShieldAlert size={20} className="text-orange-600"/> Powody Zwolnień</h3>
                 <div className="flex gap-2 mb-4">
@@ -265,7 +245,6 @@ export const HRSettingsPage = () => {
                     <Button size="sm" className="rounded-lg w-10 px-0 h-9" onClick={() => { if(newReason) { setLocalSystemConfig(prev => ({ ...prev, terminationReasons: [...prev.terminationReasons, newReason] })); setNewReason(''); }}} disabled={!newReason}><Plus size={18}/></Button>
                 </div>
             </div>
-
             <div className="lg:col-span-2 flex justify-end pt-4"><Button className="px-10 h-12 rounded-xl shadow-lg shadow-blue-600/10 font-bold" onClick={handleSaveSystem}><Save size={20} className="mr-2"/> Zapisz Konfigurację</Button></div>
         </div>
     );
@@ -273,11 +252,9 @@ export const HRSettingsPage = () => {
     return (
         <div className="p-6 max-w-7xl mx-auto pb-24">
             <h1 className="text-2xl font-bold text-slate-900 mb-6 tracking-tight">Ustawienia Systemu</h1>
-            
             <div className="flex space-x-1 bg-white p-1 rounded-xl shadow-sm border border-slate-200 mb-8 w-fit overflow-x-auto">
                 {[
                     { id: 'general', label: 'MÓJ PROFIL', icon: UserIcon },
-                    { id: 'notifications', label: 'POWIADOMIENIA', icon: Bell },
                     { id: 'positions', label: 'STANOWISKA', icon: Briefcase },
                     { id: 'system', label: 'KONFIGURACJA', icon: SettingsIcon }
                 ].map(t => (
@@ -290,13 +267,178 @@ export const HRSettingsPage = () => {
                     </button>
                 ))}
             </div>
-
             <div className="relative min-h-[400px]">
                 {activeTab === 'general' && renderGeneral()}
-                {activeTab === 'notifications' && renderNotifications()}
                 {activeTab === 'positions' && renderPositions()}
                 {activeTab === 'system' && renderSystem()}
             </div>
+            
+            {/* --- COMPACT POSITION MODAL --- */}
+            {isPositionModalOpen && editingPosition && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden animate-in zoom-in duration-300">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">{editingPosition.id ? 'Edytuj Stanowisko' : 'Nowe Stanowisko'}</h3>
+                            <button onClick={() => setIsPositionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-white rounded-full"><X size={20} /></button>
+                        </div>
+                        
+                        <div className="p-6 space-y-6 scrollbar-hide overflow-y-auto max-h-[85vh]">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Left Column: Info & Salary */}
+                                <div className="space-y-6">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWA STANOWISKA</label>
+                                        <input 
+                                            className="w-full bg-[#2D2E32] border-none rounded-xl p-3 text-white font-bold text-base focus:ring-4 focus:ring-blue-500/20 outline-none transition-all shadow-inner" 
+                                            value={editingPosition.name} 
+                                            onChange={e => setEditingPosition({...editingPosition, name: e.target.value})} 
+                                            placeholder="Wpisz nazwę..."
+                                        />
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">RODZAJ WYNAGRODZENIA</label>
+                                        <div className="flex bg-slate-100 p-1 rounded-xl w-full">
+                                            <button 
+                                                onClick={() => setEditingPosition({...editingPosition, salary_type: 'hourly'})}
+                                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'hourly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                Stawka Godzinowa
+                                            </button>
+                                            <button 
+                                                onClick={() => setEditingPosition({...editingPosition, salary_type: 'monthly'})}
+                                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'monthly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                Stawka Miesięczna
+                                            </button>
+                                        </div>
+
+                                        {editingPosition.salary_type === 'monthly' ? (
+                                            <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <div className="space-y-1">
+                                                    <label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MIN (PLN)</label>
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none"
+                                                        value={editingPosition.min_monthly_rate}
+                                                        onChange={e => setEditingPosition({...editingPosition, min_monthly_rate: Number(e.target.value)})}
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MAX (PLN)</label>
+                                                    <input 
+                                                        type="number"
+                                                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none"
+                                                        value={editingPosition.max_monthly_rate}
+                                                        onChange={e => setEditingPosition({...editingPosition, max_monthly_rate: Number(e.target.value)})}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="bg-blue-50 border border-blue-100 p-3 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200">
+                                                <div className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Wyliczona prognoza</div>
+                                                <div className="text-xl font-black text-blue-700">
+                                                    {calculateSalaryRange(editingPosition).min}-{calculateSalaryRange(editingPosition).max} <span className="text-xs font-bold text-blue-400">zł/h</span>
+                                                </div>
+                                                <p className="text-[10px] text-blue-400 font-medium leading-tight mt-1">Stawka bazowa ({localSystemConfig.baseRate} zł) + wybrane umiejętności.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Responsibilities */}
+                                    <div className="space-y-3">
+                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">OBOWIĄZKI</label>
+                                        <div className="flex gap-2">
+                                            <input 
+                                                className="flex-1 bg-slate-100 border-none rounded-xl p-2.5 text-slate-700 font-medium text-xs focus:ring-4 focus:ring-blue-500/20 outline-none" 
+                                                placeholder="Dodaj obowiązek..."
+                                                value={newResp}
+                                                onChange={e => setNewResp(e.target.value)}
+                                                onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } } }}
+                                            />
+                                            <button 
+                                                onClick={() => { if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } }}
+                                                className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"
+                                            >
+                                                <Plus size={16}/>
+                                            </button>
+                                        </div>
+                                        <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide pr-1">
+                                            {(editingPosition.responsibilities || []).map((resp, i) => (
+                                                <div key={i} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-blue-200 transition-all">
+                                                    <span className="text-xs font-bold text-slate-700 truncate mr-2">{resp}</span>
+                                                    <button 
+                                                        onClick={() => setEditingPosition({...editingPosition, responsibilities: (editingPosition.responsibilities || []).filter((_, idx) => idx !== i)})}
+                                                        className="text-red-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 size={14}/>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Skills */}
+                                <div className="space-y-3 h-full">
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">WYMAGANE UMIEJĘTNOŚCI (WIDŁY)</label>
+                                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-inner h-[calc(100%-1.5rem)] flex flex-col">
+                                        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar-hide max-h-[380px]">
+                                            {skills.filter(s => !s.is_archived).map(skill => {
+                                                const isSelected = editingPosition.required_skill_ids?.includes(skill.id);
+                                                return (
+                                                    <label key={skill.id} className={`flex items-center justify-between p-3 cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'}`}>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
+                                                                {isSelected && <Check size={12} />}
+                                                            </div>
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="hidden" 
+                                                                checked={isSelected} 
+                                                                onChange={() => {
+                                                                    const current = editingPosition.required_skill_ids || [];
+                                                                    const updated = isSelected ? current.filter(id => id !== skill.id) : [...current, skill.id];
+                                                                    setEditingPosition({...editingPosition, required_skill_ids: updated});
+                                                                }}
+                                                            />
+                                                            <div>
+                                                                <div className="text-xs font-black text-slate-800 leading-tight">{skill.name_pl}</div>
+                                                                <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{skill.category}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-[10px] font-black text-green-600">+{skill.hourly_bonus} zł</div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/30">
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsPositionModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">Anuluj</button>
+                                {editingPosition.id && (
+                                    <button 
+                                        onClick={() => { if(confirm('Czy na pewno chcesz usunąć to stanowisko?')) { deletePosition(editingPosition.id!); setIsPositionModalOpen(false); } }}
+                                        className="px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                    >
+                                        Usuń
+                                    </button>
+                                )}
+                            </div>
+                            <Button onClick={handleSavePosition} className="px-8 h-10 rounded-xl font-black shadow-xl shadow-blue-600/30 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95">
+                                <Save size={18} className="mr-2"/> {editingPosition.id ? 'Zapisz Stanowisko' : 'Dodaj Stanowisko'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {successMsg && <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 flex items-center gap-3 z-[100]"><CheckCircle2 size={20}/><span className="font-bold">{successMsg}</span></div>}
         </div>
     );
 };

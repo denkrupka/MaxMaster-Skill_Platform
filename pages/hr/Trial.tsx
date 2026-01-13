@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
     ArrowRight, Search, Clock, CheckCircle, XCircle, AlertTriangle, Send, Edit, ChevronRight, ChevronDown, Upload, X, Archive, RotateCcw, Calendar, Eye, Camera, Plus, ChevronLeft, UserPlus, Wallet, Shield, Save, Loader2,
@@ -19,7 +20,7 @@ const QUALIFICATIONS_LIST = [
 
 export const HRTrialPage = () => {
     const { state, updateUser, logCandidateAction, hireCandidate, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, resetSkillProgress, assignBrigadir, triggerNotification, payReferralBonus } = useAppContext();
-    const { systemConfig, users, skills, userSkills, monthlyBonuses, currentUser, qualityIncidents } = state;
+    const { systemConfig, users, skills, userSkills, monthlyBonuses, currentUser, qualityIncidents, positions } = state;
 
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [search, setSearch] = useState('');
@@ -73,7 +74,11 @@ export const HRTrialPage = () => {
     const cameraInputRef = useRef<HTMLInputElement>(null);
 
     const trialUsers = state.users.filter(u => u.status === UserStatus.TRIAL);
-    const brigadirsList = state.users.filter(u => u.role === Role.BRIGADIR || u.target_position === 'Brygadzista');
+    
+    // Filtrowanie brygadzistów wyłącznie po roli brigadir z bazy danych
+    const brigadirsList = useMemo(() => {
+        return state.users.filter(u => u.role === Role.BRIGADIR);
+    }, [state.users]);
 
     const filteredUsers = trialUsers.filter(u => {
         const matchesSearch = u.first_name.toLowerCase().includes(search.toLowerCase()) || 
@@ -327,14 +332,10 @@ export const HRTrialPage = () => {
         if (selectedUser) {
             await updateUser(selectedUser.id, localPersonalData);
             setSelectedUser({ ...selectedUser, ...localPersonalData } as User);
-            alert("Dane osobowe zostały zapisane.");
+            alert("Dane osobowе zostały zapisane.");
         }
     };
 
-    // Added missing handleAddDocument and handleEditDocument
-    /**
-     * handleAddDocument resets form and opens document modal
-     */
     const handleAddDocument = () => {
         setEditingDocId(null);
         setNewDocData({ 
@@ -348,9 +349,6 @@ export const HRTrialPage = () => {
         setIsDocModalOpen(true);
     };
 
-    /**
-     * handleEditDocument populates form with doc details and opens modal
-     */
     const handleEditDocument = (docId: string) => {
         const doc = state.userSkills.find(us => us.id === docId);
         if(!doc) return;
@@ -873,7 +871,7 @@ export const HRTrialPage = () => {
             <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-200">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight">Edytuj Dane Pracownika</h2>
+                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">EDYTUJ DANE PRACOWNIKA</h2>
                         <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-all">
                             <X size={24} />
                         </button>
@@ -929,10 +927,10 @@ export const HRTrialPage = () => {
                             <select 
                                 className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner appearance-none" 
                                 value={editFormData.target_position || ''} 
-                                onChange={e => setEditFormData({...editFormData, target_position: e.target.value})}
+                                onChange={e => setEditFormData({...editFormData, target_position: e.target.value})} 
                             >
                                 <option value="">Wybierz stanowisko...</option>
-                                {systemConfig.positions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+                                {positions.map(pos => <option key={pos.id} value={pos.name}>{pos.name}</option>)}
                             </select>
                         </div>
 
@@ -965,15 +963,17 @@ export const HRTrialPage = () => {
                                 onChange={e => setEditFormData({...editFormData, assigned_brigadir_id: e.target.value})} 
                             >
                                 <option value="">Wybierz brygadzistę...</option>
-                                {brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)}
+                                {brigadirsList.map(b => (
+                                    <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
                     
                     <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                        <Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="font-bold text-slate-500 px-6">Anuluj</Button>
+                        <button onClick={() => setIsEditModalOpen(false)} className="font-bold text-slate-500 px-6 hover:text-slate-700 transition-colors">Anuluj</button>
                         <Button onClick={saveEditUser} className="font-black uppercase text-xs tracking-widest rounded-xl px-8 h-11 shadow-lg shadow-blue-600/20">
-                            Zapisz Zmiany
+                            ZAPISZ ZMIANY
                         </Button>
                     </div>
                 </div>
@@ -1029,7 +1029,7 @@ export const HRTrialPage = () => {
                                     Wybrać pliki
                                 </Button>
                                 <span className="text-xs font-bold text-slate-800">
-                                    {newDocData.files.length > 0 ? `${newDocData.files.length} wybranych plików` : 'Файл не выбран'}
+                                    {newDocData.files.length > 0 ? `${newDocData.files.length} wybranych plików` : 'Plik nie wybrany'}
                                 </span>
                                 <input type="file" ref={fileInputRef} multiple className="hidden" onChange={handleFileSelect} />
                             </div>
@@ -1126,7 +1126,6 @@ export const HRTrialPage = () => {
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
-            {/* Call renderDetails() instead of duplicating its logic with out-of-scope variables */}
             {selectedUser ? renderDetails() : renderList()}
             {renderHireModal()}
             {renderEditModal()}

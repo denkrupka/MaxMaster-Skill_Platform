@@ -44,12 +44,6 @@ export const CandidateTestsPage = () => {
         if (location.state && location.state.selectedTestIds) {
             queueIds = location.state.selectedTestIds;
         } 
-        // 2. Fallback: If no selection, show all active tests (or handle differently)
-        else {
-            // For Trial Employee fallback - maybe show nothing or specific logic
-            // For now, if no ID passed, we assume no test selected.
-            // queueIds = tests.filter(t => t.is_active && !t.is_archived).map(t => t.id);
-        }
 
         if (queueIds.length > 0) {
             const queue = tests.filter(t => queueIds.includes(t.id));
@@ -90,6 +84,10 @@ export const CandidateTestsPage = () => {
 
     const handleStartTest = () => {
         if (!activeTest) return;
+        if (!activeTest.questions || activeTest.questions.length === 0) {
+            alert("Ten test nie ma jeszcze pytań. Skontaktuj się z administratorem.");
+            return;
+        }
         setAnswers(new Array(activeTest.questions.length).fill([]));
         setCurrentQuestionIdx(0);
         setTestStarted(true);
@@ -141,13 +139,12 @@ export const CandidateTestsPage = () => {
         const totalQuestions = activeTest.questions.length;
 
         activeTest.questions.forEach((q, idx) => {
-            const userAnswers = answers[idx] || []; // Handle undefined if skipped
+            const userAnswers = answers[idx] || []; 
             const correctAnswers = q.correctOptionIndices;
             const strategy = q.gradingStrategy || GradingStrategy.ALL_CORRECT;
 
             let isCorrect = false;
             
-            // If no answer selected (timeout), it's wrong by default
             if (userAnswers.length > 0) {
                 if (strategy === GradingStrategy.ANY_CORRECT) {
                     const intersection = userAnswers.filter(a => correctAnswers.includes(a));
@@ -165,12 +162,10 @@ export const CandidateTestsPage = () => {
             if (isCorrect) correctCount++;
         });
 
-        const calculatedScore = Math.round((correctCount / totalQuestions) * 100);
+        const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
         const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
         
-        // Submit Logic (Global State) - Pass results to state
-        // Fix: Use correct arguments for submitTest (testId, answers, score, passed) to match AppContext signature and call once per test attempt
         submitTest(activeTest.id, answers, calculatedScore, passed);
 
         setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
@@ -196,8 +191,7 @@ export const CandidateTestsPage = () => {
                 updateUser(currentUser.id, { status: UserStatus.TESTS_COMPLETED });
                 navigate('/candidate/thank-you'); 
             } else {
-                // For Trial employees
-                navigate('/dashboard/tests'); // Redirect back to tests dashboard
+                navigate('/dashboard/tests'); 
             }
         }
     };
@@ -210,8 +204,6 @@ export const CandidateTestsPage = () => {
         }
     };
 
-    // --- Renderers ---
-
     if (!currentUser || testQueue.length === 0) {
         return (
             <div className="p-12 text-center text-slate-500 h-screen flex flex-col items-center justify-center">
@@ -221,6 +213,8 @@ export const CandidateTestsPage = () => {
             </div>
         );
     }
+
+    const currentQuestion = activeTest?.questions[currentQuestionIdx];
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
@@ -294,7 +288,6 @@ export const CandidateTestsPage = () => {
                 {/* TEST AREA */}
                 <div className="flex-1">
                     {!testStarted ? (
-                        // INTRO CARD FOR CURRENT TEST
                         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 text-center max-w-2xl mx-auto mt-10">
                             <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <Play size={40} className="ml-1" />
@@ -311,17 +304,16 @@ export const CandidateTestsPage = () => {
                                 Rozpocznij Test
                             </Button>
                         </div>
-                    ) : (
-                        // QUESTION CARD
+                    ) : currentQuestion ? (
                         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-3xl mx-auto animate-in slide-in-from-right duration-300">
                             <div className="mb-6 flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
                                 <span>Pytanie {currentQuestionIdx + 1} z {activeTest.questions.length}</span>
                                 <span>Postęp w teście: {Math.round(((currentQuestionIdx + 1) / activeTest.questions.length) * 100)}%</span>
                             </div>
 
-                            {activeTest.questions[currentQuestionIdx].imageUrl && (
-                                <div className="mb-6 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 flex justify-center relative group cursor-pointer" onClick={() => setZoomedImage(activeTest.questions[currentQuestionIdx].imageUrl!)}>
-                                    <img src={activeTest.questions[currentQuestionIdx].imageUrl} alt="Ilustracja" className="max-h-64 object-contain" />
+                            {currentQuestion.imageUrl && (
+                                <div className="mb-6 rounded-xl overflow-hidden border border-slate-100 bg-slate-50 flex justify-center relative group cursor-pointer" onClick={() => setZoomedImage(currentQuestion.imageUrl!)}>
+                                    <img src={currentQuestion.imageUrl} alt="Ilustracja" className="max-h-64 object-contain" />
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                                         <ZoomIn className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" size={32} />
                                     </div>
@@ -329,19 +321,19 @@ export const CandidateTestsPage = () => {
                             )}
 
                             <h3 className="text-xl font-bold text-slate-900 mb-6 leading-relaxed">
-                                {activeTest.questions[currentQuestionIdx].text}
+                                {currentQuestion.text}
                             </h3>
 
-                            {activeTest.questions[currentQuestionIdx].correctOptionIndices.length > 1 && (
+                            {currentQuestion.correctOptionIndices.length > 1 && (
                                 <div className="mb-4 flex items-center gap-2 text-sm text-blue-600 bg-blue-50 px-3 py-2 rounded-lg w-fit font-medium">
                                     <CheckCircle size={16} /> W tym pytaniu może być kilka wariantów prawidłowych
                                 </div>
                             )}
 
                             <div className="space-y-3 mb-8">
-                                {activeTest.questions[currentQuestionIdx].options.map((opt, idx) => {
+                                {currentQuestion.options.map((opt, idx) => {
                                     const isSelected = answers[currentQuestionIdx]?.includes(idx);
-                                    const isMulti = activeTest.questions[currentQuestionIdx].correctOptionIndices.length > 1;
+                                    const isMulti = currentQuestion.correctOptionIndices.length > 1;
                                     
                                     return (
                                         <button
@@ -364,11 +356,10 @@ export const CandidateTestsPage = () => {
                                 })}
                             </div>
 
-                            {/* Progress bar for timer */}
                             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mb-6">
                                 <div 
                                     className={`h-full transition-all duration-1000 ease-linear ${timeLeft <= 5 ? 'bg-red-500' : 'bg-blue-500'}`} 
-                                    style={{ width: `${(timeLeft / (activeTest.questions[currentQuestionIdx].timeLimit || 30)) * 100}%` }}
+                                    style={{ width: `${(timeLeft / (currentQuestion.timeLimit || 30)) * 100}%` }}
                                 ></div>
                             </div>
 
@@ -383,11 +374,13 @@ export const CandidateTestsPage = () => {
                                 </Button>
                             </div>
                         </div>
+                    ) : (
+                        <div className="p-8 text-center text-slate-400">Błąd ładowania pytania.</div>
                     )}
                 </div>
             </main>
 
-            {/* 3. INTERIM MODAL (After each test) */}
+            {/* 3. INTERIM MODAL */}
             {showInterimModal && lastCompletedTest && (
                 <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center animate-in zoom-in duration-300">
@@ -410,7 +403,6 @@ export const CandidateTestsPage = () => {
                                 Wynik: <strong className={lastCompletedTest.passed ? 'text-green-600' : 'text-red-600'}>{lastCompletedTest.score}%</strong>
                             </p>
                             
-                            {/* Specific Message for Trial Employees who failed */}
                             {(!lastCompletedTest.passed && currentUser.status === UserStatus.TRIAL) && (
                                 <div className="bg-red-50 p-4 rounded-lg text-sm text-red-700 border border-red-100 flex items-start gap-3 text-left">
                                     <Clock size={18} className="shrink-0 mt-0.5"/>

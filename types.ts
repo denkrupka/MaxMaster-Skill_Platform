@@ -9,7 +9,8 @@ export interface AppNotification {
 }
 
 export interface NotificationSetting {
-    id: string;
+    id?: string; // UUID z bazy danych
+    setting_type: string; // Logiczny kod (np. 'cand_reg')
     label: string;
     category: 'rekrutacja' | 'trial' | 'skills' | 'quality' | 'referrals' | 'system';
     target_role: Role | 'work_manager'; 
@@ -19,7 +20,8 @@ export interface NotificationSetting {
 }
 
 export interface NotificationSettingUpdate extends Partial<NotificationSetting> {
-    id: string;
+    setting_type: string;
+    target_role: Role | 'work_manager';
 }
 
 export enum Role {
@@ -126,6 +128,7 @@ export interface Position {
   required_skill_ids: string[];
   min_monthly_rate?: number;
   max_monthly_rate?: number;
+  salary_type: 'hourly' | 'monthly';
   order: number;
 }
 
@@ -255,6 +258,7 @@ export interface QualityIncident {
     description: string;
     reported_by: string;
     image_url?: string;
+    image_urls?: string[];
 }
 
 export enum NoteCategory {
@@ -321,6 +325,7 @@ export interface LibraryResource {
   url: string;
   videoUrl?: string;
   imageUrl?: string;
+  file_urls?: string[]; // Added for multiple files
   textContent?: string;
   is_archived: boolean;
 }

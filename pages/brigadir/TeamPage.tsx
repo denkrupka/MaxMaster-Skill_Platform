@@ -1,9 +1,10 @@
+
 import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Users, Phone, Mail, Award, CheckSquare, Clock, AlertTriangle, 
     Lock, CheckCircle, TrendingUp, Calendar, ChevronRight, User as UserIcon,
-    StickyNote, X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera, Loader2
+    StickyNote, X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera, Loader2, Image as ImageIcon
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -37,7 +38,7 @@ export const BrigadirTeamPage = () => {
     const [isQualityFormOpen, setIsQualityFormOpen] = useState(false);
     const [selectedSkillIdForIncident, setSelectedSkillIdForIncident] = useState<string | null>(null);
     const [incidentDescription, setIncidentDescription] = useState('');
-    const [incidentImage, setIncidentImage] = useState<string>('');
+    const [incidentImages, setIncidentImages] = useState<string[]>([]);
     
     // Incident History State
     const [viewIncidentSkillId, setViewIncidentSkillId] = useState<string | null>(null);
@@ -107,12 +108,12 @@ export const BrigadirTeamPage = () => {
     const handleOpenQualityForm = (skillId: string) => {
         setSelectedSkillIdForIncident(skillId);
         setIncidentDescription('');
-        setIncidentImage('');
+        setIncidentImages([]);
         setIsQualityFormOpen(true);
     };
 
     const handleSubmitIncident = () => {
-        if (!selectedUser || !selectedSkillIdForIncident || !incidentDescription || !incidentImage || !currentUser) return;
+        if (!selectedUser || !selectedSkillIdForIncident || !incidentDescription || incidentImages.length === 0 || !currentUser) return;
 
         const existingIncidents = qualityIncidents.filter(inc => {
             const d = new Date(inc.date);
@@ -129,19 +130,24 @@ export const BrigadirTeamPage = () => {
             incident_number: existingIncidents.length + 1,
             description: incidentDescription,
             reported_by: `${currentUser.first_name} ${currentUser.last_name}`,
-            image_url: incidentImage
+            image_urls: incidentImages,
+            image_url: incidentImages[0] || undefined
         });
 
         setIsQualityFormOpen(false);
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && selectedUser) {
+        const files = e.target.files;
+        if (files && files.length > 0 && selectedUser) {
             setIsUploading(true);
             try {
-                const url = await uploadDocument(file, selectedUser.id);
-                if (url) setIncidentImage(url);
+                const uploadedUrls: string[] = [];
+                for (let i = 0; i < files.length; i++) {
+                    const url = await uploadDocument(files[i], selectedUser.id);
+                    if (url) uploadedUrls.push(url);
+                }
+                setIncidentImages(prev => [...prev, ...uploadedUrls]);
             } catch (error) {
                 console.error("Quality image upload failed", error);
                 alert("Błąd przesłania zdjęcia.");
@@ -151,12 +157,16 @@ export const BrigadirTeamPage = () => {
         }
     };
 
-    const openImagePreview = (url: string) => {
+    const removeIncidentImage = (urlToRemove: string) => {
+        setIncidentImages(prev => prev.filter(url => url !== urlToRemove));
+    };
+
+    const openImagePreview = (urls: string[], index: number = 0) => {
         setFileViewer({
             isOpen: true,
-            urls: [url],
-            title: 'Podgląd Zdjęcia',
-            index: 0
+            urls: urls,
+            title: 'Podgląd Dowodów',
+            index: index
         });
     };
 
@@ -203,6 +213,10 @@ export const BrigadirTeamPage = () => {
     const incidentPrediction = useMemo(() => {
         if (!selectedUser || !selectedSkillIdForIncident) return null;
         
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
         const existingCount = qualityIncidents.filter(inc => {
             const d = new Date(inc.date);
             return inc.user_id === selectedUser.id && 
@@ -313,7 +327,7 @@ export const BrigadirTeamPage = () => {
             {/* PROFILE MODAL */}
             {selectedUser && (
                 <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedUser(null)}>
-                    <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full p-6 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
@@ -389,17 +403,7 @@ export const BrigadirTeamPage = () => {
                                         {userNotes.map(note => {
                                             const author = users.find(u => u.id === note.author_id);
                                             return (
-                                                <div key={note.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">{author ? author.first_name[0] : '?'}</div>
-                                                            <div><div className="text-xs font-bold text-slate-800">{author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</div><div className="text-[10px] text-slate-500">{new Date(note.created_at).toLocaleString()}</div></div>
-                                                        </div>
-                                                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">{note.category}</span>
-                                                    </div>
-                                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{note.text}</p>
-                                                    {note.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeNote(note.id)}><Trash2 size={16} /></button>)}
-                                                </div>
+                                                <div key={note.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">{author ? author.first_name[0] : '?'}</div><div><div className="text-xs font-bold text-slate-800">{author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</div><div className="text-[10px] text-slate-500">{new Date(note.created_at).toLocaleString()}</div></div></div><span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">{note.category}</span></div><p className="text-sm text-slate-700 whitespace-pre-wrap">{note.text}</p>{note.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeNote(note.id)}><Trash2 size={16} /></button>)}</div>
                                             );
                                         })}
                                     </div>
@@ -503,16 +507,16 @@ export const BrigadirTeamPage = () => {
             {/* QUALITY FORM MODAL */}
             {isQualityFormOpen && selectedUser && (
                 <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[90vh]">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-xl font-bold text-slate-900">Zgłoś Błąd Jakościowy</h2>
                             <button onClick={() => setIsQualityFormOpen(false)}><X size={24} className="text-slate-400"/></button>
                         </div>
                         
-                        <div className="space-y-4">
+                        <div className="space-y-4 flex-1 overflow-y-auto pr-1">
                             {isUploading && (
                                 <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
-                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęcia...
+                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęć...
                                 </div>
                             )}
 
@@ -525,7 +529,7 @@ export const BrigadirTeamPage = () => {
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 mb-1">Opis błędu</label>
                                 <textarea 
-                                    className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
                                     rows={3}
                                     placeholder="Opisz dokładnie na czym polegał błąd..."
                                     value={incidentDescription}
@@ -534,32 +538,53 @@ export const BrigadirTeamPage = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Zdjęcie (Wymagane) *</label>
-                                <div className="flex gap-3">
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                                    <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} />
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Zdjęcia (Wymagane) *</label>
+                                <div className="flex flex-wrap gap-3">
+                                    {incidentImages.map((url, idx) => (
+                                        <div key={idx} className="relative w-20 h-20 group">
+                                            <img src={url} alt="Dowód" className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" />
+                                            <button 
+                                                onClick={() => removeIncidentImage(url)}
+                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <X size={12}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button 
+                                        onClick={() => cameraInputRef.current?.click()}
+                                        disabled={isUploading}
+                                        className="w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all bg-slate-50"
+                                    >
+                                        <Camera size={24}/>
+                                        <span className="text-[9px] font-bold mt-1 uppercase">Dodaj</span>
+                                    </button>
+                                </div>
+                                <input type="file" multiple ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                                <input type="file" multiple ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} />
+                                <div className="mt-3 flex gap-2">
                                     <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} type="button" disabled={isUploading}>
-                                        <Upload size={16} className="mr-2"/> Wybierz
-                                    </Button>
-                                    <Button variant="secondary" size="sm" onClick={() => cameraInputRef.current?.click()} type="button" disabled={isUploading}>
-                                        <Camera size={16} className="mr-2"/> Zdjęcie
+                                        <Upload size={16} className="mr-2"/> Wybierz z galerii
                                     </Button>
                                 </div>
-                                {incidentImage && (
-                                    <div className="mt-2 relative w-fit">
-                                        <img src={incidentImage} alt="Preview" className="h-20 w-auto rounded border border-slate-200" />
-                                        <button onClick={() => setIncidentImage('')} className="absolute -top-2 -right-2 bg-red-500 text-white p-0.5 rounded-full"><X size={12}/></button>
-                                    </div>
-                                )}
                             </div>
+
+                            {incidentPrediction && (
+                                <div className={`p-3 rounded-lg border ${incidentPrediction.isBlock ? 'bg-red-50 border-red-100 text-red-800' : 'bg-yellow-50 border-yellow-100 text-yellow-800'}`}>
+                                    <div className="flex items-center gap-2 font-black text-[10px] mb-1 uppercase tracking-widest">
+                                        <Shield size={14}/> Skutek: {incidentPrediction.label}
+                                    </div>
+                                    <p className="text-[11px] font-medium opacity-80 leading-relaxed">{incidentPrediction.description}</p>
+                                </div>
+                            )}
                         </div>
 
-                        <div className="flex justify-end gap-3 mt-6">
+                        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
                             <Button variant="ghost" onClick={() => setIsQualityFormOpen(false)}>Anuluj</Button>
                             <Button 
                                 variant={incidentPrediction?.isBlock ? 'danger' : 'primary'}
                                 onClick={handleSubmitIncident} 
-                                disabled={!incidentDescription || !incidentImage || isUploading}
+                                disabled={!incidentDescription || incidentImages.length === 0 || isUploading}
                             >
                                 Zatwierdź Zgłoszenie
                             </Button>

@@ -41,7 +41,7 @@ const CANDIDATE_DISPLAY_COLORS: Record<string, string> = {
 
 export const HRCandidatesPage = () => {
     const { state, updateUser, addCandidate, logCandidateAction, triggerNotification, archiveCandidateDocument, restoreCandidateDocument, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus, resetTestAttempt, moveCandidateToTrial } = useAppContext();
-    const { systemConfig, skills, userSkills, testAttempts, users, tests } = state;
+    const { systemConfig, skills, userSkills, testAttempts, users, tests, positions } = state;
     const location = useLocation();
     
     const inviteLink = `${window.location.origin}/#/candidate/welcome`;
@@ -66,7 +66,8 @@ export const HRCandidatesPage = () => {
     const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
     const [trialDates, setTrialDates] = useState({
         start: new Date().toISOString().split('T')[0],
-        end: new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0]
+        end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
+        brigadirId: ''
     });
 
     // Form for adding new candidate
@@ -97,6 +98,10 @@ export const HRCandidatesPage = () => {
 
     // Validation state
     const [validationErrors, setValidationErrors] = useState<{email?: string, phone?: string}>({});
+
+    const brigadirsList = useMemo(() => {
+        return users.filter(u => u.role === Role.BRIGADIR);
+    }, [users]);
 
     // Phone masking helper
     const formatPhone = (val: string) => {
@@ -288,12 +293,15 @@ export const HRCandidatesPage = () => {
                 reader.readAsDataURL(file);
                 const base64Data = await base64Promise;
                 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                
+                const posNames = positions.map(p => p.name).join(', ');
+                
                 const response = await ai.models.generateContent({
                     model: 'gemini-3-flash-preview',
                     contents: {
                         parts: [
                             { inlineData: { mimeType: 'application/pdf', data: base64Data } },
-                            { text: 'Extract candidate details from this resume. Return a JSON object with fields: first_name, last_name, email, phone (formatted with +48), target_position (one of: Pomocnik, Elektromonter, Elektryk, Brygadzista, Koordynator Robót, Kierownik Robót). If a field is not found, use an empty string.' }
+                            { text: `Extract candidate details from this resume. Return a JSON object with fields: first_name, last_name, email, phone (formatted with +48), target_position (must be one of: ${posNames}). If a field is not found, use an empty string.` }
                         ]
                     },
                     config: {
@@ -312,7 +320,7 @@ export const HRCandidatesPage = () => {
                     }
                 });
                 const result = JSON.parse(response.text || '{}');
-                setNewCandidateData({ first_name: result.first_name || '', last_name: result.last_name || '', email: result.email || '', phone: result.phone ? formatPhone(result.phone) : '', target_position: systemConfig.positions.includes(result.target_position) ? result.target_position : '', source: 'Import z CV (AI)', cvFile: file });
+                setNewCandidateData({ first_name: result.first_name || '', last_name: result.last_name || '', email: result.email || '', phone: result.phone ? formatPhone(result.phone) : '', target_position: positions.some(p => p.name === result.target_position) ? result.target_position : '', source: 'Import z CV (AI)', cvFile: file });
                 setIsSelectionModalOpen(false);
                 setIsAddModalOpen(true);
                 triggerNotification('success', 'AI Przetworzyło CV', 'Dane zostały wyodrębnione i uzupełnione w formularzu.');
@@ -350,22 +358,36 @@ export const HRCandidatesPage = () => {
 
     const handleHireToTrial = async () => {
         if (!selectedCandidate) return;
+        
+        // Walidacja czy dane osobowe są kompletne - teraz z powiadomieniem toast
         if (!isDataComplete(selectedCandidate)) {
-            return alert("Nie można zatrudnić kandydata bez kompletnych danych osobowych.");
+            return triggerNotification('error', 'Błąd Zatrudnienia', 'Nie można zatrudnić kandydata bez kompletnych danych osobowych.');
         }
+        
         setTrialDates({
             start: new Date().toISOString().split('T')[0],
-            end: new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0]
+            end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
+            brigadirId: selectedCandidate.assigned_brigadir_id || ''
         });
         setIsTrialModalOpen(true);
     };
 
     const confirmTrialHiring = async () => {
         if (!selectedCandidate) return;
+        if (!trialDates.brigadirId) {
+            return triggerNotification('info', 'Wymagane Przypisanie', 'Wybierz brygadzistę, do którego ma zostać przypisany pracownik.');
+        }
+
         setIsSubmitting(true);
         try {
-            await updateUser(selectedCandidate.id, { status: UserStatus.TRIAL, role: Role.EMPLOYEE, hired_date: trialDates.start, trial_end_date: trialDates.end });
-            await logCandidateAction(selectedCandidate.id, `Zatrudniono na okres próbny: ${trialDates.start} - ${trialDates.end}`);
+            await updateUser(selectedCandidate.id, { 
+                status: UserStatus.TRIAL, 
+                role: Role.EMPLOYEE, 
+                hired_date: trialDates.start, 
+                trial_end_date: trialDates.end,
+                assigned_brigadir_id: trialDates.brigadirId
+            });
+            await logCandidateAction(selectedCandidate.id, `Zatrudniono na okres próbny: ${trialDates.start} - ${trialDates.end}. Brygadzista: ${users.find(u => u.id === trialDates.brigadirId)?.last_name}`);
             triggerNotification('success', 'Zatrudniono', `Pracownik ${selectedCandidate.first_name} ${selectedCandidate.last_name} rozpoczął okres próbny.`);
             setIsTrialModalOpen(false);
             setSelectedCandidate(null); 
@@ -621,7 +643,7 @@ export const HRCandidatesPage = () => {
                                             </div>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div className="space-y-1">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase">Typ Dokumentu</label>
+                                                    <label className="block text-[9px] font-black text-slate-400 uppercase">Typ Dokumentu</label>
                                                     <select className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.document_type} onChange={e => setEditPersonalData({...editPersonalData, document_type: e.target.value})}>
                                                         <option value="Dowód osobisty">Dowód osobisty</option>
                                                         <option value="Paszport">Paszport</option>
@@ -629,7 +651,7 @@ export const HRCandidatesPage = () => {
                                                     </select>
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase">Nr Dokumentu</label>
+                                                    <label className="block text-[9px] font-black text-slate-400 uppercase">Nr Dokumentu</label>
                                                     <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.document_number} onChange={e => setEditPersonalData({...editPersonalData, document_number: e.target.value})} placeholder="ABC 123456" />
                                                 </div>
                                             </div>
@@ -657,7 +679,7 @@ export const HRCandidatesPage = () => {
                                                 <div className="col-span-2 space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Miasto</label><input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.city} onChange={e => setEditPersonalData({...editPersonalData, city: e.target.value})} /></div>
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">Konto Bankowe</label>
+                                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">KONTO BANKOWE</label>
                                                 <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold font-mono bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.bank_account} onChange={handleBankAccountChange} placeholder="00 0000 0000..." />
                                             </div>
                                             <div className="space-y-1">
@@ -799,7 +821,7 @@ export const HRCandidatesPage = () => {
                                             {candidateSkills.filter(us => {
                                                 if (docsViewMode === 'active' ? us.is_archived : !us.is_archived) return false;
                                                 const s = skills.find(sk => sk.id === us.skill_id);
-                                                const isDoc = s?.verification_type === VerificationType.DOCUMENT || !!us.custom_type || us.skill_id?.startsWith('doc_');
+                                                const isDoc = s?.verification_type === VerificationType.DOCUMENT || !!us.custom_type || (typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || !us.skill_id;
                                                 if (!isDoc) return false;
                                                 if (docSearch && !((us.custom_name || s?.name_pl || '').toLowerCase().includes(docSearch.toLowerCase()))) return false;
                                                 return true;
@@ -979,7 +1001,7 @@ export const HRCandidatesPage = () => {
             {/* Selection Modal */}
             {isSelectionModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-200 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => !isAILoading && setIsSelectionModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-lg w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-slate-900 tracking-tight">Dodaj Nowego Kandydata</h3>
                             <button onClick={() => !isAILoading && setIsSelectionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -1047,7 +1069,7 @@ export const HRCandidatesPage = () => {
             {/* Edit Basic Data Modal */}
             {isEditBasicModalOpen && selectedCandidate && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsEditBasicModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="text-lg font-black text-slate-900 tracking-tight">Edytuj Kandydata</h3>
                             <button onClick={() => setIsEditBasicModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
@@ -1118,7 +1140,7 @@ export const HRCandidatesPage = () => {
                                         onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}
                                     >
                                         <option value="">Wybierz...</option>
-                                        {systemConfig.positions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="space-y-1">
@@ -1190,7 +1212,7 @@ export const HRCandidatesPage = () => {
             {/* Manual Add Candidate Modal */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAddModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="text-lg font-black text-slate-900 tracking-tight">Nowy Kandydat</h3>
                             <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
@@ -1263,7 +1285,7 @@ export const HRCandidatesPage = () => {
                                         onChange={e => setNewCandidateData({...newCandidateData, target_position: e.target.value})}
                                     >
                                         <option value="">Wybierz...</option>
-                                        {systemConfig.positions.map(p => <option key={p} value={p}>{p}</option>)}
+                                        {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="space-y-1">
@@ -1315,9 +1337,9 @@ export const HRCandidatesPage = () => {
             {/* Trial Period Confirmation Modal */}
             {isTrialModalOpen && selectedCandidate && (
                 <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 uppercase">
                                 <Calendar size={24} className="text-orange-600"/> Okres Próbny
                             </h3>
                             <button onClick={() => setIsTrialModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
@@ -1325,40 +1347,56 @@ export const HRCandidatesPage = () => {
                         <div className="p-8 space-y-6">
                             <p className="text-sm text-slate-600 leading-relaxed font-medium">
                                 Ustal ramy czasowe okresu próbnego dla pracownika <strong className="text-slate-900 font-black">{selectedCandidate.first_name} {selectedCandidate.last_name}</strong>. 
-                                Standardowo okres próbny trwa 3 miesiące.
+                                Standardowo okres próbny trwa 1 miesiąc.
                             </p>
                             
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ROZPOCZĘCIA</label>
-                                    <div className="relative">
-                                        <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                        <input 
-                                            type="date"
-                                            className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
-                                            value={trialDates.start}
-                                            onChange={(e) => setTrialDates({...trialDates, start: e.target.value})}
-                                        />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ROZPOCZĘCIA</label>
+                                        <div className="relative">
+                                            <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                                            <input 
+                                                type="date"
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
+                                                value={trialDates.start}
+                                                onChange={(e) => setTrialDates({...trialDates, start: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ZAKOŃCZENIA</label>
+                                        <div className="relative">
+                                            <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                                            <input 
+                                                type="date"
+                                                className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
+                                                value={trialDates.end}
+                                                onChange={(e) => setTrialDates({...trialDates, end: e.target.value})}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                                
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ZAKOŃCZENIA</label>
-                                    <div className="relative">
-                                        <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                        <input 
-                                            type="date"
-                                            className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
-                                            value={trialDates.end}
-                                            onChange={(e) => setTrialDates({...trialDates, end: e.target.value})}
-                                        />
-                                    </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PRZYPISANY BRYGADZISTA</label>
+                                    <select 
+                                        className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm appearance-none" 
+                                        value={trialDates.brigadirId} 
+                                        onChange={e => setTrialDates({...trialDates, brigadirId: e.target.value})} 
+                                    >
+                                        <option value="">Wybierz brygadzistę...</option>
+                                        {brigadirsList.map(b => (
+                                            <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
                         </div>
                         <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
                             <Button variant="ghost" fullWidth onClick={() => setIsTrialModalOpen(false)} className="font-bold text-slate-400">Anuluj</Button>
-                            <Button fullWidth onClick={confirmTrialHiring} disabled={isSubmitting} className="font-black uppercase text-[11px] tracking-widest h-12 shadow-lg shadow-blue-600/20">
+                            <Button fullWidth onClick={confirmTrialHiring} disabled={isSubmitting || !trialDates.brigadirId} className="font-black uppercase text-[11px] tracking-widest h-12 shadow-lg shadow-blue-600/20">
                                 {isSubmitting ? <Loader2 size={16} className="animate-spin mr-2"/> : <UserCheck size={16} className="mr-2"/>}
                                 Potwierdź zatrudnienie
                             </Button>
@@ -1418,7 +1456,7 @@ export const HRCandidatesPage = () => {
                                 <input type="checkbox" checked={newDocData.indefinite} onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
                                 <span className="text-[10px] font-black text-slate-500 uppercase">Bezterminowy</span>
                             </label>
-                            <Button fullWidth onClick={handleSaveDocument} disabled={isSubmitting} className="h-12 font-black text-sm shadow-xl shadow-blue-600/20 rounded-2xl mt-4">
+                            <Button fullWidth onClick={handleSaveDocument} disabled={!newDocData.typeId || newDocData.files.length === 0 || isSubmitting} className="h-12 font-black text-sm shadow-xl shadow-blue-600/20 rounded-2xl mt-4">
                                 {isSubmitting ? <Loader2 size={18} className="animate-spin mr-3"/> : <Save size={18} className="mr-3"/>}
                                 ZAPISZ DOKUMENT
                             </Button>

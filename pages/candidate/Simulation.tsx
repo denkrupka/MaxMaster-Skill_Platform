@@ -35,7 +35,7 @@ export const CandidateSimulationPage = () => {
         let total = 0;
         selectedTestIds.forEach(testId => {
             const test = tests.find(t => t.id === testId);
-            if (test) {
+            if (test && test.skill_ids) {
                 test.skill_ids.forEach(skillId => {
                     const skill = skills.find(s => s.id === skillId);
                     if (skill) total += skill.hourly_bonus;
@@ -80,7 +80,7 @@ export const CandidateSimulationPage = () => {
     };
 
     const getTestBonus = (test: Test) => {
-        return test.skill_ids.reduce((acc, sid) => {
+        return (test.skill_ids || []).reduce((acc, sid) => {
             const s = skills.find(sk => sk.id === sid);
             return acc + (s?.hourly_bonus || 0);
         }, 0);
@@ -289,7 +289,7 @@ export const CandidateSimulationPage = () => {
                             {tests.filter(t => t.is_active && !t.is_archived).map(test => {
                                 const isSelected = selectedTestIds.includes(test.id);
                                 const bonus = getTestBonus(test);
-                                const skill = skills.find(s => s.id === test.skill_ids[0]);
+                                const skill = skills.find(s => s.id === (test.skill_ids && test.skill_ids[0]));
                                 
                                 return (
                                     <tr 
