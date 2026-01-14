@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Search, AlertTriangle, Archive, RotateCcw, UserMinus, Edit, X, Plus, Upload, ChevronRight, ChevronDown, CheckCircle, Clock, Trash2, Camera, Eye, ChevronLeft, MessageSquare, StickyNote, Award, UserPlus, Wallet, Lock, Shield, XCircle, MapPin, Mail, Phone, Calendar, Save, User as UserIcon } from 'lucide-react';
+import { ArrowRight, Search, AlertTriangle, Archive, RotateCcw, UserMinus, Edit, X, Plus, Upload, ChevronRight, ChevronDown, CheckCircle, Clock, Trash2, Camera, Eye, ChevronLeft, MessageSquare, StickyNote, Award, UserPlus, Wallet, Lock, Shield, XCircle, MapPin, Mail, Phone, Calendar, Save, User as UserIcon, HardHat } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { User, Role, UserStatus, ContractType, SkillStatus, VerificationType, NoteCategory, EmployeeNote, UserSkill } from '../../types';
@@ -23,6 +23,9 @@ export const HREmployeesPage = () => {
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editFormData, setEditFormData] = useState<Partial<User>>({});
+
+    const [showCoordinatorSelection, setShowCoordinatorSelection] = useState(false);
+    const [pendingBrigadierId, setPendingBrigadierId] = useState<string | null>(null);
 
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
@@ -62,16 +65,19 @@ export const HREmployeesPage = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const allEmployees = state.users.filter(u => u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR);
+    const allEmployees = state.users.filter(u => u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR || u.role === Role.COORDINATOR);
     
-    // Filtrowanie brygadzistów bezpośrednio z bazy danych
     const brigadirsList = useMemo(() => {
         return state.users.filter(u => u.role === Role.BRIGADIR);
     }, [state.users]);
 
+    const coordinatorsList = useMemo(() => {
+        return state.users.filter(u => u.role === Role.COORDINATOR);
+    }, [state.users]);
+
     const filteredEmployees = allEmployees.filter(e => {
         if (viewMode === 'active') {
-            if (e.status !== UserStatus.ACTIVE) return false;
+            if (e.status !== UserStatus.ACTIVE && e.status !== UserStatus.TRIAL) return false;
         } else {
             if (e.status !== UserStatus.INACTIVE) return false;
         }
@@ -98,14 +104,39 @@ export const HREmployeesPage = () => {
         }
     };
 
-    const saveEditEmployee = () => {
+    const saveEditEmployee = async () => {
         if (selectedEmployee) {
-            updateUser(selectedEmployee.id, editFormData);
-            if (editFormData.assigned_brigadir_id !== selectedEmployee.assigned_brigadir_id && editFormData.assigned_brigadir_id) {
-                assignBrigadir(selectedEmployee.id, editFormData.assigned_brigadir_id);
+            const wasBrigadier = selectedEmployee.role === Role.BRIGADIR;
+            const willBeBrigadier = editFormData.role === Role.BRIGADIR;
+
+            await updateUser(selectedEmployee.id, editFormData);
+            
+            // Если роль не Координатор и выбран руководитель - сохраняем
+            if (editFormData.role !== Role.COORDINATOR && editFormData.assigned_brigadir_id !== selectedEmployee.assigned_brigadir_id && editFormData.assigned_brigadir_id) {
+                await assignBrigadir(selectedEmployee.id, editFormData.assigned_brigadir_id);
             }
-            setSelectedEmployee({ ...selectedEmployee, ...editFormData } as User);
+            
+            const updatedUser = { ...selectedEmployee, ...editFormData } as User;
+            setSelectedEmployee(updatedUser);
             setIsEditModalOpen(false);
+
+            // Если произошло повышение до бригадира, а координатор еще не выбран - показываем окно
+            if (!wasBrigadier && willBeBrigadier && !editFormData.assigned_brigadir_id) {
+                setPendingBrigadierId(selectedEmployee.id);
+                setShowCoordinatorSelection(true);
+            }
+        }
+    };
+
+    const handleSelectCoordinator = async (coordinatorId: string) => {
+        if (pendingBrigadierId) {
+            await updateUser(pendingBrigadierId, { assigned_brigadir_id: coordinatorId });
+            triggerNotification('success', 'Przypisano Koordynatora', 'Brygadzista został pomyślnie przypisany do koordynatora.');
+            setShowCoordinatorSelection(false);
+            setPendingBrigadierId(null);
+            if (selectedEmployee?.id === pendingBrigadierId) {
+                setSelectedEmployee(prev => prev ? { ...prev, assigned_brigadir_id: coordinatorId } : null);
+            }
         }
     };
 
@@ -413,13 +444,13 @@ export const HREmployeesPage = () => {
                                 <h1 className="text-2xl font-bold text-slate-900">{selectedEmployee.first_name} {selectedEmployee.last_name}</h1>
                                 <div className="text-sm text-slate-500 flex gap-4 mt-1"><span>{selectedEmployee.email}</span><span>{selectedEmployee.phone}</span></div>
                                 <div className="text-sm font-bold text-slate-700 mt-2">Stanowisko: <span className="font-normal text-slate-600">{selectedEmployee.target_position || '-'}</span></div>
-                                <div className="text-sm font-bold text-slate-700 mt-1">Brygadzista: <span className="font-normal text-slate-600">{brigadirName ? `${brigadirName.first_name} ${brigadirName.last_name}` : '-'}</span></div>
+                                <div className="text-sm font-bold text-slate-700 mt-1">Brygadzista/Koordynator: <span className="font-normal text-slate-600">{brigadirName ? `${brigadirName.first_name} ${brigadirName.last_name}` : '-'}</span></div>
                                 <div className="text-sm font-bold text-slate-700 mt-1">Okres umowy: <span className="font-normal text-slate-600">{selectedEmployee.hired_date?.split('T')[0] || '-'} — {selectedEmployee.contract_end_date?.split('T')[0] || 'nieokreślony'}</span></div>
                             </div>
                         </div>
                         <div className="flex flex-col items-end gap-3">
-                            <div className="flex items-center gap-2"><span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${selectedEmployee.status === UserStatus.ACTIVE ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{USER_STATUS_LABELS[selectedEmployee.status]}</span><Button size="sm" variant="outline" onClick={handleEditEmployee}><Edit size={16} className="mr-2"/> Edytuj</Button></div>
-                            {selectedEmployee.status === UserStatus.ACTIVE ? (<Button size="sm" variant="danger" onClick={() => handleFireEmployee(selectedEmployee)}><UserMinus size={16} className="mr-2"/> Rozwiąż Umowę</Button>) : (<Button size="sm" variant="secondary" onClick={() => handleRestoreEmployee(selectedEmployee)}><RotateCcw size={16} className="mr-2"/> Przywróć</Button>)}
+                            <div className="flex items-center gap-2"><span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${selectedEmployee.status === UserStatus.ACTIVE || selectedEmployee.status === UserStatus.TRIAL ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{USER_STATUS_LABELS[selectedEmployee.status]}</span><Button size="sm" variant="outline" onClick={handleEditEmployee}><Edit size={16} className="mr-2"/> Edytuj</Button></div>
+                            {selectedEmployee.status !== UserStatus.INACTIVE ? (<Button size="sm" variant="danger" onClick={() => handleFireEmployee(selectedEmployee)}><UserMinus size={16} className="mr-2"/> Rozwiąż Umowę</Button>) : (<Button size="sm" variant="secondary" onClick={() => handleRestoreEmployee(selectedEmployee)}><RotateCcw size={16} className="mr-2"/> Przywróć</Button>)}
                         </div>
                     </div>
                 </div>
@@ -682,7 +713,7 @@ export const HREmployeesPage = () => {
             </div>
 
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Szukaj pracownika (imię, nazwisko)..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={search} onChange={e => setSearch(e.target.value)}/></div>
+                <div className="relative flex-1 w-full"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Szukaj pracownika..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={search} onChange={e => setSearch(e.target.value)}/></div>
                 <div className="relative min-w-[200px] w-full md:w-auto"><select className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-10 rounded-lg text-sm font-medium cursor-pointer" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)}><option value="all">Wszystkie stanowiska</option>{systemConfig.positions.map(pos => (<option key={pos} value={pos}>{pos}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/></div>
             </div>
 
@@ -752,110 +783,123 @@ export const HREmployeesPage = () => {
         if (!isEditModalOpen) return null;
         return (
             <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-200">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Edytuj Dane Pracownika</h2>
-                        <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-all">
-                            <X size={24} />
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden animate-in zoom-in duration-200">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h2 className="text-lg font-black text-slate-900 tracking-tight uppercase">EDYTUJ DANE PRACOWNIKA</h2>
+                        <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all">
+                            <X size={20} />
                         </button>
                     </div>
                     
-                    <div className="p-8 space-y-6">
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
+                    <div className="p-6 space-y-5 overflow-y-auto max-h-[80vh]">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
                                 <input 
-                                    className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
                                     value={editFormData.first_name || ''} 
                                     onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} 
                                 />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
                                 <input 
-                                    className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
                                     value={editFormData.last_name || ''} 
                                     onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} 
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label>
-                                <div className="relative">
-                                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                    <input 
-                                        className="w-full bg-slate-50/50 border border-slate-200 p-2.5 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
-                                        value={editFormData.email || ''} 
-                                        onChange={e => setEditFormData({...editFormData, email: e.target.value})} 
-                                    />
-                                </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label>
+                                <input 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
+                                    value={editFormData.email || ''} 
+                                    onChange={e => setEditFormData({...editFormData, email: e.target.value})} 
+                                />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label>
-                                <div className="relative">
-                                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                    <input 
-                                        className="w-full bg-slate-50/50 border border-slate-200 p-2.5 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
-                                        value={editFormData.phone || ''} 
-                                        onChange={e => setEditFormData({...editFormData, phone: e.target.value})} 
-                                    />
-                                </div>
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label>
+                                <input 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
+                                    value={editFormData.phone || ''} 
+                                    onChange={e => setEditFormData({...editFormData, phone: e.target.value})} 
+                                />
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label>
-                            <select 
-                                className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner appearance-none" 
+                        <div className="space-y-1">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label>
+                            <input 
+                                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
                                 value={editFormData.target_position || ''} 
                                 onChange={e => setEditFormData({...editFormData, target_position: e.target.value})} 
-                            >
-                                <option value="">Wybierz stanowisko...</option>
-                                {state.positions.map(pos => <option key={pos.id} value={pos.name}>{pos.name}</option>)}
-                            </select>
+                            />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">DATA ROZPOCZĘCIA</label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">DATA ROZPOCZĘCIA</label>
                                 <input 
                                     type="date" 
-                                    className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
-                                    value={editFormData.hired_date || ''} 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
+                                    value={editFormData.hired_date ? editFormData.hired_date.split('T')[0] : ''} 
                                     onChange={e => setEditFormData({...editFormData, hired_date: e.target.value})} 
                                 />
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">KONIEC UMOWY</label>
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">KONIEC UMOWY</label>
                                 <input 
                                     type="date" 
-                                    className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner" 
-                                    value={editFormData.contract_end_date || ''} 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
+                                    value={editFormData.contract_end_date ? editFormData.contract_end_date.split('T')[0] : ''} 
                                     onChange={e => setEditFormData({...editFormData, contract_end_date: e.target.value})} 
                                 />
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PRZYPISANY BRYGADZISTA</label>
+                        <div className="space-y-1">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROLA / UPRAWNIENIA</label>
                             <select 
-                                className="w-full bg-slate-50/50 border border-slate-200 p-2.5 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-inner appearance-none" 
-                                value={editFormData.assigned_brigadir_id || ''} 
-                                onChange={e => setEditFormData({...editFormData, assigned_brigadir_id: e.target.value})} 
+                                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm appearance-none" 
+                                value={editFormData.role || ''} 
+                                onChange={e => {
+                                    const newRole = e.target.value as Role;
+                                    setEditFormData({...editFormData, role: newRole, assigned_brigadir_id: ''});
+                                }} 
                             >
-                                <option value="">Wybierz brygadzistę...</option>
-                                {brigadirsList.map(b => (
-                                    <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>
-                                ))}
+                                <option value={Role.EMPLOYEE}>pracownik</option>
+                                <option value={Role.BRIGADIR}>Brygadzista</option>
+                                <option value={Role.COORDINATOR}>koordynator</option>
                             </select>
                         </div>
+
+                        {editFormData.role !== Role.COORDINATOR && (
+                            <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                    {editFormData.role === Role.BRIGADIR ? 'PRZYPISANY KOORDYNATOR' : 'PRZYPISANY BRYGADZISTA'}
+                                </label>
+                                <select 
+                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm appearance-none" 
+                                    value={editFormData.assigned_brigadir_id || ''} 
+                                    onChange={e => setEditFormData({...editFormData, assigned_brigadir_id: e.target.value})} 
+                                >
+                                    <option value="">Wybierz...</option>
+                                    {editFormData.role === Role.BRIGADIR ? (
+                                        coordinatorsList.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)
+                                    ) : (
+                                        brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)
+                                    )}
+                                </select>
+                            </div>
+                        )}
                     </div>
                     
-                    <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                        <button onClick={() => setIsEditModalOpen(false)} className="font-bold text-slate-500 px-6">Anuluj</button>
-                        <Button onClick={saveEditEmployee} className="font-black uppercase text-xs tracking-widest rounded-xl px-8 h-11 shadow-lg shadow-blue-600/20">
+                    <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                        <button onClick={() => setIsEditModalOpen(false)} className="text-sm font-bold text-slate-500 px-4 hover:text-slate-700 transition-colors">Anuluj</button>
+                        <Button onClick={saveEditEmployee} className="font-black uppercase text-[11px] tracking-widest rounded-xl px-6 h-10 shadow-lg shadow-blue-600/20">
                             Zapisz Zmiany
                         </Button>
                     </div>
@@ -867,19 +911,55 @@ export const HREmployeesPage = () => {
     return (
         <div className="p-6 max-w-7xl mx-auto">
             {selectedEmployee ? renderDetail() : renderList()}
+
+            {/* Coordinator Selection Modal (Triggered on promotion if skipped in main form) */}
+            {showCoordinatorSelection && (
+                <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in duration-200 text-center">
+                        <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 mx-auto mb-4">
+                            <HardHat size={32} />
+                        </div>
+                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Wybierz Koordynatora</h2>
+                        <p className="text-sm text-slate-500 mt-2 font-medium mb-6">
+                            Nowy brygadzista musi zostać przypisany do koordynatora robót.
+                        </p>
+                        
+                        <div className="space-y-2 max-h-48 overflow-y-auto mb-6 pr-1">
+                            {coordinatorsList.map(coord => (
+                                <button 
+                                    key={coord.id}
+                                    onClick={() => handleSelectCoordinator(coord.id)}
+                                    className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-xl border border-slate-100 transition-all group"
+                                >
+                                    <span className="font-bold text-xs uppercase tracking-tight">{coord.first_name} {coord.last_name}</span>
+                                    <ChevronRight size={14} className="text-slate-300 group-hover:text-white" />
+                                </button>
+                            ))}
+                        </div>
+                        
+                        <button 
+                            onClick={() => setShowCoordinatorSelection(false)} 
+                            className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest"
+                        >
+                            Pomiń na razie
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isDocModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Dodaj Dokument</h2>
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Dodaj Dokument</h2>
                             <button onClick={() => setIsDocModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={24}/></button>
                         </div>
                         
-                        <div className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="block text-xs font-bold text-slate-700">Typ Dokumentu</label>
+                        <div className="space-y-4">
+                            <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Typ Dokumentu</label>
                                 <select 
-                                    className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20" 
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10" 
                                     value={newDocData.typeId} 
                                     onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}
                                     disabled={!!editingDocId}
@@ -891,10 +971,10 @@ export const HREmployeesPage = () => {
                             </div>
 
                             {(newDocData.typeId === 'other' || editingDocId) && (
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold text-slate-700">Nazwa dokumentu</label>
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Nazwa dokumentu</label>
                                     <input 
-                                        className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20" 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10" 
                                         placeholder="Wpisz nazwę..." 
                                         value={newDocData.customName} 
                                         onChange={e => setNewDocData({...newDocData, customName: e.target.value})} 
@@ -902,49 +982,39 @@ export const HREmployeesPage = () => {
                                 </div>
                             )}
 
-                            <div className="space-y-2">
-                                <label className="block text-xs font-bold text-slate-700">Załącz Pliki</label>
-                                <div className="bg-slate-50 rounded-xl p-3 flex items-center gap-3">
+                            <div className="space-y-1">
+                                <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Załącz Pliki</label>
+                                <div className="bg-slate-50 rounded-xl p-2.5 flex items-center gap-3 border border-slate-200">
                                     <Button 
                                         variant="secondary" 
                                         size="sm" 
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="bg-slate-500 hover:bg-slate-600 text-white border-0 text-xs py-1.5"
+                                        className="bg-slate-500 hover:bg-slate-600 text-white border-0 text-[10px] h-8 px-3"
                                     >
-                                        Wybrać pliki
+                                        Wybierz
                                     </Button>
-                                    <span className="text-xs font-bold text-slate-800">
-                                        {newDocData.files.length > 0 ? `${newDocData.files.length} wybranych plików` : 'Plik nie wybrany'}
+                                    <span className="text-[10px] font-bold text-slate-800">
+                                        {newDocData.files.length > 0 ? `${newDocData.files.length} plików` : 'Brak plików'}
                                     </span>
                                     <input type="file" ref={fileInputRef} multiple className="hidden" onChange={handleFileSelect} />
                                 </div>
-                                {newDocData.files.length > 0 && (
-                                    <div className="mt-2 space-y-1">
-                                        {newDocData.files.map((f, i) => (
-                                            <div key={i} className="flex justify-between items-center bg-slate-100/50 p-2 rounded-lg text-[10px] font-bold">
-                                                <span className="truncate max-w-[200px]">{f.name}</span>
-                                                <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold text-slate-700">Data Wydania</label>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Data Wydania</label>
                                     <input 
                                         type="date" 
-                                        className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20" 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none" 
                                         value={newDocData.issue_date} 
                                         onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})} 
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold text-slate-700">Data Ważności</label>
+                                <div className="space-y-1">
+                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Data Ważności</label>
                                     <input 
                                         type="date" 
-                                        className={`w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 ${newDocData.indefinite ? 'opacity-30 cursor-not-allowed' : ''}`} 
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none ${newDocData.indefinite ? 'opacity-30 cursor-not-allowed' : ''}`} 
                                         value={newDocData.expires_at} 
                                         onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})}
                                         disabled={newDocData.indefinite} 
@@ -953,20 +1023,20 @@ export const HREmployeesPage = () => {
                             </div>
 
                             <div 
-                                className="bg-slate-50 rounded-xl p-3 flex items-center gap-3 cursor-pointer select-none"
+                                className="bg-slate-50 rounded-xl p-2.5 flex items-center gap-3 cursor-pointer select-none border border-slate-200"
                                 onClick={() => setNewDocData({...newDocData, indefinite: !newDocData.indefinite})}
                             >
-                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${newDocData.indefinite ? 'bg-slate-700 border-slate-700' : 'bg-white border-slate-300'}`}>
-                                    {newDocData.indefinite && <CheckCircle size={14} className="text-white fill-white"/>}
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${newDocData.indefinite ? 'bg-slate-700 border-slate-700' : 'bg-white border-slate-300'}`}>
+                                    {newDocData.indefinite && <CheckCircle size={12} className="text-white fill-white"/>}
                                 </div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BEZTERMINOWY</span>
                             </div>
 
                             <button 
                                 onClick={handleSaveDocument}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-14 flex items-center justify-center gap-3 font-black uppercase text-sm tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95 mt-4"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 flex items-center justify-center gap-2 font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95 mt-4"
                             >
-                                <Save size={20}/>
+                                <Save size={16}/>
                                 ZAPISZ DOKUMENT
                             </button>
                         </div>
@@ -977,17 +1047,15 @@ export const HREmployeesPage = () => {
             {renderEditModal()}
             {resetModal.isOpen && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6">
-                        <div className="flex flex-col items-center text-center">
-                            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4"><RotateCcw size={24} /></div>
-                            <h3 className="text-lg font-bold text-slate-900 mb-2">Resetuj Postęp</h3>
-                            <p className="text-sm text-slate-500 mb-6">Wybierz, który element chcesz zresetować. Operacja jest nieodwracalna.</p>
-                            <div className="space-y-2 w-full">
-                                <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'theory'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Teoria</Button>
-                                <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'practice'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Praktyka</Button>
-                                <Button fullWidth variant="danger" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'both'); setResetModal({isOpen: false, skillId: null}); }}}>Zresetuj Całość</Button>
-                                <Button fullWidth variant="ghost" size="sm" onClick={() => setResetModal({ isOpen: false, skillId: null })}>Anuluj</Button>
-                            </div>
+                    <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6 text-center">
+                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4 mx-auto"><RotateCcw size={24} /></div>
+                        <h3 className="text-lg font-bold text-slate-900 mb-2">Resetuj Postęp</h3>
+                        <p className="text-sm text-slate-500 mb-6">Operacja jest nieodwracalna.</p>
+                        <div className="space-y-2 w-full">
+                            <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'theory'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Teoria</Button>
+                            <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'practice'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Praktyka</Button>
+                            <Button fullWidth variant="danger" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'both'); setResetModal({isOpen: false, skillId: null}); }}}>Zresetuj Całość</Button>
+                            <Button fullWidth variant="ghost" size="sm" onClick={() => setResetModal({ isOpen: false, skillId: null })}>Anuluj</Button>
                         </div>
                     </div>
                 </div>
@@ -1000,7 +1068,7 @@ export const HREmployeesPage = () => {
                             <h3 className="text-xl font-bold text-slate-900 mb-4">{confirmModal.type === 'fire' ? 'Rozwiązanie Umowy' : 'Przywróć Pracownika'}</h3>
                             <p className="text-sm text-slate-500 mb-6">Czy potwierdzasz tę operację dla <strong>{confirmModal.user.first_name} {confirmModal.user.last_name}</strong>?</p>
                             <div className="flex gap-3 w-full">
-                                <Button fullWidth variant="ghost" size="sm" onClick={() => setConfirmModal({isOpen: false, type: null, user: null})}>Anuluj</Button>
+                                <Button fullWidth variant="ghost" onClick={() => setConfirmModal({isOpen: false, type: null, user: null})}>Anuluj</Button>
                                 <Button fullWidth variant={confirmModal.type === 'fire' ? 'danger' : 'primary'} size="sm" onClick={executeConfirmation}>Potwierdź</Button>
                             </div>
                         </div>

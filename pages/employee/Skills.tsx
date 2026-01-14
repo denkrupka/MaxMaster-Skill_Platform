@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -13,6 +12,16 @@ import { Button } from '../../components/Button';
 import { BONUS_DOCUMENT_TYPES, SKILL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
+
+// Fix: Added interface for strong typing of newDocData state to resolve 'unknown' type errors
+interface DocData {
+    typeId: string;
+    customName: string;
+    issue_date: string;
+    expires_at: string;
+    indefinite: boolean;
+    files: File[];
+}
 
 export const EmployeeSkills = () => {
     const { state, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus } = useAppContext();
@@ -29,13 +38,15 @@ export const EmployeeSkills = () => {
     const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
     const [isDocModalOpen, setIsDocModalOpen] = useState(false);
     const [editingDocId, setEditingDocId] = useState<string | null>(null);
-    const [newDocData, setNewDocData] = useState({ 
+    
+    // Fix: Explicitly typed the newDocData state to avoid 'unknown' type errors during build/compilation.
+    const [newDocData, setNewDocData] = useState<DocData>({ 
         typeId: '',
         customName: '', 
         issue_date: new Date().toISOString().split('T')[0], 
         expires_at: '', 
         indefinite: false,
-        files: [] as File[]
+        files: []
     });
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
     
@@ -177,11 +188,13 @@ export const EmployeeSkills = () => {
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = Array.from(e.target.files || []);
-        if (selectedFiles.length > 0) setNewDocData(prev => ({ ...prev, files: [...prev.files, ...selectedFiles] }));
+        // Fix: Explicitly type the previous state in functional update to ensure TypeScript recognizes the properties.
+        if (selectedFiles.length > 0) setNewDocData((prev: DocData) => ({ ...prev, files: [...prev.files, ...selectedFiles] }));
     };
 
     const removeFile = (index: number) => { 
-        setNewDocData(prev => ({ ...prev, files: prev.files.filter((_, i) => i !== index) })); 
+        // Fix: Explicitly type the previous state in functional update to ensure TypeScript recognizes the properties.
+        setNewDocData((prev: DocData) => ({ ...prev, files: prev.files.filter((_, i) => i !== index) })); 
     };
 
     const handleSaveDocument = async () => {
@@ -191,6 +204,8 @@ export const EmployeeSkills = () => {
         const bonus = selectedType?.bonus || 0;
         if (!docName) return alert("Podaj nazwę dokumentu.");
         const docPayload: any = { custom_name: docName, issue_date: newDocData.issue_date || null, expires_at: newDocData.indefinite ? null : (newDocData.expires_at || null), is_indefinite: newDocData.indefinite };
+        
+        // Fix: Accessed length of the correctly typed files array to resolve 'unknown' type error.
         if (newDocData.files.length > 0) {
              const uploadedUrls: string[] = [];
              for (const file of newDocData.files) {
@@ -364,8 +379,9 @@ export const EmployeeSkills = () => {
                                     {openCategories[category] && (
                                         <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2 duration-200 bg-white">
                                             {skillList.map(skill => {
-                                                const isLocked = skill.testData?.isLocked;
-                                                const bonus = skill.testData?.summedBonus || skill.hourly_bonus;
+                                                const testData = getTestData(skill.id);
+                                                const isLocked = testData?.isLocked;
+                                                const bonus = testData?.summedBonus || skill.hourly_bonus;
                                                 return (
                                                     <button key={skill.id} onClick={() => handleTakeTest(skill.id)} disabled={isLocked} className={`p-4 bg-white border rounded-2xl flex justify-between items-center group transition-all text-left relative overflow-hidden ${isLocked ? 'border-slate-100 opacity-60 cursor-not-allowed' : 'border-slate-100 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/5'}`}>
                                                         {!isLocked && <div className="absolute inset-y-0 left-0 w-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>}
@@ -376,9 +392,9 @@ export const EmployeeSkills = () => {
                                                             <div>
                                                                 <span className={`text-sm font-bold block ${isLocked ? 'text-slate-500' : 'text-slate-700 group-hover:text-slate-900'}`}>{skill.name_pl}</span>
                                                                 {isLocked ? (
-                                                                    <div className="flex items-center gap-1 text-[10px] font-black text-red-500 uppercase tracking-tighter mt-0.5"><Clock size={10}/> Dostępny za: {skill.testData.cooldownText}</div>
-                                                                ) : skill.testData?.test?.skill_ids.length > 1 ? (
-                                                                    <div className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter mt-0.5 flex items-center gap-1"><Layers size={10}/> Pakiet: {skill.testData.test.skill_ids.length} umiejętności</div>
+                                                                    <div className="flex items-center gap-1 text-[10px] font-black text-red-500 uppercase tracking-tighter mt-0.5"><Clock size={10}/> Dostępny za: {testData?.cooldownText}</div>
+                                                                ) : testData?.test?.skill_ids.length > 1 ? (
+                                                                    <div className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter mt-0.5 flex items-center gap-1"><Layers size={10}/> Pakiet: {testData.test.skill_ids.length} umiejętności</div>
                                                                 ) : null}
                                                             </div>
                                                         </div>
@@ -440,6 +456,50 @@ export const EmployeeSkills = () => {
                     </div>
                 )}
             </div>
+
+            {isDocModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl max-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-slate-900">Dodaj Dokument</h2>
+                            <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Typ Dokumentu</label>
+                                <select className="w-full border p-2 rounded bg-white" value={newDocData.typeId} onChange={e => setNewDocData((prev: DocData) => ({...prev, typeId: e.target.value}))}>
+                                    <option value="">Wybierz dokument...</option>
+                                    {BONUS_DOCUMENT_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+                                </select>
+                            </div>
+                            {newDocData.typeId === 'other' && (
+                                <input className="w-full border p-2 rounded" placeholder="Nazwa dokumentu..." value={newDocData.customName} onChange={e => setNewDocData((prev: DocData) => ({...prev, customName: e.target.value}))} />
+                            )}
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
+                                <input type="file" multiple onChange={handleFileSelect} className="w-full border p-2 rounded bg-slate-50 text-sm" />
+                                <div className="mt-2 space-y-1">
+                                    {/* Fix: Explicitly typed the map and ensured it's an array for proper property access. */}
+                                    {(newDocData.files || []).map((f: File, i: number) => (
+                                        <div key={i} className="flex justify-between items-center bg-slate-100 p-1.5 rounded text-xs">
+                                            <span className="truncate">{f.name}</span>
+                                            <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 mb-2 p-2 bg-slate-50 rounded">
+                                <input type="checkbox" id="indef_trial_skills_2" checked={newDocData.indefinite} onChange={e => setNewDocData((prev: DocData) => ({...prev, indefinite: e.target.checked}))} className="w-4 h-4 text-blue-600 rounded" />
+                                <label htmlFor="indef_trial_skills_2" className="text-sm text-slate-700 font-medium">Bezterminowy</label>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-6">
+                            <Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button>
+                            <Button onClick={handleSaveDocument}>Zapisz Dokument</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} title={fileViewer.title} />
         </div>

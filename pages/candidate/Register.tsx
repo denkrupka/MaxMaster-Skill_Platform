@@ -40,7 +40,7 @@ export const CandidateRegisterPage = () => {
         if (!formData.firstName.trim()) newErrors.firstName = 'Imię jest wymagane';
         if (!formData.lastName.trim()) newErrors.lastName = 'Nazwisko jest wymagane';
         if (!formData.email.trim()) newErrors.email = 'Email jest wymagany';
-        else if (!/^\S+@\S+\.\S+$/.test(formData.email)) newErrors.email = 'Nieprawidłowy format email';
+        else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) newErrors.email = 'Nieprawidłowy format email';
         if (!formData.phone.trim()) newErrors.phone = 'Numer telefonu jest wymagany';
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -70,10 +70,12 @@ export const CandidateRegisterPage = () => {
         console.log('=== CANDIDATE REGISTRATION START ===');
         setIsSubmitting(true);
 
+        const cleanEmail = formData.email.trim().toLowerCase();
+
         try {
-            console.log('Attempting Supabase Auth signUp for:', formData.email);
+            console.log('Attempting Supabase Auth signUp for:', cleanEmail);
             const { data: authData, error: authError } = await supabase.auth.signUp({
-                email: formData.email,
+                email: cleanEmail,
                 password: passData.password,
                 options: {
                     data: {
@@ -96,7 +98,7 @@ export const CandidateRegisterPage = () => {
             const { data: existingUser } = await supabase
                 .from('users')
                 .select('*')
-                .eq('email', formData.email)
+                .eq('email', cleanEmail)
                 .maybeSingle();
 
             let finalUser: any = null;
@@ -115,7 +117,7 @@ export const CandidateRegisterPage = () => {
                 const { data: updated, error: updateError } = await supabase
                     .from('users')
                     .update(updates)
-                    .eq('email', formData.email)
+                    .eq('email', cleanEmail)
                     .select()
                     .single();
 
@@ -130,7 +132,7 @@ export const CandidateRegisterPage = () => {
                     .from('users')
                     .insert([{
                         id: authId,
-                        email: formData.email,
+                        email: cleanEmail,
                         first_name: formData.firstName,
                         last_name: formData.lastName,
                         phone: formData.phone,

@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Lock, CheckCircle, Clock, Play, AlertCircle, Info, User, Briefcase, Phone, Mail, X, BookOpen, Award, Star, Eye } from 'lucide-react';
+import { Wallet, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Lock, CheckCircle, Clock, Play, AlertCircle, Info, User, Briefcase, Phone, Mail, X, BookOpen, Award, Star, Eye, HardHat } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { calculateSalary } from '../../services/salaryService';
 import { SkillStatus, ContractType, VerificationType, Role } from '../../types';
@@ -15,7 +16,7 @@ export const EmployeeDashboard = () => {
     
     // UI States
     const [breakdownType, setBreakdownType] = useState<'current' | 'potential' | null>(null);
-    const [showContactModal, setShowContactModal] = useState<{type: 'brigadir' | 'hr', user: any} | null>(null);
+    const [showContactModal, setShowContactModal] = useState<{type: 'brigadir' | 'hr' | 'coordinator', user: any} | null>(null);
     const [isQualityOpen, setIsQualityOpen] = useState(false);
     const [selectedQualitySkillId, setSelectedQualitySkillId] = useState<string | null>(null);
     
@@ -27,6 +28,7 @@ export const EmployeeDashboard = () => {
     // --- HELPER DATA ---
     const brigadir = state.users.find(u => u.id === currentUser.assigned_brigadir_id);
     const hrContact = state.users.find(u => u.role === Role.HR);
+    const coordinator = state.users.find(u => u.role === Role.COORDINATOR);
 
     // --- LOGIC: DATE CONTEXT ---
     const now = new Date();
@@ -73,14 +75,12 @@ export const EmployeeDashboard = () => {
     };
 
     // --- LOGIC: TASKS (Section D) ---
-    // Update logic to be robust for skills waiting for verification
     const practiceTasks = userSkills
         .filter(us => {
             if (us.user_id !== currentUser.id) return false;
             const skill = skills.find(s => s.id === us.skill_id);
             if (!skill) return false;
 
-            // Only show skills that are THEORY_PRACTICE and are in a pending state
             const isPendingPractice = skill.verification_type === VerificationType.THEORY_PRACTICE && 
                                      (us.status === SkillStatus.THEORY_PASSED || us.status === SkillStatus.PRACTICE_PENDING);
             return isPendingPractice;
@@ -91,7 +91,6 @@ export const EmployeeDashboard = () => {
                 type: 'practice', 
                 title: skill?.name_pl, 
                 id: us.skill_id,
-                // Fix: Add missing fields to satisfy the union type with failedOrResetTests items and fix TS errors on lines 559-592
                 isLocked: false,
                 cooldownText: ''
             };
@@ -124,10 +123,8 @@ export const EmployeeDashboard = () => {
 
     // --- LOGIC: QUALITY WARNINGS & INCIDENTS ---
     const affectedSkills = skills.map(skill => {
-        // STRICT CHECK: Does the user have this skill CONFIRMED?
         const userSkill = userSkills.find(us => us.user_id === currentUser.id && us.skill_id === skill.id);
         
-        // If skill is not confirmed (e.g. pending, failed, not started), do not show incidents.
         if (!userSkill || userSkill.status !== SkillStatus.CONFIRMED) {
             return null;
         }
@@ -175,7 +172,6 @@ export const EmployeeDashboard = () => {
         const title = breakdownType === 'current' ? `Skład Stawki (Bieżący: ${currentMonthName})` : `Prognoza Stawki (Od 1. ${nextMonthName})`;
         const total = breakdownType === 'current' ? currentTotalRate : nextMonthTotalRate;
         
-        // Re-use logic from salaryInfo
         const activeItems = salaryInfo.breakdown.details.activeSkills;
         const pendingItems = salaryInfo.breakdown.details.pendingSkills;
 
@@ -188,7 +184,6 @@ export const EmployeeDashboard = () => {
                     </div>
                     
                     <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-                        {/* Base */}
                         <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                             <div>
                                 <div className="font-medium text-sm text-slate-800">Stawka Bazowa</div>
@@ -197,7 +192,6 @@ export const EmployeeDashboard = () => {
                             <div className="font-bold text-slate-900">+{salaryInfo.breakdown.base.toFixed(2)} zł</div>
                         </div>
 
-                        {/* Contract */}
                         {totalExtras > 0 && (
                             <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                                 <div>
@@ -208,7 +202,6 @@ export const EmployeeDashboard = () => {
                             </div>
                         )}
 
-                        {/* Skills */}
                         <div className="mt-4">
                             <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 tracking-wider">Umiejętności</h4>
                             {breakdownType === 'current' ? (
@@ -255,11 +248,11 @@ export const EmployeeDashboard = () => {
     const renderContactModal = () => {
         if (!showContactModal) return null;
         const { type, user } = showContactModal;
-        const title = type === 'brigadir' ? 'Twój Brygadzista' : 'Twój Opiekun HR';
+        const title = type === 'brigadir' ? 'Twój Brygadzista' : type === 'coordinator' ? 'Twój Koordynator' : 'Twój Opiekun HR';
 
         return (
             <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowContactModal(null)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
+                <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6 text-center" onClick={e => e.stopPropagation()}>
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-2xl font-bold mx-auto mb-4">
                         {user ? `${user.first_name[0]}${user.last_name[0]}` : <User size={32}/>}
                     </div>
@@ -308,7 +301,6 @@ export const EmployeeDashboard = () => {
                     </div>
                     
                     <div className="overflow-y-auto pr-2 space-y-6">
-                        {/* Summary Status */}
                         <div className={`p-4 rounded-xl border ${data.isBlocked ? 'bg-red-50 border-red-200' : 'bg-yellow-50 border-yellow-200'}`}>
                             <h4 className={`font-bold text-lg mb-1 ${data.isBlocked ? 'text-red-700' : 'text-yellow-800'}`}>
                                 {data.isBlocked ? 'Dodatek Zablokowany' : 'Ostrzeżenie'}
@@ -321,7 +313,6 @@ export const EmployeeDashboard = () => {
                             </p>
                         </div>
 
-                        {/* Recent Incidents List */}
                         <div>
                             <h4 className="font-bold text-slate-700 mb-3 text-sm uppercase">Zgłoszone uwagi</h4>
                             <div className="space-y-4">
@@ -347,7 +338,6 @@ export const EmployeeDashboard = () => {
                             </div>
                         </div>
 
-                        {/* Motivation & Library (If Blocked or just generally helpful) */}
                         {data.isBlocked && (
                             <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
                                 <div className="flex items-start gap-3 mb-3">
@@ -400,6 +390,22 @@ export const EmployeeDashboard = () => {
                 
                 {/* Contact Buttons */}
                 <div className="flex gap-3">
+                    {/* New Coordinator Button for regular Employee */}
+                    {currentUser.role === Role.EMPLOYEE && (
+                        <button 
+                            onClick={() => setShowContactModal({type: 'coordinator', user: coordinator})}
+                            className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                        >
+                            <div className="bg-orange-100 p-2 rounded-full text-orange-600">
+                                <HardHat size={18} />
+                            </div>
+                            <div className="text-left hidden sm:block">
+                                <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój Koordynator</span>
+                                <span className="font-bold text-slate-800 text-sm leading-tight">{coordinator ? `${coordinator.first_name} ${coordinator.last_name}` : 'Brak'}</span>
+                            </div>
+                        </button>
+                    )}
+
                     <button 
                         onClick={() => setShowContactModal({type: 'brigadir', user: brigadir})}
                         className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
@@ -408,7 +414,9 @@ export const EmployeeDashboard = () => {
                             <User size={18} />
                         </div>
                         <div className="text-left hidden sm:block">
-                            <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój Brygadzista</span>
+                            <span className="block text-slate-500 text-[10px] uppercase font-bold">
+                                {currentUser.role === Role.BRIGADIR ? 'Twój Koordynator' : 'Twój Brygadzista'}
+                            </span>
                             <span className="font-bold text-slate-800 text-sm leading-tight">{brigadir ? `${brigadir.first_name} ${brigadir.last_name}` : 'Brak'}</span>
                         </div>
                     </button>
