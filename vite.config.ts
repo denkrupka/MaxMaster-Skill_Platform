@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base: '/', // For custom domain use root path
+      base: process.env.GITHUB_ACTIONS ? '/MaxMaster-Skill_Platform/' : '/',
       build: {
         target: 'esnext',
       },
