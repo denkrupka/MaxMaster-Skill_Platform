@@ -1001,7 +1001,7 @@ export const HRCandidatesPage = () => {
             {/* Selection Modal */}
             {isSelectionModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-200 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => !isAILoading && setIsSelectionModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-lg w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-slate-900 tracking-tight">Dodaj Nowego Kandydata</h3>
                             <button onClick={() => !isAILoading && setIsSelectionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
@@ -1069,7 +1069,7 @@ export const HRCandidatesPage = () => {
             {/* Edit Basic Data Modal */}
             {isEditBasicModalOpen && selectedCandidate && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsEditBasicModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="text-lg font-black text-slate-900 tracking-tight">Edytuj Kandydata</h3>
                             <button onClick={() => setIsEditBasicModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
@@ -1192,7 +1192,7 @@ export const HRCandidatesPage = () => {
             {/* Invite Link Modal */}
             {isInviteModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsInviteModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full p-8 animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-slate-900">Zaproszenie Kandydata</h3>
                             <button onClick={() => setIsInviteModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
@@ -1212,7 +1212,7 @@ export const HRCandidatesPage = () => {
             {/* Manual Add Candidate Modal */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAddModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="text-lg font-black text-slate-900 tracking-tight">Nowy Kandydat</h3>
                             <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
@@ -1337,7 +1337,7 @@ export const HRCandidatesPage = () => {
             {/* Trial Period Confirmation Modal */}
             {isTrialModalOpen && selectedCandidate && (
                 <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl max-md w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                             <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 uppercase">
                                 <Calendar size={24} className="text-orange-600"/> Okres Próbny
@@ -1408,7 +1408,7 @@ export const HRCandidatesPage = () => {
             {/* Document Modal */}
             {isDocModalOpen && (
                 <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-md w-full p-8 animate-in zoom-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-2xl font-black text-slate-900 tracking-tighter">Dodaj Dokument</h2>
                             <button onClick={() => setIsDocModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
