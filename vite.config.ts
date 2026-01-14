@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base: '/MaxMaster-Skill_Platform/',
+      base: mode === 'production' ? '/MaxMaster-Skill_Platform/' : '/',
       server: {
         port: 3000,
         host: '0.0.0.0',
