@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - claude/project-review-setup-lHAvR
 
 permissions:
   contents: read
