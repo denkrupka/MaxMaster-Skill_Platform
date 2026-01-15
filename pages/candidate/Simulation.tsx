@@ -1,10 +1,13 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calculator, CheckCircle, ChevronDown, ArrowRight, Wallet, Award, FileText, Shield, ChevronRight, X, AlertTriangle, Info } from 'lucide-react';
+import { 
+    CheckCircle, ArrowRight, Wallet, Award, FileText, Shield, 
+    ChevronRight, X, Info, Check, ArrowLeft, Sparkles, Zap, Coins, TrendingUp, Plus as PlusIcon
+} from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { ContractType, Skill, Test, UserStatus } from '../../types';
+import { ContractType, UserStatus } from '../../types';
 import { CONTRACT_TYPE_LABELS } from '../../constants';
 
 const QUALIFICATIONS_LIST = [
@@ -13,24 +16,26 @@ const QUALIFICATIONS_LIST = [
     { id: 'udt', label: 'UDT na podnośniki', value: 1.0 }
 ];
 
+type SimulationStep = 'intro' | 'contract' | 'quals' | 'skills';
+
 export const CandidateSimulationPage = () => {
     const { state, updateUser, logCandidateAction } = useAppContext();
     const { systemConfig, tests, skills, currentUser } = state;
     const navigate = useNavigate();
 
-    // State
+    // Wizard State
+    const [currentStep, setCurrentStep] = useState<SimulationStep>('intro');
     const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
-    const [selectedContract, setSelectedContract] = useState<ContractType>(
-        currentUser?.contract_type || ContractType.UOP
+    const [selectedContract, setSelectedContract] = useState<string>(
+        currentUser?.contract_type || 'uop'
     );
     const [isStudent, setIsStudent] = useState(currentUser?.is_student || false);
-    const [isQualModalOpen, setIsQualModalOpen] = useState(false);
+
+    if (!currentUser) return null;
 
     // --- Calculations ---
+    const baseRate = Number(systemConfig.baseRate || 24);
 
-    const baseRate = systemConfig.baseRate;
-
-    // Calculate potential bonus from selected tests
     const skillsBonus = useMemo(() => {
         let total = 0;
         selectedTestIds.forEach(testId => {
@@ -45,20 +50,19 @@ export const CandidateSimulationPage = () => {
         return total;
     }, [selectedTestIds, tests, skills]);
 
-    // Use qualifications from currentUser
     const qualBonus = useMemo(() => {
-        const userQuals = currentUser?.qualifications || [];
+        const userQuals = currentUser.qualifications || [];
         return QUALIFICATIONS_LIST
             .filter(q => userQuals.includes(q.id))
             .reduce((acc, q) => acc + q.value, 0);
-    }, [currentUser?.qualifications]);
+    }, [currentUser.qualifications]);
 
     const contractBonus = systemConfig.contractBonuses[selectedContract] || 0;
-    const studentBonus = (selectedContract === ContractType.UZ && isStudent) ? 3 : 0;
+    const studentBonus = (selectedContract === 'uz' && isStudent) ? systemConfig.studentBonus : 0;
+    
     const totalRate = baseRate + skillsBonus + qualBonus + contractBonus + studentBonus;
 
-    // --- Helpers ---
-
+    // --- Handlers ---
     const toggleTestSelection = (testId: string) => {
         setSelectedTestIds(prev => 
             prev.includes(testId) 
@@ -68,288 +72,269 @@ export const CandidateSimulationPage = () => {
     };
 
     const toggleQual = (id: string) => {
-        if (!currentUser) return;
         const currentQuals = currentUser.qualifications || [];
-        let newQuals;
-        if (currentQuals.includes(id)) {
-            newQuals = currentQuals.filter(q => q !== id);
-        } else {
-            newQuals = [...currentQuals, id];
-        }
+        const newQuals = currentQuals.includes(id) 
+            ? currentQuals.filter(q => q !== id) 
+            : [...currentQuals, id];
         updateUser(currentUser.id, { qualifications: newQuals });
     };
 
-    const getTestBonus = (test: Test) => {
-        return (test.skill_ids || []).reduce((acc, sid) => {
-            const s = skills.find(sk => sk.id === sid);
-            return acc + (s?.hourly_bonus || 0);
-        }, 0);
-    };
-
     const handleConfirm = async () => {
-        if (!currentUser) return;
-
-        // 1. Update User Contract Preference and Status
         updateUser(currentUser.id, { 
-            contract_type: selectedContract,
+            contract_type: selectedContract as any,
             is_student: isStudent,
-            status: UserStatus.STARTED // Ensure status allows testing
+            status: UserStatus.STARTED 
         });
 
-        // 2. Log Action
         const testNames = tests.filter(t => selectedTestIds.includes(t.id)).map(t => t.title).join(', ');
-        const qualNames = QUALIFICATIONS_LIST.filter(q => (currentUser.qualifications || []).includes(q.id)).map(q => q.label).join(', ');
-        logCandidateAction(currentUser.id, `Symulacja stawki. Wybrano: ${CONTRACT_TYPE_LABELS[selectedContract]}${isStudent ? ' (Student)' : ''}. Planowane testy: ${testNames}. Uprawnienia: ${qualNames}`);
+        logCandidateAction(currentUser.id, `Zakończono kalkulację stawki. Wybrano: ${selectedContract}. Wybrane testy: ${testNames}`);
 
-        // 3. Navigate WITH STATE
         navigate('/candidate/tests', { state: { selectedTestIds } });
     };
 
-    const renderQualModal = () => {
-        if (!isQualModalOpen) return null;
-        return (
-            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setIsQualModalOpen(false)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                            <Shield size={24} className="text-purple-600"/> Uprawnienia
-                        </h3>
-                        <button onClick={() => setIsQualModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
-                    </div>
-                    <div className="p-6">
-                        <p className="text-sm text-slate-500 mb-4">Zaznacz posiadane uprawnienia, aby zwiększyć swoją stawkę.</p>
-                        <div className="space-y-2">
-                            {QUALIFICATIONS_LIST.map(q => {
-                                const isSelected = (currentUser?.qualifications || []).includes(q.id);
-                                return (
-                                    <div 
-                                        key={q.id}
-                                        onClick={() => toggleQual(q.id)}
-                                        className={`flex justify-between items-center p-3 rounded-lg border cursor-pointer transition-all ${
-                                            isSelected 
-                                            ? 'bg-green-50 border-green-200 shadow-sm' 
-                                            : 'bg-white border-slate-200 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? 'bg-green-600 border-green-600' : 'border-slate-300'}`}>
-                                                {isSelected && <CheckCircle size={14} className="text-white"/>}
-                                            </div>
-                                            <span className={`font-medium ${isSelected ? 'text-green-800' : 'text-slate-700'}`}>{q.label}</span>
-                                        </div>
-                                        <span className={`font-bold ${isSelected ? 'text-green-600' : 'text-slate-400'}`}>+{q.value} zł</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className="mt-6 p-4 bg-blue-50 text-blue-800 text-xs rounded-lg flex items-start gap-2">
-                            <AlertTriangle size={16} className="flex-shrink-0 mt-0.5"/>
-                            <span>Dokumenty potwierdzające wybrane uprawnienia będziesz musiał dostarczyć na etapie podpisywania umowy.</span>
-                        </div>
-                    </div>
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-                        <Button onClick={() => setIsQualModalOpen(false)}>Zatwierdź</Button>
-                    </div>
+    // --- Step Content Components ---
+
+    const StepContainer = ({ title, description, icon: Icon, children, colorClass, showRate = true, nextLabel = "DALEJ" }: any) => (
+        <div className="bg-white rounded-[40px] shadow-2xl p-6 md:p-8 w-full max-w-lg relative animate-in zoom-in-95 duration-500 border border-white/40 flex flex-col overflow-hidden max-h-[95vh]">
+            {/* Step Indicator Dot (Top) - Compact */}
+            <div className="flex justify-center gap-1.5 mb-4">
+                {['intro', 'contract', 'quals', 'skills'].map((s, idx) => (
+                    <div key={s} className={`h-1.5 rounded-full transition-all duration-300 ${currentStep === s ? 'w-8 bg-blue-600' : (idx < ['intro', 'contract', 'quals', 'skills'].indexOf(currentStep) ? 'w-4 bg-green-500' : 'w-2 bg-slate-100')}`}></div>
+                ))}
+            </div>
+
+            <div className="flex flex-col items-center text-center mb-5 relative">
+                <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center mb-4 shadow-xl shadow-blue-100 ${colorClass}`}>
+                    <Icon size={28} className="text-white"/>
+                </div>
+                <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-1">{title}</h2>
+                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest px-4 leading-relaxed opacity-70">{description}</p>
+            </div>
+            
+            <div className="space-y-2 mb-6 overflow-y-auto pr-1 scrollbar-hide">
+                {children}
+            </div>
+
+            <div className="flex items-center justify-between pt-5 border-t border-slate-50 mt-auto">
+                <div className={`transition-opacity duration-300 ${showRate ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">TWOJA STAWKA</span>
+                    {/* Fixed: Cast totalRate to number to avoid 'unknown' error */}
+                    <div className="text-2xl font-black text-blue-600 tabular-nums">{(totalRate as number).toFixed(2)} <span className="text-[10px] font-bold text-slate-300 uppercase">zł/h</span></div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    {currentStep !== 'intro' && (
+                        <button 
+                            onClick={() => {
+                                if (currentStep === 'contract') setCurrentStep('intro');
+                                else if (currentStep === 'quals') setCurrentStep('contract');
+                                else if (currentStep === 'skills') setCurrentStep('quals');
+                            }}
+                            className="px-5 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest text-slate-300 hover:text-slate-600 transition-colors"
+                        >
+                            Wróć
+                        </button>
+                    )}
+                    
+                    <Button 
+                        onClick={() => {
+                            if (currentStep === 'skills') handleConfirm();
+                            else if (currentStep === 'intro') setCurrentStep('contract');
+                            else if (currentStep === 'contract') setCurrentStep('quals');
+                            else if (currentStep === 'quals') setCurrentStep('skills');
+                        }} 
+                        disabled={currentStep === 'skills' && selectedTestIds.length === 0}
+                        className={`h-12 px-8 rounded-2xl font-black uppercase text-[10px] tracking-[0.15em] shadow-2xl shadow-blue-600/30 transition-all active:scale-95 border-0 ${currentStep === 'skills' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                    >
+                        {currentStep === 'skills' ? 'Rozpocznij testy' : nextLabel}
+                        {currentStep === 'skills' ? <ArrowRight size={18} className="ml-2"/> : <ChevronRight size={18} className="ml-1 opacity-50"/>}
+                    </Button>
                 </div>
             </div>
-        );
-    };
+        </div>
+    );
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6 pb-24">
-            <div className="max-w-7xl mx-auto space-y-8">
-                
-                {/* Header */}
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Kalkulator Stawki</h1>
-                    <p className="text-slate-500">
-                        Wybierz umiejętności które posiadasz oraz dobierz preferowaną formę współpracy, aby poznać swoją prognozowaną stawkę.
-                    </p>
-                </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 selection:bg-blue-100">
+            {/* Background Blur Overlay */}
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl animate-in fade-in duration-700"></div>
 
-                {/* 1. Formula Block */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    {/* BAZA */}
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                        <div>
-                            <div className="flex items-center gap-2 text-slate-500 mb-2 font-medium uppercase text-xs tracking-wider">
-                                <Wallet size={16} /> Baza
-                            </div>
-                            <div className="text-3xl font-bold text-slate-900">{baseRate} zł</div>
+            {/* Step 0: Intro / Base Info */}
+            {currentStep === 'intro' && (
+                <StepContainer 
+                    title="Twoje zarobki" 
+                    description="Zacznijmy od podstawy. Sprawdź, jak budujemy Twoją stawkę."
+                    icon={Coins}
+                    colorClass="bg-slate-900"
+                    showRate={false}
+                    nextLabel="Kalkulacja"
+                >
+                    <div className="flex flex-col items-center">
+                        {/* Base Rate Box - More Compact */}
+                        <div className="w-full bg-slate-50 border border-slate-100 rounded-[28px] p-5 text-center shadow-inner ring-1 ring-slate-100 mb-2">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-1">STAWKA BAZOWA</span>
+                            <div className="text-4xl font-black text-slate-900 tracking-tighter leading-none">{baseRate.toFixed(2)} <span className="text-base font-bold text-slate-400 uppercase">zł/h</span></div>
                         </div>
-                        <p className="text-xs text-slate-400 mt-2">Minimalna stawka godzinowa w MaxMaster.</p>
-                    </div>
 
-                    {/* UMIEJĘTNOŚCI */}
-                    <div className={`p-5 rounded-xl shadow-sm border flex flex-col justify-between transition-colors ${skillsBonus > 0 ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
-                        <div>
-                            <div className="flex items-center gap-2 text-slate-500 mb-2 font-medium uppercase text-xs tracking-wider">
-                                <Award size={16} /> Umiejętności
-                            </div>
-                            <div className="text-3xl font-bold text-green-600">+{skillsBonus} zł</div>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-2">Suma dodatków za wybrane umiejętności.</p>
-                    </div>
-
-                    {/* UPRAWNIENIA */}
-                    <div 
-                        className={`p-5 rounded-xl shadow-sm border flex flex-col justify-between cursor-pointer transition-all hover:shadow-md ${qualBonus > 0 ? 'bg-purple-50 border-purple-200' : 'bg-white border-slate-200 hover:border-purple-300'}`}
-                        onClick={() => setIsQualModalOpen(true)}
-                    >
-                        <div>
-                            <div className="flex items-center gap-2 text-slate-500 mb-2 font-medium uppercase text-xs tracking-wider">
-                                <Shield size={16} /> Uprawnienia
-                            </div>
-                            <div className={`text-3xl font-bold flex items-center ${qualBonus > 0 ? 'text-purple-600' : 'text-slate-300'}`}>
-                                +{qualBonus} zł <ChevronRight size={20} className={`ml-auto ${qualBonus > 0 ? 'text-purple-400' : 'text-slate-300'}`} />
+                        {/* Plus Symbol */}
+                        <div className="flex items-center justify-center -my-1 relative z-10">
+                            <div className="bg-white rounded-full p-1 border border-slate-100 shadow-sm text-slate-300">
+                                <PlusIcon size={16} />
                             </div>
                         </div>
-                        <p className="text-xs text-slate-400 mt-2">Kliknij, aby dodać.</p>
-                    </div>
 
-                    {/* FORMA ZATRUDNIENIA */}
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative group">
-                        <div>
-                            <div className="flex items-center gap-2 text-slate-500 mb-2 font-medium uppercase text-xs tracking-wider">
-                                <FileText size={16} /> Forma Umowy
+                        {/* Components Stack - Tighter */}
+                        <div className="grid grid-cols-1 gap-1.5 w-full">
+                            <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm">
+                                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-blue-600 shadow-sm"><Award size={16}/></div>
+                                <span className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Umiejętności techniczne</span>
                             </div>
-                            <div className="relative">
-                                <select 
-                                    className="w-full appearance-none bg-transparent text-xl font-bold text-blue-600 focus:outline-none cursor-pointer py-1 pr-6"
-                                    value={selectedContract}
-                                    onChange={(e) => setSelectedContract(e.target.value as ContractType)}
-                                >
-                                    <option value={ContractType.UOP}>Umowa o Pracę</option>
-                                    <option value={ContractType.UZ}>Umowa Zlecenie</option>
-                                    <option value={ContractType.B2B}>B2B</option>
-                                </select>
-                                <ChevronDown size={16} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-600 pointer-events-none"/>
+                            
+                            <div className="flex items-center justify-center -my-3 relative z-10">
+                                <div className="text-slate-300"><PlusIcon size={12} /></div>
                             </div>
-                            <div className="text-sm font-bold text-blue-400 mt-1">
-                                {contractBonus > 0 ? `+${contractBonus} zł` : '+0 zł'}
+
+                            <div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-100 rounded-2xl shadow-sm">
+                                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-purple-600 shadow-sm"><Shield size={16}/></div>
+                                <span className="text-[10px] font-black text-purple-900 uppercase tracking-widest">Uprawnienia SEP / UDT</span>
                             </div>
-                            {selectedContract === ContractType.UZ && (
-                                <div className="mt-2 flex items-center gap-2 bg-blue-50 p-2 rounded">
-                                    <input 
-                                        type="checkbox" 
-                                        id="studentCb"
-                                        checked={isStudent} 
-                                        onChange={(e) => setIsStudent(e.target.checked)}
-                                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-                                    />
-                                    <label htmlFor="studentCb" className="text-xs text-slate-700 font-medium cursor-pointer">Student &lt; 26 lat (+3 zł)</label>
+
+                            <div className="flex items-center justify-center -my-3 relative z-10">
+                                <div className="text-slate-300"><PlusIcon size={12} /></div>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-2xl shadow-sm">
+                                <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm"><FileText size={16}/></div>
+                                <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Forma umowy i status</span>
+                            </div>
+                        </div>
+                    </div>
+                </StepContainer>
+            )}
+
+            {/* Step 1: Contract */}
+            {currentStep === 'contract' && (
+                <StepContainer 
+                    title="Typ umowy" 
+                    description="Wybierz formę współpracy. Wpływa ona na Twoją stawkę netto."
+                    icon={FileText}
+                    colorClass="bg-blue-600"
+                >
+                    <div className="grid grid-cols-1 gap-2.5">
+                        {Object.entries(systemConfig.contractBonuses).map(([key, bonus]) => (
+                            <button 
+                                key={key}
+                                onClick={() => setSelectedContract(key)}
+                                className={`flex items-center justify-between p-4 rounded-[22px] border-2 transition-all ${
+                                    selectedContract === key 
+                                    ? 'border-blue-600 bg-blue-50 shadow-xl shadow-blue-100 scale-[1.02]' 
+                                    : 'border-slate-50 bg-slate-50/50 hover:border-blue-200'
+                                }`}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedContract === key ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-200 bg-white'}`}>
+                                        {selectedContract === key && <Check size={14}/>}
+                                    </div>
+                                    <span className={`font-black text-xs uppercase tracking-widest ${selectedContract === key ? 'text-blue-900' : 'text-slate-500'}`}>
+                                        {CONTRACT_TYPE_LABELS[key as ContractType] || key}
+                                    </span>
                                 </div>
-                            )}
-                        </div>
-                        <p className="text-xs text-slate-400 mt-2">Wpływ formy współpracy na stawkę.</p>
+                                <span className={`font-black text-xs tabular-nums ${selectedContract === key ? 'text-blue-600' : 'text-slate-300'}`}>
+                                    +{bonus.toFixed(2)} zł
+                                </span>
+                            </button>
+                        ))}
                     </div>
-
-                    {/* TOTAL */}
-                    <div className="bg-slate-900 p-5 rounded-xl shadow-lg border border-slate-800 flex flex-col justify-between text-white">
-                        <div>
-                            <div className="flex items-center gap-2 text-slate-400 mb-2 font-medium uppercase text-xs tracking-wider">
-                                <Calculator size={16} /> Twoja Stawka
+                    {selectedContract === 'uz' && (
+                        <div className="mt-3 p-3.5 bg-indigo-600 text-white rounded-[22px] shadow-xl shadow-indigo-200 flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-3">
+                                <div className="p-1.5 bg-white/20 rounded-lg"><Award size={18}/></div>
+                                <span className="text-[9px] font-black uppercase tracking-[0.2em]">Status Studenta &lt; 26</span>
                             </div>
-                            <div className="text-4xl font-bold">{totalRate} zł<span className="text-lg text-slate-400 font-normal">/h</span></div>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked={isStudent} onChange={e => setIsStudent(e.target.checked)} className="sr-only peer"/>
+                                <div className="w-10 h-5 bg-indigo-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white after:peer-checked:bg-indigo-600"></div>
+                            </label>
                         </div>
-                        <p className="text-xs text-slate-500 mt-2">Szacowana stawka netto (na rękę).</p>
-                    </div>
-                </div>
+                    )}
+                </StepContainer>
+            )}
 
-                {/* INFO BOX */}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-4 items-start">
-                    <div className="bg-blue-100 p-2 rounded-full text-blue-600 shrink-0">
-                        <Info size={20} />
+            {/* Step 2: Qualifications */}
+            {currentStep === 'quals' && (
+                <StepContainer 
+                    title="Uprawnienia" 
+                    description="Zaznacz posiadane uprawnienia, aby podnieść swoją stawkę."
+                    icon={Shield}
+                    colorClass="bg-purple-600"
+                >
+                    <div className="space-y-2.5">
+                        {QUALIFICATIONS_LIST.map(q => {
+                            const isSelected = (currentUser.qualifications || []).includes(q.id);
+                            return (
+                                <button 
+                                    key={q.id}
+                                    onClick={() => toggleQual(q.id)}
+                                    className={`w-full flex items-center justify-between p-4 rounded-[22px] border-2 transition-all ${
+                                        isSelected 
+                                        ? 'border-purple-600 bg-purple-50 shadow-xl shadow-purple-100 scale-[1.02]' 
+                                        : 'border-slate-50 bg-slate-50/50 hover:border-purple-200'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-200 bg-white'}`}>
+                                            {isSelected && <Check size={14}/>}
+                                        </div>
+                                        <span className={`font-black text-xs uppercase tracking-widest ${isSelected ? 'text-purple-900' : 'text-slate-500'}`}>{q.label}</span>
+                                    </div>
+                                    <span className={`font-black text-xs tabular-nums ${isSelected ? 'text-purple-600' : 'text-slate-300'}`}>+{q.value.toFixed(1)} zł</span>
+                                </button>
+                            );
+                        })}
                     </div>
-                    <div>
-                        <h4 className="font-bold text-blue-800 text-sm mb-1">Zasada aktualizacji stawki</h4>
-                        <p className="text-sm text-blue-700 leading-relaxed">
-                            Aktualizacja stawki następuje raz w miesiącu. 
-                            Jeśli zaliczysz test i potwierdzisz umiejętność w praktyce, nowa stawka zacznie obowiązywać od 1 dnia następnego miesiąca.
-                        </p>
-                    </div>
-                </div>
+                </StepContainer>
+            )}
 
-                {/* 2. Skills Selection Table */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                        <h3 className="font-bold text-slate-800">Wybierz umiejętności które posiadasz</h3>
-                        <p className="text-sm text-slate-500">Zaznacz te obszary, w których czujesz się pewnie.</p>
-                    </div>
-                    <table className="w-full text-left text-sm">
-                        <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
-                            <tr>
-                                <th className="px-6 py-4 w-12"></th>
-                                <th className="px-6 py-4">Nazwa Umiejętności</th>
-                                <th className="px-6 py-4">Kryterium</th>
-                                <th className="px-6 py-4 text-right">Dodatek do stawki</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {tests.filter(t => t.is_active && !t.is_archived).map(test => {
-                                const isSelected = selectedTestIds.includes(test.id);
-                                const bonus = getTestBonus(test);
-                                const skill = skills.find(s => s.id === (test.skill_ids && test.skill_ids[0]));
-                                
-                                return (
-                                    <tr 
-                                        key={test.id} 
-                                        onClick={() => toggleTestSelection(test.id)}
-                                        className={`cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 bg-white'}`}>
-                                                {isSelected && <CheckCircle size={14} className="text-white" />}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`font-medium ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
-                                                {skill ? skill.name_pl : test.title}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-500 text-xs">
-                                            {skill && skill.criteria && skill.criteria.length > 0 ? (
-                                                <ul className="list-disc pl-4 space-y-1">
-                                                    {skill.criteria.map((c, i) => (
-                                                        <li key={i}>{c}</li>
-                                                    ))}
-                                                </ul>
-                                            ) : (
-                                                <span className="italic text-slate-400">Brak zdefiniowanych kryteriów</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className={`font-bold ${isSelected ? 'text-green-600' : 'text-slate-400'}`}>
-                                                +{bonus} zł/h
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Step 3: Skills */}
+            {currentStep === 'skills' && (
+                <StepContainer 
+                    title="Umiejętności" 
+                    description="Wybierz to, co już potrafisz. Sprawdzimy to krótkim testem."
+                    icon={Sparkles}
+                    colorClass="bg-green-600"
+                >
+                    <div className="space-y-2">
+                        {tests.filter(t => t.is_active && !t.is_archived).map(test => {
+                            const isSelected = selectedTestIds.includes(test.id);
+                            const skill = skills.find(s => s.id === (test.skill_ids && test.skill_ids[0]));
+                            const bonus = (test.skill_ids || []).reduce((acc, sid) => acc + (skills.find(s => s.id === sid)?.hourly_bonus || 0), 0);
 
-                {/* 3. CTA */}
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 z-50 md:static md:bg-transparent md:border-0 md:p-0">
-                    <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                        <div className="text-sm text-slate-500 hidden md:block">
-                            Wybrano umiejętności: <strong>{selectedTestIds.length}</strong>. Potencjalny wzrost stawki: <strong>+{skillsBonus} zł/h</strong>.
-                        </div>
-                        <Button 
-                            size="lg" 
-                            disabled={selectedTestIds.length === 0}
-                            onClick={handleConfirm}
-                            className="w-full md:w-auto shadow-xl shadow-blue-900/10"
-                        >
-                            Potwierdź wybrane umiejętności
-                            <ArrowRight size={18} className="ml-2" />
-                        </Button>
+                            return (
+                                <button 
+                                    key={test.id}
+                                    onClick={() => toggleTestSelection(test.id)}
+                                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all ${
+                                        isSelected 
+                                        ? 'border-green-600 bg-green-50 shadow-lg shadow-green-50 scale-[1.01]' 
+                                        : 'border-slate-50 bg-slate-50/50 hover:border-green-200'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-slate-200'}`}>
+                                            {isSelected && <Check size={12}/>}
+                                        </div>
+                                        <div className="text-left">
+                                            <div className={`font-black text-[11px] uppercase tracking-tighter leading-none ${isSelected ? 'text-green-900' : 'text-slate-700'}`}>{skill?.name_pl || test.title}</div>
+                                            {skill?.criteria && skill.criteria.length > 0 && <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter truncate max-w-[200px] mt-1 opacity-60">{skill.criteria[0]}</div>}
+                                        </div>
+                                    </div>
+                                    <div className={`text-[11px] font-black tabular-nums transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>+{bonus.toFixed(2)} zł</div>
+                                </button>
+                            );
+                        })}
                     </div>
-                </div>
-
-                {renderQualModal()}
-            </div>
+                </StepContainer>
+            )}
         </div>
     );
 };

@@ -111,7 +111,7 @@ export interface Question {
 export interface Skill {
   id: string;
   name_pl: string;
-  category: SkillCategory;
+  category: string; // Changed from enum to string for dynamic support
   description_pl: string;
   verification_type: VerificationType;
   hourly_bonus: number;
@@ -130,6 +130,7 @@ export interface Position {
   max_monthly_rate?: number;
   salary_type: 'hourly' | 'monthly';
   order: number;
+  referral_bonus?: number;
 }
 
 export interface User {
@@ -233,12 +234,19 @@ export interface BonusDocumentType {
 
 export interface SystemConfig {
     baseRate: number;
+    overtimeBonus: number;
+    holidayBonus: number;
+    seniorityBonus: number;
+    delegationBonus: number;
     contractBonuses: Record<string, number>;
     studentBonus: number;
     bonusDocumentTypes: BonusDocumentType[];
     bonusPermissionTypes: BonusDocumentType[];
     terminationReasons: string[];
     positions: string[];
+    noteCategories: string[];
+    badgeTypes: string[];
+    skillCategories: string[]; // Added
 }
 
 export interface CandidateHistoryEntry {
@@ -282,7 +290,7 @@ export interface EmployeeNote {
     id: string;
     employee_id: string;
     author_id: string;
-    category: NoteCategory;
+    category: string;
     text: string;
     created_at: string;
 }
@@ -300,7 +308,7 @@ export interface EmployeeBadge {
     employee_id: string;
     author_id: string;
     month: string;
-    type: BadgeType;
+    type: string;
     description: string;
     visible_to_employee: boolean;
     created_at: string;
@@ -319,8 +327,8 @@ export interface LibraryResource {
   title: string;
   description?: string;
   type: 'pdf' | 'video' | 'link' | 'mixed';
-  category?: SkillCategory;
-  categories?: SkillCategory[];
+  category?: string; // Changed from enum
+  categories?: string[]; // Changed from enum
   skill_ids: string[];
   url: string;
   videoUrl?: string;

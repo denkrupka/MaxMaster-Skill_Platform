@@ -1,13 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, ExternalLink, ChevronRight, Shield, HardHat, Users, Sparkles } from 'lucide-react';
+import { Mail, Lock, AlertCircle, ExternalLink, ChevronRight } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Button } from '../components/Button';
-import { Role, UserStatus, User } from '../types';
+import { Role, UserStatus } from '../types';
 
 export const LoginPage = () => {
-  const { login, loginAsUser, state } = useAppContext();
+  const { login, state } = useAppContext();
   const navigate = useNavigate();
 
   // Form states
@@ -18,7 +18,9 @@ export const LoginPage = () => {
 
   useEffect(() => {
     if (state.currentUser) {
-      if (state.currentUser.role === Role.ADMIN) {
+      if (state.currentUser.status === UserStatus.INACTIVE) {
+        navigate('/terminated');
+      } else if (state.currentUser.role === Role.ADMIN) {
         navigate('/admin/users');
       } else if (state.currentUser.role === Role.HR) {
         navigate('/hr/dashboard');
@@ -51,25 +53,11 @@ export const LoginPage = () => {
       } else if (err.message === 'Email not confirmed') {
         setError('Adres e-mail nie został jeszcze potwierdzony. Sprawdź skrzynkę odbiorczą.');
       } else {
-        setError('Wystąpił błąd podczas logowania. Spróbuj ponownie lub użyj dostępu Demo.');
+        setError('Wystąpił błąd podczas logowania. Spróbuj ponownie.');
       }
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleDemoLogin = (role: Role) => {
-    const mockUser: User = {
-      id: `demo-${role}-${Date.now()}`,
-      email: `demo-${role}@maxmaster.pl`,
-      first_name: 'Demo',
-      last_name: role.toUpperCase(),
-      role: role,
-      status: UserStatus.ACTIVE,
-      hired_date: new Date().toISOString(),
-      target_position: role === Role.BRIGADIR ? 'Brygadzista' : role === Role.COORDINATOR ? 'Koordynator' : 'Elektryk'
-    };
-    loginAsUser(mockUser);
   };
 
   return (
@@ -126,7 +114,7 @@ export const LoginPage = () => {
           </form>
 
           <div className="text-center mt-4">
-            <Link to="/forgot-password" size="sm" className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-bold uppercase tracking-tighter">
+            <Link to="/forgot-password" className="text-xs text-blue-600 hover:text-blue-700 hover:underline font-bold uppercase tracking-tighter">
               Zapomniałeś hasła?
             </Link>
           </div>
@@ -135,64 +123,6 @@ export const LoginPage = () => {
               <Link to="/candidate/welcome" className="inline-flex items-center text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
                   <ExternalLink size={14} className="mr-2"/> Strona powitalna dla kandydatów
               </Link>
-          </div>
-        </div>
-
-        {/* Quick Demo Access Section - Fixed "Invalid credentials" roadblock for reviewers */}
-        <div className="bg-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-800 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-blue-600 p-1.5 rounded-lg">
-              <Sparkles size={16} className="text-white fill-white/20"/>
-            </div>
-            <h3 className="text-white font-black text-xs uppercase tracking-widest">Szybki dostęp Demo</h3>
-          </div>
-          <p className="text-slate-400 text-[11px] mb-4 font-medium leading-relaxed uppercase tracking-tighter">
-            Wybierz rolę, aby przetestować interfejs bez logowania:
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={() => handleDemoLogin(Role.HR)}
-              className="flex items-center justify-between bg-slate-800 hover:bg-blue-600 text-white p-3 rounded-xl transition-all group border border-slate-700 hover:border-blue-500"
-            >
-              <div className="flex items-center gap-3">
-                <Shield size={16} className="text-blue-400 group-hover:text-white" />
-                <span className="text-[10px] font-black uppercase tracking-widest">HR Manager</span>
-              </div>
-              <ChevronRight size={14} className="text-slate-600 group-hover:text-white" />
-            </button>
-
-            <button 
-              onClick={() => handleDemoLogin(Role.COORDINATOR)}
-              className="flex items-center justify-between bg-slate-800 hover:bg-orange-600 text-white p-3 rounded-xl transition-all group border border-slate-700 hover:border-orange-500"
-            >
-              <div className="flex items-center gap-3">
-                <HardHat size={16} className="text-orange-400 group-hover:text-white" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Koordynator</span>
-              </div>
-              <ChevronRight size={14} className="text-slate-600 group-hover:text-white" />
-            </button>
-
-            <button 
-              onClick={() => handleDemoLogin(Role.BRIGADIR)}
-              className="flex items-center justify-between bg-slate-800 hover:bg-purple-600 text-white p-3 rounded-xl transition-all group border border-slate-700 hover:border-purple-500"
-            >
-              <div className="flex items-center gap-3">
-                <Users size={16} className="text-purple-400 group-hover:text-white" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Brygadzista</span>
-              </div>
-              <ChevronRight size={14} className="text-slate-600 group-hover:text-white" />
-            </button>
-
-            <button 
-              onClick={() => handleDemoLogin(Role.EMPLOYEE)}
-              className="flex items-center justify-between bg-slate-800 hover:bg-green-600 text-white p-3 rounded-xl transition-all group border border-slate-700 hover:border-green-500"
-            >
-              <div className="flex items-center gap-3">
-                <Users size={16} className="text-green-400 group-hover:text-white" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Pracownik</span>
-              </div>
-              <ChevronRight size={14} className="text-slate-600 group-hover:text-white" />
-            </button>
           </div>
         </div>
       </div>

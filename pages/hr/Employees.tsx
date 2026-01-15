@@ -12,7 +12,7 @@ import { uploadDocument } from '../../lib/supabase';
 
 export const HREmployeesPage = () => {
     const { state, updateUser, logCandidateAction, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, resetSkillProgress, assignBrigadir, triggerNotification, addEmployeeNote, deleteEmployeeNote, payReferralBonus } = useAppContext();
-    const { systemConfig, currentUser, users, skills, userSkills, monthlyBonuses, qualityIncidents, employeeNotes, employeeBadges } = state;
+    const { systemConfig, currentUser, users, skills, userSkills, monthlyBonuses, qualityIncidents, employeeNotes, employeeBadges, positions } = state;
     const navigate = useNavigate();
 
     const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
@@ -58,7 +58,7 @@ export const HREmployeesPage = () => {
     const [statusPopoverDocId, setStatusPopoverDocId] = useState<string | null>(null);
 
     const [noteText, setNoteText] = useState('');
-    const [noteCategory, setNoteCategory] = useState<NoteCategory>(NoteCategory.GENERAL);
+    const [noteCategory, setNoteCategory] = useState<string>(systemConfig.noteCategories[0] || 'Ogólna');
 
     // State for Personal Data form
     const [localPersonalData, setLocalPersonalData] = useState<Partial<User>>({});
@@ -75,17 +75,19 @@ export const HREmployeesPage = () => {
         return state.users.filter(u => u.role === Role.COORDINATOR);
     }, [state.users]);
 
-    const filteredEmployees = allEmployees.filter(e => {
-        if (viewMode === 'active') {
-            if (e.status !== UserStatus.ACTIVE && e.status !== UserStatus.TRIAL) return false;
-        } else {
-            if (e.status !== UserStatus.INACTIVE) return false;
-        }
-        const matchesSearch = e.first_name.toLowerCase().includes(search.toLowerCase()) || 
-                              e.last_name.toLowerCase().includes(search.toLowerCase());
-        const matchesPosition = positionFilter === 'all' || e.target_position === positionFilter;
-        return matchesSearch && matchesPosition;
-    });
+    const filteredEmployees = useMemo(() => {
+        return allEmployees.filter(e => {
+            if (viewMode === 'active') {
+                if (e.status !== UserStatus.ACTIVE) return false;
+            } else {
+                if (e.status !== UserStatus.INACTIVE) return false;
+            }
+            const matchesSearch = e.first_name.toLowerCase().includes(search.toLowerCase()) || 
+                                  e.last_name.toLowerCase().includes(search.toLowerCase());
+            const matchesPosition = positionFilter === 'all' || e.target_position === positionFilter;
+            return matchesSearch && matchesPosition;
+        });
+    }, [allEmployees, viewMode, search, positionFilter]);
 
     const handleEditEmployee = () => {
         if (selectedEmployee) {
@@ -111,7 +113,6 @@ export const HREmployeesPage = () => {
 
             await updateUser(selectedEmployee.id, editFormData);
             
-            // Если роль не Координатор и выбран руководитель - сохраняем
             if (editFormData.role !== Role.COORDINATOR && editFormData.assigned_brigadir_id !== selectedEmployee.assigned_brigadir_id && editFormData.assigned_brigadir_id) {
                 await assignBrigadir(selectedEmployee.id, editFormData.assigned_brigadir_id);
             }
@@ -120,7 +121,6 @@ export const HREmployeesPage = () => {
             setSelectedEmployee(updatedUser);
             setIsEditModalOpen(false);
 
-            // Если произошло повышение до бригадира, а координатор еще не выбран - показываем окно
             if (!wasBrigadier && willBeBrigadier && !editFormData.assigned_brigadir_id) {
                 setPendingBrigadierId(selectedEmployee.id);
                 setShowCoordinatorSelection(true);
@@ -146,11 +146,25 @@ export const HREmployeesPage = () => {
     };
 
     const handleRestoreEmployee = (user: User) => {
-        setConfirmModal({ isOpen: true, type: 'restore', user });
+        setConfirmModal({ isOpen: false, type: 'restore', user });
+        executeConfirmationDirect(user, 'restore');
     };
 
     const handlePayReferral = (referralUser: User) => {
         setConfirmModal({ isOpen: true, type: 'pay_referral', user: referralUser });
+    };
+
+    const executeConfirmationDirect = async (user: User, type: string) => {
+        if (type === 'restore') {
+            await updateUser(user.id, { 
+                status: UserStatus.ACTIVE, 
+                termination_date: undefined, 
+                termination_initiator: undefined, 
+                termination_reason: undefined
+            });
+            await logCandidateAction(user.id, 'Przywrócono pracownika z archiwum');
+            setSelectedEmployee(null);
+        }
     };
 
     const executeConfirmation = () => {
@@ -167,15 +181,6 @@ export const HREmployeesPage = () => {
             });
             logCandidateAction(user.id, `Rozwiązano umowę. Inicjator: ${initiatorLabel}, Powód: ${fireConfig.reason}`);
             triggerNotification('termination', 'Zwolnienie Pracownika', `Rozwiązano umowę z pracownikiem ${user.first_name} ${user.last_name}.`, '/hr/employees');
-            setSelectedEmployee(null);
-        } else if (type === 'restore') {
-            updateUser(user.id, { 
-                status: UserStatus.ACTIVE, 
-                termination_date: undefined, 
-                termination_initiator: undefined, 
-                termination_reason: undefined
-            });
-            logCandidateAction(user.id, 'Przywrócono pracownika z archiwum');
             setSelectedEmployee(null);
         } else if (type === 'pay_referral') {
             payReferralBonus(user.id);
@@ -227,7 +232,6 @@ export const HREmployeesPage = () => {
         if(!selectedEmployee) return;
         
         const employeeId = selectedEmployee.id;
-
         const selectedType = BONUS_DOCUMENT_TYPES.find(t => t.id === newDocData.typeId);
         const docName = newDocData.typeId === 'other' || editingDocId ? newDocData.customName : (selectedType?.label || 'Dokument');
         const bonus = selectedType?.bonus || 0;
@@ -297,12 +301,17 @@ export const HREmployeesPage = () => {
         setStatusPopoverSkillId(null);
     };
 
-    const updateContractType = async (type: ContractType) => {
+    const updateContractType = async (type: string) => {
         if (selectedEmployee) {
-            await updateUser(selectedEmployee.id, { contract_type: type });
-            await logCandidateAction(selectedEmployee.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
-            setSelectedEmployee({ ...selectedEmployee, contract_type: type } as User);
-            setIsContractPopoverOpen(false);
+            try {
+                await updateUser(selectedEmployee.id, { contract_type: type as any });
+                await logCandidateAction(selectedEmployee.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type as ContractType] || type.toUpperCase()}`);
+                setSelectedEmployee({ ...selectedEmployee, contract_type: type as any } as User);
+                setIsContractPopoverOpen(false);
+                triggerNotification('success', 'Zapisano', `Zmieniono formę zatrudnienia na ${type.toUpperCase()}`);
+            } catch (err: any) {
+                triggerNotification('error', 'Błąd zapisu', 'Wybrany typ umowy nie jest wspierany przez bazę danych (ENUM limitation).');
+            }
         }
     };
 
@@ -314,8 +323,9 @@ export const HREmployeesPage = () => {
         }
     };
 
-    const formatContractType = (type?: ContractType) => {
-        return type ? CONTRACT_TYPE_LABELS[type] : '-';
+    const formatContractType = (type?: string) => {
+        if (!type) return '-';
+        return CONTRACT_TYPE_LABELS[type as ContractType] || type.toUpperCase();
     };
 
     const handleAddNote = () => {
@@ -327,7 +337,6 @@ export const HREmployeesPage = () => {
             text: noteText
         });
         setNoteText('');
-        setNoteCategory(NoteCategory.GENERAL);
     };
 
     const handleSavePersonalData = async () => {
@@ -373,8 +382,10 @@ export const HREmployeesPage = () => {
 
     const renderDetail = () => {
         if (!selectedEmployee) return null;
+        
+        // Fixed: Strictly use systemConfig.baseRate from main configuration for "Baza" tile in HR Profile view
         const salaryInfo = calculateSalary(
-            selectedEmployee.base_rate || systemConfig.baseRate, 
+            systemConfig.baseRate, 
             state.skills, 
             state.userSkills.filter(us => us.user_id === selectedEmployee.id), 
             state.monthlyBonuses[selectedEmployee.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
@@ -435,7 +446,7 @@ export const HREmployeesPage = () => {
 
         return (
             <div className="animate-in fade-in duration-500 pb-20" onClick={() => { setStatusPopoverSkillId(null); setIsContractPopoverOpen(false); setStatusPopoverDocId(null); }}>
-                <Button variant="ghost" onClick={() => setSelectedEmployee(null)} className="mb-4"><ArrowRight className="transform rotate-180 mr-2" size={18} /> Wróć do listy</Button>
+                <button onClick={() => setSelectedEmployee(null)} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold mb-4 transition-colors group"><ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform"/> Wróć do listy</button>
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
                     <div className="flex justify-between items-start">
                         <div className="flex gap-4">
@@ -500,7 +511,6 @@ export const HREmployeesPage = () => {
                         {activeTab === 'personal' && (
                             <div className="space-y-8 animate-in fade-in duration-300">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                    {/* Column 1: DANE PODSTAWOWE */}
                                     <div className="space-y-6">
                                         <h3 className="font-bold text-blue-600 mb-6 flex items-center gap-2 uppercase tracking-tighter text-sm">
                                             <UserIcon size={18}/> DANE PODSTAWOWE
@@ -564,7 +574,6 @@ export const HREmployeesPage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Column 2: ADRES I FINANSE */}
                                     <div className="space-y-6">
                                         <h3 className="font-bold text-blue-600 mb-6 flex items-center gap-2 uppercase tracking-tighter text-sm">
                                             <MapPin size={18}/> ADRES I FINANSE
@@ -648,18 +657,18 @@ export const HREmployeesPage = () => {
                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
                                 <h3 className="font-bold text-slate-900 mb-6">Stawka Pracownika</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
-                                    <div className="bg-white p-4 rounded-lg shadow-sm"><div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Baza</div><div className="text-2xl font-black text-slate-900">{salaryInfo.breakdown.base} zł</div></div>
+                                    <div className="bg-white p-4 rounded-lg shadow-sm"><div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Baza</div><div className="text-2xl font-black text-slate-900">{systemConfig.baseRate.toFixed(2)} zł</div></div>
                                     <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100"><div className="text-[10px] text-green-600 uppercase font-black tracking-widest mb-1">Umiejętności</div><div className="text-2xl font-black text-green-600">+{matrycaBonus.toFixed(2)} zł</div></div>
                                     <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100"><div className="text-[10px] text-purple-600 uppercase font-black tracking-widest mb-1">Uprawnienia</div><div className="text-2xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div></div>
-                                    <div className="relative z-[200]"><div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition-colors h-full flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}><div className="text-[10px] text-blue-600 uppercase font-black tracking-widest mb-1">Forma Zatrudnienia</div><div className="text-lg font-black text-blue-600 flex items-center justify-center gap-1">{formatContractType(selectedEmployee.contract_type)}<ChevronDown size={14} /></div><div className="text-[10px] text-blue-400 font-bold mt-1">{contractBonus + studentBonus > 0 ? `+${(contractBonus + studentBonus).toFixed(2)} zł/h` : 'Bez dodatku'}</div></div>{isContractPopoverOpen && (<div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-lg z-[300] flex flex-col py-1 animate-in zoom-in-95 duration-150">{(Object.values(ContractType) as ContractType[]).map((type) => (<button key={type} className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700 font-medium" onClick={() => updateContractType(type)}>{CONTRACT_TYPE_LABELS[type]}</button>))}<div className="border-t border-slate-100 my-1"></div><div className="px-4 py-2 flex items-center justify-between"><span className="text-[10px] font-black text-slate-500 uppercase">Student &lt; 26 lat</span><input type="checkbox" checked={selectedEmployee.is_student} onChange={(e) => toggleStudentStatus(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" /></div></div>)}</div>
+                                    <div className="relative z-[200]"><div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition-colors h-full flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}><div className="text-[10px] text-blue-600 uppercase font-black tracking-widest mb-1">Forma Zatrudnienia</div><div className="text-lg font-black text-blue-600 flex items-center justify-center gap-1 uppercase">{formatContractType(selectedEmployee.contract_type)}<ChevronDown size={14} /></div><div className="text-[10px] text-blue-400 font-bold mt-1">{contractBonus + studentBonus > 0 ? `+${(contractBonus + studentBonus).toFixed(2)} zł/h` : 'Bez dodatku'}</div></div>{isContractPopoverOpen && (<div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-lg z-[300] flex flex-col py-1 animate-in zoom-in-95 duration-150">{Object.keys(systemConfig.contractBonuses).map((type) => (<button key={type} className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700 font-medium uppercase" onClick={() => updateContractType(type)}>{CONTRACT_TYPE_LABELS[type as ContractType] || type}</button>))}<div className="border-t border-slate-100 my-1"></div><div className="px-4 py-2 flex items-center justify-between"><span className="text-[10px] font-black text-slate-500 uppercase">Student &lt; 26 lat</span><input type="checkbox" checked={selectedEmployee.is_student} onChange={(e) => toggleStudentStatus(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" /></div></div>)}</div>
                                     <div className="bg-slate-900 p-4 rounded-lg shadow-sm text-white flex flex-col justify-center"><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Stawka Total</div><div className="text-2xl font-black leading-tight">{totalRate.toFixed(2)} zł<span className="text-xs font-medium ml-1">/h netto</span></div></div>
                                 </div>
                             </div>
                         )}
                         {activeTab === 'skills' && (<table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Umiejętność</th><th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Stawka</th><th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Teoria</th><th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Praktyka</th><th className="px-4 py-3 font-bold text-[10px] uppercase tracking-wider">Status</th><th className="px-4 py-3 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{skillList.map((skill: any) => (<tr key={skill.id}><td className="px-4 py-3 font-medium">{skill.skillName}</td><td className="px-4 py-3 font-bold text-green-600">+{skill.hourlyBonus} zł</td><td className="px-4 py-3"><span className={`px-2 py-1 rounded text-[11px] font-bold ${skill.theoryStatus === 'Zaliczona' ? 'bg-green-100 text-green-700' : skill.theoryStatus === 'Niezaliczona' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}`}>{skill.theoryStatus}</span></td><td className="px-4 py-3"><span className={`px-2 py-1 rounded text-[11px] font-bold ${skill.practiceStatus === 'Zaliczona' ? 'bg-green-100 text-green-700' : skill.practiceStatus === 'Oczekuje' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-500'}`}>{skill.practiceStatus}</span></td><td className="px-4 py-3 relative" onClick={(e) => { e.stopPropagation(); setStatusPopoverSkillId(skill.skillId); }}><span className={`px-2 py-1 rounded text-[10px] uppercase font-black tracking-tighter cursor-pointer hover:opacity-80 border ${skill.statusColor}`}>{skill.statusText}</span>{statusPopoverSkillId === skill.skillId && (<div className="absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 shadow-xl rounded-lg z-[210] flex flex-col py-1"><button className="text-left px-3 py-2 text-xs hover:bg-yellow-50 text-yellow-700" onClick={() => changeSkillStatus(skill.skillId, SkillStatus.PRACTICE_PENDING)}>{SKILL_STATUS_LABELS[SkillStatus.PRACTICE_PENDING]}</button><button className="text-left px-3 py-2 text-xs hover:bg-green-50 text-green-700" onClick={() => changeSkillStatus(skill.skillId, SkillStatus.CONFIRMED)}>{SKILL_STATUS_LABELS[SkillStatus.CONFIRMED]}</button></div>)}</td><td className="px-4 py-3 text-right"><Button size="sm" variant="ghost" onClick={() => setResetModal({ isOpen: true, skillId: skill.skillId })}>Reset</Button></td></tr>))}{skillList.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-400">Brak rozpoczętych umiejętności.</td></tr>}</tbody></table>)}
                         {activeTab === 'docs' && (<div onClick={() => setStatusPopoverDocId(null)}><div className="flex justify-between items-center mb-6"><div className="relative w-64"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Szukaj dokumentu..." className="w-full pl-9 pr-2 py-1.5 border rounded text-xs bg-slate-50" value={docSearch} onChange={(e) => setDocSearch(e.target.value)} /></div><div className="flex gap-2"><Button size="sm" variant="secondary" className="bg-white text-slate-700 border-slate-300 font-bold" onClick={() => setDocsViewMode(prev => prev === 'active' ? 'archived' : 'active')}><Archive size={16} className="mr-2"/> Archiwum</Button><Button size="sm" className="bg-blue-600 font-bold" onClick={handleAddDocument}><Upload size={16} className="mr-2"/> Dodaj Dokument</Button></div></div><table className="w-full text-left text-sm border-separate border-spacing-0"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="px-4 py-3 border-b border-slate-100 text-[10px] uppercase tracking-wider">Dokument</th><th className="px-4 py-3 border-b border-slate-100 text-[10px] uppercase tracking-wider">Status</th><th className="px-4 py-3 border-b border-slate-100 text-[10px] uppercase tracking-wider">Stawka</th><th className="px-4 py-3 border-b border-slate-100 text-[10px] uppercase tracking-wider">Ważność</th><th className="px-4 py-3 border-b border-slate-100 text-right"></th></tr></thead><tbody className="divide-y divide-slate-100">{employeeDocuments.filter(d => docsViewMode === 'active' ? !d.is_archived : d.is_archived).map(d => { const bonus = d.bonus_value || state.skills.find(s => s.id === d.skill_id)?.hourly_bonus || 0; return (<tr key={d.id} className="hover:bg-slate-50 cursor-pointer transition-colors group"><td className="px-4 py-4 font-bold text-slate-700" onClick={() => handleEditDocument(d.id)}>{d.custom_name || 'Dokument'}</td><td className="px-4 py-4 relative" onClick={(e) => { e.stopPropagation(); setStatusPopoverDocId(d.id); }}><span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-tighter cursor-pointer hover:scale-105 transition-transform ${d.status === SkillStatus.CONFIRMED ? 'bg-green-100 text-green-700 border-green-200' : d.status === SkillStatus.FAILED ? 'bg-red-100 text-red-700 border-red-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'} border`}>{SKILL_STATUS_LABELS[d.status] || d.status}</span>{statusPopoverDocId === d.id && (<div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-[210] flex flex-col py-1"><button className="text-left px-3 py-2 text-xs hover:bg-slate-50 text-slate-700" onClick={() => handleDocStatusChange(d.id, SkillStatus.PENDING)}>{SKILL_STATUS_LABELS[SkillStatus.PENDING]}</button><button className="text-left px-3 py-2 text-xs hover:bg-green-50 text-green-700 font-medium" onClick={() => handleDocStatusChange(d.id, SkillStatus.CONFIRMED)}>{SKILL_STATUS_LABELS[SkillStatus.CONFIRMED]}</button><button className="text-left px-3 py-2 text-xs hover:bg-red-50 text-red-700 font-medium" onClick={() => handleDocStatusChange(d.id, SkillStatus.FAILED)}>{SKILL_STATUS_LABELS[SkillStatus.FAILED]}</button></div>)}</td><td className={`px-4 py-4 font-bold ${d.status === SkillStatus.CONFIRMED ? 'text-green-600' : 'text-slate-400'}`}>{bonus > 0 ? `+${bonus.toFixed(2)} zł` : '-'}</td><td className="px-4 py-4 text-slate-600 text-xs">{d.issue_date && <span>{d.issue_date} – </span>}{d.is_indefinite ? 'Bezterminowy' : (d.expires_at || '-')}</td><td className="px-4 py-4 text-right"><div className="flex justify-end gap-2"><button onClick={(e) => { e.stopPropagation(); openFileViewer(d); }} className="p-1.5 border border-blue-400 rounded-md text-blue-500 hover:bg-blue-50 transition-colors shadow-sm" title="Podgląd"><Eye size={18} /></button></div></td></tr>); })}{employeeDocuments.length === 0 && <tr><td colSpan={5} className="p-12 text-center text-slate-400 font-medium italic">Brak dokumentów do wyświetlenia.</td></tr>}</tbody></table></div>)}
-                        {activeTab === 'notes' && (<div className="space-y-6"><div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2 text-sm"><MessageSquare size={16}/> Dodaj Notatkę</h4><div className="space-y-3"><select className="w-full border p-2 rounded bg-white text-xs" value={noteCategory} onChange={e => setNoteCategory(e.target.value as NoteCategory)}>{Object.values(NoteCategory).map(c => <option key={c} value={c}>{c}</option>)}</select><textarea className="w-full border p-2 rounded bg-white text-sm h-24 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Wpisz treść notatki..." value={noteText} onChange={e => setNoteText(e.target.value)}/><div className="flex justify-end"><Button size="sm" onClick={handleAddNote} disabled={!noteText}>Zapisz Notatkę</Button></div></div></div><div className="space-y-4">{employeeNotes.filter(n => n.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(note => { const author = users.find(u => u.id === note.author_id); return (<div key={note.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-[10px]">{author ? author.first_name[0] : '?'}</div><div><div className="text-xs font-bold text-slate-800">{author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</div><div className="text-[10px] text-slate-500">{new Date(note.created_at).toLocaleString()}</div></div></div><span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 uppercase tracking-tighter">{note.category}</span></div><p className="text-sm text-slate-700 whitespace-pre-wrap">{note.text}</p>{note.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeNote(note.id)}><Trash2 size={16} /></button>)}</div>); })}</div></div>)}
-                        {activeTab === 'badges' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">{employeeBadges.filter(b => b.employee_id === selectedEmployee.id).map(badge => (<div key={badge.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="bg-yellow-100 text-yellow-600 p-1.5 rounded-full"><Award size={16} /></div><div><div className="text-sm font-bold text-slate-800">{badge.type}</div><div className="text-xs text-slate-500">{badge.month}</div></div></div></div><p className="text-sm text-slate-700 mt-2 italic font-medium">"{badge.description}"</p></div>))}{employeeBadges.filter(b => b.employee_id === selectedEmployee.id).length === 0 && <p className="col-span-2 text-slate-400 italic text-center text-sm py-8">Brak odznak.</p>}</div>)}
+                        {activeTab === 'notes' && (<div className="space-y-6"><div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2 text-sm"><MessageSquare size={16}/> Dodaj Notatkę</h4><div className="space-y-3"><select className="w-full border p-2 rounded bg-white text-xs" value={noteCategory} onChange={e => setNoteCategory(e.target.value)}>{systemConfig.noteCategories.map(c => <option key={c} value={c}>{c}</option>)}</select><textarea className="w-full border p-2 rounded bg-white text-sm h-24 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Wpisz treść notatki..." value={noteText} onChange={e => setNoteText(e.target.value)}/><div className="flex justify-end"><Button size="sm" onClick={handleAddNote} disabled={!noteText}>Zapisz Notatkę</Button></div></div></div><div className="space-y-4">{employeeNotes.filter(n => n.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(note => { const author = users.find(u => u.id === note.author_id); return (<div key={note.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-[10px]">{author ? author.first_name[0] : '?'}</div><div><div className="text-xs font-bold text-slate-800">{author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</div><div className="text-[10px] text-slate-500">{new Date(note.created_at).toLocaleString()}</div></div></div><span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 uppercase tracking-tighter">{note.category}</span></div><p className="text-sm text-slate-700 whitespace-pre-wrap">{note.text}</p>{note.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeNote(note.id)}><Trash2 size={16} /></button>)}</div>); })}</div></div>)}
+                        {activeTab === 'badges' && (<div className="grid grid-cols-1 md:grid-cols-2 gap-4">{employeeBadges.filter(b => b.employee_id === selectedEmployee.id).map(badge => (<div key={badge.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm"><div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2"><div className="bg-yellow-100 text-yellow-600 p-1.5 rounded-full"><Award size={16} /></div><div><div className="text-sm font-bold text-slate-800">{badge.type}</div><div className="text-xs text-slate-500">{badge.month}</div></div></div></div><p className="text-sm text-slate-700 mt-2 italic font-medium">"{badge.description}"</p></div>))}{employeeBadges.filter(b => b.employee_id === selectedEmployee.id).length === 0 && <p className="col-span-2 text-slate-400 italic text-center text-sm py-8">Brak odznak.</p>}</div>)}
                         {activeTab === 'referrals' && (
                              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                                 <table className="w-full text-sm text-left">
@@ -779,302 +788,163 @@ export const HREmployeesPage = () => {
         </div>
     );
 
-    const renderEditModal = () => {
-        if (!isEditModalOpen) return null;
-        return (
-            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden animate-in zoom-in duration-200">
-                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                        <h2 className="text-lg font-black text-slate-900 tracking-tight uppercase">EDYTUJ DANE PRACOWNIKA</h2>
-                        <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all">
-                            <X size={20} />
-                        </button>
+    const renderEditModal = () => (
+        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-8 overflow-y-auto max-h-[90vh]">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold uppercase">Edytuj Pracownika</h2>
+                    <button onClick={() => setIsEditModalOpen(false)}><X size={24} className="text-slate-400"/></button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Imię</label><input className="w-full border p-2 rounded" value={editFormData.first_name || ''} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})}/></div>
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Nazwisko</label><input className="w-full border p-2 rounded" value={editFormData.last_name || ''} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})}/></div>
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Email</label><input className="w-full border p-2 rounded" value={editFormData.email || ''} onChange={e => setEditFormData({...editFormData, email: e.target.value})}/></div>
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Telefon</label><input className="w-full border p-2 rounded" value={editFormData.phone || ''} onChange={e => setEditFormData({...editFormData, phone: e.target.value})}/></div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Stanowisko</label>
+                        <select className="w-full border p-2 rounded" value={editFormData.target_position || ''} onChange={e => setEditFormData({...editFormData, target_position: e.target.value})}>
+                            <option value="">Wybierz...</option>
+                            {systemConfig.positions.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
                     </div>
-                    
-                    <div className="p-6 space-y-5 overflow-y-auto max-h-[80vh]">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
-                                <input 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
-                                    value={editFormData.first_name || ''} 
-                                    onChange={e => setEditFormData({...editFormData, first_name: e.target.value})} 
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
-                                <input 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
-                                    value={editFormData.last_name || ''} 
-                                    onChange={e => setEditFormData({...editFormData, last_name: e.target.value})} 
-                                />
-                            </div>
-                        </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Rola</label>
+                        <select className="w-full border p-2 rounded" value={editFormData.role || Role.EMPLOYEE} onChange={e => setEditFormData({...editFormData, role: e.target.value as Role})}>
+                            <option value={Role.EMPLOYEE}>Pracownik</option>
+                            <option value={Role.BRIGADIR}>Brygadzista</option>
+                            <option value={Role.COORDINATOR}>Koordynator</option>
+                        </select>
+                    </div>
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Data zatrudnienia</label><input type="date" className="w-full border p-2 rounded" value={editFormData.hired_date?.split('T')[0] || ''} onChange={e => setEditFormData({...editFormData, hired_date: e.target.value})}/></div>
+                    <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Koniec umowy</label><input type="date" className="w-full border p-2 rounded" value={editFormData.contract_end_date?.split('T')[0] || ''} onChange={e => setEditFormData({...editFormData, contract_end_date: e.target.value})}/></div>
+                </div>
+                <div className="mt-4">
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Przełożony</label>
+                    <select className="w-full border p-2 rounded" value={editFormData.assigned_brigadir_id || ''} onChange={e => setEditFormData({...editFormData, assigned_brigadir_id: e.target.value})}>
+                        <option value="">Brak</option>
+                        {editFormData.role === Role.COORDINATOR ? null : (
+                            editFormData.role === Role.BRIGADIR ? coordinatorsList.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>) : brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)
+                        )}
+                    </select>
+                </div>
+                <div className="flex justify-end gap-2 mt-8"><Button variant="ghost" onClick={() => setIsEditModalOpen(false)}>Anuluj</Button><Button onClick={saveEditEmployee}>Zapisz</Button></div>
+            </div>
+        </div>
+    );
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label>
-                                <input 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
-                                    value={editFormData.email || ''} 
-                                    onChange={e => setEditFormData({...editFormData, email: e.target.value})} 
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label>
-                                <input 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm" 
-                                    value={editFormData.phone || ''} 
-                                    onChange={e => setEditFormData({...editFormData, phone: e.target.value})} 
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label>
-                            <input 
-                                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
-                                value={editFormData.target_position || ''} 
-                                onChange={e => setEditFormData({...editFormData, target_position: e.target.value})} 
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">DATA ROZPOCZĘCIA</label>
-                                <input 
-                                    type="date" 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
-                                    value={editFormData.hired_date ? editFormData.hired_date.split('T')[0] : ''} 
-                                    onChange={e => setEditFormData({...editFormData, hired_date: e.target.value})} 
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">KONIEC UMOWY</label>
-                                <input 
-                                    type="date" 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm" 
-                                    value={editFormData.contract_end_date ? editFormData.contract_end_date.split('T')[0] : ''} 
-                                    onChange={e => setEditFormData({...editFormData, contract_end_date: e.target.value})} 
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ROLA / UPRAWNIENIA</label>
-                            <select 
-                                className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm appearance-none" 
-                                value={editFormData.role || ''} 
-                                onChange={e => {
-                                    const newRole = e.target.value as Role;
-                                    setEditFormData({...editFormData, role: newRole, assigned_brigadir_id: ''});
-                                }} 
-                            >
-                                <option value={Role.EMPLOYEE}>pracownik</option>
-                                <option value={Role.BRIGADIR}>Brygadzista</option>
-                                <option value={Role.COORDINATOR}>koordynator</option>
+    const renderDocModal = () => (
+        <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-md w-full p-6">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold uppercase">{editingDocId ? 'Edytuj Dokument' : 'Dodaj Dokument'}</h2>
+                    <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400"/></button>
+                </div>
+                <div className="space-y-4">
+                    {!editingDocId && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Typ dokumentu</label>
+                            <select className="w-full border p-2 rounded" value={newDocData.typeId} onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}>
+                                <option value="">Wybierz...</option>
+                                {BONUS_DOCUMENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                                <option value="other">Inny...</option>
                             </select>
                         </div>
-
-                        {editFormData.role !== Role.COORDINATOR && (
-                            <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                                    {editFormData.role === Role.BRIGADIR ? 'PRZYPISANY KOORDYNATOR' : 'PRZYPISANY BRYGADZISTA'}
-                                </label>
-                                <select 
-                                    className="w-full bg-slate-50 border border-slate-200 p-2 rounded-xl text-slate-800 font-bold focus:bg-white outline-none transition-all text-sm appearance-none" 
-                                    value={editFormData.assigned_brigadir_id || ''} 
-                                    onChange={e => setEditFormData({...editFormData, assigned_brigadir_id: e.target.value})} 
-                                >
-                                    <option value="">Wybierz...</option>
-                                    {editFormData.role === Role.BRIGADIR ? (
-                                        coordinatorsList.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)
-                                    ) : (
-                                        brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)
-                                    )}
-                                </select>
-                            </div>
-                        )}
+                    )}
+                    {(newDocData.typeId === 'other' || editingDocId) && (
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nazwa</label><input className="w-full border p-2 rounded" value={newDocData.customName} onChange={e => setNewDocData({...newDocData, customName: e.target.value})}/></div>
+                    )}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Pliki</label>
+                        <input type="file" multiple onChange={handleFileSelect} className="w-full text-xs" />
+                        <div className="mt-2 space-y-1">
+                            {newDocData.files.map((f, i) => (
+                                <div key={i} className="flex justify-between items-center bg-slate-50 p-1 rounded text-[10px]">
+                                    <span className="truncate">{f.name}</span>
+                                    <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    
-                    <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                        <button onClick={() => setIsEditModalOpen(false)} className="text-sm font-bold text-slate-500 px-4 hover:text-slate-700 transition-colors">Anuluj</button>
-                        <Button onClick={saveEditEmployee} className="font-black uppercase text-[11px] tracking-widest rounded-xl px-6 h-10 shadow-lg shadow-blue-600/20">
-                            Zapisz Zmiany
-                        </Button>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Wydano</label><input type="date" className="w-full border p-2 rounded text-sm" value={newDocData.issue_date} onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})}/></div>
+                        {!newDocData.indefinite && <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ważny do</label><input type="date" className="w-full border p-2 rounded text-sm" value={newDocData.expires_at} onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})}/></div>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <input type="checkbox" id="indef_emp" checked={newDocData.indefinite} onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})}/>
+                        <label htmlFor="indef_emp" className="text-sm">Bezterminowy</label>
                     </div>
                 </div>
+                <div className="flex justify-end gap-2 mt-8"><Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button><Button onClick={handleSaveDocument}>Zapisz</Button></div>
             </div>
-        );
-    };
+        </div>
+    );
+
+    const renderConfirmModal = () => (
+        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-md w-full p-6">
+                <h2 className="text-xl font-bold mb-4">{confirmModal.type === 'fire' ? 'Rozwiązanie Umowy' : confirmModal.type === 'restore' ? 'Przywracanie' : 'Wypłata Bonusu'}</h2>
+                <p className="text-sm text-slate-500 mb-6">Czy na pewno chcesz wykonać akcję dla {confirmModal.user?.first_name} {confirmModal.user?.last_name}?</p>
+                {confirmModal.type === 'fire' && (
+                    <div className="space-y-4 mb-6">
+                        <div><label className="block text-xs font-bold mb-1">Inicjator</label><select className="w-full border p-2 rounded" value={fireConfig.initiator} onChange={e => setFireConfig({...fireConfig, initiator: e.target.value as any})}><option value="">Wybierz...</option><option value="company">Firma</option><option value="employee">Pracownik</option></select></div>
+                        <div><label className="block text-xs font-bold mb-1">Powód</label><select className="w-full border p-2 rounded" value={fireConfig.reason} onChange={e => setFireConfig({...fireConfig, reason: e.target.value})}><option value="">Wybierz powód...</option>{TERMINATION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                    </div>
+                )}
+                <div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setConfirmModal({isOpen: false, type: null, user: null})}>Anuluj</Button><Button variant={confirmModal.type === 'fire' ? 'danger' : 'primary'} onClick={executeConfirmation} disabled={confirmModal.type === 'fire' && (!fireConfig.initiator || !fireConfig.reason)}>Potwierdź</Button></div>
+            </div>
+        </div>
+    );
+
+    const renderCoordinatorSelection = () => (
+        <div className="fixed inset-0 bg-black/50 z-[250] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 text-center">
+                <HardHat size={48} className="mx-auto text-orange-500 mb-4"/>
+                <h2 className="text-xl font-bold mb-2">Wybierz Koordynatora</h2>
+                <p className="text-sm text-slate-500 mb-6">Nowy brygadzista musi zostać przypisany do koordynatora robót.</p>
+                <div className="space-y-2 mb-8">
+                    {coordinatorsList.map(c => (
+                        <button key={c.id} onClick={() => handleSelectCoordinator(c.id)} className="w-full p-3 border rounded-lg hover:bg-orange-50 hover:border-orange-200 transition-colors font-bold text-slate-700">
+                            {c.first_name} {c.last_name}
+                        </button>
+                    ))}
+                    {coordinatorsList.length === 0 && <p className="text-xs text-red-500">Brak aktywnych koordynatorów w systemie!</p>}
+                </div>
+                <Button variant="ghost" onClick={() => { setShowCoordinatorSelection(false); setPendingBrigadierId(null); }}>Pomiń (zrób to później)</Button>
+            </div>
+        </div>
+    );
+
+    const renderResetModal = () => (
+        <div className="fixed inset-0 bg-black/50 z-[250] flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center">
+                <RotateCcw size={48} className="mx-auto text-blue-500 mb-4"/>
+                <h2 className="text-xl font-bold mb-2">Reset Umiejętności</h2>
+                <p className="text-sm text-slate-500 mb-6">Wybierz co chcesz zresetować dla tej umiejętności.</p>
+                <div className="grid grid-cols-1 gap-3">
+                    <Button onClick={() => handleResetSkill(resetModal.skillId!, 'theory')}>Tylko Teoria</Button>
+                    <Button onClick={() => handleResetSkill(resetModal.skillId!, 'practice')}>Tylko Praktyka</Button>
+                    <Button variant="danger" onClick={() => handleResetSkill(resetModal.skillId!, 'both')}>Wszystko (Teoria + Praktyka)</Button>
+                    <Button variant="ghost" onClick={() => setResetModal({isOpen: false, skillId: null})}>Anuluj</Button>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
             {selectedEmployee ? renderDetail() : renderList()}
-
-            {/* Coordinator Selection Modal (Triggered on promotion if skipped in main form) */}
-            {showCoordinatorSelection && (
-                <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in duration-200 text-center">
-                        <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 mx-auto mb-4">
-                            <HardHat size={32} />
-                        </div>
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Wybierz Koordynatora</h2>
-                        <p className="text-sm text-slate-500 mt-2 font-medium mb-6">
-                            Nowy brygadzista musi zostać przypisany do koordynatora robót.
-                        </p>
-                        
-                        <div className="space-y-2 max-h-48 overflow-y-auto mb-6 pr-1">
-                            {coordinatorsList.map(coord => (
-                                <button 
-                                    key={coord.id}
-                                    onClick={() => handleSelectCoordinator(coord.id)}
-                                    className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-xl border border-slate-100 transition-all group"
-                                >
-                                    <span className="font-bold text-xs uppercase tracking-tight">{coord.first_name} {coord.last_name}</span>
-                                    <ChevronRight size={14} className="text-slate-300 group-hover:text-white" />
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <button 
-                            onClick={() => setShowCoordinatorSelection(false)} 
-                            className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest"
-                        >
-                            Pomiń na razie
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {isDocModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-black text-slate-900 tracking-tight">Dodaj Dokument</h2>
-                            <button onClick={() => setIsDocModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X size={24}/></button>
-                        </div>
-                        
-                        <div className="space-y-4">
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Typ Dokumentu</label>
-                                <select 
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10" 
-                                    value={newDocData.typeId} 
-                                    onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}
-                                    disabled={!!editingDocId}
-                                >
-                                    <option value="">Wybierz typ...</option>
-                                    {BONUS_DOCUMENT_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
-                                    <option value="other">Inny...</option>
-                                </select>
-                            </div>
-
-                            {(newDocData.typeId === 'other' || editingDocId) && (
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Nazwa dokumentu</label>
-                                    <input 
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/10" 
-                                        placeholder="Wpisz nazwę..." 
-                                        value={newDocData.customName} 
-                                        onChange={e => setNewDocData({...newDocData, customName: e.target.value})} 
-                                    />
-                                </div>
-                            )}
-
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Załącz Pliki</label>
-                                <div className="bg-slate-50 rounded-xl p-2.5 flex items-center gap-3 border border-slate-200">
-                                    <Button 
-                                        variant="secondary" 
-                                        size="sm" 
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="bg-slate-500 hover:bg-slate-600 text-white border-0 text-[10px] h-8 px-3"
-                                    >
-                                        Wybierz
-                                    </Button>
-                                    <span className="text-[10px] font-bold text-slate-800">
-                                        {newDocData.files.length > 0 ? `${newDocData.files.length} plików` : 'Brak plików'}
-                                    </span>
-                                    <input type="file" ref={fileInputRef} multiple className="hidden" onChange={handleFileSelect} />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Data Wydania</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none" 
-                                        value={newDocData.issue_date} 
-                                        onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})} 
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[10px] font-black text-slate-700 uppercase tracking-widest ml-1">Data Ważności</label>
-                                    <input 
-                                        type="date" 
-                                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none ${newDocData.indefinite ? 'opacity-30 cursor-not-allowed' : ''}`} 
-                                        value={newDocData.expires_at} 
-                                        onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})}
-                                        disabled={newDocData.indefinite} 
-                                    />
-                                </div>
-                            </div>
-
-                            <div 
-                                className="bg-slate-50 rounded-xl p-2.5 flex items-center gap-3 cursor-pointer select-none border border-slate-200"
-                                onClick={() => setNewDocData({...newDocData, indefinite: !newDocData.indefinite})}
-                            >
-                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${newDocData.indefinite ? 'bg-slate-700 border-slate-700' : 'bg-white border-slate-300'}`}>
-                                    {newDocData.indefinite && <CheckCircle size={12} className="text-white fill-white"/>}
-                                </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BEZTERMINOWY</span>
-                            </div>
-
-                            <button 
-                                onClick={handleSaveDocument}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 flex items-center justify-center gap-2 font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-600/20 transition-all active:scale-95 mt-4"
-                            >
-                                <Save size={16}/>
-                                ZAPISZ DOKUMENT
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
-            {renderEditModal()}
-            {resetModal.isOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-sm w-full p-6 text-center">
-                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4 mx-auto"><RotateCcw size={24} /></div>
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">Resetuj Postęp</h3>
-                        <p className="text-sm text-slate-500 mb-6">Operacja jest nieodwracalna.</p>
-                        <div className="space-y-2 w-full">
-                            <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'theory'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Teoria</Button>
-                            <Button fullWidth variant="outline" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'practice'); setResetModal({isOpen: false, skillId: null}); }}}>Tylko Praktyka</Button>
-                            <Button fullWidth variant="danger" size="sm" onClick={() => { if(selectedEmployee && resetModal.skillId) { resetSkillProgress(selectedEmployee.id, resetModal.skillId, 'both'); setResetModal({isOpen: false, skillId: null}); }}}>Zresetuj Całość</Button>
-                            <Button fullWidth variant="ghost" size="sm" onClick={() => setResetModal({ isOpen: false, skillId: null })}>Anuluj</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {confirmModal.isOpen && confirmModal.user && (
-                <div className="fixed inset-0 bg-black/50 z-120 flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl max-sm w-full p-6 animate-in fade-in zoom-in duration-200">
-                         <div className="flex flex-col text-center">
-                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 mx-auto ${confirmModal.type === 'fire' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}><AlertTriangle size={32} /></div>
-                            <h3 className="text-xl font-bold text-slate-900 mb-4">{confirmModal.type === 'fire' ? 'Rozwiązanie Umowy' : 'Przywróć Pracownika'}</h3>
-                            <p className="text-sm text-slate-500 mb-6">Czy potwierdzasz tę operację dla <strong>{confirmModal.user.first_name} {confirmModal.user.last_name}</strong>?</p>
-                            <div className="flex gap-3 w-full">
-                                <Button fullWidth variant="ghost" onClick={() => setConfirmModal({isOpen: false, type: null, user: null})}>Anuluj</Button>
-                                <Button fullWidth variant={confirmModal.type === 'fire' ? 'danger' : 'primary'} size="sm" onClick={executeConfirmation}>Potwierdź</Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {isEditModalOpen && renderEditModal()}
+            {isDocModalOpen && renderDocModal()}
+            {confirmModal.isOpen && renderConfirmModal()}
+            {showCoordinatorSelection && renderCoordinatorSelection()}
+            {resetModal.isOpen && renderResetModal()}
+            <DocumentViewerModal 
+                isOpen={fileViewer.isOpen} 
+                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} 
+                urls={fileViewer.urls} 
+                initialIndex={fileViewer.index} 
+                title={fileViewer.title} 
+            />
         </div>
     );
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Plus, Edit, Trash2, Archive, RotateCcw, ChevronDown, ChevronUp, X, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -25,7 +26,6 @@ export const HRSkillsPage = () => {
         const groups: Record<string, Skill[]> = {};
         const skillsToProcess = state.skills.filter(s => viewMode === 'archived' ? s.is_archived : !s.is_archived);
 
-        // Fix: Explicitly cast Object.values of the enum to string[] to avoid unknown index type errors
         (Object.values(SkillCategory) as string[]).forEach((cat) => {
             groups[cat] = [];
         });
@@ -139,7 +139,6 @@ export const HRSkillsPage = () => {
             </div>
 
             <div className="space-y-4">
-                {/* Fix: Explicitly type and iterate using Object.entries to ensure cat and skillsList are correctly inferred */}
                 {Object.entries(categorizedSkills).map(([cat, skillsList]: [string, Skill[]]) => {
                     if (viewMode === 'active' && skillsList.length === 0) return null; 
                     if (skillsList.length === 0) return null;
@@ -159,59 +158,62 @@ export const HRSkillsPage = () => {
                             
                             {activeCategory === cat && (
                                 <div className="divide-y divide-slate-100 border-t border-slate-100">
-                                    {/* Fix: Explicitly type skill in map callback */}
-                                    {skillsList.map((skill: Skill) => (
-                                        <div key={skill.id} className={`p-6 hover:bg-slate-50 transition-colors ${!skill.is_active ? 'opacity-70 bg-slate-50' : ''}`}>
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                                        {skill.name_pl}
-                                                        {!skill.is_active && <span className="text-xs border border-slate-400 text-slate-500 px-1.5 rounded bg-white">Nieaktywna</span>}
-                                                    </h3>
-                                                    <p className="text-sm text-slate-600 mt-1">{skill.description_pl}</p>
-                                                    
-                                                    <div className="flex gap-4 mt-3 text-sm">
-                                                        <div className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-bold border border-green-100">
-                                                            +{skill.hourly_bonus} zł/h
+                                    {skillsList.map((skill: Skill) => {
+                                        // Resolved 'unknown' type error by using a local typed constant for criteria.
+                                        const criteria: string[] = skill.criteria || [];
+                                        
+                                        return (
+                                            <div key={skill.id} className={`p-6 hover:bg-slate-50 transition-colors ${!skill.is_active ? 'opacity-70 bg-slate-50' : ''}`}>
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                            {skill.name_pl}
+                                                            {!skill.is_active && <span className="text-xs border border-slate-400 text-slate-500 px-1.5 rounded bg-white">Nieaktywna</span>}
+                                                        </h3>
+                                                        <p className="text-sm text-slate-600 mt-1">{skill.description_pl}</p>
+                                                        
+                                                        <div className="flex gap-4 mt-3 text-sm">
+                                                            <div className="bg-green-50 text-green-700 px-3 py-1 rounded-full font-bold border border-green-100">
+                                                                +{skill.hourly_bonus} zł/h
+                                                            </div>
+                                                            <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold border border-blue-100">
+                                                                {skill.verification_type === VerificationType.THEORY_ONLY && 'Teoria'}
+                                                                {skill.verification_type === VerificationType.THEORY_PRACTICE && 'Teoria + Praktyka'}
+                                                                {skill.verification_type === VerificationType.DOCUMENT && 'Dokument'}
+                                                            </div>
                                                         </div>
-                                                        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold border border-blue-100">
-                                                            {skill.verification_type === VerificationType.THEORY_ONLY && 'Teoria'}
-                                                            {skill.verification_type === VerificationType.THEORY_PRACTICE && 'Teoria + Praktyka'}
-                                                            {skill.verification_type === VerificationType.DOCUMENT && 'Dokument'}
-                                                        </div>
-                                                    </div>
 
-                                                    {skill.criteria && skill.criteria.length > 0 && (
-                                                        <div className="mt-4 pl-4 border-l-2 border-slate-200">
-                                                            <p className="text-xs text-slate-400 uppercase font-bold mb-2">Kryteria weryfikacji:</p>
-                                                            <ul className="text-sm text-slate-600 space-y-1 list-disc pl-4">
-                                                                {/* Fix: Explicitly cast and type criteria mapping to avoid unknown Key/Node errors */}
-                                                                {(skill.criteria as string[]).map((c: string, i: number) => (
-                                                                    <li key={`skill-crit-${i}`}>{c}</li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    {viewMode === 'active' ? (
-                                                        <>
-                                                            <Button size="sm" variant="ghost" onClick={() => handleOpenModal(skill)}>
-                                                                <Edit size={18}/>
+                                                        {criteria.length > 0 && (
+                                                            <div className="mt-4 pl-4 border-l-2 border-slate-200">
+                                                                <p className="text-xs text-slate-400 uppercase font-bold mb-2">Kryteria weryfikacji:</p>
+                                                                <ul className="text-sm text-slate-600 space-y-1 list-disc pl-4">
+                                                                    {criteria.map((c: string, i: number) => (
+                                                                        <li key={`skill-crit-${i}`}>{c}</li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        {viewMode === 'active' ? (
+                                                            <>
+                                                                <Button size="sm" variant="ghost" onClick={() => handleOpenModal(skill)}>
+                                                                    <Edit size={18}/>
+                                                                </Button>
+                                                                <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => handleArchiveSkill(skill)}>
+                                                                    <Archive size={18}/>
+                                                                </Button>
+                                                            </>
+                                                        ) : (
+                                                            <Button size="sm" variant="ghost" className="text-blue-500 hover:bg-blue-50" onClick={() => handleRestoreSkill(skill)}>
+                                                                <RotateCcw size={18}/>
                                                             </Button>
-                                                            <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => handleArchiveSkill(skill)}>
-                                                                <Archive size={18}/>
-                                                            </Button>
-                                                        </>
-                                                    ) : (
-                                                        <Button size="sm" variant="ghost" className="text-blue-500 hover:bg-blue-50" onClick={() => handleRestoreSkill(skill)}>
-                                                            <RotateCcw size={18}/>
-                                                        </Button>
-                                                    )}
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -237,7 +239,6 @@ export const HRSkillsPage = () => {
                             <div>
                                 <label className="block text-sm font-bold text-slate-700">Kategoria</label>
                                 <select className="w-full border p-2 rounded mt-1" value={selectedSkill.category || SkillCategory.INNE} onChange={e => setSelectedSkill({...selectedSkill, category: e.target.value as SkillCategory})}>
-                                    {/* Fix: Explicitly cast enum values to string array to resolve unknown Key/Value/Node errors in .map() */}
                                     {(Object.values(SkillCategory) as string[]).map((c: string) => <option key={c} value={c}>{c}</option>)}
                                 </select>
                             </div>
@@ -275,7 +276,6 @@ export const HRSkillsPage = () => {
                             <div className="border-t border-slate-100 pt-4 mt-4">
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Kryteria Oceny (Checklista)</label>
                                 <div className="space-y-2">
-                                    {/* Fix: Explicitly cast and type criteria mapping to avoid unknown Key/Value/Node errors in .map() */}
                                     {(selectedSkill.criteria as string[] || []).map((c: string, idx: number) => (
                                         <div key={`crit-${idx}`} className="flex gap-2">
                                             <input 

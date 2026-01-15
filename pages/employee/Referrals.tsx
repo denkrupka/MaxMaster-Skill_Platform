@@ -3,12 +3,12 @@ import React, { useState, useMemo } from 'react';
 import { UserPlus, Copy, CheckCircle, Clock, XCircle, AlertTriangle, TrendingUp, DollarSign, Share2, Info, X, Plus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { UserStatus, User } from '../../types';
-import { REFERRAL_STATUS_LABELS, REFERRAL_BONUSES } from '../../constants';
+import { UserStatus, User, Position } from '../../types';
+import { REFERRAL_STATUS_LABELS } from '../../constants';
 
 export const EmployeeReferrals = () => {
     const { state, inviteFriend } = useAppContext();
-    const { currentUser, users, systemConfig } = state;
+    const { currentUser, users, systemConfig, positions } = state;
     
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
     const [copySuccess, setCopySuccess] = useState(false);
@@ -16,7 +16,7 @@ export const EmployeeReferrals = () => {
 
     if (!currentUser) return null;
 
-    // --- LOGIC: Filter Referrals ---
+    // --- LOGIC: Filter Referrals using real bonuses from Positions table ---
     const myReferrals = useMemo(() => {
         return users
             .filter(u => u.referred_by_id === currentUser.id)
@@ -33,13 +33,16 @@ export const EmployeeReferrals = () => {
                 else if (u.status === UserStatus.ACTIVE || u.status === UserStatus.TRIAL) refStatus = 'working';
                 else if (u.status === UserStatus.INACTIVE || u.status === UserStatus.REJECTED) refStatus = 'dismissed';
 
-                const bonusAmount = REFERRAL_BONUSES[u.target_position || 'Pomocnik'] || 200;
+                // Real bonus from positions array
+                const positionData = positions.find(p => p.name === u.target_position);
+                const bonusAmount = positionData?.referral_bonus || 0;
+                
                 const isBonusEarned = refStatus === 'working' && daysWorking >= 90;
                 const progress = Math.min(100, Math.round((daysWorking / 90) * 100));
 
                 return { ...u, refStatus, bonusAmount, isBonusEarned, daysWorking, progress };
             });
-    }, [users, currentUser.id]);
+    }, [users, currentUser.id, positions]);
 
     // --- LOGIC: Balance ---
     const balance = useMemo(() => {
@@ -69,6 +72,13 @@ export const EmployeeReferrals = () => {
         setFormData({ firstName: '', lastName: '', phone: '', targetPosition: '' });
         setIsInviteModalOpen(false);
     };
+
+    // Filter positions that actually have a referral bonus set in HR settings
+    const activeBonuses = useMemo(() => {
+        return positions
+            .filter(p => (p.referral_bonus || 0) > 0)
+            .sort((a, b) => a.order - b.order);
+    }, [positions]);
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-8 pb-24">
@@ -132,7 +142,7 @@ export const EmployeeReferrals = () => {
                 </div>
             </div>
 
-            {/* Bonus Info Table */}
+            {/* Bonus Info Table - Now using real data from state.positions */}
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex gap-4 items-start mb-6">
                     <div className="bg-amber-100 p-3 rounded-full text-amber-600 shadow-inner"><Info size={24}/></div>
@@ -143,13 +153,18 @@ export const EmployeeReferrals = () => {
                         </p>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {Object.entries(REFERRAL_BONUSES).map(([role, amount]) => (
-                        <div key={role} className="bg-white/60 p-3 rounded-xl border border-amber-200 text-center shadow-sm">
-                            <div className="text-[10px] font-black text-amber-600 uppercase mb-1 tracking-tighter">{role}</div>
-                            <div className="text-lg font-black text-amber-900">{amount} zł</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                    {activeBonuses.map((pos) => (
+                        <div key={pos.id} className="bg-white/60 p-3 rounded-xl border border-amber-200 text-center shadow-sm hover:bg-white transition-colors">
+                            <div className="text-[10px] font-black text-amber-600 uppercase mb-1 tracking-tighter truncate" title={pos.name}>{pos.name}</div>
+                            <div className="text-lg font-black text-amber-900">{pos.referral_bonus} zł</div>
                         </div>
                     ))}
+                    {activeBonuses.length === 0 && (
+                        <div className="col-span-full text-center py-4 text-amber-600 font-medium italic">
+                            Aktualnie brak zdefiniowanych bonusów za polecenia.
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -284,7 +299,7 @@ export const EmployeeReferrals = () => {
                                     onChange={e => setFormData({...formData, targetPosition: e.target.value})}
                                 >
                                     <option value="">Wybierz stanowisko...</option>
-                                    {systemConfig.positions.map(pos => <option key={pos} value={pos}>{pos}</option>)}
+                                    {positions.map(pos => <option key={pos.id} value={pos.name}>{pos.name}</option>)}
                                 </select>
                             </div>
                             <div className="pt-6">

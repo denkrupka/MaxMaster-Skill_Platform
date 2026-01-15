@@ -5,7 +5,7 @@ import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig, 
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry, 
   QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
-  Role, UserStatus, SkillStatus, ContractType, VerificationType
+  Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory
 } from '../types';
 
 interface AppState {
@@ -89,6 +89,32 @@ export const useAppContext = () => {
   return context;
 };
 
+// Logical identifier for main configuration
+const CONFIG_KEY = 'main';
+
+const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
+  baseRate: 24,
+  overtimeBonus: 3,
+  holidayBonus: 5,
+  seniorityBonus: 1,
+  delegationBonus: 3,
+  contractBonuses: { [ContractType.UOP]: 0, [ContractType.UZ]: 1, [ContractType.B2B]: 7 },
+  studentBonus: 3,
+  bonusDocumentTypes: [
+      { id: 'sep_e', label: 'SEP E z pomiarami', bonus: 0.5 },
+      { id: 'sep_d', label: 'SEP D z pomiarami', bonus: 0.5 },
+      { id: 'udt_pod', label: 'UDT - Podnośniki (IP)', bonus: 1.0 },
+      { id: 'bhp_szkol', label: 'Szkolenie BHP (Wstępne/Okresowe)', bonus: 0 },
+      { id: 'badania', label: 'Orzeczenie Lekarskie (Wysokościowe)', bonus: 0 }
+  ],
+  bonusPermissionTypes: [],
+  terminationReasons: ["Niesatysfakcjonujące wynagrodzenie", "Brak możliwości rozwoju", "Zła atmosfera w zespole", "Lepsza oferta konkurencji", "Przyczyny osobiste", "Niewywychodzenie z obowiązków", "Naruszenie regulaminu", "Inne"],
+  positions: [],
+  noteCategories: Object.values(NoteCategory),
+  badgeTypes: Object.values(BadgeType),
+  skillCategories: Object.values(SkillCategory) // Added dynamic source
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>({
     currentUser: null,
@@ -99,15 +125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     testAttempts: [],
     candidateHistory: [],
     appNotifications: [],
-    systemConfig: {
-      baseRate: 24,
-      contractBonuses: { [ContractType.UOP]: 0, [ContractType.UZ]: 1, [ContractType.B2B]: 7 },
-      studentBonus: 3,
-      bonusDocumentTypes: [],
-      bonusPermissionTypes: [],
-      terminationReasons: [],
-      positions: []
-    },
+    systemConfig: DEFAULT_SYSTEM_CONFIG,
     notificationSettings: [],
     positions: [],
     monthlyBonuses: {},
@@ -131,7 +149,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { data: incidents },
         { data: notes },
         { data: badges },
-        { data: resources }
+        { data: resources },
+        { data: configData }
       ] = await Promise.all([
         supabase.from('users').select('*'),
         supabase.from('positions').select('*').order('order'),
@@ -143,7 +162,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('quality_incidents').select('*'),
         supabase.from('employee_notes').select('*'),
         supabase.from('employee_badges').select('*'),
-        supabase.from('library_resources').select('*')
+        supabase.from('library_resources').select('*'),
+        supabase.from('system_config').select('config_data').eq('config_key', CONFIG_KEY).maybeSingle()
       ]);
 
       setState(prev => ({
@@ -158,7 +178,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         qualityIncidents: incidents || [],
         employeeNotes: notes || [],
         employeeBadges: badges || [],
-        libraryResources: resources || []
+        libraryResources: resources || [],
+        systemConfig: {
+            ...DEFAULT_SYSTEM_CONFIG,
+            ...(configData?.config_data || {})
+        }
       }));
     } catch (err) {
       console.error('Error refreshing data from Supabase:', err);
@@ -471,7 +495,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateSystemConfig = async (config: SystemConfig) => {
-    setState(prev => ({ ...prev, systemConfig: config }));
+    try {
+      // payload includes config_key for conflict matching and config_value as a clone of config_data to satisfy NOT NULL
+      const payload = {
+        config_key: CONFIG_KEY,
+        config_data: config,
+        config_value: config
+      };
+
+      const { error } = await supabase
+        .from('system_config')
+        .upsert(payload, { onConflict: 'config_key' });
+
+      if (error) throw error;
+      setState(prev => ({ ...prev, systemConfig: config }));
+    } catch (err) {
+      console.error('Error saving system config:', err);
+    }
   };
 
   const updateNotificationSettings = async (settings: NotificationSetting[]) => {

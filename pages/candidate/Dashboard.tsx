@@ -17,7 +17,7 @@ const QUALIFICATIONS_LIST = [
 
 export const CandidateDashboard = () => {
     const { state, updateUser, logCandidateAction, triggerNotification } = useAppContext();
-    const { currentUser, systemConfig, testAttempts, tests, skills, userSkills } = state;
+    const { currentUser, systemConfig, testAttempts, tests, skills, userSkills, positions } = state;
     const navigate = useNavigate();
     
     // Modal State
@@ -25,10 +25,11 @@ export const CandidateDashboard = () => {
     const [salaryTab, setSalaryTab] = useState<'hourly' | 'piecework'>('hourly');
 
     // Post-Test State
-    const [selectedContract, setSelectedContract] = useState<ContractType>(
-        currentUser?.contract_type || ContractType.UOP
+    const [selectedContract, setSelectedContract] = useState<string>(
+        currentUser?.contract_type || 'uop'
     );
     const [isStudent, setIsStudent] = useState(currentUser?.is_student || false);
+    const [isContractPopoverOpen, setIsContractPopoverOpen] = useState(false);
 
     // New Interactive States for Monthly Simulator & Benefits
     const [isDelegation, setIsDelegation] = useState(false);
@@ -41,6 +42,24 @@ export const CandidateDashboard = () => {
     const [isQualModalOpen, setIsQualModalOpen] = useState(false);
 
     if (!currentUser) return null;
+
+    // --- Dynamic Career Steps ---
+    const careerStepsData = useMemo(() => {
+        const sorted = [...positions].sort((a, b) => a.order - b.order);
+        const colors = [
+            'bg-slate-400',
+            'bg-blue-400',
+            'bg-blue-600',
+            'bg-purple-600',
+            'bg-orange-500',
+            'bg-slate-800'
+        ];
+        return sorted.map((pos, idx) => ({
+            step: idx + 1,
+            label: pos.name,
+            color: colors[idx] || 'bg-slate-800'
+        }));
+    }, [positions]);
 
     // --- REJECTION / BLOCKED SCREEN ---
     if (currentUser.status === UserStatus.REJECTED || currentUser.status === UserStatus.PORTAL_BLOCKED) {
@@ -128,24 +147,24 @@ export const CandidateDashboard = () => {
     }, [currentUser.qualifications, userSkills, currentUser.id]);
 
     const contractBonus = systemConfig.contractBonuses[selectedContract] || 0;
-    const studentBonus = (selectedContract === ContractType.UZ && isStudent) ? 3 : 0;
+    const studentBonus = (selectedContract === 'uz' && isStudent) ? systemConfig.studentBonus : 0;
     const totalRate = systemConfig.baseRate + skillsBonus + qualBonus + contractBonus + studentBonus;
 
     // --- Monthly Simulation Calculations ---
     const monthlySimulations = useMemo(() => {
-        // Base effective rate (including delegation if checked)
-        const effectiveRate = totalRate + (isDelegation ? 3 : 0);
+        // Base effective rate (including delegation bonus from systemConfig if checked)
+        const effectiveRate = totalRate + (isDelegation ? (systemConfig.delegationBonus || 3) : 0);
         
         // Scenario 1: Standard (Pn-Pt 8h) -> ~168h base
         let s1_hours = 168;
         let s1_earnings = s1_hours * effectiveRate;
 
         // Scenario 2: Overtime (Pn-Pt 10h) -> ~210h total
-        // 168h normal + 42h overtime (+3 bonus)
+        // 168h normal + 42h overtime (+ overtimeBonus from systemConfig)
         const s2_std = 168;
         const s2_ot = 42;
         let s2_hours = s2_std + s2_ot;
-        let s2_earnings = (s2_std * effectiveRate) + (s2_ot * (effectiveRate + 3));
+        let s2_earnings = (s2_std * effectiveRate) + (s2_ot * (effectiveRate + (systemConfig.overtimeBonus || 3)));
 
         // Apply Saturday Logic if toggled
         if (isSaturday) {
@@ -153,12 +172,12 @@ export const CandidateDashboard = () => {
             // For Scenario 1 (8h base), assume 8h Saturdays
             const satHours8 = 4 * 8; 
             s1_hours += satHours8;
-            s1_earnings += (satHours8 * (effectiveRate + 5)); // Weekend bonus +5
+            s1_earnings += (satHours8 * (effectiveRate + (systemConfig.holidayBonus || 5))); // Weekend bonus from systemConfig
 
             // For Scenario 2 (10h base), assume 10h Saturdays
             const satHours10 = 4 * 10;
             s2_hours += satHours10;
-            s2_earnings += (satHours10 * (effectiveRate + 5)); // Weekend bonus +5
+            s2_earnings += (satHours10 * (effectiveRate + (systemConfig.holidayBonus || 5))); // Weekend bonus from systemConfig
         }
 
         const suffix = isSaturday ? ' + Soboty' : '';
@@ -167,17 +186,18 @@ export const CandidateDashboard = () => {
             { label: `Standard (Pn-Pt 8h${suffix})`, hours: s1_hours, amount: Math.round(s1_earnings) },
             { label: `Z nadgodzinami (Pn-Pt 10h${suffix})`, hours: s2_hours, amount: Math.round(s2_earnings) },
         ];
-    }, [totalRate, isDelegation, isSaturday]);
+    }, [totalRate, isDelegation, isSaturday, systemConfig]);
 
     // --- Actions ---
 
     const handleInterested = () => {
         updateUser(currentUser.id, { 
             status: UserStatus.INTERESTED,
-            contract_type: selectedContract,
+            contract_type: selectedContract as any,
             is_student: isStudent
         });
-        logCandidateAction(currentUser.id, `Kandydat zgłosił zainteresowanie współpracą. Umowa: ${CONTRACT_TYPE_LABELS[selectedContract]}${isStudent ? ' (Student)' : ''}`);
+        const contractLabel = CONTRACT_TYPE_LABELS[selectedContract as ContractType] || selectedContract;
+        logCandidateAction(currentUser.id, `Kandydat zgłosił zainteresowanie współpracą. Umowa: ${contractLabel}${isStudent ? ' (Student)' : ''}`);
         triggerNotification('status_change', 'Zainteresowanie Kandydata', `Kandydat ${currentUser.first_name} ${currentUser.last_name} jest zainteresowany współpracą.`, '/hr/candidates');
     };
 
@@ -201,6 +221,12 @@ export const CandidateDashboard = () => {
     const closeModal = () => {
         setActiveModal(null);
         setSalaryTab('hourly');
+    };
+
+    const handleContractClick = (type: string) => {
+        if (isLocked) return;
+        setSelectedContract(type);
+        setIsContractPopoverOpen(false);
     };
 
     const InfoTile = ({ icon: Icon, label, type, colorClass }: { icon: any, label: string, type: ModalType, colorClass: string }) => (
@@ -233,7 +259,7 @@ export const CandidateDashboard = () => {
                                 na dużych obiektach: halach, biurowcach, obiektach publicznych i przemysłowych.
                             </p>
                             <p className="text-sm leading-relaxed mt-2 italic">
-                                My nie pracujemy „na ilość”, my pracujemy na jakość i odpowiedzialność.
+                                My ne pracujemy „na ilość”, my pracujemy na quality i odpowiedzialność.
                                 Tworzymy przestrzenie, które są funkcjonalne, bezpieczne i trwałe.
                             </p>
                         </div>
@@ -336,7 +362,7 @@ export const CandidateDashboard = () => {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                         <span className="text-sm text-slate-600">Bazowa stawka w MaxMaster:</span>
-                                        <span className="font-bold text-lg text-slate-900">24 zł netto / godz.</span>
+                                        <span className="font-bold text-lg text-slate-900">{systemConfig.baseRate} zł netto / godz.</span>
                                     </div>
                                     <p className="text-sm text-slate-500">
                                         Do tej stawki doliczane są dodatki za konkretne umiejętności, potwierdzone testami teoretycznymi oraz (jeśli wymagane) praktyką na budowie.
@@ -345,13 +371,13 @@ export const CandidateDashboard = () => {
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4">
                                         <p className="text-xs font-bold text-slate-400 uppercase mb-3">Przykład wyliczenia:</p>
                                         <div className="space-y-2 text-sm">
-                                            <div className="flex justify-between"><span>Baza</span> <span className="font-bold">24,00 zł</span></div>
+                                            <div className="flex justify-between"><span>Baza</span> <span className="font-bold">{systemConfig.baseRate.toFixed(2).replace('.', ',')} zł</span></div>
                                             <div className="flex justify-between text-green-600"><span>+ LAN – sieci strukturalne</span> <span className="font-bold">+1,00 zł</span></div>
                                             <div className="flex justify-between text-green-600"><span>+ Montaż rozdzielnic</span> <span className="font-bold">+1,00 zł</span></div>
                                             <div className="flex justify-between text-purple-600"><span>+ SEP E</span> <span className="font-bold">+0,50 zł</span></div>
                                             <div className="border-t border-slate-300 my-2 pt-2 flex justify-between font-bold text-lg text-slate-900">
                                                 <span>RAZEM:</span>
-                                                <span>26,50 zł netto / godz.</span>
+                                                <span>{(systemConfig.baseRate + 2.5).toFixed(2).replace('.', ',')} zł netto / godz.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -395,14 +421,7 @@ export const CandidateDashboard = () => {
                         <h4 className="text-lg font-bold text-slate-900 mb-6 text-center">Twoja ścieżka rozwoju w MaxMaster</h4>
                         
                         <div className="relative pl-8 space-y-6 mb-8 before:absolute before:left-3.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                            {[
-                                { step: 1, label: 'Pomocnik elektryka', color: 'bg-slate-400' },
-                                { step: 2, label: 'Elektromonter', color: 'bg-blue-400' },
-                                { step: 3, label: 'Elektryk', color: 'bg-blue-600' },
-                                { step: 4, label: 'Brygadzista', color: 'bg-purple-500' },
-                                { step: 5, label: 'Koordynator Robót', color: 'bg-orange-500' },
-                                { step: 6, label: 'Kierownik Robót', color: 'bg-slate-800' },
-                            ].map((item) => (
+                            {careerStepsData.map((item) => (
                                 <div key={item.step} className="relative flex items-center">
                                     <div className={`absolute -left-8 w-8 h-8 rounded-full border-4 border-white shadow-sm flex items-center justify-center text-xs font-bold text-white ${item.color}`}>
                                         {item.step}
@@ -410,6 +429,9 @@ export const CandidateDashboard = () => {
                                     <span className="font-bold text-slate-800">{item.label}</span>
                                 </div>
                             ))}
+                            {careerStepsData.length === 0 && (
+                                <p className="text-slate-400 italic text-sm">Brak zdefiniowanych kroków kariery.</p>
+                            )}
                         </div>
 
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
@@ -424,7 +446,7 @@ export const CandidateDashboard = () => {
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <h5 className="font-bold text-slate-800 text-sm mb-2">Jak awansujesz?</h5>
+                                <h5 className="font-bold text-slate-800 text-sm mb-2">Jak awansować?</h5>
                                 <ul className="text-xs text-slate-600 space-y-1">
                                     <li>• Zdajesz testy</li>
                                     <li>• Potwierdzasz umiejętności w praktyce</li>
@@ -517,7 +539,7 @@ export const CandidateDashboard = () => {
     // --- VIEW: POST-TEST DASHBOARD ---
     if (isPostTestStage) {
         return (
-            <div className="min-h-screen bg-slate-50 p-6 pb-24">
+            <div className="min-h-screen bg-slate-50 p-6 pb-24" onClick={() => setIsContractPopoverOpen(false)}>
                 <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     
                     {/* Header */}
@@ -610,42 +632,64 @@ export const CandidateDashboard = () => {
                             <p className="text-xs text-slate-400 mt-2">{isLocked ? 'Zablokowane.' : 'Kliknij, aby dodać.'}</p>
                         </div>
 
-                        {/* FORMA ZATRUDNIENIA */}
-                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative group">
-                            <div>
+                        {/* FORMA ZATRUDNIENIA - CUSTOM DROPDOWN (matching HR) */}
+                        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative">
+                            <div 
+                                className={`cursor-pointer ${isLocked ? 'cursor-default' : 'hover:bg-slate-50'} transition-colors rounded-lg -m-2 p-2`}
+                                onClick={(e) => { 
+                                    if (isLocked) return;
+                                    e.stopPropagation(); 
+                                    setIsContractPopoverOpen(!isContractPopoverOpen); 
+                                }}
+                            >
                                 <div className="flex items-center gap-2 text-slate-500 mb-2 font-medium uppercase text-xs tracking-wider">
                                     <FileText size={16} /> Forma Umowy
                                 </div>
-                                <div className="relative">
-                                    <select 
-                                        className={`w-full appearance-none bg-transparent text-xl font-bold text-blue-600 focus:outline-none py-1 pr-6 ${isLocked ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}`}
-                                        value={selectedContract}
-                                        onChange={(e) => setSelectedContract(e.target.value as ContractType)}
-                                        disabled={isLocked}
-                                    >
-                                        <option value={ContractType.UOP}>Umowa o Pracę</option>
-                                        <option value={ContractType.UZ}>Umowa Zlecenie</option>
-                                        <option value={ContractType.B2B}>B2B</option>
-                                    </select>
-                                    {!isLocked && <ChevronDown size={16} className="absolute right-0 top-1/2 -translate-y-1/2 text-blue-600 pointer-events-none"/>}
+                                <div className="flex items-center justify-between">
+                                    <div className="text-xl font-bold text-blue-600 uppercase flex items-center gap-1">
+                                        {CONTRACT_TYPE_LABELS[selectedContract as ContractType] || selectedContract || 'Wybierz'}
+                                        {!isLocked && <ChevronDown size={16} className="text-blue-400" />}
+                                    </div>
                                 </div>
                                 <div className="text-sm font-bold text-blue-400 mt-1">
                                     {contractBonus > 0 ? `+${contractBonus} zł` : '+0 zł'}
                                 </div>
-                                {selectedContract === ContractType.UZ && (
-                                    <div className="mt-2 flex items-center gap-2 bg-blue-50 p-2 rounded">
-                                        <input 
-                                            type="checkbox" 
-                                            id="studentCb"
-                                            checked={isStudent} 
-                                            onChange={(e) => setIsStudent(e.target.checked)}
-                                            disabled={isLocked}
-                                            className={`w-4 h-4 text-blue-600 rounded focus:ring-blue-500 ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                                        />
-                                        <label htmlFor="studentCb" className={`text-xs text-slate-700 font-medium ${isLocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>Student &lt; 26 lat (+3 zł)</label>
-                                    </div>
-                                )}
                             </div>
+
+                            {isContractPopoverOpen && (
+                                <div 
+                                    className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-xl z-[200] py-1 flex flex-col animate-in slide-in-from-top-2 duration-200 overflow-hidden"
+                                    onClick={e => e.stopPropagation()}
+                                >
+                                    {Object.entries(systemConfig.contractBonuses).map(([type, bonus]) => (
+                                        <button 
+                                            key={type} 
+                                            className="px-4 py-3 text-[11px] font-bold text-left hover:bg-blue-50 text-slate-700 transition-colors flex justify-between items-center" 
+                                            onClick={() => handleContractClick(type)}
+                                        >
+                                            <span className="uppercase">{CONTRACT_TYPE_LABELS[type as ContractType] || type}</span>
+                                            <span className="text-blue-500 font-black">+{bonus} zł</span>
+                                        </button>
+                                    ))}
+                                    {selectedContract === 'uz' && (
+                                        <>
+                                            <div className="border-t border-slate-100 my-1"></div>
+                                            <div className="px-4 py-2 flex items-center justify-between bg-slate-50/50">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase">Student &lt; 26 lat</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-[10px] font-bold text-indigo-600">+{systemConfig.studentBonus} zł</span>
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={isStudent} 
+                                                        onChange={(e) => setIsStudent(e.target.checked)}
+                                                        className="w-4 h-4 text-blue-600 rounded cursor-pointer" 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                             <p className="text-xs text-slate-400 mt-2">{isLocked ? 'Wybrano.' : 'Twój wybór.'}</p>
                         </div>
 
@@ -655,7 +699,7 @@ export const CandidateDashboard = () => {
                                 <div className="flex items-center gap-2 text-slate-400 mb-2 font-medium uppercase text-xs tracking-wider">
                                     <Calculator size={16} /> Twoja Stawka
                                 </div>
-                                <div className="text-4xl font-bold">{totalRate} zł<span className="text-lg text-slate-400 font-normal">/h</span></div>
+                                <div className="text-4xl font-bold">{totalRate.toFixed(2)} zł<span className="text-lg text-slate-400 font-normal">/h</span></div>
                             </div>
                             <p className="text-xs text-slate-500 mt-2">To jest symulacja. Finalna stawka może wejść od następnego miesiąca po potwierdzeniach.</p>
                         </div>
@@ -697,13 +741,13 @@ export const CandidateDashboard = () => {
                                         </p>
                                         <div className="grid grid-cols-1 gap-2 text-xs mb-6">
                                             <div className="bg-white p-2 rounded border border-slate-200 shadow-sm flex items-center gap-2">
-                                                <span className="font-bold text-blue-600 w-16 text-right">+3 zł/h</span> Nadgodziny (powyżej 8h)
+                                                <span className="font-bold text-blue-600 w-16 text-right">+{systemConfig.overtimeBonus} zł/h</span> Nadgodziny (powyżej 8h)
                                             </div>
                                             <div className="bg-white p-2 rounded border border-slate-200 shadow-sm flex items-center gap-2">
-                                                <span className="font-bold text-blue-600 w-16 text-right">+5 zł/h</span> Weekend (Soboty/Niedziele)
+                                                <span className="font-bold text-blue-600 w-16 text-right">+{systemConfig.holidayBonus} zł/h</span> Weekend (Soboty/Niedziele)
                                             </div>
                                             <div className="bg-white p-2 rounded border border-slate-200 shadow-sm flex items-center gap-2">
-                                                <span className="font-bold text-blue-600 w-16 text-right">+1 zł/h</span> Staż pracy (co rok)
+                                                <span className="font-bold text-blue-600 w-16 text-right">+{systemConfig.seniorityBonus} zł/h</span> Staż pracy (co rok)
                                             </div>
                                         </div>
                                         
@@ -714,7 +758,7 @@ export const CandidateDashboard = () => {
                                                 <MapPin size={16} className="text-blue-600"/>
                                                 <div className="flex flex-col">
                                                     <span className="text-[10px] uppercase font-bold text-blue-400">Dodatek</span>
-                                                    <span className="text-xs font-bold text-blue-800">Delegacja (+3 zł)</span>
+                                                    <span className="text-xs font-bold text-blue-800">Delegacja (+{systemConfig.delegationBonus} zł)</span>
                                                 </div>
                                                 <button 
                                                     onClick={() => setIsDelegation(!isDelegation)}
@@ -729,7 +773,7 @@ export const CandidateDashboard = () => {
                                                 <Calendar size={16} className="text-orange-600"/>
                                                 <div className="flex flex-col">
                                                     <span className="text-[10px] uppercase font-bold text-orange-400">Czas pracy</span>
-                                                    <span className="text-xs font-bold text-orange-800">Soboty (+5 zł)</span>
+                                                    <span className="text-xs font-bold text-orange-800">Soboty (+{systemConfig.holidayBonus} zł)</span>
                                                 </div>
                                                 <button 
                                                     onClick={() => setIsSaturday(!isSaturday)}
@@ -807,30 +851,17 @@ export const CandidateDashboard = () => {
                                                     {/* Vertical connecting line */}
                                                     <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-slate-200"></div>
                                                     
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-slate-300 flex items-center justify-center text-xs font-bold text-slate-500">1</div>
-                                                        <span className="font-medium text-slate-600">Pomocnik elektryka</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-blue-50 border-2 border-blue-200 flex items-center justify-center text-xs font-bold text-blue-600">2</div>
-                                                        <span className="font-medium text-blue-700">Elektromonter</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-blue-100 border-2 border-blue-400 flex items-center justify-center text-xs font-bold text-blue-700">3</div>
-                                                        <span className="font-bold text-blue-900">Elektryk</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-purple-100 border-2 border-purple-400 flex items-center justify-center text-xs font-bold text-purple-700">4</div>
-                                                        <span className="font-bold text-purple-900">Brygadzista</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-orange-100 border-2 border-orange-400 flex items-center justify-center text-xs font-bold text-orange-700">5</div>
-                                                        <span className="font-bold text-orange-900">Koordynator Robót</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-4 relative z-10">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-xs font-bold text-white">6</div>
-                                                        <span className="font-bold text-slate-900">Kierownik Robót</span>
-                                                    </div>
+                                                    {careerStepsData.map((item) => (
+                                                        <div key={item.step} className="flex items-center gap-4 relative z-10">
+                                                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold shadow-sm transition-all duration-300 ${item.color} border-white text-white`}>
+                                                                {item.step}
+                                                            </div>
+                                                            <span className="font-medium text-slate-600">{item.label}</span>
+                                                        </div>
+                                                    ))}
+                                                    {careerStepsData.length === 0 && (
+                                                        <p className="text-slate-400 italic text-sm">Brak zdefiniowanych kroków kariery.</p>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -1006,7 +1037,7 @@ export const CandidateDashboard = () => {
 
     // --- VIEW: PRE-TEST DASHBOARD (Existing) ---
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-8">
+        <div className="p-6 max-w-5xl mx-auto space-y-8" onClick={() => setIsContractPopoverOpen(false)}>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <InfoTile type="about" label="O MaxMaster" icon={Building} colorClass="bg-blue-100 text-blue-600"/>
                 <InfoTile type="conditions" label="Warunki Pracy" icon={Briefcase} colorClass="bg-green-100 text-green-600"/>
@@ -1032,8 +1063,6 @@ export const CandidateDashboard = () => {
                     </div>
                 </div>
             )}
-
-            {/* REMOVED TILE BLOCK HERE */}
 
             {renderModalContent()}
             {renderQualModal()}

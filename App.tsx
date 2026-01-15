@@ -11,6 +11,7 @@ import { LoginPage } from './pages/Login';
 import { SetupPasswordPage } from './pages/SetupPassword';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { ResetPasswordPage } from './pages/ResetPassword';
+import { TerminatedPage } from './pages/Terminated';
 import { AdminUsersPage } from './pages/admin/Users';
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
@@ -70,6 +71,11 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
     return <Navigate to="/login" replace />;
   }
 
+  // BLOCK TERMINATED USERS
+  if (state.currentUser.status === UserStatus.INACTIVE) {
+      return <Navigate to="/terminated" replace />;
+  }
+
   // Trial User Logic
   if (state.currentUser.status === UserStatus.TRIAL) {
       if (checkTrial && window.location.hash.includes('/dashboard') && !window.location.hash.includes('/trial')) {
@@ -98,6 +104,7 @@ export default function App() {
           <Route path="/setup-password" element={<SetupPasswordPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/terminated" element={<TerminatedPage />} />
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           

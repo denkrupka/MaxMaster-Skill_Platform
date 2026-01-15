@@ -1,252 +1,211 @@
 
 import React, { useMemo } from 'react';
-import { TrendingUp, Award, Star, CheckCircle, Lock, User, Briefcase, ChevronRight, Zap, BookOpen, Shield } from 'lucide-react';
+import { 
+    TrendingUp, Award, CheckCircle, Lock, User, Briefcase, 
+    ChevronRight, Zap, BookOpen, Shield, DollarSign, List, Circle
+} from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { SkillCategory, SkillStatus } from '../../types';
-
-interface CareerStep {
-    id: number;
-    title: string;
-    description: string;
-    requiredCategories: SkillCategory[];
-    minSkillsRequired: number; // Threshold to consider "ready" for next
-    responsibilities: string[];
-}
-
-const CAREER_PATH: CareerStep[] = [
-    {
-        id: 1,
-        title: 'Pomocnik',
-        description: 'Początek kariery. Nauka podstaw i wsparcie zespołu.',
-        requiredCategories: [SkillCategory.INNE, SkillCategory.UPRAWNIENIA],
-        minSkillsRequired: 1, // e.g. BHP or basic intro
-        responsibilities: [
-            'Dbanie o porządek na stanowisku pracy',
-            'Pomoc w transporcie materiałów',
-            'Wsparcie elektromonterów w prostych pracach'
-        ]
-    },
-    {
-        id: 2,
-        title: 'Elektromonter',
-        description: 'Samodzielny montaż tras i okablowania.',
-        requiredCategories: [SkillCategory.MONTAZ, SkillCategory.ELEKTRYKA],
-        minSkillsRequired: 3,
-        responsibilities: [
-            'Montaż tras kablowych (koryta, drabinki)',
-            'Układanie okablowania',
-            'Montaż osprzętu (gniazda, łączniki)'
-        ]
-    },
-    {
-        id: 3,
-        title: 'Elektryk',
-        description: 'Zaawansowane prace łączeniowe i pomiary.',
-        requiredCategories: [SkillCategory.ELEKTRYKA, SkillCategory.AUTOMATYKA, SkillCategory.UPRAWNIENIA],
-        minSkillsRequired: 5,
-        responsibilities: [
-            'Prefabrykacja i podłączanie rozdzielnic',
-            'Wykonywanie pomiarów elektrycznych',
-            'Czytanie schematów ideowych'
-        ]
-    },
-    {
-        id: 4,
-        title: 'Brygadzista',
-        description: 'Zarządzanie małym zespołem i weryfikacja jakości.',
-        requiredCategories: [SkillCategory.BRYGADZISTA, SkillCategory.UPRAWNIENIA],
-        minSkillsRequired: 2,
-        responsibilities: [
-            'Organizacja pracy zespołu',
-            'Weryfikacja jakości wykonania (Odbiory wewnętrzne)',
-            'Raportowanie postępów do Kierownika'
-        ]
-    },
-    {
-        id: 5,
-        title: 'Koordynator Robót',
-        description: 'Nadzór nad odcinkiem robót i materiałami.',
-        requiredCategories: [SkillCategory.BRYGADZISTA, SkillCategory.POMIARY],
-        minSkillsRequired: 4,
-        responsibilities: [
-            'Zamawianie materiałów',
-            'Rozwiązywanie kolizji na budowie',
-            'Harmonogramowanie prac'
-        ]
-    },
-    {
-        id: 6,
-        title: 'Kierownik Robót',
-        description: 'Pełna odpowiedzialność za kontrakt i ludzi.',
-        requiredCategories: [SkillCategory.BRYGADZISTA, SkillCategory.INNE], // Placeholder logic
-        minSkillsRequired: 5,
-        responsibilities: [
-            'Rozliczenia finansowe budowy',
-            'Kontakt z Inwestorem',
-            'Nadzór nad BHP i dokumentacją'
-        ]
-    }
-];
+import { SkillStatus, Position } from '../../types';
 
 export const EmployeeCareer = () => {
     const { state } = useAppContext();
-    const { currentUser, skills, userSkills } = state;
+    const { currentUser, skills, userSkills, positions, systemConfig } = state;
 
     if (!currentUser) return null;
 
-    // --- LOGIC: Determine Current Level Index ---
-    // Fallback to 0 (Pomocnik) if exact match not found
-    const currentLevelIndex = useMemo(() => {
-        const idx = CAREER_PATH.findIndex(step => step.title === currentUser.target_position);
-        return idx !== -1 ? idx : 0;
-    }, [currentUser.target_position]);
+    // --- LOGIC: Sort and Process Positions from DB ---
+    const careerSteps = useMemo(() => {
+        return [...positions].sort((a, b) => a.order - b.order);
+    }, [positions]);
 
-    // --- LOGIC: Calculate Progress Per Level ---
-    const getLevelProgress = (step: CareerStep) => {
-        // Find all system skills that match the categories required by this step
-        const relevantSkills = skills.filter(s => step.requiredCategories.includes(s.category));
+    // Determine current level based on target_position name
+    const currentLevelIndex = useMemo(() => {
+        const idx = careerSteps.findIndex(p => p.name === currentUser.target_position);
+        return idx !== -1 ? idx : 0;
+    }, [careerSteps, currentUser.target_position]);
+
+    const getLevelData = (pos: Position) => {
+        const requiredSkillIds = pos.required_skill_ids || [];
         
-        // Count how many of these the user has CONFIRMED
-        const userConfirmedCount = relevantSkills.reduce((acc, skill) => {
-            const hasSkill = userSkills.find(us => us.skill_id === skill.id && us.status === SkillStatus.CONFIRMED);
+        // Find how many required skills the user has CONFIRMED
+        const userConfirmedCount = requiredSkillIds.reduce((acc, sid) => {
+            const hasSkill = userSkills.find(us => us.user_id === currentUser.id && us.skill_id === sid && us.status === SkillStatus.CONFIRMED);
             return hasSkill ? acc + 1 : acc;
         }, 0);
 
-        // Cap at the requirement for display logic (e.g. don't show 5/3) or show actual? 
-        // Let's show actual vs min required.
-        const percentage = Math.min(100, Math.round((userConfirmedCount / step.minSkillsRequired) * 100));
+        const totalRequired = requiredSkillIds.length || 1; // Default to 1 to avoid div by zero
+        const percentage = Math.min(100, Math.round((userConfirmedCount / totalRequired) * 100));
+
+        // Calculate Salary Range for this position
+        // If position has fixed monthly rate, use it. Otherwise calculate based on base + required skills.
+        let minSalary = 0;
+        let maxSalary = 0;
+        let unit = 'zł/h';
+
+        if (pos.salary_type === 'monthly') {
+            minSalary = pos.min_monthly_rate || 0;
+            maxSalary = pos.max_monthly_rate || 0;
+            unit = 'zł/mc';
+        } else {
+            const base = systemConfig.baseRate;
+            const reqSkills = skills.filter(s => requiredSkillIds.includes(s.id));
+            const bonusSum = reqSkills.reduce((acc, s) => acc + s.hourly_bonus, 0);
+            minSalary = base;
+            maxSalary = base + bonusSum;
+        }
+
+        // Get unique categories for tags at the bottom
+        const categories = Array.from(new Set(
+            skills.filter(s => requiredSkillIds.includes(s.id)).map(s => s.category)
+        ));
 
         return {
             userCount: userConfirmedCount,
-            required: step.minSkillsRequired,
+            totalCount: requiredSkillIds.length,
             percentage,
-            relevantSkills
+            minSalary,
+            maxSalary,
+            unit,
+            categories
         };
     };
 
     return (
-        <div className="p-6 max-w-4xl mx-auto pb-24">
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-slate-900 mb-2">Ścieżka Rozwoju</h1>
-                <p className="text-slate-500">
+        <div className="p-8 max-w-5xl mx-auto pb-32">
+            <div className="mb-12">
+                <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Ścieżka Rozwoju</h1>
+                <p className="text-slate-500 font-medium">
                     Twoja droga awansu w MaxMaster. Zdobywaj umiejętności, aby odblokować kolejne poziomy i wyższe stawki.
                 </p>
             </div>
 
             <div className="relative">
                 {/* Vertical Line */}
-                <div className="absolute left-8 top-8 bottom-8 w-0.5 bg-slate-200 hidden md:block"></div>
+                <div className="absolute left-[31px] top-8 bottom-8 w-1 bg-slate-100 rounded-full hidden md:block"></div>
 
-                <div className="space-y-8">
-                    {CAREER_PATH.map((step, index) => {
+                <div className="space-y-12">
+                    {careerSteps.map((pos, index) => {
                         const isPast = index < currentLevelIndex;
                         const isCurrent = index === currentLevelIndex;
                         const isFuture = index > currentLevelIndex;
                         
-                        const progress = getLevelProgress(step);
+                        const data = getLevelData(pos);
 
                         return (
-                            <div key={step.id} className={`relative flex flex-col md:flex-row gap-6 ${isFuture ? 'opacity-70' : 'opacity-100'}`}>
+                            <div key={pos.id} className="relative flex flex-col md:flex-row gap-10">
                                 
-                                {/* Timeline Icon */}
+                                {/* Timeline Icon - Matching screenshot style */}
                                 <div className="hidden md:flex flex-col items-center z-10">
                                     <div className={`
-                                        w-16 h-16 rounded-full border-4 flex items-center justify-center shadow-sm transition-all
+                                        w-16 h-16 rounded-full border-4 flex items-center justify-center shadow-sm transition-all duration-500
                                         ${isCurrent ? 'bg-blue-600 border-blue-100 text-white scale-110 shadow-blue-200' : ''}
-                                        ${isPast ? 'bg-green-100 border-green-50 text-green-600' : ''}
-                                        ${isFuture ? 'bg-slate-50 border-slate-200 text-slate-400' : ''}
+                                        ${isPast ? 'bg-green-50 border-green-100 text-green-600' : 'bg-slate-50 border-slate-200 text-slate-300'}
                                     `}>
-                                        {isPast ? <CheckCircle size={24}/> : (isCurrent ? <TrendingUp size={28}/> : <Lock size={24}/>)}
+                                        {isPast ? <CheckCircle size={32}/> : (isCurrent ? <TrendingUp size={32}/> : <Circle size={32} className="fill-slate-100"/>)}
                                     </div>
                                 </div>
 
-                                {/* Content Card */}
-                                <div className={`flex-1 rounded-2xl border transition-all duration-300 overflow-hidden ${
+                                {/* Content Card - Matching screenshot design */}
+                                <div className={`flex-1 rounded-[32px] border transition-all duration-500 overflow-hidden ${
                                     isCurrent 
-                                    ? 'bg-white border-blue-200 shadow-lg ring-1 ring-blue-100' 
-                                    : (isPast ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100')
+                                    ? 'bg-white border-blue-200 shadow-2xl ring-1 ring-blue-50' 
+                                    : (isPast ? 'bg-slate-50/50 border-slate-200' : 'bg-white border-slate-100 opacity-60')
                                 }`}>
                                     
-                                    {/* Card Header */}
-                                    <div className={`px-6 py-4 flex justify-between items-center ${isCurrent ? 'bg-blue-50/50' : ''}`}>
-                                        <div>
-                                            <div className="flex items-center gap-3">
-                                                <h3 className={`text-lg font-bold ${isCurrent ? 'text-blue-800' : 'text-slate-800'}`}>
-                                                    {step.title}
+                                    <div className="p-8">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex items-center gap-4">
+                                                <h3 className={`text-2xl font-black tracking-tight ${isCurrent ? 'text-slate-900' : 'text-slate-700'}`}>
+                                                    {pos.name}
                                                 </h3>
                                                 {isCurrent && (
-                                                    <span className="bg-blue-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-                                                        <User size={10}/> Twój poziom
+                                                    <span className="bg-blue-600 text-white text-[10px] uppercase font-black px-3 py-1 rounded-full tracking-widest shadow-sm">
+                                                        Twój poziom
                                                     </span>
                                                 )}
                                                 {isPast && (
-                                                    <span className="bg-green-100 text-green-700 text-[10px] uppercase font-bold px-2 py-0.5 rounded-full">
-                                                        Zaliczone
+                                                    <span className="bg-green-100 text-green-700 text-[10px] uppercase font-black px-3 py-1 rounded-full tracking-widest border border-green-200">
+                                                        ZALICZONE
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-500 mt-1">{step.description}</p>
+                                            
+                                            {/* Salary Display */}
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">STAWKA PROGNOZOWANA</div>
+                                                <div className={`text-xl font-black ${isCurrent ? 'text-blue-600' : 'text-slate-600'}`}>
+                                                    {data.minSalary}-{data.maxSalary} <span className="text-xs font-bold text-slate-400">{data.unit}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        {isFuture && <Lock size={20} className="text-slate-300"/>}
-                                    </div>
 
-                                    {/* Card Body */}
-                                    <div className="p-6 pt-4 space-y-6">
-                                        
-                                        {/* Responsibilities */}
-                                        <div>
-                                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2">
-                                                <Briefcase size={14}/> Odpowiedzialność
+                                        <p className="text-slate-500 text-sm font-medium mb-8">
+                                            Poziom kariery: {index + 1}. Wymaga potwierdzenia kluczowych kompetencji technicznych.
+                                        </p>
+
+                                        {/* Responsibilities - List style from screenshot */}
+                                        <div className="mb-10">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                                <Briefcase size={14}/> ODPOWIEDZIALNOŚĆ
                                             </h4>
-                                            <ul className="space-y-2">
-                                                {step.responsibilities.map((resp, i) => (
-                                                    <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                                                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent ? 'bg-blue-400' : 'bg-slate-300'}`}></div>
+                                            <ul className="space-y-3">
+                                                {(pos.responsibilities || []).map((resp, i) => (
+                                                    <li key={i} className="flex items-start gap-3 text-sm font-medium text-slate-700">
+                                                        <div className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCurrent ? 'bg-blue-500' : 'bg-slate-300'}`}></div>
                                                         {resp}
                                                     </li>
                                                 ))}
+                                                {(!pos.responsibilities || pos.responsibilities.length === 0) && (
+                                                    <li className="text-sm italic text-slate-400">Brak zdefiniowanych obowiązków.</li>
+                                                )}
                                             </ul>
                                         </div>
 
-                                        {/* Requirements Progress */}
-                                        <div className={`bg-slate-50 rounded-xl p-4 border ${isCurrent ? 'border-blue-100' : 'border-slate-100'}`}>
-                                            <div className="flex justify-between items-end mb-2">
-                                                <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
-                                                    <Award size={14} className={isCurrent ? 'text-blue-500' : 'text-slate-400'}/> Wymagane Kompetencje
+                                        {/* Competence Progress - Styled exactly as requested */}
+                                        <div className="bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
+                                            <div className="flex justify-between items-end mb-4">
+                                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                    <Award size={16} className={isCurrent ? 'text-blue-500' : 'text-slate-400'}/> WYMAGANE KOMPETENCJE
                                                 </h4>
                                                 <div className="text-right">
-                                                    <span className={`text-lg font-bold ${progress.userCount >= progress.required ? 'text-green-600' : 'text-slate-700'}`}>
-                                                        {progress.userCount}
+                                                    <span className={`text-xl font-black ${data.userCount >= data.totalCount && data.totalCount > 0 ? 'text-green-600' : 'text-slate-900'}`}>
+                                                        {data.userCount}
                                                     </span>
-                                                    <span className="text-sm text-slate-400"> / {progress.required}</span>
+                                                    <span className="text-sm font-bold text-slate-400"> / {data.totalCount}</span>
                                                 </div>
                                             </div>
                                             
                                             {/* Progress Bar */}
-                                            <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden mb-3">
+                                            <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden mb-6 shadow-inner">
                                                 <div 
-                                                    className={`h-full transition-all duration-1000 ${
-                                                        progress.userCount >= progress.required ? 'bg-green-500' : (isCurrent ? 'bg-blue-500' : 'bg-slate-400')
+                                                    className={`h-full transition-all duration-1000 ease-out ${
+                                                        data.userCount >= data.totalCount && data.totalCount > 0 ? 'bg-green-500' : (isCurrent ? 'bg-blue-600' : 'bg-slate-400')
                                                     }`} 
-                                                    style={{ width: `${progress.percentage}%` }}
+                                                    style={{ width: `${data.percentage}%` }}
                                                 ></div>
                                             </div>
 
-                                            <div className="flex flex-wrap gap-2 mt-3">
-                                                {step.requiredCategories.map((cat, i) => (
-                                                    <span key={i} className="text-[10px] border border-slate-200 bg-white text-slate-500 px-2 py-1 rounded shadow-sm">
+                                            {/* Tags at the bottom */}
+                                            <div className="flex flex-wrap gap-2">
+                                                {data.categories.map((cat, i) => (
+                                                    <span key={i} className="text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-white text-slate-500 px-3 py-1.5 rounded-lg shadow-sm">
                                                         {cat}
                                                     </span>
                                                 ))}
+                                                {data.categories.length === 0 && (
+                                                    <span className="text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-white text-slate-400 px-3 py-1.5 rounded-lg shadow-sm">
+                                                        PODSTAWY
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* CTA for Current Level */}
-                                        {isCurrent && (
-                                            <div className="flex justify-end pt-2">
-                                                <div className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg font-medium flex items-center gap-2">
-                                                    <Zap size={14}/>
-                                                    Uzupełnij brakujące umiejętności w zakładce "Testy", aby awansować.
+                                        {/* Future path reminder for current position */}
+                                        {isCurrent && !isPast && (
+                                            <div className="mt-8 flex justify-center">
+                                                <div className="text-xs font-bold text-blue-600 bg-blue-50 px-6 py-3 rounded-2xl flex items-center gap-3 border border-blue-100 shadow-sm animate-pulse">
+                                                    <Zap size={16} fill="currentColor"/>
+                                                    Zdobądź brakujące kompetencje, aby awansować na kolejny poziom!
                                                 </div>
                                             </div>
                                         )}
@@ -255,6 +214,12 @@ export const EmployeeCareer = () => {
                             </div>
                         );
                     })}
+
+                    {careerSteps.length === 0 && (
+                        <div className="bg-white p-20 text-center rounded-[32px] border border-dashed border-slate-200 text-slate-400 font-bold italic">
+                            Lista stanowisk nie została jeszcze skonfigurowana przez dział HR.
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

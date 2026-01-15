@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -43,6 +42,7 @@ export const HRCandidatesPage = () => {
     const { state, updateUser, addCandidate, logCandidateAction, triggerNotification, archiveCandidateDocument, restoreCandidateDocument, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus, resetTestAttempt, moveCandidateToTrial } = useAppContext();
     const { systemConfig, skills, userSkills, testAttempts, users, tests, positions } = state;
     const location = useLocation();
+    const navigate = useNavigate();
     
     const inviteLink = `${window.location.origin}/#/candidate/welcome`;
 
@@ -95,6 +95,7 @@ export const HRCandidatesPage = () => {
     // AI Parsing State
     const [isAILoading, setIsAILoading] = useState(false);
     const aiFileInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Validation state
     const [validationErrors, setValidationErrors] = useState<{email?: string, phone?: string}>({});
@@ -151,8 +152,6 @@ export const HRCandidatesPage = () => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
-    const [docsViewMode, setDocsViewMode] = useState<'active' | 'archived'>('active');
-    const [docSearch, setDocSearch] = useState('');
 
     useEffect(() => {
         if (location.state && (location.state as any).openAddCandidate) {
@@ -359,7 +358,6 @@ export const HRCandidatesPage = () => {
     const handleHireToTrial = async () => {
         if (!selectedCandidate) return;
         
-        // Walidacja czy dane osobowe są kompletne - teraz z powiadomieniem toast
         if (!isDataComplete(selectedCandidate)) {
             return triggerNotification('error', 'Błąd Zatrudnienia', 'Nie można zatrudnić kandydata bez kompletnych danych osobowych.');
         }
@@ -451,11 +449,20 @@ export const HRCandidatesPage = () => {
         setIsStatusPopoverOpen(false);
     };
 
-    const handleContractChange = async (type: ContractType) => {
+    const handleContractChange = async (type: string) => {
         if (!selectedCandidate) return;
-        await updateUser(selectedCandidate.id, { contract_type: type });
-        setSelectedCandidate({ ...selectedCandidate, contract_type: type });
-        setIsContractPopoverOpen(false);
+        
+        // Zapisz do bazy - bez względu na to czy jest to typ "core" czy "custom"
+        // Jeśli DB ma ENUM, a typ jest spoza, rzuci błędem, ale przynajmniej Frontend spróbuje zapisać.
+        try {
+            await updateUser(selectedCandidate.id, { contract_type: type as any });
+            setSelectedCandidate({ ...selectedCandidate, contract_type: type as any });
+            setIsContractPopoverOpen(false);
+            triggerNotification('success', 'Zapisano', `Zmieniono formę zatrudnienia na ${type.toUpperCase()}`);
+        } catch (err: any) {
+            console.error('Błąd zapisu ContractType:', err);
+            triggerNotification('error', 'Błąd zapisu', 'Wybrany typ umowy nie jest wspierany przez bazę danych (ENUM limitation). Skontaktuj się z adminem.');
+        }
     };
 
     const handleStudentToggle = async (val: boolean) => {
@@ -464,12 +471,28 @@ export const HRCandidatesPage = () => {
         setSelectedCandidate({ ...selectedCandidate, is_student: val });
     };
 
+    const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, '');
+        if (val.length > 5) val = val.slice(0, 5);
+        if (val.length > 2) val = val.slice(0, 2) + '-' + val.slice(2);
+        setEditPersonalData({ ...editPersonalData, zip_code: val });
+    };
+
+    const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, '');
+        if (val.length > 26) val = val.slice(0, 26);
+        val = val.replace(/(.{4})/g, '$1 ').trim();
+        setEditPersonalData({ ...editPersonalData, bank_account: val });
+    };
+
     const renderDetail = () => {
         if (!selectedCandidate) return null;
 
         const candidateSkills = userSkills.filter(us => us.user_id === selectedCandidate.id);
+        
+        // Obliczenia używające systemConfig.baseRate
         const salaryInfo = calculateSalary(
-            selectedCandidate.base_rate || systemConfig.baseRate,
+            systemConfig.baseRate,
             skills,
             candidateSkills.filter(us => !us.is_archived),
             { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
@@ -477,9 +500,9 @@ export const HRCandidatesPage = () => {
             []
         );
 
-        const contractType = selectedCandidate.contract_type || ContractType.UOP;
+        const contractType = selectedCandidate.contract_type || 'uop';
         const contractBonus = systemConfig.contractBonuses[contractType] || 0;
-        const studentBonus = (contractType === ContractType.UZ && selectedCandidate.is_student) ? 3 : 0;
+        const studentBonus = (contractType === 'uz' && selectedCandidate.is_student) ? systemConfig.studentBonus : 0;
         const totalExtras = contractBonus + studentBonus;
         const totalRate = salaryInfo.total + totalExtras;
 
@@ -606,7 +629,7 @@ export const HRCandidatesPage = () => {
                             { id: 'docs', label: 'Dokumenty' },
                             { id: 'history', label: 'Historia Działań' }
                         ].map(t => (
-                            <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`py-3.5 px-4 font-bold text-xs border-b-4 transition-all whitespace-nowrap ${activeTab === t.id ? 'border-blue-600 text-blue-600 bg-blue-50/20' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+                            <button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`py-3.5 px-4 font-bold text-sm border-b-4 transition-all whitespace-nowrap ${activeTab === t.id ? 'border-blue-600 text-blue-600 bg-blue-50/20' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
                                 {t.label}
                             </button>
                         ))}
@@ -614,86 +637,26 @@ export const HRCandidatesPage = () => {
                     <div className="p-6">
                         {activeTab === 'info' && (
                             <div className="space-y-6">
-                                <div><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Notatki Rekrutacyjne</h3><textarea className="w-full border border-slate-200 rounded-xl p-4 bg-slate-50 focus:bg-white transition-all outline-none focus:ring-2 focus:ring-blue-500/10 shadow-inner min-h-[150px] text-sm" placeholder="Wpisz notatki..." value={selectedCandidate.notes || ''} onChange={(e) => updateUser(selectedCandidate.id, { notes: e.target.value })} /></div>
+                                <div><h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Notatki Rekrutacyjne</h3><textarea className="w-full border border-slate-200 rounded-xl p-4 bg-slate-50 focus:bg-white transition-all outline-none focus:ring-2 focus:ring-blue-500/10 shadow-inner min-h-[150px] text-sm" placeholder="Wpisz notatki..." value={selectedCandidate.notes || ''} onChange={(e) => { const val = e.target.value; updateUser(selectedCandidate.id, { notes: val }); setSelectedCandidate({...selectedCandidate, notes: val}); }} /></div>
                             </div>
                         )}
                         {activeTab === 'personal' && (
-                            <div className="animate-in fade-in duration-300">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                    <div className="space-y-4">
-                                        <h3 className="font-black text-slate-800 flex items-center gap-2 border-b pb-2 uppercase text-[10px] tracking-widest"><UserIcon size={16} className="text-blue-600"/> Dane podstawowe</h3>
-                                        <div className="space-y-4">
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">PESEL</label>
-                                                <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.pesel} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); setEditPersonalData({...editPersonalData, pesel: v}); }} placeholder="00000000000" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">Data urodzenia</label>
-                                                <input type="date" className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.birth_date} onChange={e => setEditPersonalData({...editPersonalData, birth_date: e.target.value})} />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">Obywatelstwo</label>
-                                                <select className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.citizenship} onChange={e => setEditPersonalData({...editPersonalData, citizenship: e.target.value})}>
-                                                    <option value="">Wybierz...</option>
-                                                    <option value="Polskie">Polskie</option>
-                                                    <option value="Ukraińskie">Ukraińskie</option>
-                                                    <option value="Białoruskie">Białoruskie</option>
-                                                    <option value="Inne">Inne</option>
-                                                </select>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <label className="block text-[9px] font-black text-slate-400 uppercase">Typ Dokumentu</label>
-                                                    <select className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.document_type} onChange={e => setEditPersonalData({...editPersonalData, document_type: e.target.value})}>
-                                                        <option value="Dowód osobisty">Dowód osobisty</option>
-                                                        <option value="Paszport">Paszport</option>
-                                                        <option value="Karta Pobytu">Karta Pobytu</option>
-                                                    </select>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="block text-[9px] font-black text-slate-400 uppercase">Nr Dokumentu</label>
-                                                    <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.document_number} onChange={e => setEditPersonalData({...editPersonalData, document_number: e.target.value})} placeholder="ABC 123456" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <h3 className="font-black text-slate-800 flex items-center gap-2 border-b pb-2 uppercase text-[10px] tracking-widest"><MapPin size={16} className="text-blue-600"/> Adres i Finanse</h3>
-                                        <div className="space-y-4">
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">ULICA</label>
-                                                <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.street} onChange={e => setEditPersonalData({...editPersonalData, street: e.target.value})} />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="space-y-1">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase">Nr Domu</label>
-                                                    <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.house_number} onChange={e => setEditPersonalData({...editPersonalData, house_number: e.target.value})} />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-[9px] font-black text-slate-400 uppercase">Nr Lokalu</label>
-                                                    <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.apartment_number} onChange={e => setEditPersonalData({...editPersonalData, apartment_number: e.target.value})} />
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                <div className="col-span-1 space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Kod Pocztowy</label><input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.zip_code} onChange={handleZipCodeChange} placeholder="00-000" /></div>
-                                                <div className="col-span-2 space-y-1"><label className="text-[9px] font-black text-slate-400 uppercase">Miasto</label><input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.city} onChange={e => setEditPersonalData({...editPersonalData, city: e.target.value})} /></div>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">KONTO BANKOWE</label>
-                                                <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold font-mono bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.bank_account} onChange={handleBankAccountChange} placeholder="00 0000 0000..." />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-black text-slate-400 uppercase">NIP (Opcjonalnie)</label>
-                                                <input className="w-full border border-slate-200 p-2 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white transition-all outline-none shadow-inner" value={editPersonalData.nip} onChange={e => setEditPersonalData({...editPersonalData, nip: e.target.value.replace(/\D/g, '').slice(0, 10)})} placeholder="0000000000" />
-                                            </div>
-                                        </div>
-                                    </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 animate-in fade-in duration-300">
+                                <div className="space-y-4">
+                                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2 uppercase tracking-tighter">Dane Kontaktowe</h4>
+                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">PESEL</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.pesel || ''} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); setEditPersonalData({...editPersonalData, pesel: v}); }}/></div>
+                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Data Urodzenia</label><input type="date" className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.birth_date || ''} onChange={e => setEditPersonalData({...editPersonalData, birth_date: e.target.value})}/></div>
+                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Obywatelstwo</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.citizenship || ''} onChange={e => setEditPersonalData({...editPersonalData, citizenship: e.target.value})}/></div>
                                 </div>
-                                <div className="mt-8 pt-4 border-t flex justify-end">
-                                    <Button onClick={handleSavePersonalData} disabled={isSubmitting} className="px-8 font-black uppercase text-xs tracking-widest rounded-xl h-11">
-                                        {isSubmitting ? <Loader2 size={16} className="animate-spin mr-2"/> : <Save size={16} className="mr-2"/>}
-                                        Zapisz dane
-                                    </Button>
+                                <div className="space-y-4">
+                                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2 uppercase tracking-tighter">Adres</h4>
+                                    <div className="grid grid-cols-3 gap-2"><div className="col-span-2"><label className="text-[9px] font-black text-slate-400 uppercase">Miasto</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.city || ''} onChange={e => setEditPersonalData({...editPersonalData, city: e.target.value})}/></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Kod Pocztowy</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.zip_code || ''} onChange={handleZipCodeChange}/></div></div>
+                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Ulica</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.street || ''} onChange={e => editPersonalData.street = e.target.value}/></div>
+                                    <div className="flex gap-2"><div><label className="text-[9px] font-black text-slate-400 uppercase">Nr Domu</label><input className="w-full border-b p-1 text-sm font-bold w-16" value={editPersonalData.house_number || ''} onChange={e => setEditPersonalData({...editPersonalData, house_number: e.target.value})}/></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Nr Lokalu</label><input className="w-full border-b p-1 text-sm font-bold w-16" value={editPersonalData.apartment_number || ''} onChange={e => setEditPersonalData({...editPersonalData, apartment_number: e.target.value})}/></div></div>
+                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Bank Account</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.bank_account || ''} onChange={handleBankAccountChange}/></div>
+                                </div>
+                                <div className="md:col-span-2 flex justify-end gap-2 mt-4">
+                                    <Button onClick={handleSavePersonalData} disabled={isSubmitting}><Save size={16} className="mr-2"/> Zapisz Dane</Button>
                                 </div>
                             </div>
                         )}
@@ -702,7 +665,7 @@ export const HRCandidatesPage = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
                                         <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">BAZA</div>
-                                        <div className="text-2xl font-black text-slate-900">{salaryInfo.breakdown.base} zł</div>
+                                        <div className="text-2xl font-black text-slate-900">{systemConfig.baseRate} zł</div>
                                     </div>
                                     <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
                                         <div className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">UMIEJĘTNOŚCI</div>
@@ -718,28 +681,36 @@ export const HRCandidatesPage = () => {
                                             onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}
                                         >
                                             <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">FORMA UMOWY</div>
-                                            <div className="text-sm font-black text-blue-700 flex items-center justify-center gap-1">
-                                                {CONTRACT_TYPE_LABELS[selectedCandidate.contract_type || ContractType.UOP]}
+                                            <div className="text-sm font-black text-blue-700 flex items-center justify-center gap-1 uppercase">
+                                                {CONTRACT_TYPE_LABELS[selectedCandidate.contract_type as ContractType] || selectedCandidate.contract_type || 'Wybierz'}
                                                 <ChevronDown size={14} />
                                             </div>
                                             <div className="text-[9px] text-blue-400 font-bold mt-1">{totalExtras > 0 ? `+${totalExtras.toFixed(2)} zł` : 'Bez dodatku'}</div>
                                         </div>
                                         {isContractPopoverOpen && (
                                             <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-xl z-[200] py-1 flex flex-col animate-in slide-in-from-top-2 duration-200 overflow-hidden">
-                                                {Object.values(ContractType).map((type) => (
-                                                    <button key={type} className="px-4 py-2.5 text-[11px] font-bold text-left hover:bg-blue-50 text-slate-700 transition-colors" onClick={() => handleContractChange(type)}>
-                                                        {CONTRACT_TYPE_LABELS[type]}
+                                                {Object.entries(systemConfig.contractBonuses).map(([type, bonus]) => (
+                                                    <button 
+                                                        key={type} 
+                                                        className="px-4 py-2.5 text-[11px] font-bold text-left hover:bg-blue-50 text-slate-700 transition-colors flex justify-between items-center" 
+                                                        onClick={() => handleContractChange(type)}
+                                                    >
+                                                        <span className="uppercase">{CONTRACT_TYPE_LABELS[type as ContractType] || type}</span>
+                                                        <span className="text-blue-500 font-black">+{bonus} zł</span>
                                                     </button>
                                                 ))}
                                                 <div className="border-t border-slate-100 my-1"></div>
                                                 <div className="px-4 py-2 flex items-center justify-between bg-slate-50/50">
                                                     <span className="text-[9px] font-black text-slate-400 uppercase">Student &lt; 26 lat</span>
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={selectedCandidate.is_student} 
-                                                        onChange={(e) => handleStudentToggle(e.target.checked)}
-                                                        className="w-4 h-4 text-blue-600 rounded" 
-                                                    />
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-bold text-indigo-600">+{systemConfig.studentBonus} zł</span>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedCandidate.is_student} 
+                                                            onChange={(e) => handleStudentToggle(e.target.checked)}
+                                                            className="w-4 h-4 text-blue-600 rounded" 
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -752,139 +723,54 @@ export const HRCandidatesPage = () => {
                             </div>
                         )}
                         {activeTab === 'tests' && (
-                            <div className="animate-in fade-in duration-300">
-                                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-                                    <table className="w-full text-left text-xs">
-                                        <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[9px] tracking-widest border-b border-slate-100">
-                                            <tr>
-                                                <th className="px-6 py-3.5">Test</th>
-                                                <th className="px-6 py-3.5 text-center">Wynik</th>
-                                                <th className="px-6 py-3.5 text-center">Status</th>
-                                                <th className="px-6 py-3.5 text-center">Data</th>
-                                                <th className="px-6 py-3.5 text-right">Akcje</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {candidateAttempts.map(ta => {
-                                                const test = tests.find(t => t.id === ta.test_id);
-                                                return (
-                                                    <tr key={ta.id} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-slate-800">{test?.title || 'Nieznany test'}</td>
-                                                        <td className="px-6 py-4 text-center font-black text-sm">{ta.score}%</td>
-                                                        <td className="px-6 py-4 text-center">
-                                                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-black uppercase tracking-tighter ${ta.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                                {ta.passed ? 'ZALICZONY' : 'NIEZALICZONY'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center text-slate-500 font-medium">{new Date(ta.completed_at).toLocaleDateString()}</td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <button 
-                                                                onClick={() => { if(confirm('Zresetować to podejście?')) resetTestAttempt(ta.test_id, selectedCandidate.id); }}
-                                                                className="text-slate-400 hover:text-red-500 font-bold text-[10px] uppercase tracking-widest hover:underline"
-                                                            >
-                                                                Resetuj
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {candidateAttempts.length === 0 && (
-                                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-bold italic text-sm">Brak rozwiązanych testów.</td></tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div className="space-y-4">
+                                {candidateAttempts.map(attempt => {
+                                    const test = tests.find(t => t.id === attempt.test_id);
+                                    return (
+                                        <div key={attempt.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg border">
+                                            <div><p className="font-bold text-slate-800">{test?.title}</p><p className="text-xs text-slate-500">{new Date(attempt.completed_at).toLocaleString()}</p></div>
+                                            <div className="text-right"><p className={`font-black ${attempt.passed ? 'text-green-600' : 'text-red-600'}`}>{attempt.score}%</p><button onClick={() => resetTestAttempt(attempt.test_id, selectedCandidate.id)} className="text-[10px] text-blue-600 hover:underline font-bold uppercase">Resetuj podejście</button></div>
+                                        </div>
+                                    );
+                                })}
+                                {candidateAttempts.length === 0 && <p className="text-center text-slate-400 py-8 italic">Brak rozwiązanych testów.</p>}
                             </div>
                         )}
                         {activeTab === 'docs' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="relative w-56">
-                                        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-slate-400" size={14} />
-                                        <input type="text" placeholder="Szukaj..." className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white text-xs outline-none shadow-inner" value={docSearch} onChange={e => setDocSearch(e.target.value)} />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <Button variant="secondary" className="h-8 px-3 text-xs font-bold border-slate-300" onClick={() => setDocsViewMode(prev => prev === 'active' ? 'archived' : 'active')}>
-                                            {docsViewMode === 'active' ? <><Archive size={14} className="mr-1.5"/> Archiwum</> : <><RotateCcw size={14} className="mr-1.5"/> Aktywne</>}
-                                        </Button>
-                                        <Button className="bg-blue-600 h-8 px-3 text-xs font-bold shadow-md shadow-blue-600/10" onClick={handleAddDocument}>
-                                            <Plus size={14} className="mr-1.5"/> Dodaj Dokument
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div className="border border-slate-100 rounded-xl shadow-sm">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-slate-50 text-slate-500 font-black uppercase text-[9px] tracking-widest border-b border-slate-100">
-                                            <tr><th className="px-6 py-3.5">Dokument</th><th className="px-6 py-3.5">Status</th><th className="px-6 py-3.5 text-center">Bonus</th><th className="px-6 py-3.5">Ważność</th><th className="px-6 py-3.5 text-right">Akcje</th></tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {candidateSkills.filter(us => {
-                                                if (docsViewMode === 'active' ? us.is_archived : !us.is_archived) return false;
-                                                const s = skills.find(sk => sk.id === us.skill_id);
-                                                const isDoc = s?.verification_type === VerificationType.DOCUMENT || !!us.custom_type || (typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || !us.skill_id;
-                                                if (!isDoc) return false;
-                                                if (docSearch && !((us.custom_name || s?.name_pl || '').toLowerCase().includes(docSearch.toLowerCase()))) return false;
-                                                return true;
-                                            }).map(doc => {
-                                                const skill = skills.find(sk => sk.id === doc.skill_id);
-                                                const bonus = skill ? skill.hourly_bonus : (doc.bonus_value || 0);
-                                                return (
-                                                    <tr key={doc.id} className="hover:bg-slate-50 transition-colors group">
-                                                        <td className="px-6 py-4 font-bold text-slate-700">{doc.custom_name || skill?.name_pl || 'Dokument'}</td>
-                                                        <td className={`px-6 py-4 relative ${statusPopoverDocId === doc.id ? 'z-[500]' : ''}`} onClick={(e) => { e.stopPropagation(); setStatusPopoverDocId(doc.id); }}>
-                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border cursor-pointer hover:scale-105 transition-transform ${doc.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-700 border-green-100' : doc.status === SkillStatus.FAILED ? 'bg-red-50 text-red-700 border-red-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'}`}>
-                                                                {SKILL_STATUS_LABELS[doc.status]}
-                                                            </span>
-                                                            {statusPopoverDocId === doc.id && (
-                                                                <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 shadow-2xl rounded-lg z-[9999] py-1 animate-in zoom-in-95 duration-150">
-                                                                    <button className="w-full px-3 py-2 text-[10px] font-bold text-left hover:bg-slate-50 text-slate-700 uppercase" onClick={() => handleDocStatusChange(doc.id, SkillStatus.PENDING)}>Oczekuje</button>
-                                                                    <button className="w-full px-3 py-2 text-[10px] font-bold text-left hover:bg-green-50 text-green-700 uppercase" onClick={() => handleDocStatusChange(doc.id, SkillStatus.CONFIRMED)}>Zatwierdź</button>
-                                                                    <button className="w-full px-3 py-2 text-[10px] font-bold text-left hover:bg-red-50 text-red-700 uppercase" onClick={() => handleDocStatusChange(doc.id, SkillStatus.FAILED)}>Odrzuć</button>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-center font-black text-green-600">+{bonus.toFixed(2)} zł</td>
-                                                        <td className="px-6 py-4 text-slate-500 font-medium">{doc.is_indefinite ? 'Bezterminowy' : (doc.expires_at || '-')}</td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex justify-end gap-1.5">
-                                                                <button onClick={() => setFileViewer({ isOpen: true, urls: doc.document_urls || [doc.document_url!], title: doc.custom_name || 'Dokument', index: 0 })} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors"><Eye size={16}/></button>
-                                                                {docsViewMode === 'active' ? (
-                                                                    <button onClick={() => archiveCandidateDocument(doc.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
-                                                                ) : (
-                                                                    <button onClick={() => restoreCandidateDocument(doc.id)} className="p-1.5 text-slate-400 hover:text-green-600 transition-colors"><RotateCcw size={16}/></button>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            }).length === 0 && (
-                                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-bold italic text-sm">Brak dokumentów.</td></tr>
+                            <div className="space-y-4">
+                                <div className="flex justify-end"><Button size="sm" onClick={handleAddDocument}><Plus size={16} className="mr-2"/> Dodaj dokument</Button></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {candidateSkills.filter(us => us.custom_type === 'doc_generic' || !us.skill_id || (typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_'))).map(doc => (
+                                        <div key={doc.id} className="p-4 border rounded-xl bg-white shadow-sm flex justify-between items-center group relative">
+                                            <div>
+                                                <p className="font-bold text-slate-800">{doc.custom_name}</p>
+                                                <div className="flex gap-2 mt-1">
+                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${doc.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'}`}>{SKILL_STATUS_LABELS[doc.status]}</span>
+                                                    {doc.bonus_value > 0 && <span className="text-[9px] font-bold text-green-600">+{doc.bonus_value} zł</span>}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-1 relative z-10">
+                                                <button onClick={() => setFileViewer({ isOpen: true, urls: doc.document_urls || [doc.document_url!], title: doc.custom_name || 'Dokument', index: 0 })} className="p-1.5 hover:bg-blue-50 text-blue-600 rounded"><Eye size={18}/></button>
+                                                <button onClick={(e) => { e.stopPropagation(); setStatusPopoverDocId(doc.id); }} className="p-1.5 hover:bg-slate-50 text-slate-400 rounded"><Edit size={18}/></button>
+                                            </div>
+                                            {statusPopoverDocId === doc.id && (
+                                                <div className="absolute right-4 top-full mt-1 w-40 bg-white border shadow-xl rounded-lg z-[150] py-1">
+                                                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-green-50 text-green-700" onClick={() => handleDocStatusChange(doc.id, SkillStatus.CONFIRMED)}>Zatwierdź</button>
+                                                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-red-50 text-red-700" onClick={() => handleDocStatusChange(doc.id, SkillStatus.FAILED)}>Odrzuć</button>
+                                                    <div className="border-t my-1"></div>
+                                                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 text-red-500" onClick={() => archiveCandidateDocument(doc.id)}>Usuń</button>
+                                                </div>
                                             )}
-                                        </tbody>
-                                    </table>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
                         {activeTab === 'history' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Historia Działań</h3>
-                                <div className="space-y-4">
-                                    {state.candidateHistory.filter(h => h.candidate_id === selectedCandidate.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(h => (
-                                        <div key={h.id} className="flex gap-4 p-3 border-b border-slate-100 last:border-0 rounded-lg transition-colors">
-                                            <div className="text-slate-400 text-xs w-24 flex-shrink-0 pt-1">
-                                                <div className="font-mono">{new Date(h.created_at).toLocaleDateString()}</div>
-                                                <div className="font-mono">{new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-sm font-bold text-slate-800">{h.action}</div>
-                                                <div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mt-1">Wykonawca: {h.performed_by}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {state.candidateHistory.filter(h => h.candidate_id === selectedCandidate.id).length === 0 && (
-                                        <p className="text-slate-400 text-sm italic py-8 text-center">Brak wpisów w historii.</p>
-                                    )}
-                                </div>
+                            <div className="space-y-2">
+                                {state.candidateHistory.filter(h => h.candidate_id === selectedCandidate.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(h => (
+                                    <div key={h.id} className="text-xs p-2 border-b last:border-0 flex justify-between"><span className="text-slate-600">[{new Date(h.created_at).toLocaleString()}] {h.action}</span><span className="font-bold text-slate-400">{h.performed_by}</span></div>
+                                ))}
                             </div>
                         )}
                     </div>
@@ -893,579 +779,260 @@ export const HRCandidatesPage = () => {
         );
     };
 
-    // Helper functions for mask inputs
-    const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let val = e.target.value.replace(/\D/g, '');
-        if (val.length > 5) val = val.slice(0, 5);
-        if (val.length > 2) val = val.slice(0, 2) + '-' + val.slice(2);
-        setEditPersonalData({ ...editPersonalData, zip_code: val });
+    const renderList = () => (
+        <div className="animate-in fade-in duration-500">
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Zarządzanie Kandydatami</h1>
+                    <p className="text-slate-500">Przegląd i procesowanie nowych aplikacji.</p>
+                </div>
+                <div className="flex gap-2">
+                    <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm mr-2">
+                        <button 
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                            onClick={() => setViewMode('active')}
+                        >
+                            Aktywni
+                        </button>
+                        <button 
+                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'archived' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                            onClick={() => setViewMode('archived')}
+                        >
+                            Odrzuceni
+                        </button>
+                    </div>
+                    <Button onClick={() => setIsSelectionModalOpen(true)}>
+                        <UserPlus size={18} className="mr-2"/> Dodaj Kandydata
+                    </Button>
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                        type="text" 
+                        placeholder="Szukaj kandydata..." 
+                        className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                </div>
+                <div className="relative min-w-[200px] w-full md:w-auto">
+                    <select 
+                        className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-10 rounded-lg text-sm font-medium cursor-pointer"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                    >
+                        <option value="all">Wszystkie statusy</option>
+                        {Object.entries(CANDIDATE_DISPLAY_LABELS).map(([status, label]) => (
+                            <option key={status} value={status}>{label}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                        <tr>
+                            <th className="px-6 py-4">Kandydat</th>
+                            <th className="px-6 py-4">Stanowisko</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4">Źródło</th>
+                            <th className="px-6 py-4 text-right">Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {filteredCandidates.map(candidate => {
+                            const cs = userSkills.filter(us => us.user_id === candidate.id && !us.is_archived);
+                            const s = calculateSalary(systemConfig.baseRate, skills, cs, { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 });
+                            const ct = candidate.contract_type || ContractType.UOP;
+                            const cb = systemConfig.contractBonuses[ct] || 0;
+                            const sb = (ct === ContractType.UZ && candidate.is_student) ? systemConfig.studentBonus : 0;
+                            const total = (s.total + cb + sb).toFixed(2);
+
+                            return (
+                                <tr key={candidate.id} className="hover:bg-slate-50 cursor-pointer transition-colors group" onClick={() => setSelectedCandidate(candidate)}>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                                {candidate.first_name[0]}{candidate.last_name[0]}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-slate-900">{candidate.first_name} {candidate.last_name}</div>
+                                                <div className="text-[10px] text-slate-400 font-medium">{candidate.email}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-600 font-medium">{candidate.target_position || '-'}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm ${CANDIDATE_DISPLAY_COLORS[candidate.status] || 'bg-slate-100 text-slate-600'}`}>
+                                            {CANDIDATE_DISPLAY_LABELS[candidate.status] || candidate.status.toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-500">{candidate.source || '-'}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex items-center justify-end gap-3">
+                                            <span className="font-black text-slate-900 text-xs">{total} zł/h</span>
+                                            <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 inline transition-all transform group-hover:translate-x-1"/>
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {filteredCandidates.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="p-12 text-center text-slate-400 italic font-medium">Brak kandydatów spełniających kryteria.</td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+
+    const renderSelectionModal = () => {
+        if (!isSelectionModalOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSelectionModalOpen(false)}>
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-xl w-full p-10 animate-in zoom-in duration-300 text-center" onClick={e => e.stopPropagation()}>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">DODAJ KANDYDATA</h2>
+                    <p className="text-slate-500 font-medium mb-10">Wybierz sposób wprowadzenia danych do systemu.</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <button 
+                            onClick={() => { setIsSelectionModalOpen(false); setIsAddModalOpen(true); }}
+                            className="flex flex-col items-center gap-4 p-8 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-[32px] border border-slate-100 transition-all group shadow-sm hover:shadow-xl hover:shadow-blue-200"
+                        >
+                            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover:scale-110 transition-transform"><UserPlus size={32}/></div>
+                            <span className="font-black uppercase tracking-widest text-xs">WPISZ RĘCZNIE</span>
+                        </button>
+                        
+                        <div className="relative">
+                            <input type="file" ref={aiFileInputRef} className="hidden" accept=".pdf" onChange={handleAIImport}/>
+                            <button 
+                                onClick={() => aiFileInputRef.current?.click()}
+                                disabled={isAILoading}
+                                className="w-full flex flex-col items-center gap-4 p-8 bg-slate-900 hover:bg-indigo-600 text-white rounded-[32px] border border-slate-800 transition-all group shadow-sm hover:shadow-xl hover:shadow-indigo-200 disabled:opacity-50"
+                            >
+                                <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-indigo-400 group-hover:text-white shadow-sm group-hover:scale-110 transition-transform">
+                                    {isAILoading ? <Loader2 size={32} className="animate-spin"/> : <Sparkles size={32}/>}
+                                </div>
+                                <span className="font-black uppercase tracking-widest text-xs">{isAILoading ? 'ANALIZA CV...' : 'IMPORT CV (AI)'}</span>
+                            </button>
+                            <div className="absolute -top-3 -right-3 bg-indigo-500 text-white text-[8px] font-black px-2 py-1 rounded-full shadow-lg border-2 border-white uppercase tracking-widest">Polecane</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
     };
 
-    const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let val = e.target.value.replace(/\D/g, '');
-        if (val.length > 26) val = val.slice(0, 26);
-        val = val.replace(/(.{4})/g, '$1 ').trim();
-        setEditPersonalData({ ...editPersonalData, bank_account: val });
+    const renderAddModal = () => {
+        if (!isAddModalOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">NOWY KANDYDAT</h2>
+                        <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-white rounded-full"><X size={24}/></button>
+                    </div>
+                    <form onSubmit={handleAddCandidateSubmit} className="p-8 space-y-6">
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.first_name} onChange={e => setNewCandidateData({...newCandidateData, first_name: e.target.value})}/></div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.last_name} onChange={e => setNewCandidateData({...newCandidateData, last_name: e.target.value})}/></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label><input type="email" required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.email} onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})}/></div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.phone} onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})}/></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.target_position} onChange={e => setNewCandidateData({...newCandidateData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ŹRÓDŁO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.source} onChange={e => setNewCandidateData({...newCandidateData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                        </div>
+                        <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PLIK CV (PDF/DOC)</label><div className="border-2 border-dashed border-slate-200 p-4 rounded-xl flex items-center justify-center bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-400 transition-all" onClick={() => fileInputRef.current?.click()}><input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={e => setNewCandidateData({...newCandidateData, cvFile: e.target.files?.[0] || null})}/><span className="text-xs font-bold text-slate-400">{newCandidateData.cvFile ? newCandidateData.cvFile.name : 'WYBIERZ PLIK...'}</span></div></div>
+                        <div className="pt-6 flex justify-end gap-3"><button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">Anuluj</button><Button type="submit" disabled={isSubmitting} className="px-10 h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">UTWÓRZ KANDYDATA</Button></div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+
+    const renderEditBasicModal = () => {
+        if (!isEditBasicModalOpen || !selectedCandidate) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-300">
+                    <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4"><h2 className="text-xl font-black uppercase tracking-tight">Edytuj dane kandydata</h2><button onClick={() => setIsEditBasicModalOpen(false)} className="p-1 hover:bg-slate-50 rounded-full text-slate-300"><X size={24}/></button></div>
+                    <form onSubmit={handleEditBasicSubmit} className="space-y-6">
+                        <div className="grid grid-cols-2 gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Imię</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.first_name} onChange={e => setEditBasicData({...editBasicData, first_name: e.target.value})}/></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Nazwisko</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.last_name} onChange={e => setEditBasicData({...editBasicData, last_name: e.target.value})}/></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label><input type="email" required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.email} onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})}/></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Telefon</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.phone} onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})}/></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Stanowisko</label><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.target_position} onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Źródło</label><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.source} onChange={e => setEditBasicData({...editBasicData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                        </div>
+                        <div className="pt-6 border-t flex justify-end gap-3"><button type="button" onClick={() => setIsEditBasicModalOpen(false)} className="px-6 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button type="submit" disabled={isSubmitting}>ZAPISZ ZMIANY</Button></div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+
+    const renderTrialModal = () => {
+        if (!isTrialModalOpen || !selectedCandidate) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-md w-full p-8 animate-in zoom-in duration-300">
+                    <h3 className="text-xl font-black uppercase tracking-tight mb-2">ZATRUDNIENIE (OKRES PRÓBNY)</h3>
+                    <p className="text-sm text-slate-500 mb-8">Rozpoczęcie okresu próbnego dla kandydata <strong>{selectedCandidate.first_name} {selectedCandidate.last_name}</strong>.</p>
+                    <div className="space-y-5">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">START PRACY</label><input type="date" className="w-full border p-2 rounded-xl text-sm" value={trialDates.start} onChange={e => setTrialDates({...trialDates, start: e.target.value})}/></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">KONIEC PRÓBY</label><input type="date" className="w-full border p-2 rounded-xl text-sm" value={trialDates.end} onChange={e => setTrialDates({...trialDates, end: e.target.value})}/></div>
+                        </div>
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">BRYGADZISTA PROWADZĄCY *</label><select required className="w-full border p-2 rounded-xl text-sm appearance-none bg-slate-50" value={trialDates.brigadirId} onChange={e => setTrialDates({...trialDates, brigadirId: e.target.value})}><option value="">Wybierz brygadzistę...</option>{brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)}</select></div>
+                    </div>
+                    <div className="pt-8 flex gap-3"><button onClick={() => setIsTrialModalOpen(false)} className="flex-1 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button onClick={confirmTrialHiring} className="flex-[2] h-12 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 text-white font-black">ROZPOCZNIJ OKRES PRÓBNY</Button></div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDocModal = () => {
+        if (!isDocModalOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-md w-full p-8 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-xl font-black uppercase tracking-tight mb-6">DODAJ DOKUMENT KANDYDATA</h3>
+                    <div className="space-y-4">
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">TYP DOKUMENTU</label><select className="w-full border p-2 rounded-xl text-sm" value={newDocData.typeId} onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}><option value="">Wybierz...</option>{BONUS_DOCUMENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}<option value="other">Inny...</option></select></div>
+                        {newDocData.typeId === 'other' && <input className="w-full border p-2 rounded-xl text-sm" placeholder="Nazwa dokumentu..." value={newDocData.customName} onChange={e => setNewDocData({...newDocData, customName: e.target.value})}/>}
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">ZAŁĄCZ PLIKI</label><input type="file" multiple className="w-full text-xs" onChange={handleFileSelect}/></div>
+                    </div>
+                    <div className="pt-8 flex gap-3"><button onClick={() => setIsDocModalOpen(false)} className="flex-1 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button onClick={handleSaveDocument} className="flex-[2] font-black uppercase text-xs tracking-widest h-12 rounded-xl">PRZEŚLIJ DOKUMENT</Button></div>
+                </div>
+            </div>
+        );
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto pb-24">
-             {selectedCandidate ? renderDetail() : (
-                <>
-                    <div className="flex justify-between items-start mb-8">
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Kandydaci</h1>
-                        <div className="flex gap-2">
-                            <button className="h-10 px-4 border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 font-bold rounded-lg shadow-sm flex items-center" onClick={() => setViewMode(viewMode === 'active' ? 'archived' : 'active')}>
-                                <Archive size={18} className="mr-2" /> {viewMode === 'active' ? 'Archiwum' : 'Aktywni'}
-                            </button>
-                            <button className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md flex items-center gap-2" onClick={() => setIsSelectionModalOpen(true)}>
-                                <UserPlus size={18} /> Dodaj Kandydata
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4 mb-8">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-                            <input 
-                                type="text" 
-                                placeholder="Szukaj kandydata..." 
-                                className="w-full pl-12 pr-4 py-3 bg-slate-700 text-white rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-medium placeholder:text-slate-400 shadow-inner" 
-                                value={search} 
-                                onChange={e => setSearch(e.target.value)} 
-                            />
-                        </div>
-                        <div className="relative min-w-[200px]">
-                            <select 
-                                className="w-full h-full appearance-none bg-white border border-slate-200 px-4 py-2 rounded-lg text-slate-700 font-bold focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer pr-10 shadow-sm"
-                                value={statusFilter}
-                                onChange={e => setStatusFilter(e.target.value)}
-                            >
-                                <option value="all">Wszystkie Statusy</option>
-                                {Object.values(UserStatus).filter(s => !s.includes('active') && !s.includes('trial')).map(s => <option key={s} value={s}>{CANDIDATE_DISPLAY_LABELS[s] || s.toUpperCase()}</option>)}
-                            </select>
-                            <ChevronDown size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-widest border-b border-slate-100">
-                                <tr>
-                                    <th className="px-6 py-5">Imię i Nazwisko</th>
-                                    <th className="px-6 py-5">Stanowisko</th>
-                                    <th className="px-6 py-5">Kontakt</th>
-                                    <th className="px-6 py-5">Status</th>
-                                    <th className="px-6 py-5">Stawka</th>
-                                    <th className="px-6 py-5">Źródło</th>
-                                    <th className="px-6 py-4 text-right">Akcje</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {filteredCandidates.map(candidate => (
-                                    <tr key={candidate.id} className="hover:bg-slate-50/50 cursor-pointer transition-colors group" onClick={() => setSelectedCandidate(candidate)}>
-                                        <td className="px-6 py-6 font-bold text-slate-900">{candidate.first_name} {candidate.last_name}</td>
-                                        <td className="px-6 py-6 text-slate-400 font-medium">{candidate.target_position || '-'}</td>
-                                        <td className="px-6 py-6">
-                                            <div className="text-slate-700 font-medium text-xs">{candidate.email}</div>
-                                            <div className="text-slate-400 text-[10px] mt-0.5">{candidate.phone || 'Brak telefonu'}</div>
-                                        </td>
-                                        <td className="px-6 py-6">
-                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter shadow-sm border border-transparent ${CANDIDATE_DISPLAY_COLORS[candidate.status] || 'bg-slate-100 text-slate-600'}`}>
-                                                {CANDIDATE_DISPLAY_LABELS[candidate.status] || candidate.status.toUpperCase()}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-6 font-black text-slate-900 text-sm">
-                                            {(() => {
-                                                const cs = userSkills.filter(us => us.user_id === candidate.id && !us.is_archived);
-                                                const s = calculateSalary(candidate.base_rate || systemConfig.baseRate, skills, cs, { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 });
-                                                const ct = candidate.contract_type || ContractType.UOP;
-                                                const cb = systemConfig.contractBonuses[ct] || 0;
-                                                const sb = (ct === ContractType.UZ && candidate.is_student) ? 3 : 0;
-                                                return (s.total + cb + sb).toFixed(0);
-                                            })()} zł/h
-                                        </td>
-                                        <td className="px-6 py-6 text-slate-400 font-bold text-xs">{candidate.source || 'Pracuj.pl'}</td>
-                                        <td className="px-6 py-6 text-right">
-                                            <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all inline" />
-                                        </td>
-                                    </tr>
-                                ))}
-                                {filteredCandidates.length === 0 && <tr><td colSpan={7} className="p-20 text-center text-slate-400 font-black italic">Brak kandydatów pasujących do filtrów.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </>
-             )}
-            
-            {/* Selection Modal */}
-            {isSelectionModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-200 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => !isAILoading && setIsSelectionModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                            <h3 className="text-xl font-bold text-slate-900 tracking-tight">Dodaj Nowego Kandydata</h3>
-                            <button onClick={() => !isAILoading && setIsSelectionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                                <X size={24} />
-                            </button>
-                        </div>
-                        <div className="p-8 space-y-4 relative">
-                            {isAILoading && (
-                                <div className="absolute inset-0 bg-white/80 z-[201] flex flex-col items-center justify-center animate-in fade-in">
-                                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-                                    <p className="font-bold text-slate-800">AI analizuje dokument...</p>
-                                </div>
-                            )}
-
-                            {/* Button: Manual */}
-                            <button 
-                                onClick={() => { setIsSelectionModalOpen(false); setIsAddModalOpen(true); }} 
-                                className="w-full flex items-center gap-5 p-6 rounded-2xl border border-slate-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all text-left group shadow-sm"
-                            >
-                                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:scale-105 transition-transform shadow-inner flex-shrink-0">
-                                    <Edit size={28} />
-                                </div>
-                                <div>
-                                    <div className="font-black text-slate-900 text-lg uppercase tracking-tight">DODAJ RĘCZNIE</div>
-                                    <div className="text-sm text-slate-500 font-medium mt-0.5">Wypełnij formularz z danymi kandydata.</div>
-                                </div>
-                            </button>
-
-                            {/* Button: AI Import */}
-                            <button 
-                                onClick={() => aiFileInputRef.current?.click()} 
-                                className="w-full flex items-center gap-5 p-6 rounded-2xl border border-slate-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all text-left group shadow-sm bg-blue-50/20"
-                            >
-                                <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white group-hover:scale-105 transition-transform shadow-lg flex-shrink-0">
-                                    <Sparkles size={28} />
-                                </div>
-                                <div>
-                                    <div className="font-black text-slate-900 text-lg uppercase tracking-tight">IMPORTUJ Z CV (AI)</div>
-                                    <div className="text-sm text-slate-500 font-medium mt-0.5">
-                                        Automatyczne uzupełnienie danych.
-                                        <div className="text-blue-600 font-bold">(tylko pliki PDF)</div>
-                                    </div>
-                                </div>
-                                <input type="file" ref={aiFileInputRef} className="hidden" accept=".pdf,.doc,.docx" onChange={handleAIImport} />
-                            </button>
-
-                            {/* Button: Invite */}
-                            <button 
-                                onClick={() => { setIsSelectionModalOpen(false); setIsInviteModalOpen(true); }} 
-                                className="w-full flex items-center gap-5 p-6 rounded-2xl border border-slate-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all text-left group shadow-sm"
-                            >
-                                <div className="w-14 h-14 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 group-hover:scale-105 transition-transform shadow-inner flex-shrink-0">
-                                    <Send size={28} />
-                                </div>
-                                <div>
-                                    <div className="font-black text-slate-900 text-lg uppercase tracking-tight">GENERUJ LINK ZAPROSZENIA</div>
-                                    <div className="text-sm text-slate-500 font-medium mt-0.5">Wyślij link do samodzielnej rejestracji.</div>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Edit Basic Data Modal */}
-            {isEditBasicModalOpen && selectedCandidate && (
-                <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsEditBasicModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg font-black text-slate-900 tracking-tight">Edytuj Kandydata</h3>
-                            <button onClick={() => setIsEditBasicModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
-                        </div>
-                        <form onSubmit={handleEditBasicSubmit} className="p-5 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
-                                    <input 
-                                        required
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner text-sm" 
-                                        value={editBasicData.first_name} 
-                                        onChange={e => setEditBasicData({...editBasicData, first_name: e.target.value})} 
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
-                                    <input 
-                                        required
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner text-sm" 
-                                        value={editBasicData.last_name} 
-                                        onChange={e => setEditBasicData({...editBasicData, last_name: e.target.value})} 
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label>
-                                <div className="relative">
-                                    <input 
-                                        type="email"
-                                        required
-                                        className={`w-full border p-2 rounded-lg font-bold transition-all shadow-inner outline-none text-sm ${validationErrors.email ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600'}`} 
-                                        value={editBasicData.email} 
-                                        onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})} 
-                                    />
-                                    {validationErrors.email && (
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500">
-                                            <AlertTriangle size={14} />
-                                        </div>
-                                    )}
-                                </div>
-                                {validationErrors.email && <p className="text-[9px] text-red-500 font-bold ml-1">{validationErrors.email}</p>}
-                            </div>
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label>
-                                <div className="relative">
-                                    <input 
-                                        required
-                                        className={`w-full border p-2 rounded-lg font-bold transition-all shadow-inner outline-none text-sm ${validationErrors.phone ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600'}`} 
-                                        value={editBasicData.phone} 
-                                        onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})} 
-                                        placeholder="+48 000 000 000"
-                                    />
-                                    {validationErrors.phone && (
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500">
-                                            <AlertTriangle size={14} />
-                                        </div>
-                                    )}
-                                </div>
-                                {validationErrors.phone && <p className="text-[9px] text-red-500 font-bold ml-1">{validationErrors.phone}</p>}
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label>
-                                    <select 
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner appearance-none text-sm"
-                                        value={editBasicData.target_position}
-                                        onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}
-                                    >
-                                        <option value="">Wybierz...</option>
-                                        {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ŹRÓDŁO</label>
-                                    <select 
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner appearance-none text-sm"
-                                        value={editBasicData.source}
-                                        onChange={e => setEditBasicData({...editBasicData, source: e.target.value})}
-                                    >
-                                        {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">CV / Dokument</label>
-                                <div 
-                                    className="border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col items-center justify-center hover:bg-white hover:border-blue-400 transition-all cursor-pointer group"
-                                    onClick={() => document.getElementById('cv-edit-upload')?.click()}
-                                >
-                                    <input 
-                                        id="cv-edit-upload"
-                                        type="file" 
-                                        className="hidden" 
-                                        accept=".pdf,.doc,.docx"
-                                        onChange={(e) => setEditCVFile(e.target.files?.[0] || null)}
-                                    />
-                                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm text-slate-400 group-hover:text-blue-600 transition-colors mb-1">
-                                        {editCVFile || selectedCandidate.resume_url ? <CheckCircle size={18} className="text-green-600"/> : <Upload size={18}/>}
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-600 truncate max-w-full">
-                                        {editCVFile ? editCVFile.name : (selectedCandidate.resume_url ? 'CV już wgrane (kliknij by zmienić)' : 'Załącz CV (PDF/DOC)')}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-4">
-                                <Button variant="ghost" onClick={() => setIsEditBasicModalOpen(false)} className="px-4 text-sm font-bold text-slate-400">Anuluj</Button>
-                                <Button type="submit" disabled={isSubmitting || Object.keys(validationErrors).length > 0} className="px-6 h-10 rounded-lg font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/20">
-                                    {isSubmitting ? <Loader2 size={14} className="animate-spin mr-2"/> : <Save size={14} className="mr-2"/>}
-                                    Zapisz
-                                </Button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Invite Link Modal */}
-            {isInviteModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsInviteModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-xl font-bold text-slate-900">Zaproszenie Kandydata</h3>
-                            <button onClick={() => setIsInviteModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
-                        </div>
-                        <p className="text-sm text-slate-500 mb-6">Skopiuj poniższy link i wyślij go do kandydata. Po kliknięciu trafi on na stronę powitalną procesu rekrutacji.</p>
-                        <div className="flex gap-2 mb-8">
-                            <input readOnly className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-medium text-slate-600 outline-none" value={inviteLink} />
-                            <button onClick={() => { navigator.clipboard.writeText(inviteLink); triggerNotification('success', 'Skopiowano', 'Link został zapisany w schowku.'); }} className="h-10 px-4 bg-blue-600 text-white rounded-lg flex items-center justify-center">
-                                <Copy size={18} />
-                            </button>
-                        </div>
-                        <Button fullWidth onClick={() => setIsInviteModalOpen(false)}>Zamknij</Button>
-                    </div>
-                </div>
-            )}
-
-            {/* Manual Add Candidate Modal */}
-            {isAddModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAddModalOpen(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-lg font-black text-slate-900 tracking-tight">Nowy Kandydat</h3>
-                            <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-full transition-all"><X size={20}/></button>
-                        </div>
-                        <form onSubmit={handleAddCandidateSubmit} className="p-5 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
-                                    <input 
-                                        required
-                                        className="w-full border border-slate-200 p-3 rounded-xl font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner text-sm" 
-                                        value={newCandidateData.first_name} 
-                                        onChange={e => setNewCandidateData({...newCandidateData, first_name: e.target.value})} 
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
-                                    <input 
-                                        required
-                                        className="w-full border border-slate-200 p-3 rounded-xl font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner text-sm" 
-                                        value={newCandidateData.last_name} 
-                                        onChange={e => setNewCandidateData({...newCandidateData, last_name: e.target.value})} 
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label>
-                                    <div className="relative">
-                                        <input 
-                                            type="email"
-                                            required
-                                            className={`w-full border p-3 rounded-xl font-bold transition-all shadow-inner outline-none text-sm ${validationErrors.email ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600'}`} 
-                                            value={newCandidateData.email} 
-                                            onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})} 
-                                        />
-                                        {validationErrors.email && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500">
-                                                <AlertTriangle size={14} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    {validationErrors.email && <p className="text-[9px] text-red-500 font-bold ml-1">{validationErrors.email}</p>}
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label>
-                                    <div className="relative">
-                                        <input 
-                                            required
-                                            className={`w-full border p-2 rounded-lg font-bold transition-all shadow-inner outline-none text-sm ${validationErrors.phone ? 'border-red-500 bg-red-50' : 'border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600'}`} 
-                                            value={newCandidateData.phone} 
-                                            onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})} 
-                                            placeholder="+48 000 000 000"
-                                        />
-                                        {validationErrors.phone && (
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-red-500">
-                                                <AlertTriangle size={14} />
-                                            </div>
-                                        )}
-                                    </div>
-                                    {validationErrors.phone && <p className="text-[9px] text-red-500 font-bold ml-1">{validationErrors.phone}</p>}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label>
-                                    <select 
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner appearance-none text-sm"
-                                        value={newCandidateData.target_position}
-                                        onChange={e => setNewCandidateData({...newCandidateData, target_position: e.target.value})}
-                                    >
-                                        <option value="">Wybierz...</option>
-                                        {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">ŹRÓDŁO</label>
-                                    <select 
-                                        className="w-full border border-slate-200 p-2 rounded-lg font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-inner appearance-none text-sm"
-                                        value={newCandidateData.source}
-                                        onChange={e => setNewCandidateData({...newCandidateData, source: e.target.value})}
-                                    >
-                                        {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">CV</label>
-                                <div 
-                                    className="border-2 border-dashed border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col items-center justify-center hover:bg-white hover:border-blue-400 transition-all cursor-pointer group"
-                                    onClick={() => document.getElementById('cv-manual-upload')?.click()}
-                                >
-                                    <input 
-                                        id="cv-manual-upload"
-                                        type="file" 
-                                        className="hidden" 
-                                        accept=".pdf,.doc,.docx"
-                                        onChange={(e) => setNewCandidateData({...newCandidateData, cvFile: e.target.files?.[0] || null})}
-                                    />
-                                    <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm text-slate-400 group-hover:text-blue-600 transition-colors mb-1">
-                                        {newCandidateData.cvFile ? <CheckCircle size={18} className="text-green-600"/> : <Upload size={18}/>}
-                                    </div>
-                                    <p className="text-[10px] font-bold text-slate-600 truncate max-w-full">
-                                        {newCandidateData.cvFile ? newCandidateData.cvFile.name : 'Załącz CV'}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-4">
-                                <Button variant="ghost" onClick={() => setIsAddModalOpen(false)} className="px-4 text-sm font-bold text-slate-400">Anuluj</Button>
-                                <Button type="submit" disabled={isSubmitting || Object.keys(validationErrors).length > 0} className="px-6 h-10 rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-600/20">
-                                    {isSubmitting ? <Loader2 size={14} className="animate-spin mr-2"/> : <Save size={14} className="mr-2"/>}
-                                    Dodaj
-                                </Button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* Trial Period Confirmation Modal */}
-            {isTrialModalOpen && selectedCandidate && (
-                <div className="fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 uppercase">
-                                <Calendar size={24} className="text-orange-600"/> Okres Próbny
-                            </h3>
-                            <button onClick={() => setIsTrialModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
-                        </div>
-                        <div className="p-8 space-y-6">
-                            <p className="text-sm text-slate-600 leading-relaxed font-medium">
-                                Ustal ramy czasowe okresu próbnego dla pracownika <strong className="text-slate-900 font-black">{selectedCandidate.first_name} {selectedCandidate.last_name}</strong>. 
-                                Standardowo okres próbny trwa 1 miesiąc.
-                            </p>
-                            
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ROZPOCZĘCIA</label>
-                                        <div className="relative">
-                                            <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                            <input 
-                                                type="date"
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
-                                                value={trialDates.start}
-                                                onChange={(e) => setTrialDates({...trialDates, start: e.target.value})}
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">DATA ZAKOŃCZENIA</label>
-                                        <div className="relative">
-                                            <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                                            <input 
-                                                type="date"
-                                                className="w-full bg-slate-50 border border-slate-200 p-3 pl-11 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm"
-                                                value={trialDates.end}
-                                                onChange={(e) => setTrialDates({...trialDates, end: e.target.value})}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PRZYPISANY BRYGADZISTA</label>
-                                    <select 
-                                        className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-sm appearance-none" 
-                                        value={trialDates.brigadirId} 
-                                        onChange={e => setTrialDates({...trialDates, brigadirId: e.target.value})} 
-                                    >
-                                        <option value="">Wybierz brygadzistę...</option>
-                                        {brigadirsList.map(b => (
-                                            <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
-                            <Button variant="ghost" fullWidth onClick={() => setIsTrialModalOpen(false)} className="font-bold text-slate-400">Anuluj</Button>
-                            <Button fullWidth onClick={confirmTrialHiring} disabled={isSubmitting || !trialDates.brigadirId} className="font-black uppercase text-[11px] tracking-widest h-12 shadow-lg shadow-blue-600/20">
-                                {isSubmitting ? <Loader2 size={16} className="animate-spin mr-2"/> : <UserCheck size={16} className="mr-2"/>}
-                                Potwierdź zatrudnienie
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Document Modal */}
-            {isDocModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-black text-slate-900 tracking-tighter">Dodaj Dokument</h2>
-                            <button onClick={() => setIsDocModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={24}/></button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Typ Dokumentu</label>
-                                <select className="w-full border border-slate-200 p-2.5 rounded-xl bg-slate-50 text-sm font-bold text-slate-700 outline-none shadow-inner" value={newDocData.typeId} onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}>
-                                    <option value="">Wybierz typ...</option>
-                                    {BONUS_DOCUMENT_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
-                                    <option value="other">Inny Dokument</option>
-                                </select>
-                            </div>
-                            {newDocData.typeId === 'other' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Nazwa</label>
-                                    <input className="w-full border border-slate-200 p-2.5 rounded-xl bg-slate-50 font-bold text-slate-700 outline-none shadow-inner" placeholder="np. Uprawnienia SEP E" value={newDocData.customName} onChange={e => setNewDocData({...newDocData, customName: e.target.value})} />
-                                </div>
-                            )}
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
-                                <input type="file" multiple onChange={handleFileSelect} className="w-full border border-slate-200 p-2 rounded-xl bg-slate-50 text-xs font-bold shadow-inner" />
-                                <div className="mt-2 space-y-1">
-                                    {newDocData.files.map((f, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-100 p-1.5 rounded-lg text-[10px] font-bold">
-                                            <span className="truncate">{f.name}</span>
-                                            <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-sm font-bold text-slate-700 mb-1">Data Wydania</label>
-                                    <input type="date" className="w-full border border-slate-200 p-2 rounded-xl bg-slate-50 text-xs font-bold shadow-inner" value={newDocData.issue_date} onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})} />
-                                </div>
-                                {!newDocData.indefinite && (
-                                    <div>
-                                        <label className="block text-sm font-bold text-slate-700 mb-1">Data Ważności</label>
-                                        <input type="date" className="w-full border border-slate-200 p-2 rounded-xl bg-slate-50 text-xs font-bold shadow-inner" value={newDocData.expires_at} onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})} />
-                                    </div>
-                                )}
-                            </div>
-                            <label className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl cursor-pointer shadow-inner">
-                                <input type="checkbox" checked={newDocData.indefinite} onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})} className="w-4 h-4 text-blue-600 rounded" />
-                                <span className="text-[10px] font-black text-slate-500 uppercase">Bezterminowy</span>
-                            </label>
-                            <Button fullWidth onClick={handleSaveDocument} disabled={!newDocData.typeId || newDocData.files.length === 0 || isSubmitting} className="h-12 font-black text-sm shadow-xl shadow-blue-600/20 rounded-2xl mt-4">
-                                {isSubmitting ? <Loader2 size={18} className="animate-spin mr-3"/> : <Save size={18} className="mr-3"/>}
-                                ZAPISZ DOKUMENT
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+        <div className="p-6 max-w-7xl mx-auto">
+            {selectedCandidate ? renderDetail() : renderList()}
+            {renderSelectionModal()}
+            {renderAddModal()}
+            {renderEditBasicModal()}
+            {renderDocModal()}
+            {renderTrialModal()}
             <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
+            <input type="file" ref={aiFileInputRef} className="hidden" accept=".pdf" onChange={handleAIImport}/>
         </div>
     );
 };

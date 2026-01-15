@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
     ArrowRight, Search, Clock, CheckCircle, XCircle, AlertTriangle, Send, Edit, ChevronRight, ChevronDown, Upload, X, Archive, RotateCcw, Calendar, Eye, Camera, Plus, ChevronLeft, UserPlus, Wallet, Shield, Save, Loader2,
-    Mail, Phone, User as UserIcon, MapPin
+    Mail, Phone, User as UserIcon, MapPin, Calculator, Award, Sparkles
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -75,7 +75,6 @@ export const HRTrialPage = () => {
 
     const trialUsers = state.users.filter(u => u.status === UserStatus.TRIAL);
     
-    // Filtrowanie brygadzistów wyłącznie po roli brigadir z bazy danych
     const brigadirsList = useMemo(() => {
         return state.users.filter(u => u.role === Role.BRIGADIR);
     }, [state.users]);
@@ -209,11 +208,11 @@ export const HRTrialPage = () => {
         }
     };
 
-    const updateContractType = async (type: ContractType) => {
+    const updateContractType = async (type: string) => {
         if (selectedUser) {
-            await updateUser(selectedUser.id, { contract_type: type });
-            await logCandidateAction(selectedUser.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type]}`);
-            setSelectedUser({ ...selectedUser, contract_type: type } as User);
+            await updateUser(selectedUser.id, { contract_type: type as any });
+            await logCandidateAction(selectedUser.id, `Zmieniono formę zatrudnienia na: ${CONTRACT_TYPE_LABELS[type as ContractType] || type.toUpperCase()}`);
+            setSelectedUser({ ...selectedUser, contract_type: type as any } as User);
             setIsContractPopoverOpen(false);
         }
     };
@@ -310,8 +309,9 @@ export const HRTrialPage = () => {
         setStatusPopoverSkillId(null);
     };
 
-    const formatContractType = (type?: ContractType) => {
-        return type ? CONTRACT_TYPE_LABELS[type] : '-';
+    const formatContractType = (type?: string) => {
+        if (!type) return 'Wybierz...';
+        return CONTRACT_TYPE_LABELS[type as ContractType] || type.toUpperCase();
     };
 
     const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -416,7 +416,7 @@ export const HRTrialPage = () => {
         if (!selectedUser) return null;
 
         const salaryData = calculateSalary(
-            selectedUser.base_rate || systemConfig.baseRate, 
+            systemConfig.baseRate, 
             state.skills, 
             state.userSkills.filter(us => us.user_id === selectedUser.id), 
             state.monthlyBonuses[selectedUser.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
@@ -443,9 +443,11 @@ export const HRTrialPage = () => {
             return acc;
         }, 0);
 
-        const contractBonus = systemConfig.contractBonuses[selectedUser.contract_type || ContractType.UOP] || 0;
-        const studentBonus = (selectedUser.contract_type === ContractType.UZ && selectedUser.is_student) ? 3 : 0;
-        const totalRateWithContract = salaryData.total + contractBonus + studentBonus;
+        const contractType = selectedUser.contract_type || 'uop';
+        const contractBonus = systemConfig.contractBonuses[contractType] || 0;
+        const studentBonus = (contractType === 'uz' && selectedUser.is_student) ? systemConfig.studentBonus : 0;
+        const totalExtras = contractBonus + studentBonus;
+        const totalRate = salaryData.total + totalExtras;
 
         const employeeDocuments = state.userSkills.filter(us => {
             if (us.user_id !== selectedUser.id) return false;
@@ -532,7 +534,7 @@ export const HRTrialPage = () => {
                     <div className="p-8">
                         {activeTab === 'info' && (
                             <div className="animate-in fade-in duration-300">
-                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">NOTATKI REKRUTACYJNE</h3>
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">NOTATKI REKRUTACYJNE</h3>
                                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 shadow-inner">
                                     <textarea 
                                         className="w-full bg-transparent border-none focus:ring-0 text-slate-700 placeholder:text-slate-400 font-medium min-h-[200px] resize-none outline-none text-base" 
@@ -696,43 +698,63 @@ export const HRTrialPage = () => {
                         )}
 
                         {activeTab === 'rate' && (
-                             <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                                <h3 className="font-bold text-slate-900 mb-6">Stawka Pracownika</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
-                                    <div className="bg-white p-4 rounded-lg shadow-sm">
-                                        <div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Baza</div>
-                                        <div className="text-2xl font-bold text-slate-900">{salaryData.breakdown.base} zł</div>
+                             <div className="space-y-8 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                    <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
+                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">BAZA</div>
+                                        <div className="text-2xl font-black text-slate-900">{systemConfig.baseRate} zł</div>
                                     </div>
-                                    <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100">
-                                        <div className="text-[10px] text-green-600 uppercase font-black tracking-widest mb-1">Umiejętności</div>
-                                        <div className="text-2xl font-bold text-green-600">+{matrycaBonus.toFixed(2)} zł</div>
+                                    <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
+                                        <div className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">UMIEJĘTNOŚCI</div>
+                                        <div className="text-2xl font-black text-green-600">+{salaryData.breakdown.skills.toFixed(2)} zł</div>
                                     </div>
-                                    <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100">
-                                        <div className="text-[10px] text-purple-600 uppercase font-black tracking-widest mb-1">Uprawnienia</div>
-                                        <div className="text-2xl font-bold text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div>
+                                    <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
+                                        <div className="text-[9px] font-black text-purple-600 uppercase tracking-widest mb-1">UPRAWNIENIA</div>
+                                        <div className="text-2xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div>
                                     </div>
-                                    <div className="relative z-[300]">
-                                        <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition-colors h-full flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}>
-                                            <div className="text-[10px] text-blue-600 uppercase font-black tracking-widest mb-1">Forma Zatrudnienia</div>
-                                            <div className="text-lg font-bold text-blue-600 flex items-center justify-center gap-1">{formatContractType(selectedUser.contract_type)}<ChevronDown size={14} /></div>
-                                            <div className="text-[10px] text-blue-400 font-medium mt-1">{contractBonus + studentBonus > 0 ? `+${(contractBonus + studentBonus).toFixed(2)} zł/h` : 'Bez dodatku'}</div>
+                                    <div className="relative">
+                                        <div 
+                                            className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm text-center flex flex-col justify-center min-h-[110px] cursor-pointer hover:bg-blue-50 transition-colors"
+                                            onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}
+                                        >
+                                            <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">FORMA UMOWY</div>
+                                            <div className="text-sm font-black text-blue-700 flex items-center justify-center gap-1 uppercase">
+                                                {formatContractType(selectedUser.contract_type)}
+                                                <ChevronDown size={14} />
+                                            </div>
+                                            <div className="text-[9px] text-blue-400 font-bold mt-1">{totalExtras > 0 ? `+${totalExtras.toFixed(2)} zł` : 'Bez dodatku'}</div>
                                         </div>
                                         {isContractPopoverOpen && (
-                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-lg z-[310] flex flex-col py-1 animate-in zoom-in-95 duration-150">
-                                                {(Object.values(ContractType) as ContractType[]).map((type) => (
-                                                    <button key={type} className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700 font-medium" onClick={() => updateContractType(type)}>{CONTRACT_TYPE_LABELS[type]}</button>
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-xl z-[200] py-1 flex flex-col animate-in slide-in-from-top-2 duration-200 overflow-hidden">
+                                                {Object.entries(systemConfig.contractBonuses).map(([type, bonus]) => (
+                                                    <button 
+                                                        key={type} 
+                                                        className="px-4 py-2.5 text-[11px] font-bold text-left hover:bg-blue-50 text-slate-700 transition-colors flex justify-between items-center" 
+                                                        onClick={() => updateContractType(type)}
+                                                    >
+                                                        <span className="uppercase">{CONTRACT_TYPE_LABELS[type as ContractType] || type}</span>
+                                                        <span className="text-blue-500 font-black">+{bonus} zł</span>
+                                                    </button>
                                                 ))}
                                                 <div className="border-t border-slate-100 my-1"></div>
-                                                <div className="px-4 py-2 flex items-center justify-between">
-                                                    <span className="text-[10px] font-black text-slate-500 uppercase">Student &lt; 26 lat</span>
-                                                    <input type="checkbox" checked={selectedUser.is_student} onChange={(e) => toggleStudentStatus(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
+                                                <div className="px-4 py-2 flex items-center justify-between bg-slate-50/50">
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Student &lt; 26 lat</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-bold text-indigo-600">+{systemConfig.studentBonus} zł</span>
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={selectedUser.is_student} 
+                                                            onChange={(e) => toggleStudentStatus(e.target.checked)}
+                                                            className="w-4 h-4 text-blue-600 rounded" 
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
-                                    <div className="bg-slate-900 p-4 rounded-lg shadow-sm text-white flex flex-col justify-center">
-                                        <div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Stawka Total</div>
-                                        <div className="text-2xl font-black leading-tight">{totalRateWithContract.toFixed(2)} zł<span className="text-xs font-medium ml-1">/h netto</span></div>
+                                    <div className="bg-slate-900 p-4 rounded-xl text-center text-white flex flex-col justify-center min-h-[110px] shadow-lg shadow-slate-900/20">
+                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">STAWKA TOTAL</div>
+                                        <div className="text-2xl font-black leading-tight">{totalRate.toFixed(2)} zł<span className="text-[10px] font-medium ml-1">/h netto</span></div>
                                     </div>
                                 </div>
                             </div>
@@ -984,7 +1006,7 @@ export const HRTrialPage = () => {
     const renderDocumentModal = () => {
         if (!isDocModalOpen) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
                 <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-200">
                     <div className="flex justify-between items-center mb-8">
                         <h2 className="text-2xl font-black text-slate-900 tracking-tight">Dodaj Dokument</h2>
@@ -1033,16 +1055,6 @@ export const HRTrialPage = () => {
                                 </span>
                                 <input type="file" ref={fileInputRef} multiple className="hidden" onChange={handleFileSelect} />
                             </div>
-                            {newDocData.files.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                    {newDocData.files.map((f, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-100/50 p-2 rounded-lg text-[10px] font-bold">
-                                            <span className="truncate max-w-[200px]">{f.name}</span>
-                                            <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-6">

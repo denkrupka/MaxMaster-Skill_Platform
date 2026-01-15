@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -16,7 +15,7 @@ export const CoordinatorDashboard = () => {
     // --- DATA CALCULATIONS ---
 
     const stats = useMemo(() => {
-        // 1. Total Workforce (Employees + Brigadirs + Trial)
+        // 1. Total Workforce (Only active/trial Employees and Brigadiers)
         const totalWorkforce = users.filter(u => 
             (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && 
             (u.status === UserStatus.ACTIVE || u.status === UserStatus.TRIAL)
@@ -42,8 +41,13 @@ export const CoordinatorDashboard = () => {
         const brigadirs = users.filter(u => u.role === Role.BRIGADIR && u.status === UserStatus.ACTIVE);
 
         return brigadirs.map(brig => {
-            // My Team
-            const myTeam = users.filter(u => u.assigned_brigadir_id === brig.id && u.status !== UserStatus.INACTIVE);
+            // Team Members (Following the same filtering logic as the Employee List)
+            const myTeam = users.filter(u => 
+                u.assigned_brigadir_id === brig.id && 
+                u.status !== UserStatus.INACTIVE &&
+                u.role !== Role.CANDIDATE &&
+                ![Role.ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)
+            );
             const teamIds = myTeam.map(u => u.id);
 
             // Pending Verifications in Team
@@ -73,9 +77,8 @@ export const CoordinatorDashboard = () => {
         });
     }, [users, userSkills, skills, qualityIncidents]);
 
-    // 5. Recent Alerts Feed (Mocked High Level / Real Data Mix)
+    // 5. Recent Alerts Feed
     const recentAlerts = useMemo(() => {
-        // Take last 5 incidents globally
         return qualityIncidents
             .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())
             .slice(0, 5)

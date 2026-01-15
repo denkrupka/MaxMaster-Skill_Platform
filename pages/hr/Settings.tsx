@@ -1,26 +1,55 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    User as UserIcon, Bell, Settings as SettingsIcon, Save, Lock, Mail, Phone,
-    Shield, Check, Plus, Trash2, Briefcase, DollarSign, List, 
-    ChevronUp, ChevronDown, Award, HardHat, TrendingUp, X, CheckCircle2, 
-    ShieldCheck, Zap, ChevronRight, Star, Info, ShieldAlert, FileText,
-    UserPlus, CheckSquare, AlertTriangle, Network, Clock, Cloud, RefreshCw,
-    GripVertical, ArrowUp, ArrowDown, Layers
+    User as UserIcon, Bell, Settings as SettingsIcon, Save, Mail, Phone,
+    Plus, Trash2, Briefcase, DollarSign, List, 
+    ChevronUp, ChevronDown, Award, HardHat, X, TrendingUp, 
+    Layers, FileJson, MessageSquare, Tag, GraduationCap, AlertTriangle,
+    ChevronRight, ShieldCheck, Info, ShieldAlert as ShieldAlertIcon, Star, Gift, Check, CheckCircle2, Zap, Calendar, MapPin
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { Role, ContractType, NotificationSetting, Position, Skill, SkillCategory, VerificationType, BonusDocumentType } from '../../types';
+import { Role, ContractType, Position, Skill, SkillCategory, SystemConfig } from '../../types';
+import { CONTRACT_TYPE_LABELS } from '../../constants';
 
 type TabType = 'general' | 'positions' | 'system';
 
+// Fix: Added optional children to AccordionItem props to avoid missing children error
+const AccordionItem = ({ id, icon: Icon, title, description, children, isOpen, onToggle }: { id: string, icon: any, title: string, description: string, children?: React.ReactNode, isOpen: boolean, onToggle: (id: string) => void }) => {
+    return (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-4 transition-all">
+            <button 
+                type="button"
+                onClick={() => onToggle(id)}
+                className="w-full flex items-center justify-between p-6 hover:bg-slate-50 transition-colors text-left"
+            >
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl ${isOpen ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-500'} transition-all`}>
+                        <Icon size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-black text-slate-800 uppercase tracking-tight text-sm">{title}</h3>
+                        <p className="text-xs text-slate-400 font-medium">{description}</p>
+                    </div>
+                </div>
+                {isOpen ? <ChevronUp className="text-slate-300" /> : <ChevronDown className="text-slate-300" />}
+            </button>
+            {isOpen && (
+                <div className="p-6 border-t border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                    {children}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export const HRSettingsPage = () => {
-    const { state, updateUser, updateSystemConfig, addPosition, updatePosition, deletePosition, reorderPositions } = useAppContext();
+    const { state, updateUser, updateSystemConfig, addPosition, updatePosition, deletePosition, reorderPositions, triggerNotification } = useAppContext();
     const { currentUser, systemConfig, positions, skills } = state;
-    const [activeTab, setActiveTab] = useState<TabType>('positions');
+    const [activeTab, setActiveTab] = useState<TabType>('system');
     const [successMsg, setSuccessMsg] = useState('');
 
-    const roundToHalf = (num: number) => Math.round(num * 2) / 2;
+    const [openAccordion, setOpenAccordion] = useState<string | null>(null);
 
     const [profileData, setProfileData] = useState({ first_name: '', last_name: '', email: '', phone: '', password: '', confirmPassword: '' });
     useEffect(() => { if (currentUser) setProfileData({ first_name: currentUser.first_name, last_name: currentUser.last_name, email: currentUser.email, phone: currentUser.phone || '', password: '', confirmPassword: '' }); }, [currentUser]);
@@ -31,8 +60,13 @@ export const HRSettingsPage = () => {
 
     const sortedPositions = useMemo(() => [...positions].sort((a, b) => a.order - b.order), [positions]);
 
-    const [localSystemConfig, setLocalSystemConfig] = useState(systemConfig);
+    const [localSystemConfig, setLocalSystemConfig] = useState<SystemConfig>(systemConfig);
     const [newReason, setNewReason] = useState('');
+    const [newDocLabel, setNewDocLabel] = useState('');
+    const [newDocBonus, setNewDocBonus] = useState(0);
+    const [tempNoteCategory, setTempNoteCategory] = useState('');
+    const [tempBadgeType, setTempBadgeType] = useState('');
+
     useEffect(() => { setLocalSystemConfig(systemConfig); }, [systemConfig]);
 
     const showSuccess = (msg: string) => { setSuccessMsg(msg); setTimeout(() => setSuccessMsg(''), 3000); };
@@ -45,7 +79,10 @@ export const HRSettingsPage = () => {
         } 
     };
     
-    const handleSaveSystem = () => { updateSystemConfig(localSystemConfig); showSuccess('Konfiguracja systemowa zapisana.'); };
+    const handleSaveSystem = () => { 
+        updateSystemConfig(localSystemConfig); 
+        showSuccess('Konfiguracja systemowa zapisana.'); 
+    };
 
     const calculateSalaryRange = (pos: Partial<Position>) => {
         if (pos.salary_type === 'monthly') {
@@ -65,7 +102,8 @@ export const HRSettingsPage = () => {
             order: positions.length + 1,
             salary_type: 'hourly',
             min_monthly_rate: 4500,
-            max_monthly_rate: 6500
+            max_monthly_rate: 6500,
+            referral_bonus: 0
         }); 
         setNewResp('');
         setIsPositionModalOpen(true); 
@@ -82,170 +120,163 @@ export const HRSettingsPage = () => {
         const newPositions = [...sortedPositions];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newPositions.length) return;
-        
         const temp = newPositions[index];
         newPositions[index] = newPositions[targetIndex];
         newPositions[targetIndex] = temp;
-
         const updated = newPositions.map((p, idx) => ({ ...p, order: idx + 1 }));
         reorderPositions(updated);
+    };
+
+    const toggleAccordion = (id: string) => { setOpenAccordion(openAccordion === id ? null : id); };
+
+    const handleRemoveContractType = (type: string) => {
+        if (['uop', 'uz', 'b2b'].includes(type.toLowerCase())) {
+            return triggerNotification('error', 'Odmowa', 'Nie można usunąć podstawowych form zatrudnienia.');
+        }
+        const newContracts = { ...localSystemConfig.contractBonuses };
+        delete newContracts[type];
+        setLocalSystemConfig({ ...localSystemConfig, contractBonuses: newContracts });
     };
 
     const renderGeneral = () => (
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 max-w-4xl animate-in fade-in duration-300">
             <div className="flex items-center gap-5 mb-8">
-                <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-blue-600/20">
-                    {profileData.first_name[0]}{profileData.last_name[0]}
-                </div>
-                <div>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight">Twój Profil</h2>
-                    <p className="text-sm text-slate-500 font-medium">Zarządzaj swoimi danymi kontaktowymi.</p>
-                </div>
+                <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-blue-600/20">{profileData.first_name[0]}{profileData.last_name[0]}</div>
+                <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Twój Profil</h2><p className="text-sm text-slate-500 font-medium">Zarządzaj swoimi danymi kontaktowymi.</p></div>
             </div>
             <div className="w-full h-px bg-slate-100 mb-8"></div>
             <div className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label>
-                        <input className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.first_name} onChange={e => setProfileData({...profileData, first_name: e.target.value})}/>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label>
-                        <input className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.last_name} onChange={e => setProfileData({...profileData, last_name: e.target.value})}/>
-                    </div>
+                    <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">IMIĘ</label><input className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.first_name} onChange={e => setProfileData({...profileData, first_name: e.target.value})}/></div>
+                    <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">NAZWISKO</label><input className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.last_name} onChange={e => setProfileData({...profileData, last_name: e.target.value})}/></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ADRES EMAIL</label>
-                        <div className="relative">
-                            <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                            <input type="email" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.email} onChange={e => setProfileData({...profileData, email: e.target.value})}/>
-                        </div>
-                    </div>
-                    <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NUMER TELEFONU</label>
-                        <div className="relative">
-                            <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                            <input type="tel" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.phone} onChange={e => setProfileData({...profileData, phone: e.target.value})}/>
-                        </div>
-                    </div>
+                    <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">ADRES EMAIL</label><div className="relative"><Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" /><input type="email" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.email} onChange={e => setProfileData({...profileData, email: e.target.value})}/></div></div>
+                    <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">NUMER TELEFONU</label><div className="relative"><Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300" /><input type="tel" className="w-full bg-slate-50/50 border border-slate-200 p-3 rounded-xl text-slate-800 font-bold focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all shadow-sm" value={profileData.phone} onChange={e => setProfileData({...profileData, phone: e.target.value})}/></div></div>
                 </div>
             </div>
-            <div className="flex justify-end mt-10">
-                <Button onClick={handleSaveGeneral} className="px-10 h-12 rounded-xl font-black shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-95"><Save size={20} className="mr-2"/> Zapisz Profil</Button>
-            </div>
+            <div className="flex justify-end mt-10"><Button onClick={handleSaveGeneral} className="px-10 h-12 rounded-xl font-black shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.02] active:scale-95"><Save size={20} className="mr-2"/> Zapisz Profil</Button></div>
         </div>
     );
 
     const renderPositions = () => (
         <div className="space-y-8 animate-in fade-in duration-500 max-w-5xl">
-            {/* Header section updated according to request */}
             <div className="flex justify-between items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                <div>
-                    <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3 uppercase">
-                        <Briefcase size={24} className="text-blue-600"/> Lista Stanowisk
-                    </h2>
-                    <p className="text-sm text-slate-500 mt-1 font-medium italic">Zarządzaj dostępnymi stanowiskami i wymaganiami w Twojej firmie.</p>
-                </div>
-                <Button onClick={() => handleOpenPositionModal()} className="rounded-xl h-11 px-6 font-black shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95">
-                    <Plus size={20} className="mr-2"/> Dodaj Stanowisko
-                </Button>
+                <div><h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3 uppercase"><Briefcase size={24} className="text-blue-600"/> Lista Stanowisk</h2><p className="text-sm text-slate-500 mt-1 font-medium italic">Zarządzaj dostępnymi stanowiskami i wymaganiami w Twojej firmie.</p></div>
+                <Button onClick={() => handleOpenPositionModal()} className="rounded-xl h-11 px-6 font-black shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95"><Plus size={20} className="mr-2"/> Dodaj Stanowisko</Button>
             </div>
-
-            {/* List from DB (state.positions) */}
             <div className="relative pl-20 space-y-4">
-                {/* Vertical Line */}
                 <div className="absolute left-[40px] top-4 bottom-4 w-1 bg-slate-100 rounded-full"></div>
-
                 {sortedPositions.map((pos, idx) => {
                     const range = calculateSalaryRange(pos);
                     return (
                         <div key={pos.id} className="relative group">
-                            {/* Circle with Index */}
-                            <div className="absolute -left-[64px] top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full border-4 border-slate-50 shadow-sm flex items-center justify-center text-slate-400 font-black text-lg z-10 group-hover:border-blue-100 group-hover:text-blue-500 transition-all">
-                                {idx + 1}
-                            </div>
-
-                            {/* Card */}
+                            <div className="absolute -left-[64px] top-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full border-4 border-slate-50 shadow-sm flex items-center justify-center text-slate-400 font-black text-lg z-10 group-hover:border-blue-100 group-hover:text-blue-500 transition-all">{idx + 1}</div>
                             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all p-6 flex flex-col md:flex-row items-center gap-6 cursor-pointer" onClick={() => handleOpenPositionModal(pos)}>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase group-hover:text-blue-600 transition-colors">
-                                            {pos.name}
-                                        </h3>
-                                        <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded tracking-widest uppercase border border-blue-100">Aktywne</span>
-                                    </div>
-                                    <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
-                                        <div className="flex items-center gap-1.5"><Layers size={14}/> {pos.required_skill_ids?.length || 0} wymagań</div>
-                                        <div className="flex items-center gap-1.5"><List size={14}/> {pos.responsibilities?.length || 0} obowiązków</div>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-8">
-                                    <div className="text-right">
-                                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">WYNAGRODZENIE</div>
-                                        <div className="text-2xl font-black text-green-600 leading-none">
-                                            {range.min.toFixed(0)}-{range.max.toFixed(0)} <span className="text-xs font-bold text-slate-400">{range.unit}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Reorder actions */}
-                                    <div className="flex flex-col gap-1" onClick={e => e.stopPropagation()}>
-                                        <button 
-                                            onClick={() => movePosition(idx, 'up')}
-                                            disabled={idx === 0}
-                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"
-                                        >
-                                            <ChevronUp size={20}/>
-                                        </button>
-                                        <button 
-                                            onClick={() => movePosition(idx, 'down')}
-                                            disabled={idx === sortedPositions.length - 1}
-                                            className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"
-                                        >
-                                            <ChevronDown size={20}/>
-                                        </button>
-                                    </div>
-                                    
-                                    <ChevronRight className="text-slate-200 group-hover:text-blue-400 transition-colors" size={24} />
-                                </div>
+                                <div className="flex-1"><div className="flex items-center gap-3 mb-2"><h3 className="text-xl font-black text-slate-900 tracking-tight uppercase group-hover:text-blue-600 transition-colors">{pos.name}</h3><span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded tracking-widest uppercase border border-blue-100">Aktywne</span></div><div className="flex items-center gap-4 text-xs font-bold text-slate-400"><div className="flex items-center gap-1.5"><Layers size={14}/> {pos.required_skill_ids?.length || 0} wymagań</div><div className="flex items-center gap-1.5"><List size={14}/> {pos.responsibilities?.length || 0} obowiązków</div></div></div>
+                                <div className="flex items-center gap-8"><div className="text-right"><div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">WYNAGRODZENIE</div><div className="text-2xl font-black text-green-600 leading-none">{range.min.toFixed(0)}-{range.max.toFixed(0)} <span className="text-xs font-bold text-slate-400">{range.unit}</span></div></div><div className="flex flex-col gap-1" onClick={e => e.stopPropagation()}><button onClick={() => movePosition(idx, 'up')} disabled={idx === 0} className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"><ChevronUp size={20}/></button><button onClick={() => movePosition(idx, 'down')} disabled={idx === sortedPositions.length - 1} className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-20 transition-colors"><ChevronDown size={20}/></button></div><ChevronRight className="text-slate-200 group-hover:text-blue-400 transition-colors" size={24} /></div>
                             </div>
                         </div>
                     );
                 })}
-                
-                {sortedPositions.length === 0 && (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center ml-[-20px]">
-                        <Briefcase size={48} className="text-slate-300 mx-auto mb-4"/>
-                        <p className="text-slate-500 font-bold">Brak dodanych stanowisk. Kliknij przycisk powyżej, aby utworzyć pierwsze stanowisko.</p>
-                    </div>
-                )}
             </div>
         </div>
     );
 
     const renderSystem = () => (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl animate-in fade-in duration-300">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-fit">
-                <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 uppercase tracking-tighter text-sm"><DollarSign size={20} className="text-green-600"/> Stawki & Bonusy</h3>
+        <div className="max-w-5xl animate-in fade-in duration-300">
+            <AccordionItem 
+                id="base-rate" 
+                icon={DollarSign} 
+                title="Stawka Bazowa & Bonusy" 
+                description="Zarządzaj globalną stawką bazową oraz dodatkami za nadgodziny i staż." 
+                isOpen={openAccordion === 'base-rate'} 
+                onToggle={toggleAccordion}
+            >
                 <div className="space-y-6">
-                    <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Globalna Stawka Bazowa (PLN/h)</label>
-                        <div className="flex items-center gap-3">
-                            <input type="number" step="0.5" className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-lg font-bold text-xl focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.baseRate} onChange={(e) => setLocalSystemConfig({...localSystemConfig, baseRate: Number(e.target.value)})}/>
-                            <span className="text-slate-400 font-bold text-xs">PLN/H</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">STAWKA BAZOWA PLN/H</label>
+                            <div className="relative">
+                                <input type="number" step="0.5" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-xl text-slate-800 focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.baseRate} onChange={(e) => setLocalSystemConfig({...localSystemConfig, baseRate: Number(e.target.value)})}/>
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 uppercase text-xs">PLN / H</span>
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 flex items-center gap-1.5"><Zap size={10} className="text-blue-500"/> BONUS ZA NADGODZINY</label>
+                            <div className="relative">
+                                <input type="number" step="0.5" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-xl text-blue-600 focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.overtimeBonus} onChange={(e) => setLocalSystemConfig({...localSystemConfig, overtimeBonus: Number(e.target.value)})}/>
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 uppercase text-xs">PLN / H</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 flex items-center gap-1.5"><Calendar size={10} className="text-orange-500"/> PRACA W DNI WOLNE</label>
+                            <div className="relative">
+                                <input type="number" step="0.5" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-xl text-orange-600 focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.holidayBonus} onChange={(e) => setLocalSystemConfig({...localSystemConfig, holidayBonus: Number(e.target.value)})}/>
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 uppercase text-xs">PLN / H</span>
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 flex items-center gap-1.5"><TrendingUp size={10} className="text-green-500"/> BONUS ZA STAŻ (CO 1 ROK)</label>
+                            <div className="relative">
+                                <input type="number" step="0.1" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-xl text-green-600 focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.seniorityBonus} onChange={(e) => setLocalSystemConfig({...localSystemConfig, seniorityBonus: Number(e.target.value)})}/>
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 uppercase text-xs">PLN / H</span>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Delegation Bonus Input */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5 flex items-center gap-1.5"><MapPin size={10} className="text-purple-500"/> STAWKA ZA DELEGACJĘ</label>
+                            <div className="relative">
+                                <input type="number" step="0.5" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-black text-xl text-purple-600 focus:bg-white outline-none transition-all shadow-inner" value={localSystemConfig.delegationBonus} onChange={(e) => setLocalSystemConfig({...localSystemConfig, delegationBonus: Number(e.target.value)})}/>
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-300 uppercase text-xs">PLN / H</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-fit">
-                <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 uppercase tracking-tighter text-sm"><ShieldAlert size={20} className="text-orange-600"/> Powody Zwolnień</h3>
-                <div className="flex gap-2 mb-4">
-                    <input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-lg text-sm font-medium focus:bg-white outline-none" placeholder="Nowy powód..." value={newReason} onChange={(e) => setNewReason(e.target.value)}/>
-                    <Button size="sm" className="rounded-lg w-10 px-0 h-9" onClick={() => { if(newReason) { setLocalSystemConfig(prev => ({ ...prev, terminationReasons: [...prev.terminationReasons, newReason] })); setNewReason(''); }}} disabled={!newReason}><Plus size={18}/></Button>
+            </AccordionItem>
+            
+            <AccordionItem id="doc-permissions" icon={ShieldCheck} title="Dokumenty i Uprawnienia" description="Zarządzaj typami dokumentów (SEP, UDT) i stawkami bonusowymi za nie." isOpen={openAccordion === 'doc-permissions'} onToggle={toggleAccordion}><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{(localSystemConfig.bonusDocumentTypes || []).map((doc, idx) => (<div key={doc.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between group"><div className="flex-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">NAZWA DOKUMENTU</p><input className="w-full bg-transparent border-none p-0 font-bold text-slate-800 text-sm focus:ring-0" value={doc.label} onChange={e => { const newDocs = [...localSystemConfig.bonusDocumentTypes]; newDocs[idx].label = e.target.value; setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }}/></div><div className="w-24 px-4"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-right">PLN/H</p><input type="number" step="0.1" className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-right font-black text-blue-600 outline-none" value={doc.bonus} onChange={e => { const newDocs = [...localSystemConfig.bonusDocumentTypes]; newDocs[idx].bonus = Number(e.target.value); setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }}/></div><button type="button" onClick={() => { const newDocs = localSystemConfig.bonusDocumentTypes.filter((_, i) => i !== idx); setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button></div>))}</div><div className="bg-blue-50 p-5 rounded-[24px] border border-blue-100 flex flex-col md:flex-row gap-4 items-end"><div className="flex-1 w-full"><label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">NOWY TYP DOKUMENTU</label><input className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="np. SEP G1 Eksploatacja" value={newDocLabel} onChange={e => setNewDocLabel(e.target.value)}/></div><div className="w-full md:w-32"><label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">BONUS PLN/H</label><input type="number" step="0.1" className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" value={newDocBonus} onChange={e => setNewDocBonus(Number(e.target.value))}/></div><Button type="button" onClick={() => { if (newDocLabel) { const newDoc = { id: 'doc_' + Date.now(), label: newDocLabel, bonus: newDocBonus }; setLocalSystemConfig({ ...localSystemConfig, bonusDocumentTypes: [...(localSystemConfig.bonusDocumentTypes || []), newDoc] }); setNewDocLabel(''); setNewDocBonus(0); } }} disabled={!newDocLabel} className="h-12 px-8 rounded-xl font-black shadow-lg shadow-blue-600/20"><Plus size={20} className="mr-2" /> Dodaj Dokument</Button></div></div></AccordionItem>
+            <AccordionItem id="contracts" icon={FileJson} title="Formy Zatrudnienia" description="Zarządzaj typami umów i bonusami za formę współpracy." isOpen={openAccordion === 'contracts'} onToggle={toggleAccordion}>
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Object.entries(localSystemConfig.contractBonuses).map(([type, bonus]) => {
+                            const isUZ = type.toLowerCase() === 'uz';
+                            const isCore = ['uop', 'uz', 'b2b'].includes(type.toLowerCase());
+                            return (
+                                <div key={type} className={`bg-slate-50 p-5 rounded-[24px] border border-slate-100 flex flex-col group transition-all hover:border-blue-200 relative overflow-hidden ${isUZ ? 'bg-indigo-50/50 border-indigo-100' : ''}`}>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex-1">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">TYP UMOWY</p>
+                                            <p className="font-bold text-slate-800 text-sm uppercase">{CONTRACT_TYPE_LABELS[type as ContractType] || type}</p>
+                                        </div>
+                                        <div className="w-28 flex items-center gap-2">
+                                            <div className="flex-1">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-right">BONUS PLN/H</p>
+                                                <div className="relative">
+                                                    <input type="number" className="w-full bg-white border border-slate-200 p-2 rounded-xl text-right font-black text-blue-600 outline-none focus:ring-4 focus:ring-blue-500/10" value={bonus} onChange={(e) => setLocalSystemConfig({ ...localSystemConfig, contractBonuses: { ...localSystemConfig.contractBonuses, [type]: Number(e.target.value) } })}/>
+                                                </div>
+                                            </div>
+                                            {!isCore && (
+                                                <button onClick={() => handleRemoveContractType(type)} className="mt-5 p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100" title="Usuń formę zatrudnienia">
+                                                    <Trash2 size={16}/>
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {isUZ && (<div className="mt-2 pt-4 border-t border-indigo-100 flex items-center justify-between animate-in fade-in slide-in-from-top-1 duration-300"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100"><GraduationCap size={16}/></div><div><p className="text-[10px] font-black text-indigo-900 uppercase tracking-tight">Status Studenta</p><p className="text-[8px] font-medium text-indigo-400 uppercase tracking-wider">Dodatkowy bonus dla osób &lt; 26 lat</p></div></div><div className="w-24"><div className="relative"><input type="number" className="w-full bg-white border border-indigo-200 p-1.5 rounded-lg text-center font-black text-indigo-600 outline-none focus:ring-4 focus:ring-indigo-500/10" value={localSystemConfig.studentBonus} onChange={(e) => setLocalSystemConfig({...localSystemConfig, studentBonus: Number(e.target.value)})}/><span className="absolute -right-2 top-1/2 -translate-y-1/2 text-[8px] font-bold text-indigo-300 uppercase">PLN</span></div></div></div>)}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
-            </div>
-            <div className="lg:col-span-2 flex justify-end pt-4"><Button className="px-10 h-12 rounded-xl shadow-lg shadow-blue-600/10 font-bold" onClick={handleSaveSystem}><Save size={20} className="mr-2"/> Zapisz Konfigurację</Button></div>
+            </AccordionItem>
+            <AccordionItem id="reasons" icon={ShieldAlertIcon} title="Powody Zwolnień" description="Lista przyczyn dostępna przy rozwiązywaniu umów." isOpen={openAccordion === 'reasons'} onToggle={toggleAccordion}><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-2">{localSystemConfig.terminationReasons.map((reason, idx) => (<div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center group"><span className="text-sm font-medium text-slate-700">{reason}</span><button type="button" onClick={() => setLocalSystemConfig({...localSystemConfig, terminationReasons: localSystemConfig.terminationReasons.filter((_, i) => i !== idx)})} className="p-1.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14}/></button></div>))}</div><div className="flex gap-2"><input className="flex-1 bg-slate-50 border border-slate-200 p-3 rounded-xl text-sm font-bold focus:bg-white outline-none transition-all" placeholder="Wpisz nowy powód..." value={newReason} onChange={e => setNewReason(e.target.value)}/><Button type="button" onClick={() => { if (newReason) { setLocalSystemConfig({...localSystemConfig, terminationReasons: [...localSystemConfig.terminationReasons, newReason]}); setNewReason(''); } }} disabled={!newReason} className="rounded-xl px-6"><Plus size={20} className="mr-2" /> Dodaj</Button></div></div></AccordionItem>
+            <AccordionItem id="categories" icon={Tag} title="Kategorie Notatek i Odznak" description="Zarządzaj słownikami kategorii dla ocen i wyróżnień." isOpen={openAccordion === 'categories'} onToggle={toggleAccordion}><div className="grid grid-cols-1 md:grid-cols-2 gap-8"><div className="space-y-4"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><MessageSquare size={14} className="text-blue-500"/> Kategorie Notatek</h4><div className="space-y-2">{localSystemConfig.noteCategories.map((cat, idx) => (<div key={idx} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-center group"><span className="text-xs font-bold text-slate-700">{cat}</span><button type="button" onClick={() => setLocalSystemConfig({...localSystemConfig, noteCategories: localSystemConfig.noteCategories.filter((_, i) => i !== idx)})} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14}/></button></div>))}</div><div className="flex gap-2"><input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs font-bold outline-none" placeholder="Nowa kategoria..." value={tempNoteCategory} onChange={e => setTempNoteCategory(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && tempNoteCategory.trim()) { setLocalSystemConfig({...localSystemConfig, noteCategories: [...localSystemConfig.noteCategories, tempNoteCategory.trim()]}); setTempNoteCategory(''); } }}/><Button type="button" size="sm" onClick={() => { if(tempNoteCategory.trim()) { setLocalSystemConfig({...localSystemConfig, noteCategories: [...localSystemConfig.noteCategories, tempNoteCategory.trim()]}); setTempNoteCategory(''); } }} disabled={!tempNoteCategory.trim()} className="rounded-xl px-4"><Plus size={16}/></Button></div></div><div className="space-y-4"><h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4"><Star size={14} className="text-yellow-500"/> Typy Odznak</h4><div className="space-y-2">{localSystemConfig.badgeTypes.map((type, idx) => (<div key={idx} className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-center group"><span className="text-xs font-bold text-slate-700">{type}</span><button type="button" onClick={() => setLocalSystemConfig({...localSystemConfig, badgeTypes: localSystemConfig.badgeTypes.filter((_, i) => i !== idx)})} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14}/></button></div>))}</div><div className="flex gap-2"><input className="flex-1 bg-slate-50 border border-slate-200 p-2 rounded-xl text-xs font-bold outline-none" placeholder="Nowy typ..." value={tempBadgeType} onChange={e => setTempBadgeType(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && tempBadgeType.trim()) { setLocalSystemConfig({...localSystemConfig, badgeTypes: [...localSystemConfig.badgeTypes, tempBadgeType.trim()]}); setTempBadgeType(''); } }}/><Button type="button" size="sm" onClick={() => { if(tempBadgeType.trim()) { setLocalSystemConfig({...localSystemConfig, badgeTypes: [...localSystemConfig.badgeTypes, tempBadgeType.trim()]}); setTempBadgeType(''); } }} disabled={!tempBadgeType.trim()} className="rounded-xl px-4"><Plus size={16}/></Button></div></div></div></AccordionItem>
+            <div className="flex justify-end mt-10"><Button className="px-12 h-14 rounded-2xl font-black shadow-xl shadow-blue-600/20 text-base" onClick={handleSaveSystem}><Save size={24} className="mr-3"/> ZAPISZ KONFIGURACJĘ</Button></div>
         </div>
     );
 
@@ -258,13 +289,7 @@ export const HRSettingsPage = () => {
                     { id: 'positions', label: 'STANOWISKA', icon: Briefcase },
                     { id: 'system', label: 'KONFIGURACJA', icon: SettingsIcon }
                 ].map(t => (
-                    <button
-                        key={t.id}
-                        onClick={() => setActiveTab(t.id as TabType)}
-                        className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-lg flex items-center gap-2.5 transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                    >
-                        <t.icon size={14} /> {t.label}
-                    </button>
+                    <button key={t.id} type="button" onClick={() => setActiveTab(t.id as TabType)} className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-lg flex items-center gap-2.5 transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><t.icon size={14} /> {t.label}</button>
                 ))}
             </div>
             <div className="relative min-h-[400px]">
@@ -272,172 +297,43 @@ export const HRSettingsPage = () => {
                 {activeTab === 'positions' && renderPositions()}
                 {activeTab === 'system' && renderSystem()}
             </div>
-            
-            {/* --- COMPACT POSITION MODAL --- */}
             {isPositionModalOpen && editingPosition && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full overflow-hidden animate-in zoom-in duration-300">
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                            <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">{editingPosition.id ? 'Edytuj Stanowisko' : 'Nowe Stanowisko'}</h3>
-                            <button onClick={() => setIsPositionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-white rounded-full"><X size={20} /></button>
-                        </div>
-                        
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50"><h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">{editingPosition.id ? 'Edytuj Stanowisko' : 'Nowe Stanowisko'}</h3><button onClick={() => setIsPositionModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-white rounded-full"><X size={20} /></button></div>
                         <div className="p-6 space-y-6 scrollbar-hide overflow-y-auto max-h-[85vh]">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Left Column: Info & Salary */}
                                 <div className="space-y-6">
-                                    <div className="space-y-1.5">
-                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWA STANOWISKA</label>
-                                        <input 
-                                            className="w-full bg-[#2D2E32] border-none rounded-xl p-3 text-white font-bold text-base focus:ring-4 focus:ring-blue-500/20 outline-none transition-all shadow-inner" 
-                                            value={editingPosition.name} 
-                                            onChange={e => setEditingPosition({...editingPosition, name: e.target.value})} 
-                                            placeholder="Wpisz nazwę..."
-                                        />
-                                    </div>
-
+                                    <div className="space-y-1.5"><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWA STANOWISKA</label><input className="w-full bg-[#2D2E32] border-none rounded-xl p-3 text-white font-bold text-base focus:ring-4 focus:ring-blue-500/20 outline-none transition-all shadow-inner" value={editingPosition.name} onChange={e => setEditingPosition({...editingPosition, name: e.target.value})} placeholder="Wpisz nazwę..."/></div>
                                     <div className="space-y-3">
                                         <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">RODZAJ WYNAGRODZENIA</label>
-                                        <div className="flex bg-slate-100 p-1 rounded-xl w-full">
-                                            <button 
-                                                onClick={() => setEditingPosition({...editingPosition, salary_type: 'hourly'})}
-                                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'hourly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                            >
-                                                Stawka Godzinowa
-                                            </button>
-                                            <button 
-                                                onClick={() => setEditingPosition({...editingPosition, salary_type: 'monthly'})}
-                                                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'monthly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                                            >
-                                                Stawka Miesięczna
-                                            </button>
-                                        </div>
-
+                                        <div className="flex bg-slate-100 p-1 rounded-xl w-full"><button type="button" onClick={() => setEditingPosition({...editingPosition, salary_type: 'hourly'})} className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'hourly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Stawka Godzinowa</button><button type="button" onClick={() => setEditingPosition({...editingPosition, salary_type: 'monthly'})} className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${editingPosition.salary_type === 'monthly' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Stawka Miesięczna</button></div>
                                         {editingPosition.salary_type === 'monthly' ? (
                                             <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                                                <div className="space-y-1">
-                                                    <label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MIN (PLN)</label>
-                                                    <input 
-                                                        type="number"
-                                                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none"
-                                                        value={editingPosition.min_monthly_rate}
-                                                        onChange={e => setEditingPosition({...editingPosition, min_monthly_rate: Number(e.target.value)})}
-                                                    />
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MAX (PLN)</label>
-                                                    <input 
-                                                        type="number"
-                                                        className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none"
-                                                        value={editingPosition.max_monthly_rate}
-                                                        onChange={e => setEditingPosition({...editingPosition, max_monthly_rate: Number(e.target.value)})}
-                                                    />
-                                                </div>
+                                                <div className="space-y-1"><label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MIN (PLN)</label><input type="number" className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none" value={editingPosition.min_monthly_rate} onChange={e => setEditingPosition({...editingPosition, min_monthly_rate: Number(e.target.value)})}/></div>
+                                                <div className="space-y-1"><label className="block text-[8px] font-bold text-slate-400 uppercase ml-1 tracking-wider">MAX (PLN)</label><input type="number" className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:bg-white outline-none" value={editingPosition.max_monthly_rate} onChange={e => setEditingPosition({...editingPosition, max_monthly_rate: Number(e.target.value)})}/></div>
                                             </div>
                                         ) : (
-                                            <div className="bg-blue-50 border border-blue-100 p-3 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200">
-                                                <div className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Wyliczona prognoza</div>
-                                                <div className="text-xl font-black text-blue-700">
-                                                    {calculateSalaryRange(editingPosition).min}-{calculateSalaryRange(editingPosition).max} <span className="text-xs font-bold text-blue-400">zł/h</span>
-                                                </div>
-                                                <p className="text-[10px] text-blue-400 font-medium leading-tight mt-1">Stawka bazowa ({localSystemConfig.baseRate} zł) + wybrane umiejętności.</p>
-                                            </div>
+                                            <div className="bg-blue-50 border border-blue-100 p-3 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200"><div className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1">Wyliczona prognoza</div><div className="text-xl font-black text-blue-700">{calculateSalaryRange(editingPosition).min}-{calculateSalaryRange(editingPosition).max} <span className="text-xs font-bold text-blue-400">zł/h</span></div><p className="text-[10px] text-blue-400 font-medium leading-tight mt-1">Stawka bazowa ({localSystemConfig.baseRate} zł) + wybrane umiejętności.</p></div>
                                         )}
                                     </div>
-                                    
-                                    {/* Responsibilities */}
-                                    <div className="space-y-3">
-                                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">OBOWIĄZKI</label>
-                                        <div className="flex gap-2">
-                                            <input 
-                                                className="flex-1 bg-slate-100 border-none rounded-xl p-2.5 text-slate-700 font-medium text-xs focus:ring-4 focus:ring-blue-500/20 outline-none" 
-                                                placeholder="Dodaj obowiązek..."
-                                                value={newResp}
-                                                onChange={e => setNewResp(e.target.value)}
-                                                onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } } }}
-                                            />
-                                            <button 
-                                                onClick={() => { if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } }}
-                                                className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"
-                                            >
-                                                <Plus size={16}/>
-                                            </button>
-                                        </div>
-                                        <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide pr-1">
-                                            {(editingPosition.responsibilities || []).map((resp, i) => (
-                                                <div key={i} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-blue-200 transition-all">
-                                                    <span className="text-xs font-bold text-slate-700 truncate mr-2">{resp}</span>
-                                                    <button 
-                                                        onClick={() => setEditingPosition({...editingPosition, responsibilities: (editingPosition.responsibilities || []).filter((_, idx) => idx !== i)})}
-                                                        className="text-red-300 hover:text-red-500 transition-colors"
-                                                    >
-                                                        <Trash2 size={14}/>
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    <div className="space-y-1.5 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm"><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Gift size={12} className="text-purple-500"/> BONUS ZA POLECENIE</label><div className="flex items-center gap-3"><input type="number" className="w-full bg-white border border-slate-200 p-2.5 rounded-xl font-black text-slate-800 text-sm focus:ring-2 focus:ring-purple-500/10 outline-none transition-all" value={editingPosition.referral_bonus || 0} onChange={e => setEditingPosition({...editingPosition, referral_bonus: Number(e.target.value)})} placeholder="0.00"/><span className="text-slate-400 font-black text-xs">PLN</span></div><p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Kwota wypłacana za skutecznie zatrudnionego pracownika.</p></div>
+                                    <div className="space-y-3"><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">OBOWIĄZKI</label><div className="flex gap-2"><input className="flex-1 bg-slate-100 border-none rounded-xl p-2.5 text-slate-700 font-medium text-xs focus:ring-4 focus:ring-blue-500/20 outline-none" placeholder="Dodaj obowiązek..." value={newResp} onChange={e => setNewResp(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } } }} /><button type="button" onClick={() => { if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } }} className="bg-blue-600 text-white p-2.5 rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"><Plus size={16}/></button></div><div className="space-y-1 max-h-32 overflow-y-auto scrollbar-hide pr-1">{(editingPosition.responsibilities || []).map((resp, i) => (
+                                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-blue-200 transition-all">
+                                            <div className="flex items-center gap-2 truncate flex-1">
+                                                <Check size={12} className="text-green-500 shrink-0" />
+                                                <span className="text-xs font-bold text-slate-700 truncate">{resp}</span>
+                                            </div>
+                                            <button type="button" onClick={() => setEditingPosition({...editingPosition, responsibilities: (editingPosition.responsibilities || []).filter((_, idx) => idx !== i)})} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button>
+                                        </div>))}</div></div>
                                 </div>
-
-                                {/* Right Column: Skills */}
-                                <div className="space-y-3 h-full">
-                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">WYMAGANE UMIEJĘTNOŚCI (WIDŁY)</label>
-                                    <div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-inner h-[calc(100%-1.5rem)] flex flex-col">
-                                        <div className="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar-hide max-h-[380px]">
-                                            {skills.filter(s => !s.is_archived).map(skill => {
-                                                const isSelected = editingPosition.required_skill_ids?.includes(skill.id);
-                                                return (
-                                                    <label key={skill.id} className={`flex items-center justify-between p-3 cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'}`}>
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
-                                                                {isSelected && <Check size={12} />}
-                                                            </div>
-                                                            <input 
-                                                                type="checkbox" 
-                                                                className="hidden" 
-                                                                checked={isSelected} 
-                                                                onChange={() => {
-                                                                    const current = editingPosition.required_skill_ids || [];
-                                                                    const updated = isSelected ? current.filter(id => id !== skill.id) : [...current, skill.id];
-                                                                    setEditingPosition({...editingPosition, required_skill_ids: updated});
-                                                                }}
-                                                            />
-                                                            <div>
-                                                                <div className="text-xs font-black text-slate-800 leading-tight">{skill.name_pl}</div>
-                                                                <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{skill.category}</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-[10px] font-black text-green-600">+{skill.hourly_bonus} zł</div>
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
+                                <div className="space-y-3 h-full"><label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">WYMAGANE UMIEJĘTNOŚCI</label><div className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-inner h-[calc(100%-1.5rem)] flex flex-col"><div className="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar-hide max-h-[380px]">{skills.filter(s => !s.is_archived).map(skill => { const isSelected = editingPosition.required_skill_ids?.includes(skill.id); return (<label key={skill.id} className={`flex items-center justify-between p-3 cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'}`}><div className="flex items-center gap-3"><div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>{isSelected && <Check size={12} />}</div><input type="checkbox" className="hidden" checked={isSelected} onChange={() => { const current = editingPosition.required_skill_ids || []; const updated = isSelected ? current.filter(id => id !== skill.id) : [...current, skill.id]; setEditingPosition({...editingPosition, required_skill_ids: updated}); }}/><div><div className="text-xs font-black text-slate-800 leading-tight">{skill.name_pl}</div><div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{skill.category}</div></div></div><div className="text-[10px] font-black text-green-600">+{skill.hourly_bonus.toFixed(2)} zł</div></label>); })}</div></div></div>
                             </div>
                         </div>
-
-                        {/* Footer */}
-                        <div className="px-6 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/30">
-                            <div className="flex gap-3">
-                                <button onClick={() => setIsPositionModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">Anuluj</button>
-                                {editingPosition.id && (
-                                    <button 
-                                        onClick={() => { if(confirm('Czy na pewno chcesz usunąć to stanowisko?')) { deletePosition(editingPosition.id!); setIsPositionModalOpen(false); } }}
-                                        className="px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                    >
-                                        Usuń
-                                    </button>
-                                )}
-                            </div>
-                            <Button onClick={handleSavePosition} className="px-8 h-10 rounded-xl font-black shadow-xl shadow-blue-600/30 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95">
-                                <Save size={18} className="mr-2"/> {editingPosition.id ? 'Zapisz Stanowisko' : 'Dodaj Stanowisko'}
-                            </Button>
-                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/30"><div className="flex gap-3"><button type="button" onClick={() => setIsPositionModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors">Anuluj</button>{editingPosition.id && (<button type="button" onClick={() => { if(confirm('Czy na pewno chcesz usunąć to stanowisko?')) { deletePosition(editingPosition.id!); setIsPositionModalOpen(false); } }} className="px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all">Usuń</button>)}</div><Button onClick={handleSavePosition} className="px-8 h-10 rounded-xl font-black shadow-xl shadow-blue-600/30 bg-blue-600 hover:bg-blue-700 transition-all active:scale-95"><Save size={18} className="mr-2"/> {editingPosition.id ? 'Zapisz Stanowisko' : 'Dodaj Stanowisko'}</Button></div>
                     </div>
                 </div>
             )}
-
             {successMsg && <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl animate-in slide-in-from-bottom-4 flex items-center gap-3 z-[100]"><CheckCircle2 size={20}/><span className="font-bold">{successMsg}</span></div>}
         </div>
     );

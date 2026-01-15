@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
@@ -10,22 +9,29 @@ import {
     ChevronRight,
     StickyNote,
     Upload,
-    Loader2
+    Loader2,
+    Mail,
+    Phone,
+    UserCheck,
+    Cake,
+    ShieldCheck,
+    ShieldAlert as ShieldAlertIcon,
+    Gift
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Role, UserStatus, User, SkillStatus, VerificationType, ChecklistItemState, VerificationAttachment, VerificationNote, VerificationLog, NoteCategory, NoteSeverity, QualityIncident, LibraryResource, SkillCategory, ContractType, BadgeType } from '../../types';
-import { USER_STATUS_LABELS, USER_STATUS_COLORS, SKILL_STATUS_LABELS, CHECKLIST_TEMPLATES } from '../../constants';
-import { Button } from '../../components/Button';
+import { Role, UserStatus, User, SkillStatus, VerificationType, ChecklistItemState, NoteCategory, QualityIncident, BadgeType, ContractType } from '../../types';
+import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, CHECKLIST_TEMPLATES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
-import { CandidateProfilePage } from '../candidate/Profile';
+import { uploadDocument } from '../../lib/supabase';
+import { calculateSalary } from '../../services/salaryService';
+import { Button } from '../../components/Button';
 import { EmployeeSkills } from '../employee/Skills';
 import { EmployeeLibrary } from '../employee/Library';
-import { calculateSalary } from '../../services/salaryService';
-import { uploadDocument } from '../../lib/supabase';
+import { CandidateProfilePage } from '../candidate/Profile';
 
 // --- EMPLOYEES PAGE ---
 export const CoordinatorEmployees = () => {
-    const { state, addEmployeeNote, addQualityIncident } = useAppContext();
+    const { state, addEmployeeNote, addQualityIncident, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
     const { users, userSkills, skills, qualityIncidents, employeeNotes, systemConfig, monthlyBonuses, employeeBadges, currentUser } = state;
@@ -38,19 +44,24 @@ export const CoordinatorEmployees = () => {
     const [selectedIncident, setSelectedIncident] = useState<QualityIncident | null>(null);
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
 
-    // Local state for new note
+    // Secondary modals
+    const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
+    const [isQualityAddModalOpen, setIsQualityAddModalOpen] = useState(false);
+
+    // Local form states
     const [noteText, setNoteText] = useState('');
     const [noteCategory, setNoteCategory] = useState<NoteCategory>(NoteCategory.GENERAL);
+    
+    const [badgeType, setBadgeType] = useState<BadgeType>(BadgeType.QUALITY);
+    const [badgeDesc, setBadgeDesc] = useState('');
+    const [badgeDate, setBadgeDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // Local state for new quality incident
-    const [isAddingIncident, setIsAddingIncident] = useState(false);
     const [newIncidentSkillId, setNewIncidentSkillId] = useState('');
     const [newIncidentDesc, setNewIncidentDesc] = useState('');
     const [newIncidentImages, setNewIncidentImages] = useState<string[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const incidentCameraRef = useRef<HTMLInputElement>(null);
 
-    // Handle deep links from dashboard
     useEffect(() => {
         if (location.state && location.state.brigadirId) {
             setBrigadirFilter(location.state.brigadirId);
@@ -59,46 +70,53 @@ export const CoordinatorEmployees = () => {
     }, [location]);
 
     const brigadirs = users.filter(u => u.role === Role.BRIGADIR && u.status === UserStatus.ACTIVE);
+    
     const filteredEmployees = useMemo(() => {
         return users.filter(u => {
-            if (u.role === Role.CANDIDATE) return false;
-            if ([Role.ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)) return false;
+            // Exclude internal roles, candidates and INACTIVE (fired) employees
+            if (u.role === Role.CANDIDATE || [Role.ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)) return false;
+            if (u.status === UserStatus.INACTIVE) return false;
+
             const searchLower = search.toLowerCase();
-            const matchesSearch = u.first_name.toLowerCase().includes(searchLower) || u.last_name.toLowerCase().includes(searchLower);
+            const matchesSearch = (u.first_name + ' ' + u.last_name).toLowerCase().includes(searchLower);
             let matchesStatus = true;
             if (statusFilter === 'trial') matchesStatus = u.status === UserStatus.TRIAL;
-            if (statusFilter === 'employee') matchesStatus = u.status !== UserStatus.TRIAL && u.status !== UserStatus.INACTIVE;
+            if (statusFilter === 'employee') matchesStatus = u.status === UserStatus.ACTIVE;
             let matchesBrigadir = true;
             if (brigadirFilter !== 'all') matchesBrigadir = u.assigned_brigadir_id === brigadirFilter;
             return matchesSearch && matchesStatus && matchesBrigadir;
         });
     }, [users, search, statusFilter, brigadirFilter]);
 
-    const getBrigadirName = (id?: string) => { const b = users.find(u => u.id === id); return b ? `${b.first_name} ${b.last_name}` : '-'; };
-    const handleOpenDetail = (user: User, tab: 'info' | 'rate' | 'skills' | 'docs' | 'quality' | 'notes' | 'badges' = 'info') => { setSelectedEmployee(user); setActiveTab(tab); setIsAddingIncident(false); };
+    const getBossLabel = (user: User) => user.role === Role.BRIGADIR ? 'Koordynator:' : 'Brygadzista:';
+    const getBossName = (id?: string) => { const b = users.find(u => u.id === id); return b ? `${b.first_name} ${b.last_name}` : '-'; };
+    const getAuthorName = (id: string) => { const u = users.find(x => x.id === id); return u ? `${u.first_name} ${u.last_name}` : 'System'; };
+    
+    const handleOpenDetail = (user: User, tab: 'info' | 'rate' | 'skills' | 'docs' | 'quality' | 'notes' | 'badges' = 'info') => { 
+        setSelectedEmployee(user); 
+        setActiveTab(tab); 
+        setIsQualityAddModalOpen(false); 
+    };
 
     const handleSaveNote = () => {
         if (!selectedEmployee || !noteText || !currentUser) return;
-        addEmployeeNote({
-            employee_id: selectedEmployee.id,
-            author_id: currentUser.id,
-            category: noteCategory,
-            text: noteText
-        });
+        addEmployeeNote({ employee_id: selectedEmployee.id, author_id: currentUser.id, category: noteCategory, text: noteText });
         setNoteText('');
-        setNoteCategory(NoteCategory.GENERAL);
+    };
+
+    const handleSaveBadge = () => {
+        if (!selectedEmployee || !badgeDesc || !currentUser) return;
+        // Re-using 'month' field for specific date as string
+        addEmployeeBadge({ employee_id: selectedEmployee.id, author_id: currentUser.id, month: badgeDate, type: badgeType, description: badgeDesc, visible_to_employee: true });
+        setBadgeDesc('');
     };
 
     const handleSaveIncident = () => {
         if (!selectedEmployee || !newIncidentSkillId || !newIncidentDesc || !currentUser) return;
-        
         const now = new Date();
         const existingCount = qualityIncidents.filter(inc => {
             const d = new Date(inc.date);
-            return inc.user_id === selectedEmployee.id && 
-                   inc.skill_id === newIncidentSkillId &&
-                   d.getMonth() === now.getMonth() &&
-                   d.getFullYear() === now.getFullYear();
+            return inc.user_id === selectedEmployee.id && inc.skill_id === newIncidentSkillId && d.getMonth() === now.getMonth();
         }).length;
 
         addQualityIncident({
@@ -108,11 +126,10 @@ export const CoordinatorEmployees = () => {
             incident_number: existingCount + 1,
             description: newIncidentDesc,
             reported_by: `${currentUser.first_name} ${currentUser.last_name}`,
-            image_urls: newIncidentImages,
-            image_url: newIncidentImages[0] || undefined
+            image_urls: newIncidentImages
         });
 
-        setIsAddingIncident(false);
+        setIsQualityAddModalOpen(false);
         setNewIncidentSkillId('');
         setNewIncidentDesc('');
         setNewIncidentImages([]);
@@ -129,51 +146,25 @@ export const CoordinatorEmployees = () => {
                     if (url) uploadedUrls.push(url);
                 }
                 setNewIncidentImages(prev => [...prev, ...uploadedUrls]);
-            } catch (error) {
-                console.error("Incident image upload failed", error);
-                alert("Błąd przesłania zdjęcia.");
-            } finally {
-                setIsUploading(false);
-            }
+            } finally { setIsUploading(false); }
         }
-    };
-
-    const removeNewIncidentImage = (urlToRemove: string) => {
-        setNewIncidentImages(prev => prev.filter(url => url !== urlToRemove));
     };
 
     const renderModalContent = () => {
         if (!selectedEmployee) return null;
         
-        const employeeSkillsList = userSkills.filter(us => {
-            const skillIdStr = (us.skill_id && typeof us.skill_id === 'string') ? us.skill_id : '';
-            return us.user_id === selectedEmployee.id && 
-                   !skillIdStr.startsWith('doc_') && 
-                   skills.find(s => s.id === us.skill_id)?.verification_type !== VerificationType.DOCUMENT;
-        });
-
+        const employeeSkillsList = userSkills.filter(us => us.user_id === selectedEmployee.id && !us.skill_id?.startsWith('doc_') && skills.find(s => s.id === us.skill_id)?.verification_type !== VerificationType.DOCUMENT);
         const employeeConfirmedSkills = employeeSkillsList.filter(es => es.status === SkillStatus.CONFIRMED);
-
-        const employeeDocs = userSkills.filter(us => {
-            const skillIdStr = (us.skill_id && typeof us.skill_id === 'string') ? us.skill_id : '';
-            return us.user_id === selectedEmployee.id && 
-                   (skillIdStr.startsWith('doc_') || skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT);
-        });
-
         const employeeIncidents = qualityIncidents.filter(qi => qi.user_id === selectedEmployee.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         const employeeNotesList = employeeNotes.filter(en => en.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const employeeBadgesList = employeeBadges.filter(eb => eb.employee_id === selectedEmployee.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-        const now = new Date();
-        const currentMonthName = now.toLocaleString('pl-PL', { month: 'long' });
-        const nextMonthName = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleString('pl-PL', { month: 'long' });
 
         const salaryInfo = calculateSalary(
             selectedEmployee.base_rate || systemConfig.baseRate,
             skills,
             userSkills.filter(us => us.user_id === selectedEmployee.id),
             monthlyBonuses[selectedEmployee.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
-            now,
+            new Date(),
             qualityIncidents
         );
 
@@ -184,447 +175,373 @@ export const CoordinatorEmployees = () => {
 
         return (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedEmployee(null)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-4xl w-full flex flex-col max-h-[95vh] overflow-hidden" onClick={e => e.stopPropagation()}>
                     {/* Header */}
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
-                        <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">{selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}</div>
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white relative">
+                        <div className="flex items-center gap-5">
+                            <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-100 ring-4 ring-blue-50">
+                                {selectedEmployee.first_name[0]}{selectedEmployee.last_name[0]}
+                            </div>
                             <div>
-                                <h2 className="text-2xl font-bold text-slate-900">{selectedEmployee.first_name} {selectedEmployee.last_name}</h2>
-                                <div className="flex gap-2 mt-1">
-                                    <span className={`px-2 py-0.5 text-xs rounded border uppercase font-bold ${selectedEmployee.status === UserStatus.TRIAL ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-                                        {selectedEmployee.status === UserStatus.TRIAL ? 'OKRES PRÓBNY' : 'PRACOWNIK'}
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedEmployee.first_name} {selectedEmployee.last_name}</h2>
+                                    <span className={`px-2 py-0.5 text-[9px] rounded-full font-black uppercase tracking-widest border ${selectedEmployee.status === UserStatus.TRIAL ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                                        {USER_STATUS_LABELS[selectedEmployee.status]}
                                     </span>
-                                    <span className="px-2 py-0.5 text-xs rounded border bg-white border-slate-200 text-slate-600 uppercase font-bold">{selectedEmployee.target_position || selectedEmployee.role}</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">
+                                    <span className="flex items-center gap-1"><Briefcase size={12}/> {selectedEmployee.target_position || 'Monter'}</span>
+                                    <span className="text-slate-200">|</span>
+                                    <span className="flex items-center gap-1"><HardHat size={12}/> {getBossLabel(selectedEmployee)} {getBossName(selectedEmployee.assigned_brigadir_id)}</span>
                                 </div>
                             </div>
                         </div>
-                        <button onClick={() => setSelectedEmployee(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><XCircle size={28} /></button>
+                        <button onClick={() => setSelectedEmployee(null)} className="text-slate-300 hover:text-slate-500 transition-colors p-2 hover:bg-slate-50 rounded-full">
+                            <X size={24} />
+                        </button>
                     </div>
 
-                    {/* Tabs bar */}
-                    <div className="flex border-b border-slate-200 bg-white overflow-x-auto min-h-[64px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        <div className="flex px-6 h-full items-stretch">
-                            {[
-                                { id: 'info', label: 'Info' },
-                                { id: 'rate', label: 'Stawka' },
-                                { id: 'skills', label: 'Umiejętności' },
-                                { id: 'docs', label: 'Uprawnienia' },
-                                { id: 'quality', label: `Jakość (${employeeIncidents.length})` },
-                                { id: 'notes', label: `Notatki (${employeeNotesList.length})` },
-                                { id: 'badges', label: `Odznaki (${employeeBadgesList.length})` }
-                            ].map(tab => (
-                                <button 
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id as any)} 
-                                    className={`px-5 text-sm font-bold border-b-4 transition-all whitespace-nowrap flex-shrink-0 flex items-center ${activeTab === tab.id ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
-                                >
-                                    {tab.label}
-                                </button>
-                            ))}
-                        </div>
+                    {/* Navigation - Compact Version */}
+                    <div className="px-4 bg-white border-b border-slate-50 py-2 flex gap-0.5 overflow-x-auto scrollbar-hide justify-start">
+                        {[
+                            { id: 'info', label: 'DANE', icon: UserIcon },
+                            { id: 'rate', label: 'STAWKA', icon: Wallet },
+                            { id: 'skills', label: 'MATRYCA', icon: Award },
+                            { id: 'docs', label: 'UPRAWNIENIA', icon: FileText },
+                            { id: 'quality', label: 'JAKOŚĆ', icon: AlertTriangle, badge: employeeIncidents.length || null },
+                            { id: 'notes', label: 'NOTATKI', icon: StickyNote, badge: employeeNotesList.length || null },
+                            { id: 'badges', label: 'ODZNAKI', icon: Star, badge: employeeBadgesList.length || null }
+                        ].map(tab => (
+                            <button 
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)} 
+                                className={`px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                            >
+                                <tab.icon size={13} />
+                                {tab.label}
+                                {tab.badge && <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black ${activeTab === tab.id ? 'bg-white text-blue-600' : 'bg-red-500 text-white'}`}>{tab.badge}</span>}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Content Area */}
-                    <div className="p-8 overflow-y-auto flex-1 bg-white">
+                    {/* Content */}
+                    <div className="p-6 overflow-y-auto flex-1 bg-white scrollbar-hide">
                         {activeTab === 'info' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                <div>
-                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><UserIcon size={18} className="text-blue-500"/> Dane Podstawowe</h3>
-                                    <div className="space-y-4 text-sm">
-                                        <div className="grid grid-cols-3 gap-2"><span className="text-slate-500">Email:</span><span className="col-span-2 font-medium text-slate-900">{selectedEmployee.email}</span></div>
-                                        <div className="grid grid-cols-3 gap-2"><span className="text-slate-500">Telefon:</span><span className="col-span-2 font-medium text-slate-900">{selectedEmployee.phone || '-'}</span></div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            <span className="text-slate-500">Okres umowy:</span>
-                                            <span className="col-span-2 font-medium text-slate-900">
-                                                {selectedEmployee.hired_date || '?'} — {selectedEmployee.contract_end_date || 'Czas nieokreślony'}
-                                            </span>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Mail size={14} className="text-blue-500"/> Kontakt
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Phone size={18}/></div>
+                                            <div><p className="text-[9px] font-black text-slate-400 uppercase">TELEFON</p><p className="font-bold text-slate-800 text-sm">{selectedEmployee.phone || '-'}</p></div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Mail size={18}/></div>
+                                            <div className="truncate flex-1"><p className="text-[9px] font-black text-slate-400 uppercase">EMAIL</p><p className="font-bold text-slate-800 text-sm truncate">{selectedEmployee.email}</p></div>
                                         </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-2"><HardHat size={18} className="text-orange-500"/> Przypisania</h3>
-                                    <div className="space-y-4 text-sm">
-                                        <div className="grid grid-cols-3 gap-2"><span className="text-slate-500">Brygadzista:</span><span className="col-span-2 font-medium text-slate-900">{getBrigadirName(selectedEmployee.assigned_brigadir_id)}</span></div>
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <UserIcon size={14} className="text-blue-500"/> Personalne
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Cake size={18}/></div>
+                                            <div><p className="text-[9px] font-black text-slate-400 uppercase">URODZONY</p><p className="font-bold text-slate-800 text-sm">{selectedEmployee.birth_date || 'Nie podano'}</p></div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><MapPin size={18}/></div>
+                                            <div className="truncate flex-1"><p className="text-[9px] font-black text-slate-400 uppercase">ADRES</p><p className="font-bold text-slate-800 text-xs truncate">{selectedEmployee.city}, {selectedEmployee.street} {selectedEmployee.house_number}</p></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'rate' && (
-                            <div className="space-y-8 animate-in fade-in duration-300">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 shadow-sm">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="font-bold text-slate-700 flex items-center gap-2 uppercase tracking-tighter">
-                                                <Wallet size={20} className="text-green-600"/> STAWKA OBECNA
-                                            </h3>
-                                            <span className="text-xs font-bold uppercase bg-green-100 text-green-700 px-2 py-1 rounded">{currentMonthName}</span>
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">OBECNIE (NETTO)</h3>
+                                            <span className="text-[9px] font-black uppercase bg-green-600 text-white px-2 py-0.5 rounded-full">BIEŻĄCY MC</span>
                                         </div>
-                                        <div className="text-5xl font-extrabold text-slate-900 mb-2">{currentTotalRate.toFixed(2)}<span className="text-xl font-normal text-slate-400 ml-1">zł/h</span></div>
-                                        <p className="text-xs text-slate-500">Stawka netto uwzględniająca aktywne bonusy i ewentualne blokady jakościowe.</p>
+                                        <div className="text-4xl font-black text-slate-900">{currentTotalRate.toFixed(2)}<span className="text-sm font-medium text-slate-400 ml-1">zł/h</span></div>
+                                        <button onClick={() => setIsBreakdownModalOpen(true)} className="mt-4 text-[10px] font-black text-blue-600 uppercase tracking-wider flex items-center gap-1.5 hover:translate-x-1 transition-transform">
+                                            <Info size={14}/> Pokaż składniki stawki
+                                        </button>
                                     </div>
-
-                                    <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 text-white relative overflow-hidden shadow-lg">
-                                        <div className="absolute top-0 right-0 p-6 opacity-10"><TrendingUp size={100} /></div>
-                                        <div className="relative z-10">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h3 className="font-bold text-blue-300 flex items-center gap-2 uppercase tracking-tighter"><TrendingUp size={20}/> PROGNOZA</h3>
-                                                <span className="text-xs font-bold uppercase bg-white/10 text-white px-2 py-1 rounded">OD 1. {nextMonthName.toUpperCase()}</span>
-                                            </div>
-                                            <div className="text-5xl font-extrabold mb-2">{nextMonthTotalRate.toFixed(2)}<span className="text-xl font-normal text-slate-400 ml-1">zł/h</span></div>
-                                            <p className="text-xs text-slate-400">Prognoza zakłada odblokowanie incydentów i doliczenie nowo nabytych uprawnień.</p>
+                                    <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 text-white">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">PROGNOZA (NETTO)</h3>
+                                            <span className="text-[9px] font-black uppercase bg-blue-600 text-white px-2 py-0.5 rounded-full">PRZYSZŁY MC</span>
                                         </div>
+                                        <div className="text-4xl font-black text-green-400">{nextMonthTotalRate.toFixed(2)}<span className="text-sm font-medium text-slate-500 ml-1">zł/h</span></div>
+                                        <button onClick={() => setIsBreakdownModalOpen(true)} className="mt-4 text-[10px] font-black text-blue-400 uppercase tracking-wider flex items-center gap-1.5 hover:translate-x-1 transition-transform">
+                                            <Info size={14}/> Pokaż składniki stawki
+                                        </button>
                                     </div>
-                                </div>
-
-                                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                                    <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-700 text-xs uppercase tracking-widest">Szczegóły składników wynagrodzenia</div>
-                                    <div className="divide-y divide-slate-100">
-                                        {salaryInfo.breakdown.details.activeSkills.map((s, i) => (
-                                            <div key={i} className="px-5 py-4 flex justify-between items-center text-sm group hover:bg-slate-50 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    {s.isBlocked ? <Lock size={16} className="text-red-500"/> : <CheckCircle size={16} className="text-green-500"/>}
-                                                    <span className={s.isBlocked ? 'text-slate-400 line-through' : 'text-slate-700 font-medium'}>{s.name}</span>
-                                                    {s.isBlocked && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold ml-2">BLOKADA JAKOŚCI</span>}
-                                                </div>
-                                                <span className={`font-bold tabular-nums ${s.isBlocked ? 'text-slate-300' : 'text-green-600'}`}>+{s.amount.toFixed(2)} zł</span>
-                                            </div>
-                                        ))}
-                                        {salaryInfo.breakdown.details.pendingSkills.map((s, i) => (
-                                            <div key={`p-${i}`} className="px-5 py-4 flex justify-between items-center text-sm bg-blue-50/40">
-                                                <div className="flex items-center gap-3 text-blue-700">
-                                                    <Clock size={16}/>
-                                                    <span className="font-bold">{s.name}</span>
-                                                    <span className="text-[10px] uppercase font-black tracking-tighter bg-blue-600 text-white px-1.5 py-0.5 rounded">NOWOŚĆ</span>
-                                                </div>
-                                                <span className="font-bold text-blue-600 tabular-nums">+{s.amount.toFixed(2)} zł</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'skills' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-tighter text-sm"><Award size={18} className="text-blue-500"/> Matryca Umiejętności Systemowych</h3>
-                                <div className="border rounded-2xl overflow-hidden shadow-sm">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase tracking-wider">
-                                            <tr>
-                                                <th className="px-6 py-3">Nazwa Umiejętności</th>
-                                                <th className="px-6 py-3">Kategoria</th>
-                                                <th className="px-6 py-3 text-right">Status Weryfikacji</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {employeeSkillsList.map(us => {
-                                                const skill = skills.find(s => s.id === us.skill_id);
-                                                if (!skill) return null;
-                                                const isPending = us.status === SkillStatus.THEORY_PASSED || us.status === SkillStatus.PRACTICE_PENDING;
-                                                return (
-                                                    <tr key={us.id} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-slate-900">{skill.name_pl}</td>
-                                                        <td className="px-6 py-4 text-slate-500 font-medium text-xs">{skill.category}</td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <button 
-                                                                className={`text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-tighter transition-all border ${us.status === SkillStatus.CONFIRMED ? 'bg-green-100 text-green-700' : us.status === SkillStatus.FAILED ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'} ${isPending ? 'hover:scale-105 cursor-pointer shadow-sm' : ''}`}
-                                                                onClick={() => isPending && navigate('/coordinator/verifications', { state: { search: skill.name_pl } })}
-                                                            >
-                                                                {SKILL_STATUS_LABELS[us.status]}
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {employeeSkillsList.length === 0 && <tr><td colSpan={3} className="p-8 text-center text-slate-400 italic">Brak przypisanych umiejętności technicznych.</td></tr>}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'docs' && (
-                            <div className="space-y-4 animate-in fade-in duration-300">
-                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-tighter text-sm"><FileText size={18} className="text-purple-500"/> Dokumenty i Uprawnienia Formalne</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {employeeDocs.map(doc => (
-                                        <div key={doc.id} className="p-5 border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-purple-200 transition-colors group bg-white">
-                                            <div className="flex items-center gap-4">
-                                                <div className="p-3 bg-purple-50 text-purple-600 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition-colors shadow-inner"><FileText size={22}/></div>
-                                                <div>
-                                                    <div className="font-black text-slate-800 text-sm tracking-tight">{doc.custom_name || skills.find(s => s.id === doc.skill_id)?.name_pl || 'Dokument'}</div>
-                                                    <div className="text-[10px] text-slate-400 uppercase font-black mt-0.5 tracking-widest">{SKILL_STATUS_LABELS[doc.status]}</div>
-                                                </div>
-                                            </div>
-                                            <Button size="sm" variant="secondary" className="h-9 px-4 text-xs font-bold shadow-none" onClick={() => {
-                                                const urls = doc.document_urls && doc.document_urls.length > 0 ? doc.document_urls : (doc.document_url ? [doc.document_url] : []);
-                                                setFileViewer({ isOpen: true, urls, title: doc.custom_name || 'Dokument', index: 0 });
-                                            }}><Eye size={16} className="mr-2"/> Podgląd</Button>
-                                        </div>
-                                    ))}
-                                    {employeeDocs.length === 0 && <div className="md:col-span-2 text-center py-12 text-slate-400 border-2 border-dashed rounded-2xl italic text-sm">Brak dodanych uprawnień formalnych.</div>}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'quality' && (
-                            <div className="space-y-6 animate-in fade-in duration-300">
-                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                    <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-tighter text-sm"><AlertTriangle size={18} className="text-red-500"/> Historia Incydentów</h3>
-                                    <Button size="sm" onClick={() => setIsAddingIncident(!isAddingIncident)} variant={isAddingIncident ? 'secondary' : 'primary'}>
-                                        {isAddingIncident ? <><X size={16} className="mr-2"/> Anuluj</> : <><Plus size={16} className="mr-2"/> Dodaj Zgłoszenie</>}
-                                    </Button>
+                            <div className="space-y-4 animate-in fade-in duration-300">
+                                <div className="flex justify-between items-center bg-red-50/50 p-4 rounded-2xl border border-red-100">
+                                    <div><h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest">HISTORIA JAKOŚCI</h3><p className="text-[9px] text-red-400 font-bold uppercase mt-0.5">Zgłoszenia błędów i wstrzymane dodatki</p></div>
+                                    <Button onClick={() => setIsQualityAddModalOpen(true)} className="bg-red-600 text-white rounded-xl h-9 px-4 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-200"><Plus size={14} className="mr-1"/> Zgłoś błąd</Button>
                                 </div>
-
-                                {isAddingIncident && (
-                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-inner animate-in slide-in-from-top-2">
-                                        <h4 className="font-black text-slate-700 mb-4 text-xs uppercase tracking-widest flex items-center gap-2"><Plus size={14}/> Nowe zgłoszenie błędu</h4>
-                                        <div className="space-y-4">
-                                            {isUploading && (
-                                                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
-                                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęć...
+                                <div className="space-y-3">
+                                    {employeeIncidents.map(inc => (
+                                        <div key={inc.id} className="p-4 border border-slate-100 rounded-2xl hover:border-red-200 transition-all cursor-pointer group bg-white shadow-sm flex justify-between items-center" onClick={() => setSelectedIncident(inc)}>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${inc.incident_number === 1 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}><AlertTriangle size={18}/></div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800 text-sm uppercase tracking-tight">{skills.find(s => s.id === inc.skill_id)?.name_pl}</div>
+                                                    <div className="text-[9px] font-black text-slate-400 uppercase mt-0.5">{new Date(inc.date).toLocaleDateString()} • {inc.incident_number === 1 ? 'OSTRZEŻENIE' : 'BLOKADA DODATKU'}</div>
                                                 </div>
-                                            )}
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-wider">Umiejętność (tylko potwierdzone)</label>
-                                                <select 
-                                                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    value={newIncidentSkillId}
-                                                    onChange={e => setNewIncidentSkillId(e.target.value)}
-                                                >
-                                                    <option value="">Wybierz umiejętność...</option>
-                                                    {employeeConfirmedSkills.map(es => {
-                                                        const skill = skills.find(s => s.id === es.skill_id);
-                                                        return skill ? <option key={skill.id} value={skill.id}>{skill.name_pl}</option> : null;
-                                                    })}
-                                                </select>
                                             </div>
-                                            <div>
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-wider">Opis błędu</label>
-                                                <textarea 
-                                                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white h-20 focus:ring-2 focus:ring-blue-500 outline-none"
-                                                    placeholder="Opisz dokładnie co zostało wykonane błędnie..."
-                                                    value={newIncidentDesc}
-                                                    onChange={e => setNewIncidentDesc(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="space-y-3">
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 tracking-wider">Zdjęcia (Dowody)</label>
-                                                <div className="flex flex-wrap gap-3">
-                                                    {newIncidentImages.map((url, idx) => (
-                                                        <div key={idx} className="relative w-20 h-20 group">
-                                                            <img src={url} alt="Dowód" className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" />
-                                                            <button 
-                                                                onClick={() => removeNewIncidentImage(url)}
-                                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            >
-                                                                <X size={12}/>
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                    <button 
-                                                        onClick={() => incidentCameraRef.current?.click()}
-                                                        disabled={isUploading}
-                                                        className="w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all bg-white"
-                                                    >
-                                                        <Camera size={20}/>
-                                                        <span className="text-[8px] font-bold mt-1 uppercase">Dodaj</span>
-                                                    </button>
-                                                </div>
-                                                <input type="file" multiple className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload} />
-                                            </div>
-                                            <div className="flex justify-end pt-2">
-                                                <Button onClick={handleSaveIncident} disabled={!newIncidentSkillId || !newIncidentDesc || isUploading || newIncidentImages.length === 0}>
-                                                    Zatwierdź Zgłoszenie
-                                                </Button>
-                                            </div>
+                                            <ChevronRight size={18} className="text-slate-300 group-hover:text-red-500 transition-colors"/>
                                         </div>
-                                    </div>
-                                )}
+                                    ))}
+                                    {employeeIncidents.length === 0 && <div className="text-center py-12 text-slate-300 italic font-bold text-xs uppercase tracking-widest border-2 border-dashed border-slate-100 rounded-3xl">Brak zgłoszeń jakościowych</div>}
+                                </div>
+                            </div>
+                        )}
 
-                                <div className="space-y-4">
-                                    {employeeIncidents.length === 0 ? (
-                                        <div className="text-center py-12 text-slate-400 border-2 border-dashed rounded-2xl italic text-sm">Pracownik nie posiada żadnych zgłoszonych błędów.</div>
-                                    ) : (
-                                        employeeIncidents.map(inc => {
-                                            const skill = skills.find(s => s.id === inc.skill_id);
-                                            const isWarning = inc.incident_number === 1;
-                                            return (
-                                                <div 
-                                                    key={inc.id} 
-                                                    className={`p-4 border rounded-2xl transition-all cursor-pointer group shadow-sm ${isWarning ? 'bg-amber-50 border-amber-200 hover:border-amber-400' : 'bg-red-50 border-red-200 hover:border-red-400'}`}
-                                                    onClick={() => setSelectedIncident(inc)}
-                                                >
-                                                    <div className={`flex justify-between text-xs font-black mb-2 uppercase tracking-widest ${isWarning ? 'text-amber-700' : 'text-red-700'}`}>
-                                                        <span className="flex items-center gap-1"><Calendar size={12}/> {new Date(inc.date).toLocaleDateString()}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`${isWarning ? 'bg-amber-600' : 'bg-red-600'} text-white px-2 py-0.5 rounded`}>
-                                                                {isWarning ? 'Ostrzeżenie (1/2)' : 'Blokada dodatku (2/2)'}
-                                                            </span>
-                                                            <span className="group-hover:translate-x-1 transition-transform">Szczegóły <ChevronRight size={12} className="inline ml-0.5"/></span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="font-black text-slate-900 text-base mb-1">{skill?.name_pl}</div>
-                                                    <p className="text-sm text-slate-700 truncate opacity-80">{inc.description}</p>
-                                                    <div className="flex gap-2 mt-3 overflow-hidden">
-                                                        {(inc.image_urls || (inc.image_url ? [inc.image_url] : [])).slice(0, 5).map((url, i) => (
-                                                            <div key={i} className="w-8 h-8 rounded border border-white shadow-sm flex-shrink-0">
-                                                                <img src={url} alt="Foto" className="w-full h-full object-cover rounded" />
-                                                            </div>
-                                                        ))}
-                                                        {(inc.image_urls?.length || 0) > 5 && <span className="text-[10px] text-slate-400 self-center">+{inc.image_urls!.length - 5}</span>}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Zgłosił: {inc.reported_by}</div>
+                        {activeTab === 'notes' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">DODAJ NOWĄ NOTATKĘ</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            {Object.values(NoteCategory).map(c => (
+                                                <button key={c} onClick={() => setNoteCategory(c)} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border transition-all ${noteCategory === c ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}>{c}</button>
+                                            ))}
+                                        </div>
+                                        <textarea className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none h-24" placeholder="Wpisz treść..." value={noteText} onChange={e => setNoteText(e.target.value)}/>
+                                        <div className="flex justify-end"><Button size="sm" onClick={handleSaveNote} disabled={!noteText} className="rounded-xl h-10 px-6">Dodaj notatkę</Button></div>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    {employeeNotesList.map(note => (
+                                        <div key={note.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase tracking-widest w-fit">{note.category}</span>
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter mt-1">Zgłosił: {getAuthorName(note.author_id)}</span>
                                                 </div>
-                                            );
-                                        })
-                                    )}
+                                                <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{new Date(note.created_at).toLocaleString()}</span>
+                                            </div>
+                                            <p className="text-sm text-slate-700 font-medium leading-relaxed italic">"{note.text}"</p>
+                                            {note.author_id === currentUser?.id && <button onClick={() => deleteEmployeeNote(note.id)} className="absolute -top-2 -right-2 bg-red-50 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
 
                         {activeTab === 'badges' && (
                             <div className="space-y-6 animate-in fade-in duration-300">
-                                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 uppercase tracking-tighter text-sm"><Star size={18} className="text-yellow-500 fill-yellow-500"/> Odznaki i Wyróżnienia</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {employeeBadgesList.length === 0 ? (
-                                        <div className="md:col-span-2 text-center py-12 text-slate-400 border-2 border-dashed rounded-2xl italic text-sm">Pracownik nie posiada jeszcze żadnych przyznanych odznak.</div>
-                                    ) : (
-                                        employeeBadgesList.map(badge => {
-                                            const author = users.find(u => u.id === badge.author_id);
-                                            return (
-                                                <div key={badge.id} className="bg-gradient-to-br from-white to-yellow-50/50 p-5 rounded-2xl border border-yellow-200 shadow-sm relative group overflow-hidden">
-                                                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform"><Award size={64} className="text-yellow-600"/></div>
-                                                    <div className="relative z-10 flex gap-4">
-                                                        <div className="bg-yellow-500 text-white p-3 rounded-xl h-fit shadow-md"><Star size={24}/></div>
-                                                        <div className="flex-1">
-                                                            <div className="flex justify-between items-start mb-2">
-                                                                <h4 className="font-black text-slate-900 text-lg tracking-tighter">{badge.type}</h4>
-                                                                <span className="text-[10px] font-black uppercase text-yellow-600 bg-yellow-100 px-2 py-0.5 rounded tracking-widest">{badge.month}</span>
-                                                            </div>
-                                                            <p className="text-sm text-slate-700 italic font-medium leading-relaxed">"{badge.description}"</p>
-                                                            <div className="text-[10px] text-slate-400 mt-4 font-black uppercase tracking-widest border-t pt-2 border-yellow-100 flex justify-between">
-                                                                <span>Przyznał: {author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</span>
-                                                                <span>{new Date(badge.created_at).toLocaleDateString()}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    )}
+                                <div className="bg-yellow-50/50 p-5 rounded-3xl border border-yellow-100">
+                                    <h4 className="text-[10px] font-black text-yellow-700 uppercase tracking-widest mb-3 ml-1">PRZYZNAJ WYRÓŻNIENIE</h4>
+                                    <div className="space-y-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <input type="date" className="bg-white border border-yellow-100 p-2 rounded-xl text-xs font-bold" value={badgeDate} onChange={e => setBadgeDate(e.target.value)}/>
+                                            <select className="bg-white border border-yellow-100 p-2 rounded-xl text-xs font-bold appearance-none" value={badgeType} onChange={e => setBadgeType(e.target.value as BadgeType)}>
+                                                {Object.values(BadgeType).map(t => <option key={t} value={t}>{t}</option>)}
+                                            </select>
+                                        </div>
+                                        <textarea className="w-full bg-white border border-yellow-100 rounded-2xl p-4 text-sm font-medium focus:ring-4 focus:ring-yellow-500/10 outline-none h-20" placeholder="Uzasadnienie..." value={badgeDesc} onChange={e => setBadgeDesc(e.target.value)}/>
+                                        <div className="flex justify-end"><Button onClick={handleSaveBadge} disabled={!badgeDesc} className="bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl h-10 px-8 shadow-lg shadow-yellow-200">Przyznaj odznakę</Button></div>
+                                    </div>
                                 </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {employeeBadgesList.map(badge => (
+                                        <div key={badge.id} className="bg-white border border-yellow-100 rounded-2xl p-4 shadow-sm relative group">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 bg-yellow-100 text-yellow-600 rounded-xl flex items-center justify-center"><Star size={16} fill="currentColor"/></div>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800 uppercase tracking-tighter">{badge.type}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400">{badge.month}</p>
+                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter mt-0.5">Zgłosił: {getAuthorName(badge.author_id)}</p>
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-slate-600 italic font-medium leading-relaxed">"{badge.description}"</p>
+                                            {badge.author_id === currentUser?.id && <button onClick={() => deleteEmployeeBadge(badge.id)} className="absolute -top-2 -right-2 bg-red-50 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X size={12}/></button>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {activeTab === 'skills' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                {employeeSkillsList.map(us => {
+                                    const skill = skills.find(s => s.id === us.skill_id);
+                                    if (!skill) return null;
+                                    return (
+                                        <div key={us.id} className={`p-4 rounded-2xl border transition-all flex justify-between items-center bg-white shadow-sm ${us.status === SkillStatus.CONFIRMED ? 'border-green-100' : 'border-slate-100'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${us.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-300'}`}><Award size={20}/></div>
+                                                <div><div className="font-bold text-slate-800 text-xs uppercase tracking-tight">{skill.name_pl}</div><div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{skill.category}</div></div>
+                                            </div>
+                                            <div className="text-right"><div className="font-black text-green-600 text-xs">+{skill.hourly_bonus.toFixed(2)} zł</div><span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter border ${us.status === SkillStatus.CONFIRMED ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>{SKILL_STATUS_LABELS[us.status]}</span></div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {activeTab === 'docs' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                {userSkills.filter(us => us.user_id === selectedEmployee.id && (us.skill_id?.startsWith('doc_') || !!us.custom_type || skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT)).map(us => {
+                                    const skill = skills.find(s => s.id === us.skill_id);
+                                    return (
+                                        <div key={us.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm"><Shield size={20}/></div>
+                                                <div><p className="font-bold text-slate-800 text-xs uppercase">{us.custom_name || skill?.name_pl || 'Uprawnienie'}</p><p className="text-[9px] font-black text-slate-400 uppercase mt-0.5">{us.is_indefinite ? 'Bezterminowo' : `Do: ${us.expires_at || '-'}`}</p></div>
+                                            </div>
+                                            <button onClick={() => openFileViewer(us)} className="p-2 text-slate-400 hover:text-blue-600"><Eye size={20}/></button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
 
-                    {/* Footer */}
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-                        <Button variant="ghost" onClick={() => setSelectedEmployee(null)}>Zamknij</Button>
+                    <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                        <Button onClick={() => setSelectedEmployee(null)} className="px-10 rounded-2xl font-black uppercase tracking-widest h-11 shadow-xl shadow-slate-200">Zamknij Profil</Button>
                     </div>
                 </div>
+
+                {/* Breakdown Modal */}
+                {isBreakdownModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsBreakdownModalOpen(false)}>
+                        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full p-6 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                                <div><h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">SKŁAD STAWKI</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Szczegółowe wyliczenie wynagrodzenia</p></div>
+                                <button onClick={() => setIsBreakdownModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            </div>
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 scrollbar-hide">
+                                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100"><div className="text-xs font-black text-slate-500 uppercase tracking-widest">Baza</div><div className="text-lg font-black text-slate-900">{salaryInfo.breakdown.base.toFixed(2)} zł</div></div>
+                                {contractBonus + studentBonus > 0 && <div className="flex justify-between items-center p-3 bg-blue-50/50 rounded-2xl border border-blue-100"><div className="text-xs font-black text-blue-600 uppercase tracking-widest">Bonus Umowa</div><div className="text-lg font-black text-blue-700">+{(contractBonus + studentBonus).toFixed(2)} zł</div></div>}
+                                <div className="pt-2"><h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">AKTYWNE UMIEJĘTNOŚCI</h4><div className="space-y-2">{salaryInfo.breakdown.details.activeSkills.map((s, i) => (<div key={i} className={`flex justify-between items-center p-3 rounded-2xl border ${s.isBlocked ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}><div><p className={`text-xs font-bold ${s.isBlocked ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{s.name}</p>{s.isBlocked && <p className="text-[8px] font-black text-red-600 uppercase">Blokada jakościowa</p>}</div><div className={`text-sm font-black ${s.isBlocked ? 'text-slate-300' : 'text-green-600'}`}>+{s.amount.toFixed(2)} zł</div></div>))}</div></div>
+                                <div className="pt-2"><h4 className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">UMIEJĘTNOŚCI W TOKU (PROGNOZA)</h4><div className="space-y-2">{salaryInfo.breakdown.details.pendingSkills.map((s, i) => (<div key={i} className="flex justify-between items-center p-3 rounded-2xl border bg-blue-50/30 border-blue-100"><div><p className="text-xs font-bold text-blue-700">{s.name}</p><p className="text-[8px] font-black text-blue-400 uppercase">Wchodzi od: {new Date(s.effectiveFrom || '').toLocaleDateString()}</p></div><div className="text-sm font-black text-blue-600">+{s.amount.toFixed(2)} zł</div></div>))}</div></div>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Suma Godzinowa:</span><span className="text-2xl font-black text-blue-600">{currentTotalRate.toFixed(2)} zł/h</span></div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Quality Add Modal - Smaller as requested */}
+                {isQualityAddModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsQualityAddModalOpen(false)}>
+                        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                            <div className="bg-red-600 p-6 flex justify-between items-center text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-xl"><ShieldAlertIcon size={24}/></div><div><h2 className="text-xl font-black uppercase tracking-tight">Zgłoś błąd</h2><p className="text-[10px] font-black text-red-100 uppercase tracking-widest mt-0.5">{selectedEmployee.first_name} {selectedEmployee.last_name}</p></div></div><button onClick={() => setIsQualityAddModalOpen(false)} className="text-red-100 hover:text-white"><X size={24}/></button></div>
+                            <div className="p-8 space-y-6">
+                                <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WYBIERZ UMIEJĘTNOŚĆ</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-slate-800 font-bold text-sm focus:ring-4 focus:ring-red-500/10 outline-none appearance-none shadow-inner" value={newIncidentSkillId} onChange={e => setNewIncidentSkillId(e.target.value)}><option value="">Wybierz z listy...</option>{employeeConfirmedSkills.map(es => { const skill = skills.find(s => s.id === es.skill_id); return skill ? <option key={skill.id} value={skill.id}>{skill.name_pl}</option> : null; })}</select></div>
+                                <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">OPIS BŁĘDU / UWAGI</label><textarea className="w-full bg-slate-50 border border-slate-200 rounded-[24px] p-4 text-slate-800 font-medium text-sm focus:ring-4 focus:ring-red-500/10 outline-none h-32 shadow-inner" placeholder="Opisz dokładnie błąd..." value={newIncidentDesc} onChange={e => setNewIncidentDesc(e.target.value)}/></div>
+                                <div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">DOKUMENTACJA ZDJĘCIOWA</label><div className="flex flex-wrap gap-3">{newIncidentImages.map((url, idx) => (<div key={idx} className="relative w-20 h-20 group shadow-lg"><img src={url} alt="Proof" className="w-full h-full object-cover rounded-xl border border-slate-200"/><button onClick={() => setNewIncidentImages(prev => prev.filter(u => u !== url))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><X size={12}/></button></div>))}<button onClick={() => incidentCameraRef.current?.click()} className="w-20 h-20 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:border-red-500 hover:text-red-500 transition-all bg-slate-50"><Camera size={24}/><span className="text-[9px] font-black uppercase mt-1">DODAJ</span></button></div><input type="file" multiple className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload}/></div>
+                            </div>
+                            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4"><button onClick={() => setIsQualityAddModalOpen(false)} className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Anuluj</button><Button onClick={handleSaveIncident} disabled={!newIncidentSkillId || !newIncidentDesc || isUploading || newIncidentImages.length === 0} className="flex-[2] h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/30 bg-red-600 hover:bg-red-700">{isUploading ? <Loader2 className="animate-spin" size={20}/> : <ShieldAlertIcon size={20} className="mr-2"/>} ZATWIERDŹ BŁĄD</Button></div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
 
-    const renderIncidentModal = () => {
+    const renderIncidentDetailModal = () => {
         if (!selectedIncident) return null;
         const skill = skills.find(s => s.id === selectedIncident.skill_id);
         const isWarning = selectedIncident.incident_number === 1;
         const urls = selectedIncident.image_urls || (selectedIncident.image_url ? [selectedIncident.image_url] : []);
 
         return (
-            <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedIncident(null)}>
-                <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
-                        <h3 className="text-xl font-bold text-slate-900">Szczegóły Incydentu</h3>
-                        <button onClick={() => setSelectedIncident(null)}><X size={24} className="text-slate-400 hover:text-slate-600 transition-colors"/></button>
+            <div className="fixed inset-0 bg-black/70 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedIncident(null)}>
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-lg w-full p-8 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-start mb-6">
+                        <div className={`p-3 rounded-2xl shadow-lg ${isWarning ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'}`}><AlertTriangle size={32}/></div>
+                        <button onClick={() => setSelectedIncident(null)} className="text-slate-300 hover:text-slate-500"><X size={28}/></button>
                     </div>
-                    <div className="space-y-4 overflow-y-auto pr-2">
-                        <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Umiejętność</span><div className="font-black text-slate-900 text-lg leading-tight mt-1">{skill?.name_pl || 'Nieznana'}</div></div>
-                        <div className="flex gap-8">
-                            <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Data Zdarzenia</span><div className="text-sm text-slate-700 font-bold mt-1">{new Date(selectedIncident.date).toLocaleDateString()}</div></div>
-                            <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Osoba Zgłaszająca</span><div className="text-sm text-slate-700 font-bold mt-1">{selectedIncident.reported_by}</div></div>
-                        </div>
-                        <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Kwalifikacja kary</span><div className="mt-1.5">{isWarning ? (<span className="bg-amber-100 text-amber-800 text-[10px] font-black px-3 py-1 rounded-full border border-amber-200 flex items-center w-fit gap-2 uppercase"><AlertTriangle size={14}/> 1. Ostrzeżenie</span>) : (<span className="bg-red-100 text-red-800 text-[10px] font-black px-3 py-1 rounded-full border border-red-200 flex items-center w-fit gap-2 uppercase"><Lock size={14}/> Blokada Miesięczna</span>)}</div></div>
-                        <div><span className="text-xs font-black text-slate-400 uppercase tracking-widest">Szczegółowy Opis</span><p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-2 font-medium leading-relaxed">{selectedIncident.description}</p></div>
-                        {urls.length > 0 && (
+                    <div className="space-y-6">
+                        <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BŁĄD W UMIEJĘTNOŚCI</span><h3 className="font-black text-2xl text-slate-900 tracking-tighter uppercase">{skill?.name_pl || 'Nieznana'}</h3></div>
+                        
+                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <div>
-                                <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Dokumentacja fotograficzna ({urls.length})</span>
-                                <div className="mt-3 grid grid-cols-2 gap-3">
-                                    {urls.map((url, i) => (
-                                        <div 
-                                            key={i}
-                                            className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50 cursor-pointer hover:opacity-90 transition-opacity shadow-sm h-32"
-                                            onClick={() => setFileViewer({isOpen: true, urls, title: 'Dowód Jakości', index: i})}
-                                        >
-                                            <img src={url} alt={`Dowód ${i+1}`} className="w-full h-full object-cover" />
-                                        </div>
-                                    ))}
-                                </div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DATA I GODZINA</p>
+                                <p className="font-bold text-slate-900 text-xs">{new Date(selectedIncident.date).toLocaleString()}</p>
                             </div>
-                        )}
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ZGŁOSIŁ</p>
+                                <p className="font-bold text-slate-900 text-xs">{selectedIncident.reported_by}</p>
+                            </div>
+                        </div>
+
+                        <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">OPIS INCYDENTU</p><p className="text-sm text-slate-700 bg-blue-50/30 p-5 rounded-2xl border border-blue-100/50 italic leading-relaxed shadow-inner">"{selectedIncident.description}"</p></div>
+                        {urls.length > 0 && (<div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">DOKUMENTACJA ({urls.length})</p><div className="grid grid-cols-2 gap-3">{urls.map((url, i) => (<div key={i} className="rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-200 cursor-pointer hover:border-blue-500 transition-all shadow-sm h-32" onClick={() => setFileViewer({isOpen: true, urls, title: 'Dowód Jakości', index: i})}><img src={url} alt="Proof" className="w-full h-full object-cover"/></div>))}</div></div>)}
                     </div>
-                    <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end"><Button onClick={() => setSelectedIncident(null)}>Zamknij</Button></div>
                 </div>
             </div>
         );
     };
 
+    const openFileViewer = (doc: any) => {
+        const urls = doc.document_urls && doc.document_urls.length > 0 ? doc.document_urls : (doc.document_url ? [doc.document_url] : []);
+        setFileViewer({ isOpen: true, urls, title: doc.custom_name || 'Uprawnienie', index: 0 });
+    };
+
     return (
         <div className="p-6 max-w-7xl mx-auto pb-24">
-            <div className="flex justify-between items-center mb-6">
-                <div><h1 className="text-2xl font-bold text-slate-900">Lista Pracowników</h1><p className="text-slate-500">Przegląd personelu, statusów i przydziałów.</p></div>
-            </div>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Szukaj pracownika..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" value={search} onChange={e => setSearch(e.target.value)} /></div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <div className="relative min-w-[140px]"><select className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm font-medium cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}><option value="all">Wszystkie statusy</option><option value="trial">Okres Próbny</option><option value="employee">Pracownik</option></select><ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/></div>
-                    <div className="relative min-w-[160px]"><select className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-8 rounded-lg text-sm font-medium cursor-pointer" value={brigadirFilter} onChange={(e) => setBrigadirFilter(e.target.value)}><option value="all">Wszyscy Brygadziści</option>{brigadirs.map(b => (<option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/></div>
-                </div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-6">Lista Pracowników</h1>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="Szukaj pracownika..." className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={search} onChange={e => setSearch(e.target.value)}/></div>
+                <select className="border rounded-lg p-2 bg-slate-50 text-sm font-bold" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}><option value="all">Wszystkie statusy</option><option value="trial">Okres próbny</option><option value="employee">Pracownik</option></select>
+                <select className="border rounded-lg p-2 bg-slate-50 text-sm font-bold" value={brigadirFilter} onChange={e => setBrigadirFilter(e.target.value)}><option value="all">Wszyscy Brygadziści</option>{brigadirs.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)}</select>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
-                        <tr><th className="px-6 py-4">Pracownik</th><th className="px-6 py-4">Stanowisko</th><th className="px-6 py-4">Status</th><th className="px-6 py-4">Okres Umowy</th><th className="px-6 py-4">Brygadzista</th><th className="px-6 py-4 text-right"></th></tr>
+                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-100">
+                        <tr><th className="p-4">Pracownik</th><th className="p-4">Stanowisko</th><th className="p-4">Stawka</th><th className="p-4">Okres Umowy</th><th className="p-4 text-right"></th></tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {filteredEmployees.map(user => (
-                            <tr key={user.id} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => handleOpenDetail(user)}>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">{user.first_name[0]}{user.last_name[0]}</div>
-                                        <div>
-                                            <div className="font-medium text-slate-900">{user.first_name} {user.last_name}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    {user.role === Role.BRIGADIR || user.target_position === 'Brygadzista' ? (
-                                        <span className="bg-slate-900 text-white px-2 py-1 rounded text-xs font-bold uppercase tracking-tight">Brygadzista</span>
-                                    ) : (
-                                        <span className="text-slate-600">{user.target_position || 'Pracownik'}</span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4">
-                                    {user.status === UserStatus.TRIAL ? (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 border border-orange-200">Okres Próbny</span>) : (<span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border-blue-200">Pracownik</span>)}
-                                </td>
-                                <td className="px-6 py-4 text-slate-600">
-                                    <div className="text-xs font-bold text-slate-900">{user.hired_date || '-'}</div>
-                                    <div className="text-[10px] text-slate-400 font-medium">do: {user.contract_end_date || 'brak'}</div>
-                                </td>
-                                <td className="px-6 py-4 text-slate-600">{getBrigadirName(user.assigned_brigadir_id)}</td>
-                                <td className="px-6 py-4 text-right"><ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 inline"/></td>
-                            </tr>
-                        ))} 
-                        {filteredEmployees.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-slate-400">Brak pracowników spełniających kryteria.</td></tr>}
+                    <tbody className="divide-y divide-slate-50">
+                        {filteredEmployees.map(u => {
+                            // Calculate current rate for the table row
+                            const employeeSkills = userSkills.filter(us => us.user_id === u.id);
+                            const salaryInfo = calculateSalary(
+                                u.base_rate || systemConfig.baseRate,
+                                skills,
+                                employeeSkills,
+                                monthlyBonuses[u.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
+                                new Date(),
+                                qualityIncidents
+                            );
+                            const contractBonus = systemConfig.contractBonuses[u.contract_type || ContractType.UOP] || 0;
+                            const studentBonus = (u.contract_type === ContractType.UZ && u.is_student) ? 3 : 0;
+                            const totalRate = salaryInfo.total + contractBonus + studentBonus;
+
+                            return (
+                                <tr key={u.id} className="hover:bg-slate-50 cursor-pointer group" onClick={() => handleOpenDetail(u)}>
+                                    <td className="p-4 flex items-center gap-3"><div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">{u.first_name[0]}{u.last_name[0]}</div><div className="font-bold text-slate-900">{u.first_name} {u.last_name}</div></td>
+                                    <td className="p-4 text-slate-600 font-medium">{u.target_position || '-'}</td>
+                                    <td className="p-4 font-black text-slate-900">{totalRate.toFixed(2)} zł/h</td>
+                                    <td className="p-4 text-slate-500 text-xs font-bold">
+                                        {u.hired_date?.split('T')[0] || '-'} — {u.contract_end_date?.split('T')[0] || 'brak'}
+                                    </td>
+                                    <td className="p-4 text-right"><ChevronRight size={18} className="text-slate-300 group-hover:text-blue-600 inline transition-all transform group-hover:translate-x-1"/></td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
             {renderModalContent()}
-            {renderIncidentModal()}
+            {renderIncidentDetailModal()}
             <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
         </div>
     );
@@ -833,7 +750,7 @@ export const CoordinatorVerifications = () => {
                             <th className="px-6 py-4">Etap</th>
                             <th className="px-6 py-4">Brygadzista</th>
                             <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4">Postęp</th>
+                            <th className="px-6 py-4 font-bold">Postęp</th>
                             <th className="px-6 py-4 text-right">Akcja</th>
                         </tr>
                     </thead>
@@ -913,7 +830,7 @@ export const CoordinatorVerifications = () => {
                                 <h4 className="font-black text-slate-400 text-[10px] uppercase tracking-widest mb-2">Komentarz</h4>
                                 <textarea className="w-full border p-3 rounded-xl text-sm h-24 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm bg-white" placeholder="Opcjonalne uwagi..." value={rejectReason} onChange={e => setRejectReason(e.target.value)} disabled={selectedItem.status === SkillStatus.CONFIRMED}/>
                             </div>
-                            <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
+                            <input type="file" min-h-0 ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleImageUpload} />
                         </div>
                         <div className="p-6 border-t bg-white flex justify-between gap-4">
                             <Button variant="danger" onClick={handleReject} disabled={!rejectReason || selectedItem.status === SkillStatus.CONFIRMED}>Odrzuć</Button>

@@ -4,140 +4,114 @@ import { useNavigate } from 'react-router-dom';
 import { 
     Users, Phone, Mail, Award, CheckSquare, Clock, AlertTriangle, 
     Lock, CheckCircle, TrendingUp, Calendar, ChevronRight, User as UserIcon,
-    StickyNote, X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera, Loader2, Image as ImageIcon
+    /* Added StickyNote and Info to fix find name errors */
+    X, MessageSquare, Trash2, Star, Shield, Eye, MapPin, Plus, Upload, Camera, Loader2, Image as ImageIcon,
+    Briefcase, HardHat, Wallet, Cake, ShieldAlert as ShieldAlertIcon, Save, FileText, StickyNote, Info
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { UserStatus, SkillStatus, VerificationType, NoteCategory, User, BadgeType, QualityIncident } from '../../types';
-import { USER_STATUS_LABELS } from '../../constants';
+import { UserStatus, SkillStatus, VerificationType, User, QualityIncident, ContractType, Role } from '../../types';
+import { USER_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, SKILL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
+import { calculateSalary } from '../../services/salaryService';
 
 export const BrigadirTeamPage = () => {
-    const { state, addEmployeeNote, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge, addQualityIncident } = useAppContext();
-    const { currentUser, users, userSkills, skills, qualityIncidents, employeeNotes, employeeBadges } = state;
+    const { state, addEmployeeNote, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge, addQualityIncident, triggerNotification } = useAppContext();
+    const { currentUser, users, userSkills, skills, qualityIncidents, employeeNotes, employeeBadges, systemConfig, monthlyBonuses } = state;
     const navigate = useNavigate();
 
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [modalTab, setModalTab] = useState<'notes' | 'badges' | 'details' | 'quality'>('details');
+    const [activeTab, setActiveTab] = useState<'info' | 'rate' | 'skills' | 'docs' | 'quality' | 'notes' | 'badges'>('info');
 
-    // UI Feedback
+    // Modals
+    const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
+    const [isQualityAddModalOpen, setIsQualityAddModalOpen] = useState(false);
+    const [selectedIncident, setSelectedIncident] = useState<QualityIncident | null>(null);
+
+    // Form states
     const [isUploading, setIsUploading] = useState(false);
-
-    // Note State
     const [noteText, setNoteText] = useState('');
-    const [noteCategory, setNoteCategory] = useState<NoteCategory>(NoteCategory.GENERAL);
-
-    // Badge State
-    const [badgeType, setBadgeType] = useState<BadgeType>(BadgeType.QUALITY);
+    const [noteCategory, setNoteCategory] = useState<string>(systemConfig.noteCategories[0] || 'Ogólna');
+    const [badgeType, setBadgeType] = useState<string>(systemConfig.badgeTypes[0] || 'Jakość');
     const [badgeDesc, setBadgeDesc] = useState('');
-    const [badgeVisible, setBadgeVisible] = useState(true);
-    const [badgeMonth, setBadgeMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [badgeDate, setBadgeDate] = useState(new Date().toISOString().split('T')[0]);
 
-    // Quality Form State
-    const [isQualityFormOpen, setIsQualityFormOpen] = useState(false);
-    const [selectedSkillIdForIncident, setSelectedSkillIdForIncident] = useState<string | null>(null);
-    const [incidentDescription, setIncidentDescription] = useState('');
-    const [incidentImages, setIncidentImages] = useState<string[]>([]);
+    // Quality Add Form states
+    const [newIncidentSkillId, setNewIncidentSkillId] = useState('');
+    const [newIncidentDesc, setNewIncidentDesc] = useState('');
+    const [newIncidentImages, setNewIncidentImages] = useState<string[]>([]);
     
-    // Incident History State
-    const [viewIncidentSkillId, setViewIncidentSkillId] = useState<string | null>(null);
-
-    // File Viewer State
+    // File Viewer
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
 
-    // Refs
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const cameraInputRef = useRef<HTMLInputElement>(null);
-
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
+    const incidentCameraRef = useRef<HTMLInputElement>(null);
 
     const myTeamData = useMemo(() => {
         if (!currentUser) return [];
-        const teamMembers = users.filter(u => u.assigned_brigadir_id === currentUser.id && u.status !== UserStatus.INACTIVE);
-
-        return teamMembers.map(user => {
-            const mySkills = userSkills.filter(us => us.user_id === user.id);
-            const practicalSkills = mySkills.filter(us => {
+        const team = users.filter(u => u.assigned_brigadir_id === currentUser.id && u.status !== UserStatus.INACTIVE);
+        
+        return team.map(u => {
+            const memberSkills = userSkills.filter(us => us.user_id === u.id);
+            const practicalSkills = memberSkills.filter(us => {
                 const s = skills.find(sk => sk.id === us.skill_id);
                 return s?.verification_type === VerificationType.THEORY_PRACTICE;
             });
-            const confirmedCount = practicalSkills.filter(us => us.status === SkillStatus.CONFIRMED).length;
-            const totalAssigned = practicalSkills.length;
-
+            const total = practicalSkills.length;
+            const confirmed = practicalSkills.filter(us => us.status === SkillStatus.CONFIRMED).length;
             return {
-                user,
-                progress: { confirmed: confirmedCount, total: totalAssigned },
+                user: u,
+                progress: { confirmed, total }
             };
         });
     }, [currentUser, users, userSkills, skills]);
 
-    const handleGoToVerifications = (user: any) => {
+    const handleGoToVerifications = (user: User) => {
         navigate('/brigadir/checks', { state: { filterUser: user.id, filterName: user.last_name } });
     };
 
-    // --- NOTES HANDLERS ---
-    const handleAddNote = () => {
+    const getBossLabel = (user: User) => user.role === Role.BRIGADIR ? 'Koordynator:' : 'Brygadzista:';
+    const getBossName = (id?: string) => { const b = users.find(u => u.id === id); return b ? `${b.first_name} ${b.last_name}` : '-'; };
+    const getAuthorName = (id: string) => { const u = users.find(x => x.id === id); return u ? `${u.first_name} ${u.last_name}` : 'System'; };
+
+    const handleSaveNote = () => {
         if (!selectedUser || !noteText || !currentUser) return;
-        addEmployeeNote({
-            employee_id: selectedUser.id,
-            author_id: currentUser.id,
-            category: noteCategory,
-            text: noteText
-        });
+        addEmployeeNote({ employee_id: selectedUser.id, author_id: currentUser.id, category: noteCategory, text: noteText });
         setNoteText('');
-        setNoteCategory(NoteCategory.GENERAL);
     };
 
-    // --- BADGES HANDLERS ---
-    const handleAddBadge = () => {
+    const handleSaveBadge = () => {
         if (!selectedUser || !badgeDesc || !currentUser) return;
-        addEmployeeBadge({
-            employee_id: selectedUser.id,
-            author_id: currentUser.id,
-            month: badgeMonth,
-            type: badgeType,
-            description: badgeDesc,
-            visible_to_employee: badgeVisible
-        });
+        addEmployeeBadge({ employee_id: selectedUser.id, author_id: currentUser.id, month: badgeDate, type: badgeType, description: badgeDesc, visible_to_employee: true });
         setBadgeDesc('');
     };
 
-    // --- QUALITY HANDLERS ---
-    const handleOpenQualityForm = (skillId: string) => {
-        setSelectedSkillIdForIncident(skillId);
-        setIncidentDescription('');
-        setIncidentImages([]);
-        setIsQualityFormOpen(true);
-    };
-
-    const handleSubmitIncident = () => {
-        if (!selectedUser || !selectedSkillIdForIncident || !incidentDescription || incidentImages.length === 0 || !currentUser) return;
-
-        const existingIncidents = qualityIncidents.filter(inc => {
+    const handleSaveIncident = () => {
+        if (!selectedUser || !newIncidentSkillId || !newIncidentDesc || !currentUser) return;
+        const now = new Date();
+        const existingCount = qualityIncidents.filter(inc => {
             const d = new Date(inc.date);
-            return inc.user_id === selectedUser.id && 
-                   inc.skill_id === selectedSkillIdForIncident &&
-                   d.getMonth() === currentMonth &&
-                   d.getFullYear() === currentYear;
-        });
+            return inc.user_id === selectedUser.id && inc.skill_id === newIncidentSkillId && d.getMonth() === now.getMonth();
+        }).length;
 
         addQualityIncident({
             user_id: selectedUser.id,
-            skill_id: selectedSkillIdForIncident,
+            skill_id: newIncidentSkillId,
             date: new Date().toISOString(),
-            incident_number: existingIncidents.length + 1,
-            description: incidentDescription,
+            incident_number: existingCount + 1,
+            description: newIncidentDesc,
             reported_by: `${currentUser.first_name} ${currentUser.last_name}`,
-            image_urls: incidentImages,
-            image_url: incidentImages[0] || undefined
+            image_urls: newIncidentImages,
+            image_url: newIncidentImages[0] || undefined
         });
 
-        setIsQualityFormOpen(false);
+        setIsQualityAddModalOpen(false);
+        setNewIncidentSkillId('');
+        setNewIncidentDesc('');
+        setNewIncidentImages([]);
     };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleIncidentImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files && files.length > 0 && selectedUser) {
             setIsUploading(true);
@@ -147,96 +121,354 @@ export const BrigadirTeamPage = () => {
                     const url = await uploadDocument(files[i], selectedUser.id);
                     if (url) uploadedUrls.push(url);
                 }
-                setIncidentImages(prev => [...prev, ...uploadedUrls]);
-            } catch (error) {
-                console.error("Quality image upload failed", error);
-                alert("Błąd przesłania zdjęcia.");
-            } finally {
-                setIsUploading(false);
-            }
+                setNewIncidentImages(prev => [...prev, ...uploadedUrls]);
+            } finally { setIsUploading(false); }
         }
     };
 
-    const removeIncidentImage = (urlToRemove: string) => {
-        setIncidentImages(prev => prev.filter(url => url !== urlToRemove));
-    };
-
-    const openImagePreview = (urls: string[], index: number = 0) => {
-        setFileViewer({
-            isOpen: true,
-            urls: urls,
-            title: 'Podgląd Dowodów',
-            index: index
-        });
-    };
-
-    // --- DERIVED DATA ---
-    const userNotes = useMemo(() => {
-        if (!selectedUser) return [];
-        return employeeNotes.filter(n => n.employee_id === selectedUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }, [employeeNotes, selectedUser]);
-
-    const userBadges = useMemo(() => {
-        if (!selectedUser) return [];
-        return employeeBadges.filter(b => b.employee_id === selectedUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    }, [employeeBadges, selectedUser]);
-
-    const canAddBadge = useMemo(() => {
-        if (!selectedUser || !currentUser) return false;
-        const existing = userBadges.find(b => b.month === badgeMonth && b.author_id === currentUser.id);
-        return !existing;
-    }, [userBadges, badgeMonth, selectedUser, currentUser]);
-
-    const userConfirmedSkills = useMemo(() => {
-        if (!selectedUser) return [];
-        return userSkills
-            .filter(us => us.user_id === selectedUser.id && us.status === SkillStatus.CONFIRMED)
-            .map(us => {
-                const skill = skills.find(s => s.id === us.skill_id);
-                const incidents = qualityIncidents.filter(inc => {
-                    const d = new Date(inc.date);
-                    return inc.user_id === selectedUser.id && 
-                           inc.skill_id === us.skill_id && 
-                           d.getMonth() === currentMonth && 
-                           d.getFullYear() === currentYear;
-                });
-                
-                let qualityStatus = 'active';
-                if (incidents.length >= 2) qualityStatus = 'blocked';
-                else if (incidents.length === 1) qualityStatus = 'warning';
-
-                return { ...us, skill, incidents, qualityStatus };
-            })
-            .filter(item => item.skill);
-    }, [selectedUser, userSkills, skills, qualityIncidents, currentMonth, currentYear]);
-
-    const incidentPrediction = useMemo(() => {
-        if (!selectedUser || !selectedSkillIdForIncident) return null;
+    const renderModalContent = () => {
+        if (!selectedUser) return null;
         
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
+        const employeeSkillsList = userSkills.filter(us => us.user_id === selectedUser.id && !us.skill_id?.startsWith('doc_') && skills.find(s => s.id === us.skill_id)?.verification_type !== VerificationType.DOCUMENT);
+        const employeeConfirmedSkills = employeeSkillsList.filter(es => es.status === SkillStatus.CONFIRMED);
+        const employeeIncidents = qualityIncidents.filter(qi => qi.user_id === selectedUser.id).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const employeeNotesList = employeeNotes.filter(en => en.employee_id === selectedUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const employeeBadgesList = employeeBadges.filter(eb => eb.employee_id === selectedUser.id).sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-        const existingCount = qualityIncidents.filter(inc => {
-            const d = new Date(inc.date);
-            return inc.user_id === selectedUser.id && 
-                   inc.skill_id === selectedSkillIdForIncident &&
-                   d.getMonth() === currentMonth &&
-                   d.getFullYear() === currentYear;
-        }).length;
+        const salaryInfo = calculateSalary(
+            selectedUser.base_rate || systemConfig.baseRate,
+            skills,
+            userSkills.filter(us => us.user_id === selectedUser.id),
+            monthlyBonuses[selectedUser.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
+            new Date(),
+            qualityIncidents
+        );
 
-        const nextNumber = existingCount + 1;
-        const isBlock = nextNumber >= 2;
+        const contractBonus = systemConfig.contractBonuses[selectedUser.contract_type || ContractType.UOP] || 0;
+        const studentBonus = (selectedUser.contract_type === ContractType.UZ && selectedUser.is_student) ? 3 : 0;
+        const currentTotalRate = salaryInfo.total + contractBonus + studentBonus;
+        const nextMonthTotalRate = salaryInfo.nextMonthTotal + contractBonus + studentBonus;
 
-        return {
-            number: nextNumber,
-            isBlock,
-            label: isBlock ? 'ANULOWANIE DODATKU' : 'OSTRZEŻENIE USTNE',
-            description: isBlock 
-                ? 'Drugi błąd w miesiącu. Dodatek za tę umiejętność zostanie odjęty z wypłaty w tym miesiącu.' 
-                : 'Pierwszy błąd w miesiącu. Upomnienie, dodatek zostaje zachowany.'
-        };
-    }, [selectedUser, selectedSkillIdForIncident, qualityIncidents, currentMonth, currentYear]);
+        return (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedUser(null)}>
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-4xl w-full flex flex-col max-h-[95vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+                    {/* Header */}
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white relative">
+                        <div className="flex items-center gap-5">
+                            <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-100 ring-4 ring-blue-50">
+                                {selectedUser.first_name[0]}{selectedUser.last_name[0]}
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-xl font-black text-slate-900 tracking-tight">{selectedUser.first_name} {selectedUser.last_name}</h2>
+                                    <span className={`px-2 py-0.5 text-[9px] rounded-full font-black uppercase tracking-widest border ${selectedUser.status === UserStatus.TRIAL ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                                        {USER_STATUS_LABELS[selectedUser.status]}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">
+                                    <span className="flex items-center gap-1"><Briefcase size={12}/> {selectedUser.target_position || 'Monter'}</span>
+                                    <span className="text-slate-200">|</span>
+                                    <span className="flex items-center gap-1"><HardHat size={12}/> {getBossLabel(selectedUser)} {getBossName(selectedUser.assigned_brigadir_id)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={() => setSelectedUser(null)} className="text-slate-300 hover:text-slate-500 transition-colors p-2 hover:bg-slate-50 rounded-full">
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    {/* Navigation */}
+                    <div className="px-4 bg-white border-b border-slate-50 py-2 flex gap-0.5 overflow-x-auto scrollbar-hide justify-start">
+                        {[
+                            { id: 'info', label: 'DANE', icon: UserIcon },
+                            { id: 'rate', label: 'STAWKA', icon: Wallet },
+                            { id: 'skills', label: 'MATRYCA', icon: Award },
+                            { id: 'docs', label: 'UPRAWNIENIA', icon: FileText },
+                            { id: 'quality', label: 'JAKOŚĆ', icon: AlertTriangle, badge: employeeIncidents.length || null },
+                            /* Added StickyNote icon fixed import above */
+                            { id: 'notes', label: 'NOTATKI', icon: StickyNote, badge: employeeNotesList.length || null },
+                            { id: 'badges', label: 'ODZNAKI', icon: Star, badge: employeeBadgesList.length || null }
+                        ].map(tab => (
+                            <button 
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as any)} 
+                                className={`px-2.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                            >
+                                <tab.icon size={13} />
+                                {tab.label}
+                                {tab.badge && <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black ${activeTab === tab.id ? 'bg-white text-blue-600' : 'bg-red-50 text-white'}`}>{tab.badge}</span>}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-6 overflow-y-auto flex-1 bg-white scrollbar-hide">
+                        {activeTab === 'info' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Mail size={14} className="text-blue-500"/> Kontakt
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Phone size={18}/></div>
+                                            <div><p className="text-[9px] font-black text-slate-400 uppercase">TELEFON</p><p className="font-bold text-slate-800 text-sm">{selectedUser.phone || '-'}</p></div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Mail size={18}/></div>
+                                            <div className="truncate flex-1"><p className="text-[9px] font-black text-slate-400 uppercase">EMAIL</p><p className="font-bold text-slate-800 text-sm truncate">{selectedUser.email}</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-3xl p-5">
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <UserIcon size={14} className="text-blue-500"/> Personalne
+                                    </h3>
+                                    <div className="space-y-3">
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Cake size={18}/></div>
+                                            <div><p className="text-[9px] font-black text-slate-400 uppercase">URODZONY</p><p className="font-bold text-slate-800 text-sm">{selectedUser.birth_date || 'Nie podano'}</p></div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-2xl border border-slate-100 flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><MapPin size={18}/></div>
+                                            <div className="truncate flex-1"><p className="text-[9px] font-black text-slate-400 uppercase">ADRES</p><p className="font-bold text-slate-800 text-xs truncate">{selectedUser.city}, {selectedUser.street} {selectedUser.house_number}</p></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'rate' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">OBECNIE (NETTO)</h3>
+                                            <span className="text-[9px] font-black uppercase bg-green-600 text-white px-2 py-0.5 rounded-full">BIEŻĄCY MC</span>
+                                        </div>
+                                        <div className="text-4xl font-black text-slate-900">{currentTotalRate.toFixed(2)}<span className="text-sm font-medium text-slate-400 ml-1">zł/h</span></div>
+                                        {/* Added Info icon fixed import above */}
+                                        <button onClick={() => setIsBreakdownModalOpen(true)} className="mt-4 text-[10px] font-black text-blue-600 uppercase tracking-wider flex items-center gap-1.5 hover:translate-x-1 transition-transform">
+                                            <Info size={14}/> Pokaż składniki stawki
+                                        </button>
+                                    </div>
+                                    <div className="bg-slate-900 rounded-3xl p-6 border border-slate-800 text-white">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-widest">PROGNOZA (NETTO)</h3>
+                                            <span className="text-[9px] font-black uppercase bg-blue-600 text-white px-2 py-0.5 rounded-full">PRZYSZŁY MC</span>
+                                        </div>
+                                        <div className="text-4xl font-black text-green-400">{nextMonthTotalRate.toFixed(2)}<span className="text-sm font-medium text-slate-500 ml-1">zł/h</span></div>
+                                        {/* Added Info icon fixed import above */}
+                                        <button onClick={() => setIsBreakdownModalOpen(true)} className="mt-4 text-[10px] font-black text-blue-400 uppercase tracking-wider flex items-center gap-1.5 hover:translate-x-1 transition-transform">
+                                            <Info size={14}/> Pokaż składniki stawki
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'quality' && (
+                            <div className="space-y-4 animate-in fade-in duration-300">
+                                <div className="flex justify-between items-center bg-red-50/50 p-4 rounded-2xl border border-red-100">
+                                    <div><h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest">HISTORIA JAKOŚCI</h3><p className="text-[9px] text-red-400 font-bold uppercase mt-0.5">Zgłoszenia błędów i wstrzymane dodatki</p></div>
+                                    <Button onClick={() => setIsQualityAddModalOpen(true)} className="bg-red-600 text-white rounded-xl h-9 px-4 font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-200"><Plus size={14} className="mr-1"/> Zgłoś błąd</Button>
+                                </div>
+                                <div className="space-y-3">
+                                    {employeeIncidents.map(inc => (
+                                        <div key={inc.id} className="p-4 border border-slate-100 rounded-2xl hover:border-red-200 transition-all cursor-pointer group bg-white shadow-sm flex justify-between items-center" onClick={() => setSelectedIncident(inc)}>
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${inc.incident_number === 1 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'}`}><AlertTriangle size={18}/></div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800 text-sm uppercase tracking-tight">{skills.find(s => s.id === inc.skill_id)?.name_pl}</div>
+                                                    <div className="text-[9px] font-black text-slate-400 uppercase mt-0.5">{new Date(inc.date).toLocaleDateString()} • {inc.incident_number === 1 ? 'OSTRZEŻENIE' : 'BLOKADA DODATKU'}</div>
+                                                </div>
+                                            </div>
+                                            <ChevronRight size={18} className="text-slate-300 group-hover:text-red-500 transition-colors"/>
+                                        </div>
+                                    ))}
+                                    {employeeIncidents.length === 0 && <div className="text-center py-12 text-slate-300 italic font-bold text-xs uppercase tracking-widest border-2 border-dashed border-slate-100 rounded-3xl">Brak zgłoszeń jakościowych</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'notes' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="bg-slate-50 p-5 rounded-3xl border border-slate-200">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">DODAJ NOWĄ NOTATKĘ</h4>
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            {systemConfig.noteCategories.map(c => (
+                                                <button key={c} onClick={() => setNoteCategory(c)} className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase border transition-all ${noteCategory === c ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}>{c}</button>
+                                            ))}
+                                        </div>
+                                        <textarea className="w-full bg-white border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-4 focus:ring-blue-500/10 outline-none h-24" placeholder="Wpisz treść..." value={noteText} onChange={e => setNoteText(e.target.value)}/>
+                                        <div className="flex justify-end"><Button size="sm" onClick={handleSaveNote} disabled={!noteText} className="rounded-xl h-10 px-6">Dodaj notatkę</Button></div>
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    {employeeNotesList.map(note => (
+                                        <div key={note.id} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase tracking-widest w-fit">{note.category}</span>
+                                                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter mt-1">Zgłosił: {getAuthorName(note.author_id)}</span>
+                                                </div>
+                                                <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">{new Date(note.created_at).toLocaleString()}</span>
+                                            </div>
+                                            <p className="text-sm text-slate-700 font-medium leading-relaxed italic">"{note.text}"</p>
+                                            {note.author_id === currentUser?.id && <button onClick={() => deleteEmployeeNote(note.id)} className="absolute -top-2 -right-2 bg-red-50 text-white rounded-full p-1.5 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12}/></button>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'badges' && (
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <div className="bg-yellow-50/50 p-5 rounded-3xl border border-yellow-100">
+                                    <h4 className="text-[10px] font-black text-yellow-700 uppercase tracking-widest mb-3 ml-1">PRZYZNAJ WYRÓŻNIENIE</h4>
+                                    <div className="space-y-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <input type="date" className="bg-white border border-yellow-100 p-2 rounded-xl text-xs font-bold" value={badgeDate} onChange={e => setBadgeDate(e.target.value)}/>
+                                            <select className="bg-white border border-yellow-100 p-2 rounded-xl text-xs font-bold appearance-none" value={badgeType} onChange={e => setBadgeType(e.target.value)}>
+                                                {systemConfig.badgeTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                            </select>
+                                        </div>
+                                        <textarea className="w-full bg-white border border-yellow-100 rounded-2xl p-4 text-sm font-medium focus:ring-4 focus:ring-yellow-500/10 outline-none h-20" placeholder="Uzasadnienie..." value={badgeDesc} onChange={e => setBadgeDesc(e.target.value)}/>
+                                        <div className="flex justify-end"><Button onClick={handleSaveBadge} disabled={!badgeDesc} className="bg-yellow-600 hover:bg-yellow-700 text-white rounded-xl h-10 px-8 shadow-lg shadow-yellow-200">Przyznaj odznakę</Button></div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {employeeBadgesList.map(badge => (
+                                        <div key={badge.id} className="bg-white border border-yellow-100 rounded-2xl p-4 shadow-sm relative group">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 bg-yellow-100 text-yellow-600 rounded-xl flex items-center justify-center"><Star size={16} fill="currentColor"/></div>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800 uppercase tracking-tighter">{badge.type}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400">{badge.month}</p>
+                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-tighter mt-0.5">Zgłosił: {getAuthorName(badge.author_id)}</p>
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-slate-600 italic font-medium leading-relaxed">"{badge.description}"</p>
+                                            {badge.author_id === currentUser?.id && <button onClick={() => deleteEmployeeBadge(badge.id)} className="absolute -top-2 -right-2 bg-red-50 text-white rounded-full p-1 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><X size={12}/></button>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {activeTab === 'skills' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                {employeeSkillsList.map(us => {
+                                    const skill = skills.find(s => s.id === us.skill_id);
+                                    if (!skill) return null;
+                                    return (
+                                        <div key={us.id} className={`p-4 rounded-2xl border transition-all flex justify-between items-center bg-white shadow-sm ${us.status === SkillStatus.CONFIRMED ? 'border-green-100' : 'border-slate-100'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${us.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-600' : 'bg-slate-50 text-slate-300'}`}><Award size={20}/></div>
+                                                <div><div className="font-bold text-slate-800 text-xs uppercase tracking-tight">{skill.name_pl}</div><div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{skill.category}</div></div>
+                                            </div>
+                                            <div className="text-right"><div className="font-black text-green-600 text-xs">+{skill.hourly_bonus.toFixed(2)} zł</div><span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter border ${us.status === SkillStatus.CONFIRMED ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'}`}>{SKILL_STATUS_LABELS[us.status]}</span></div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {activeTab === 'docs' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in fade-in duration-300">
+                                {userSkills.filter(us => us.user_id === selectedUser.id && (us.skill_id?.startsWith('doc_') || !!us.custom_type || skills.find(s => s.id === us.skill_id)?.verification_type === VerificationType.DOCUMENT)).map(us => {
+                                    const skill = skills.find(s => s.id === us.skill_id);
+                                    return (
+                                        <div key={us.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm"><Shield size={20}/></div>
+                                                <div><p className="font-bold text-slate-800 text-xs uppercase">{us.custom_name || skill?.name_pl || 'Uprawnienie'}</p><p className="text-[9px] font-black text-slate-400 uppercase mt-0.5">{us.is_indefinite ? 'Bezterminowo' : `Do: ${us.expires_at || '-'}`}</p></div>
+                                            </div>
+                                            <button onClick={() => setFileViewer({ isOpen: true, urls: us.document_urls || [us.document_url!], title: us.custom_name || 'Uprawnienie', index: 0 })} className="p-2 text-slate-400 hover:text-blue-600"><Eye size={20}/></button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                        <Button onClick={() => setSelectedUser(null)} className="px-10 rounded-2xl font-black uppercase tracking-widest h-11 shadow-xl shadow-slate-200">Zamknij Profil</Button>
+                    </div>
+                </div>
+
+                {/* Breakdown Modal */}
+                {isBreakdownModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsBreakdownModalOpen(false)}>
+                        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full p-6 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                                <div><h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">SKŁAD STAWKI</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Szczegółowe wyliczenie wynagrodzenia</p></div>
+                                <button onClick={() => setIsBreakdownModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                            </div>
+                            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 scrollbar-hide">
+                                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100"><div className="text-xs font-black text-slate-500 uppercase tracking-widest">Baza</div><div className="text-lg font-black text-slate-900">{salaryInfo.breakdown.base.toFixed(2)} zł</div></div>
+                                {contractBonus + studentBonus > 0 && <div className="flex justify-between items-center p-3 bg-blue-50/50 rounded-2xl border border-blue-100"><div className="text-xs font-black text-blue-600 uppercase tracking-widest">Bonus Umowa</div><div className="text-lg font-black text-blue-700">+{(contractBonus + studentBonus).toFixed(2)} zł</div></div>}
+                                <div className="pt-2"><h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">AKTYWNE UMIEJĘTNOŚCI</h4><div className="space-y-2">{salaryInfo.breakdown.details.activeSkills.map((s, i) => (<div key={i} className={`flex justify-between items-center p-3 rounded-2xl border ${s.isBlocked ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}><div><p className={`text-xs font-bold ${s.isBlocked ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{s.name}</p>{s.isBlocked && <p className="text-[8px] font-black text-red-600 uppercase">Blokada jakościowa</p>}</div><div className={`text-sm font-black ${s.isBlocked ? 'text-slate-300' : 'text-green-600'}`}>+{s.amount.toFixed(2)} zł</div></div>))}</div></div>
+                                <div className="pt-2"><h4 className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] mb-3 ml-1">UMIEJĘTNOŚCI W TOKU (PROGNOZA)</h4><div className="space-y-2">{salaryInfo.breakdown.details.pendingSkills.map((s, i) => (<div key={i} className="flex justify-between items-center p-3 rounded-2xl border bg-blue-50/30 border-blue-100"><div><p className="text-xs font-bold text-blue-700">{s.name}</p><p className="text-[8px] font-black text-blue-400 uppercase">Wchodzi od: {new Date(s.effectiveFrom || '').toLocaleDateString()}</p></div><div className="text-sm font-black text-blue-600">+{s.amount.toFixed(2)} zł</div></div>))}</div></div>
+                            </div>
+                            <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Suma Godzinowa:</span><span className="text-2xl font-black text-blue-600">{currentTotalRate.toFixed(2)} zł/h</span></div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Quality Add Modal - Compact */}
+                {isQualityAddModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsQualityAddModalOpen(false)}>
+                        <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                            <div className="bg-red-600 p-6 flex justify-between items-center text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-xl"><ShieldAlertIcon size={24}/></div><div><h2 className="text-xl font-black uppercase tracking-tight">Zgłoś błąd</h2><p className="text-[10px] font-black text-red-100 uppercase tracking-widest mt-0.5">{selectedUser.first_name} {selectedUser.last_name}</p></div></div><button onClick={() => setIsQualityAddModalOpen(false)} className="text-red-100 hover:text-white"><X size={24}/></button></div>
+                            <div className="p-8 space-y-6">
+                                <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WYBIERZ UMIEJĘTNOŚĆ</label><select className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3.5 text-slate-800 font-bold text-sm focus:ring-4 focus:ring-red-500/10 outline-none appearance-none shadow-inner" value={newIncidentSkillId} onChange={e => setNewIncidentSkillId(e.target.value)}><option value="">Wybierz z listy...</option>{employeeConfirmedSkills.map(es => { const skill = skills.find(s => s.id === es.skill_id); return skill ? <option key={skill.id} value={skill.id}>{skill.name_pl}</option> : null; })}</select></div>
+                                <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">OPIS BŁĘDU / UWAGI</label><textarea className="w-full bg-slate-50 border border-slate-200 rounded-[24px] p-4 text-slate-800 font-medium text-sm focus:ring-4 focus:ring-red-500/10 outline-none h-32 shadow-inner" placeholder="Opisz dokładnie błąd..." value={newIncidentDesc} onChange={e => setNewIncidentDesc(e.target.value)}/></div>
+                                <div className="space-y-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">DOKUMENTACJA ZDJĘCIOWA</label><div className="flex flex-wrap gap-3">{newIncidentImages.map((url, idx) => (<div key={idx} className="relative w-20 h-20 group shadow-lg"><img src={url} alt="Proof" className="w-full h-full object-cover rounded-xl border border-slate-200"/><button onClick={() => setNewIncidentImages(prev => prev.filter(u => u !== url))} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1"><X size={12}/></button></div>))}<button onClick={() => incidentCameraRef.current?.click()} className="w-20 h-20 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:border-red-500 hover:text-red-500 transition-all bg-slate-50"><Camera size={24}/><span className="text-[9px] font-black uppercase mt-1">DODAJ</span></button></div><input type="file" multiple className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload}/></div>
+                            </div>
+                            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-4"><button onClick={() => setIsQualityAddModalOpen(false)} className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Anuluj</button><Button onClick={handleSaveIncident} disabled={!newIncidentSkillId || !newIncidentDesc || isUploading || newIncidentImages.length === 0} className="flex-[2] h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-900/30 bg-red-600 hover:bg-red-700">{isUploading ? <Loader2 className="animate-spin" size={20}/> : <ShieldAlertIcon size={20} className="mr-2"/>} ZATWIERDŹ BŁĄD</Button></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderIncidentDetailModal = () => {
+        if (!selectedIncident) return null;
+        const skill = skills.find(s => s.id === selectedIncident.skill_id);
+        const isWarning = selectedIncident.incident_number === 1;
+        const urls = selectedIncident.image_urls || (selectedIncident.image_url ? [selectedIncident.image_url] : []);
+
+        return (
+            <div className="fixed inset-0 bg-black/70 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedIncident(null)}>
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-lg w-full p-8 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-start mb-6">
+                        <div className={`p-3 rounded-2xl shadow-lg ${isWarning ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'}`}><AlertTriangle size={32}/></div>
+                        <button onClick={() => setSelectedIncident(null)} className="text-slate-300 hover:text-slate-500"><X size={28}/></button>
+                    </div>
+                    <div className="space-y-6">
+                        <div><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BŁĄD W UMIEJĘTNOŚCI</span><h3 className="font-black text-2xl text-slate-900 tracking-tighter uppercase">{skill?.name_pl || 'Nieznana'}</h3></div>
+                        
+                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">DATA I GODZINA</p>
+                                <p className="font-bold text-slate-900 text-xs">{new Date(selectedIncident.date).toLocaleString()}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ZGŁOSIŁ</p>
+                                <p className="font-bold text-slate-900 text-xs">{selectedIncident.reported_by}</p>
+                            </div>
+                        </div>
+
+                        <div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">OPIS INCYDENTU</p><p className="text-sm text-slate-700 bg-blue-50/30 p-5 rounded-2xl border border-blue-100/50 italic leading-relaxed shadow-inner">"{selectedIncident.description}"</p></div>
+                        {urls.length > 0 && (<div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">DOKUMENTACJA ({urls.length})</p><div className="grid grid-cols-2 gap-3">{urls.map((url, i) => (<div key={i} className="rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-200 cursor-pointer hover:border-blue-500 transition-all shadow-sm h-32" onClick={() => setFileViewer({isOpen: true, urls, title: 'Dowód Jakości', index: i})}><img src={url} alt="Proof" className="w-full h-full object-cover"/></div>))}</div></div>)}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="p-6 max-w-7xl mx-auto pb-24">
@@ -256,7 +488,7 @@ export const BrigadirTeamPage = () => {
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-4">Stanowisko</th>
+                            <th className="px-6 py-4">Pracownik</th>
                             <th className="px-6 py-4">Status</th>
                             <th className="px-6 py-4">Postęp Praktyki</th>
                             <th className="px-6 py-4 text-right">Akcje</th>
@@ -305,7 +537,7 @@ export const BrigadirTeamPage = () => {
                                             size="sm" 
                                             variant="secondary"
                                             className="text-xs h-8 px-3"
-                                            onClick={() => { setSelectedUser(item.user); setModalTab('details'); }}
+                                            onClick={() => { setSelectedUser(item.user); setActiveTab('info'); }}
                                         >
                                             Profil
                                         </Button>
@@ -324,282 +556,10 @@ export const BrigadirTeamPage = () => {
                 </table>
             </div>
 
-            {/* PROFILE MODAL */}
-            {selectedUser && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedUser(null)}>
-                    <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                                    {selectedUser.first_name[0]}{selectedUser.last_name[0]}
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-bold text-slate-900">{selectedUser.first_name} {selectedUser.last_name}</h2>
-                                    <p className="text-sm text-slate-500">{selectedUser.target_position || 'Pracownik'}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setSelectedUser(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                        </div>
-
-                        <div className="flex space-x-1 bg-slate-50 p-1 rounded-lg mb-6 w-full md:w-fit overflow-x-auto">
-                            <button onClick={() => setModalTab('details')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${modalTab === 'details' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Dane pracownika</button>
-                            <button onClick={() => setModalTab('notes')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${modalTab === 'notes' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Notatki</button>
-                            <button onClick={() => setModalTab('badges')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${modalTab === 'badges' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Odznaki</button>
-                            <button onClick={() => setModalTab('quality')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${modalTab === 'quality' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Zgłoszenia Jakości</button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto mb-6 pr-2">
-                            {modalTab === 'details' && (
-                                <div className="space-y-4">
-                                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                        <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Kontakt</h3>
-                                        <div className="space-y-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-blue-50 p-2 rounded text-blue-600"><Phone size={18}/></div>
-                                                <div>
-                                                    <div className="text-xs text-slate-500 uppercase font-bold">Telefon</div>
-                                                    <div className="text-slate-900 font-medium">{selectedUser.phone || 'Brak'}</div>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-blue-50 p-2 rounded text-blue-600"><Mail size={18}/></div>
-                                                <div>
-                                                    <div className="text-xs text-slate-500 uppercase font-bold">Email</div>
-                                                    <div className="text-slate-900 font-medium">{selectedUser.email}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                        <h3 className="font-bold text-slate-800 mb-4 border-b pb-2">Adres Zamieszkania</h3>
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-slate-50 p-2 rounded text-slate-600"><MapPin size={18}/></div>
-                                            <div>
-                                                <div className="text-slate-900 font-medium">
-                                                    {selectedUser.street} {selectedUser.house_number}{selectedUser.apartment_number ? `/${selectedUser.apartment_number}` : ''}
-                                                </div>
-                                                <div className="text-slate-500 text-sm">
-                                                    {selectedUser.zip_code} {selectedUser.city}
-                                                </div>
-                                                {!selectedUser.street && <div className="text-slate-400 italic">Brak danych adresowych</div>}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {modalTab === 'notes' && (
-                                <>
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                                        <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><MessageSquare size={18}/> Dodaj Notatkę</h4>
-                                        <div className="space-y-3">
-                                            <select className="w-full border p-2 rounded bg-white text-sm" value={noteCategory} onChange={e => setNoteCategory(e.target.value as NoteCategory)}>{Object.values(NoteCategory).map(c => <option key={c} value={c}>{c}</option>)}</select>
-                                            <textarea className="w-full border p-2 rounded bg-white text-sm h-24 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Wpisz treść notatki..." value={noteText} onChange={e => setNoteText(e.target.value)}/>
-                                            <div className="flex justify-end"><Button onClick={handleAddNote} disabled={!noteText}>Zapisz Notatkę</Button></div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {userNotes.length === 0 && <p className="text-slate-400 italic text-center">Brak notatek.</p>}
-                                        {userNotes.map(note => {
-                                            const author = users.find(u => u.id === note.author_id);
-                                            return (
-                                                <div key={note.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">{author ? author.first_name[0] : '?'}</div><div><div className="text-xs font-bold text-slate-800">{author ? `${author.first_name} ${author.last_name}` : 'Nieznany'}</div><div className="text-[10px] text-slate-500">{new Date(note.created_at).toLocaleString()}</div></div></div><span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">{note.category}</span></div><p className="text-sm text-slate-700 whitespace-pre-wrap">{note.text}</p>{note.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeNote(note.id)}><Trash2 size={16} /></button>)}</div>
-                                            );
-                                        })}
-                                    </div>
-                                </>
-                            )}
-
-                            {modalTab === 'badges' && (
-                                <>
-                                    <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 mb-6">
-                                        <h4 className="font-bold text-yellow-800 mb-3 flex items-center gap-2"><Star size={18}/> Przyznaj Odznakę</h4>
-                                        <div className="space-y-3">
-                                            <div className="grid grid-cols-2 gap-3"><input type="month" className="border p-2 rounded bg-white text-sm" value={badgeMonth} onChange={e => setBadgeMonth(e.target.value)} /><select className="border p-2 rounded bg-white text-sm" value={badgeType} onChange={e => setBadgeType(e.target.value as BadgeType)}>{Object.values(BadgeType).map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                            <textarea className="w-full border p-2 rounded bg-white text-sm h-20 focus:outline-none focus:ring-2 focus:ring-yellow-500" placeholder="Uzasadnienie..." value={badgeDesc} onChange={e => setBadgeDesc(e.target.value)}/>
-                                            <div className="flex justify-between items-center">
-                                                <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"><input type="checkbox" checked={badgeVisible} onChange={e => setBadgeVisible(e.target.checked)} className="rounded text-yellow-600 focus:ring-yellow-500"/> Widoczne dla pracownika</label>
-                                                <Button onClick={handleAddBadge} disabled={!badgeDesc || !canAddBadge} className={!canAddBadge ? 'bg-slate-300 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700 text-white'}>{canAddBadge ? 'Przyznaj' : 'Limit 1/mc'}</Button>
-                                            </div>
-                                            {!canAddBadge && <p className="text-xs text-red-500 text-right mt-1">Przyznałeś już odznakę w tym miesiącu.</p>}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {userBadges.length === 0 && <p className="text-slate-400 italic text-center">Brak odznak.</p>}
-                                        {userBadges.map(badge => (
-                                            <div key={badge.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm relative group">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div className="flex items-center gap-2"><div className="bg-yellow-100 text-yellow-600 p-1.5 rounded-full"><Award size={16} /></div><div><div className="text-sm font-bold text-slate-800">{badge.type}</div><div className="text-xs text-slate-500">{badge.month}</div></div></div>
-                                                    {badge.visible_to_employee ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded border border-green-200 flex items-center gap-1"><Eye size={10}/> Widoczna</span> : <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200 flex items-center gap-1"><Shield size={10}/> Ukryta</span>}
-                                                </div>
-                                                <p className="text-sm text-slate-700 mt-2 italic">"{badge.description}"</p>
-                                                {badge.author_id === currentUser?.id && (<button className="absolute top-2 right-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => deleteEmployeeBadge(badge.id)}><Trash2 size={16} /></button>)}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </>
-                            )}
-
-                            {modalTab === 'quality' && (
-                                <div>
-                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 mb-6 text-sm text-blue-800 flex items-start gap-3">
-                                        <AlertTriangle size={20} className="shrink-0 mt-0.5"/>
-                                        <div>
-                                            <p className="font-bold">Zarządzanie jakością (Zasada 1/2)</p>
-                                            <p className="opacity-90 mt-1">Kliknij na umiejętność, aby zgłosić błąd lub zobaczyć historię. 1. błąd = ostrzeżenie, 2. błąd = utrata dodatku.</p>
-                                        </div>
-                                    </div>
-
-                                    <h4 className="font-bold text-slate-700 mb-3 text-sm uppercase">Potwierdzone Umiejętności</h4>
-                                    <div className="space-y-3">
-                                        {userConfirmedSkills.map((item: any) => (
-                                            <div 
-                                                key={item.id} 
-                                                className={`bg-white border rounded-xl p-4 shadow-sm cursor-pointer transition-all hover:border-blue-400 hover:shadow-md ${item.qualityStatus === 'blocked' ? 'border-red-200 bg-red-50/20' : 'border-slate-200'}`}
-                                                onClick={() => handleOpenQualityForm(item.skill_id)}
-                                            >
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <div className="font-bold text-slate-900 text-base">{item.skill?.name_pl}</div>
-                                                        <div className="text-xs text-slate-500 mt-1">Bonus: +{item.skill?.hourly_bonus} zł/h</div>
-                                                    </div>
-                                                    {item.qualityStatus === 'active' && <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><CheckCircle size={12}/> Aktywne</span>}
-                                                    {item.qualityStatus === 'warning' && <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><AlertTriangle size={12}/> Ostrzeżenie (1/2)</span>}
-                                                    {item.qualityStatus === 'blocked' && <span className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Lock size={12}/> Zablokowane</span>}
-                                                </div>
-
-                                                {item.incidents.length > 0 && (
-                                                    <div className="mt-3 pt-3 border-t border-slate-100">
-                                                        <div className="flex justify-between items-center">
-                                                            <div className="flex gap-1">
-                                                                {item.incidents.map((inc: any, idx: number) => (
-                                                                    <div key={inc.id} className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-yellow-400' : 'bg-red-500'}`} title={inc.description}></div>
-                                                                ))}
-                                                            </div>
-                                                            <button 
-                                                                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
-                                                                onClick={(e) => { e.stopPropagation(); setViewIncidentSkillId(item.skill_id); }}
-                                                            >
-                                                                <Eye size={12}/> Zobacz szczegóły ({item.incidents.length})
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                        {userConfirmedSkills.length === 0 && (
-                                            <div className="text-center py-8 text-slate-400 text-sm border-2 border-dashed border-slate-200 rounded-xl">
-                                                Pracownik nie posiada jeszcze potwierdzonych umiejętności płatnych.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="pt-4 border-t border-slate-100 flex justify-end">
-                            <Button variant="ghost" onClick={() => setSelectedUser(null)}>Zamknij</Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* QUALITY FORM MODAL */}
-            {isQualityFormOpen && selectedUser && (
-                <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 flex flex-col max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold text-slate-900">Zgłoś Błąd Jakościowy</h2>
-                            <button onClick={() => setIsQualityFormOpen(false)}><X size={24} className="text-slate-400"/></button>
-                        </div>
-                        
-                        <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-                            {isUploading && (
-                                <div className="p-3 bg-blue-50 text-blue-700 rounded-lg flex items-center gap-2 text-sm font-medium animate-pulse">
-                                    <Loader2 size={16} className="animate-spin"/> Przesyłanie zdjęć...
-                                </div>
-                            )}
-
-                            <p className="text-sm text-slate-600">
-                                Zgłaszasz błąd dla: <strong>{selectedUser.first_name} {selectedUser.last_name}</strong>
-                                <br/>
-                                Umiejętność: <strong>{skills.find(s => s.id === selectedSkillIdForIncident)?.name_pl}</strong>
-                            </p>
-
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Opis błędu</label>
-                                <textarea 
-                                    className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm"
-                                    rows={3}
-                                    placeholder="Opisz dokładnie na czym polegał błąd..."
-                                    value={incidentDescription}
-                                    onChange={e => setIncidentDescription(e.target.value)}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2">Zdjęcia (Wymagane) *</label>
-                                <div className="flex flex-wrap gap-3">
-                                    {incidentImages.map((url, idx) => (
-                                        <div key={idx} className="relative w-20 h-20 group">
-                                            <img src={url} alt="Dowód" className="w-full h-full object-cover rounded-lg border border-slate-200 shadow-sm" />
-                                            <button 
-                                                onClick={() => removeIncidentImage(url)}
-                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <X size={12}/>
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <button 
-                                        onClick={() => cameraInputRef.current?.click()}
-                                        disabled={isUploading}
-                                        className="w-20 h-20 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 hover:border-blue-500 hover:text-blue-500 transition-all bg-slate-50"
-                                    >
-                                        <Camera size={24}/>
-                                        <span className="text-[9px] font-bold mt-1 uppercase">Dodaj</span>
-                                    </button>
-                                </div>
-                                <input type="file" multiple ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                                <input type="file" multiple ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleFileChange} />
-                                <div className="mt-3 flex gap-2">
-                                    <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} type="button" disabled={isUploading}>
-                                        <Upload size={16} className="mr-2"/> Wybierz z galerii
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {incidentPrediction && (
-                                <div className={`p-3 rounded-lg border ${incidentPrediction.isBlock ? 'bg-red-50 border-red-100 text-red-800' : 'bg-yellow-50 border-yellow-100 text-yellow-800'}`}>
-                                    <div className="flex items-center gap-2 font-black text-[10px] mb-1 uppercase tracking-widest">
-                                        <Shield size={14}/> Skutek: {incidentPrediction.label}
-                                    </div>
-                                    <p className="text-[11px] font-medium opacity-80 leading-relaxed">{incidentPrediction.description}</p>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-slate-100">
-                            <Button variant="ghost" onClick={() => setIsQualityFormOpen(false)}>Anuluj</Button>
-                            <Button 
-                                variant={incidentPrediction?.isBlock ? 'danger' : 'primary'}
-                                onClick={handleSubmitIncident} 
-                                disabled={!incidentDescription || incidentImages.length === 0 || isUploading}
-                            >
-                                Zatwierdź Zgłoszenie
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <DocumentViewerModal 
-                isOpen={fileViewer.isOpen}
-                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })}
-                urls={fileViewer.urls}
-                initialIndex={fileViewer.index}
-                title={fileViewer.title}
-            />
+            {renderModalContent()}
+            {renderIncidentDetailModal()}
+            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} initialIndex={fileViewer.index} title={fileViewer.title} />
+            <input type="file" multiple className="hidden" ref={incidentCameraRef} accept="image/*" onChange={handleIncidentImageUpload}/>
         </div>
     );
 };

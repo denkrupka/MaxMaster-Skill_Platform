@@ -1,19 +1,19 @@
+
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Award, CheckCircle, Wallet, Clock, Lock, ChevronDown, ChevronUp, 
     BookOpen, Video, FileText, AlertTriangle, TrendingUp, Calendar, Layers, ChevronRight,
     X, ExternalLink, Play, Plus, Upload, Eye, RotateCcw, Camera, List, Sparkles, Target,
-    Shield, Save, Search, History, CheckSquare
+    Shield, Save, Search, History, CheckSquare, Paperclip, Loader2, FileCheck
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { SkillStatus, VerificationType, SkillCategory, LibraryResource, Skill, Test } from '../../types';
+import { SkillStatus, VerificationType, SkillCategory, LibraryResource, Skill, Test, Role } from '../../types';
 import { Button } from '../../components/Button';
 import { BONUS_DOCUMENT_TYPES, SKILL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
 
-// Fix: Added interface for strong typing of newDocData state to resolve 'unknown' type errors
 interface DocData {
     typeId: string;
     customName: string;
@@ -32,14 +32,14 @@ export const EmployeeSkills = () => {
         confirmed: true,
         verification: true,
         toAcquire: true,
-        documents: false
+        documents: true
     });
 
     const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
     const [isDocModalOpen, setIsDocModalOpen] = useState(false);
     const [editingDocId, setEditingDocId] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     
-    // Fix: Explicitly typed the newDocData state to avoid 'unknown' type errors during build/compilation.
     const [newDocData, setNewDocData] = useState<DocData>({ 
         typeId: '',
         customName: '', 
@@ -50,7 +50,6 @@ export const EmployeeSkills = () => {
     });
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
     
-    // Force re-render for timers
     const [now, setNow] = useState(new Date());
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60000);
@@ -61,6 +60,7 @@ export const EmployeeSkills = () => {
 
     if (!currentUser) return null;
 
+    const isCoordinator = currentUser.role === Role.COORDINATOR;
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
@@ -72,18 +72,15 @@ export const EmployeeSkills = () => {
         setOpenCategories(prev => ({ ...prev, [category]: !prev[category] })); 
     };
 
-    // --- LOGIC: DB-DRIVEN COOLDOWN & SUMMED RATE ---
     const getTestData = (skillId: string) => {
         const test = tests.find(t => t.skill_ids.includes(skillId) && t.is_active && !t.is_archived);
         if (!test) return null;
 
-        // Calculate Summed Bonus for the entire test package
         const summedBonus = test.skill_ids.reduce((acc, sid) => {
             const s = skills.find(sk => sk.id === sid);
             return acc + (s?.hourly_bonus || 0);
         }, 0);
 
-        // Check Cooldown from DB attempts
         const attempts = testAttempts
             .filter(ta => ta.user_id === currentUser.id && ta.test_id === test.id)
             .sort((a,b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
@@ -105,8 +102,6 @@ export const EmployeeSkills = () => {
 
         return { test, summedBonus, isLocked, cooldownText };
     };
-
-    // --- DATA CALCULATIONS ---
 
     const { confirmedSkills, pendingPracticeSkills, toAcquireSkillsByCategory } = useMemo(() => {
         const confirmed: any[] = []; 
@@ -163,12 +158,11 @@ export const EmployeeSkills = () => {
         return userSkills.filter(us => us.user_id === currentUser.id).map(us => {
                 const skill = skills.find(s => s.id === us.skill_id);
                 const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || (us.skill_id && typeof us.skill_id === 'string' && (us.skill_id.startsWith('doc_') || us.custom_type === 'doc_generic')) || !us.skill_id;
-                if (isDoc) return { ...us, docName: us.custom_name || (skill ? skill.name_pl : 'Dokument'), bonus: skill ? skill.hourly_bonus : (us.bonus_value || 0), fileCount: us.document_urls ? us.document_urls.length : (us.document_url ? 1 : 0) };
+                
+                if (isDoc) return { ...us, docName: us.custom_name || (skill ? skill.name_pl : 'Dokument'), bonus: skill ? skill.hourly_bonus : (us.bonus_value || 0), fileCount: ((us.document_urls as string[])?.length || 0) > 0 ? (us.document_urls as string[]).length : (us.document_url ? 1 : 0) };
                 return null;
             }).filter(Boolean) as any[];
     }, [currentUser, userSkills, skills]);
-
-    // --- ACTIONS ---
 
     const handleTakeTest = (skillId: string) => {
         const testData = getTestData(skillId);
@@ -188,27 +182,28 @@ export const EmployeeSkills = () => {
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = Array.from(e.target.files || []);
-        // Fix: Explicitly type the previous state in functional update to ensure TypeScript recognizes the properties.
-        if (selectedFiles.length > 0) setNewDocData((prev: DocData) => ({ ...prev, files: [...prev.files, ...selectedFiles] }));
+        if (selectedFiles.length > 0) {
+            setNewDocData((prev: DocData) => ({ ...prev, files: [...prev.files, ...selectedFiles] }));
+        }
     };
 
     const removeFile = (index: number) => { 
-        // Fix: Explicitly type the previous state in functional update to ensure TypeScript recognizes the properties.
         setNewDocData((prev: DocData) => ({ ...prev, files: prev.files.filter((_, i) => i !== index) })); 
     };
 
     const handleSaveDocument = async () => {
         if(!currentUser) return;
+        setIsSaving(true);
         const selectedType = BONUS_DOCUMENT_TYPES.find(t => t.id === newDocData.typeId);
         const docName = newDocData.typeId === 'other' || editingDocId ? newDocData.customName : (selectedType?.label || 'Dokument');
         const bonus = selectedType?.bonus || 0;
-        if (!docName) return alert("Podaj nazwę dokumentu.");
+        
         const docPayload: any = { custom_name: docName, issue_date: newDocData.issue_date || null, expires_at: newDocData.indefinite ? null : (newDocData.expires_at || null), is_indefinite: newDocData.indefinite };
         
-        // Fix: Accessed length of the correctly typed files array to resolve 'unknown' type error.
-        if (newDocData.files.length > 0) {
+        const filesToUpload: File[] = (newDocData.files as File[]) || [];
+        if (filesToUpload.length > 0) {
              const uploadedUrls: string[] = [];
-             for (const file of newDocData.files) {
+             for (const file of filesToUpload) {
                  const url = await uploadDocument(file, currentUser.id);
                  if (url) uploadedUrls.push(url);
              }
@@ -219,6 +214,7 @@ export const EmployeeSkills = () => {
             else await addCandidateDocument(currentUser.id, { skill_id: crypto.randomUUID(), custom_type: 'doc_generic', status: SkillStatus.PENDING, bonus_value: bonus, ...docPayload });
             setIsDocModalOpen(false);
         } catch (error) { console.error("Error saving document:", error); alert("Błąd podczas zapisywania dokumentu."); }
+        finally { setIsSaving(false); }
     };
 
     const openFileViewer = (doc: any) => {
@@ -236,6 +232,9 @@ export const EmployeeSkills = () => {
         return { status: 'active', label: 'Aktywne', color: 'bg-green-100 text-green-700' };
     };
 
+    // Explicitly cast files to any[] for TS compatibility
+    const uploadedFiles: any[] = (newDocData.files as any[]) || [];
+
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-8 pb-24">
             <div>
@@ -252,7 +251,9 @@ export const EmployeeSkills = () => {
                         </div>
                         <div className="text-left">
                             <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Zaliczone umiejętności</h2>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bonusy doliczone do Twojej stawki</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                {isCoordinator ? 'Twoje potwierdzone kompetencje' : 'Bonusy doliczone do Twojej stawki'}
+                            </p>
                         </div>
                     </div>
                     {openSections.confirmed ? <ChevronUp size={24} className="text-slate-400"/> : <ChevronDown size={24} className="text-slate-400"/>}
@@ -274,10 +275,12 @@ export const EmployeeSkills = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-black text-green-600 leading-none">+{item.hourly_bonus.toFixed(2)}</div>
-                                            <div className="text-[8px] font-bold text-slate-400 uppercase">zł/h</div>
-                                        </div>
+                                        {!isCoordinator && (
+                                            <div className="text-right">
+                                                <div className="text-lg font-black text-green-600 leading-none">+{item.hourly_bonus.toFixed(2)}</div>
+                                                <div className="text-[8px] font-bold text-slate-400 uppercase">zł/h</div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -288,7 +291,7 @@ export const EmployeeSkills = () => {
                 )}
             </div>
 
-            {/* SECTION 2: PRACTICES TO VERIFY (ONLY IF PENDING) */}
+            {/* SECTION 2: PRACTICES TO VERIFY */}
             {pendingPracticeSkills.length > 0 && (
                 <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
                     <button onClick={() => toggleSection('verification')} className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
@@ -298,7 +301,7 @@ export const EmployeeSkills = () => {
                             </div>
                             <div className="text-left">
                                 <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Praktyki do Weryfikacji</h2>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Oczekują na potwierdzenie przez Brygadzistę</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Oczekują na potwierdzenie przez przełożonego</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -326,10 +329,12 @@ export const EmployeeSkills = () => {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-lg font-black text-orange-600 leading-none">+{item.hourly_bonus.toFixed(2)}</div>
-                                            <div className="text-[8px] font-bold text-slate-400 uppercase">zł/h</div>
-                                        </div>
+                                        {!isCoordinator && (
+                                            <div className="text-right">
+                                                <div className="text-lg font-black text-orange-600 leading-none">+{item.hourly_bonus.toFixed(2)}</div>
+                                                <div className="text-[8px] font-bold text-slate-400 uppercase">zł/h</div>
+                                            </div>
+                                        )}
                                     </button>
                                 ))}
                             </div>
@@ -354,7 +359,7 @@ export const EmployeeSkills = () => {
                         <button onClick={() => navigate('/dashboard/tests')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm uppercase tracking-wider">
                             <History size={16} className="text-blue-500" /> Historia Testów
                         </button>
-                        <button onClick={() => toggleSection('toAcquire')} className="p-2 text-slate-400 hover:text-slate-600">
+                        <button onClick={() => toggleSection('toAcquire')} className="p-2 text-slate-400">
                             {openSections.toAcquire ? <ChevronUp size={24}/> : <ChevronDown size={24}/>}
                         </button>
                     </div>
@@ -398,10 +403,12 @@ export const EmployeeSkills = () => {
                                                                 ) : null}
                                                             </div>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <div className={`text-[13px] font-black ${isLocked ? 'text-slate-300' : 'text-blue-600'}`}>+{bonus.toFixed(2)}</div>
-                                                            <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">zł/h</div>
-                                                        </div>
+                                                        {!isCoordinator && (
+                                                            <div className="text-right">
+                                                                <div className={`text-[13px] font-black ${isLocked ? 'text-slate-300' : 'text-blue-600'}`}>+{bonus.toFixed(2)}</div>
+                                                                <div className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">zł/h</div>
+                                                            </div>
+                                                        )}
                                                     </button>
                                                 );
                                             })}
@@ -421,87 +428,214 @@ export const EmployeeSkills = () => {
 
             {/* SECTION 4: DOCUMENTS */}
             <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <button onClick={() => toggleSection('documents')} className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div className="flex items-center gap-4">
+                <div className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <button onClick={() => toggleSection('documents')} className="flex items-center gap-4 flex-1 text-left">
                         <div className="w-10 h-10 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 shadow-inner"><FileText size={24}/></div>
                         <div className="text-left">
                             <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Dokumenty i Uprawnienia</h2>
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SEP, UDT, BHP i orzeczenia lekarskie</p>
                         </div>
+                    </button>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); handleAddDocument(); }}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-purple-600/20 transition-all active:scale-95"
+                        >
+                            <Plus size={16}/> Dodaj Dokument
+                        </button>
+                        <button onClick={() => toggleSection('documents')} className="p-2 text-slate-400">
+                            {openSections.documents ? <ChevronUp size={24}/> : <ChevronDown size={24}/>}
+                        </button>
                     </div>
-                    {openSections.documents ? <ChevronUp size={24} className="text-slate-400"/> : <ChevronDown size={24} className="text-slate-400"/>}
-                </button>
+                </div>
                 {openSections.documents && (
                     <div className="p-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {myDocuments.map((doc, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-300 transition-colors shadow-sm group">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors"><Shield size={20}/></div>
+                                        <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors shadow-inner"><Shield size={20}/></div>
                                         <div>
                                             <h4 className="font-bold text-slate-800">{doc.docName}</h4>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${doc.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-700 border-green-200' : doc.status === SkillStatus.FAILED ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>{SKILL_STATUS_LABELS[doc.status]}</span>
-                                                {doc.bonus > 0 && <span className={`text-[10px] font-black ${doc.status === SkillStatus.CONFIRMED ? 'text-green-600' : 'text-slate-300'}`}>• +{doc.bonus.toFixed(2)} zł/h</span>}
+                                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${doc.status === SkillStatus.CONFIRMED ? 'bg-green-50 text-green-700 border-green-100' : doc.status === SkillStatus.FAILED ? 'bg-red-50 text-red-700 border-red-100' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                                    {SKILL_STATUS_LABELS[doc.status]}
+                                                </span>
+                                                {!isCoordinator && doc.bonus > 0 && <span className="text-[10px] font-bold text-green-600">+{doc.bonus} zł/h</span>}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
-                                        <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" onClick={() => openFileViewer(doc)}><Eye size={18}/></button>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => openFileViewer(doc)}
+                                            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                                            title="Podgląd dokumentu"
+                                        >
+                                            <Eye size={20} />
+                                        </button>
                                     </div>
                                 </div>
                             ))}
+                            {myDocuments.length === 0 && (
+                                <div className="col-span-full text-center py-12 text-slate-400 font-bold italic bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                    Brak dodanych dokumentów. Kliknij przycisk powyżej, aby przesłać swój pierwszy certyfikat lub uprawnienie.
+                                </div>
+                            )}
                         </div>
-                        <Button fullWidth variant="outline" onClick={handleAddDocument} className="h-12 rounded-2xl border-dashed border-2 font-black uppercase text-xs tracking-widest border-slate-300 text-slate-500 hover:border-purple-400 hover:text-purple-600 hover:bg-purple-50 transition-all"><Plus size={18} className="mr-2"/> Dodaj Nowy Dokument</Button>
                     </div>
                 )}
             </div>
 
+            {/* --- REDESIGNED BEAUTIFUL COMPACT DOCUMENT MODAL --- */}
             {isDocModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-md w-full p-6 animate-in fade-in zoom-in duration-200">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-slate-900">Dodaj Dokument</h2>
-                            <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
-                        </div>
-                        <div className="space-y-4">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[24px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300">
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Typ Dokumentu</label>
-                                <select className="w-full border p-2 rounded bg-white" value={newDocData.typeId} onChange={e => setNewDocData((prev: DocData) => ({...prev, typeId: e.target.value}))}>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase flex items-center gap-2">
+                                    <FileText className="text-blue-600" size={20}/> Dodaj Dokument
+                                </h3>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Certyfikaty, uprawnienia i orzeczenia</p>
+                            </div>
+                            <button onClick={() => setIsDocModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 hover:bg-white rounded-full shadow-sm">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            {/* Typ dokumentu */}
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
+                                    <Shield size={10} className="text-blue-500"/> WYBIERZ TYP
+                                </label>
+                                <select 
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-bold text-sm focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-inner appearance-none" 
+                                    value={newDocData.typeId} 
+                                    onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}
+                                >
                                     <option value="">Wybierz dokument...</option>
-                                    {BONUS_DOCUMENT_TYPES.map(type => <option key={type.id} value={type.id}>{type.label}</option>)}
+                                    {BONUS_DOCUMENT_TYPES.map(type => (
+                                        <option key={type.id} value={type.id}>
+                                            {type.label} {!isCoordinator && type.bonus > 0 ? `(+${type.bonus.toFixed(2)} zł)` : ''}
+                                        </option>
+                                    ))}
+                                    <option value="other">Inny (własna nazwa)</option>
                                 </select>
                             </div>
-                            {newDocData.typeId === 'other' && (
-                                <input className="w-full border p-2 rounded" placeholder="Nazwa dokumentu..." value={newDocData.customName} onChange={e => setNewDocData((prev: DocData) => ({...prev, customName: e.target.value}))} />
+
+                            {/* Własna nazwa (warunkowo) */}
+                            {(newDocData.typeId === 'other' || editingDocId) && (
+                                <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5">NAZWA NIESTANDARDOWA</label>
+                                    <input 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-bold text-sm focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-inner" 
+                                        placeholder="Wpisz nazwę dokumentu..." 
+                                        value={newDocData.customName} 
+                                        onChange={e => setNewDocData({...newDocData, customName: e.target.value})} 
+                                    />
+                                </div>
                             )}
-                            <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-1">Załącz Pliki</label>
-                                <input type="file" multiple onChange={handleFileSelect} className="w-full border p-2 rounded bg-slate-50 text-sm" />
-                                <div className="mt-2 space-y-1">
-                                    {/* Fix: Explicitly typed the map and ensured it's an array for proper property access. */}
-                                    {(newDocData.files || []).map((f: File, i: number) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-100 p-1.5 rounded text-xs">
-                                            <span className="truncate">{f.name}</span>
-                                            <button onClick={() => removeFile(i)} className="text-red-500"><X size={14}/></button>
-                                        </div>
-                                    ))}
+
+                            {/* Załączniki - Slimmer Dropzone */}
+                            <div className="space-y-1">
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
+                                    <Paperclip size={10} className="text-blue-500"/> ZAŁĄCZNIKI
+                                </label>
+                                <div 
+                                    className="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col items-center justify-center hover:bg-white hover:border-blue-400 transition-all cursor-pointer group"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <input type="file" multiple ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+                                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-600 transition-colors shadow-sm mb-1.5">
+                                        <Upload size={18}/>
+                                    </div>
+                                    <p className="text-[10px] font-black text-slate-500 group-hover:text-blue-600 uppercase">Wybierz pliki</p>
+                                </div>
+
+                                {/* Fixed: Explicitly cast files to any[] and map to resolve 'unknown' type error */}
+                                {(uploadedFiles as any[]).length > 0 && (
+                                    <div className="mt-2 space-y-1 max-h-24 overflow-y-auto pr-1 scrollbar-hide">
+                                        {(uploadedFiles as any[]).map((f, i) => (
+                                            <div key={i} className="flex justify-between items-center bg-blue-50/50 border border-blue-100 p-1.5 rounded-lg text-[9px] font-black text-blue-700 animate-in slide-in-from-left-1">
+                                                <span className="truncate max-w-[200px]">{f.name}</span>
+                                                <button onClick={(e) => { e.stopPropagation(); removeFile(i); }} className="text-red-400 hover:text-red-600 p-0.5">
+                                                    <X size={12}/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Daty Grid - Native click triggered by type="date" */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
+                                        <Calendar size={10} className="text-blue-500"/> WYDANO
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-bold text-xs focus:bg-white outline-none shadow-inner" 
+                                        value={newDocData.issue_date} 
+                                        onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})} 
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
+                                        <Calendar size={10} className="text-blue-500"/> WAŻNY DO
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-slate-800 font-bold text-xs focus:bg-white outline-none shadow-inner transition-opacity ${newDocData.indefinite ? 'opacity-30 pointer-events-none' : ''}`} 
+                                        value={newDocData.expires_at} 
+                                        onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})}
+                                        disabled={newDocData.indefinite} 
+                                    />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 mb-2 p-2 bg-slate-50 rounded">
-                                <input type="checkbox" id="indef_trial_skills_2" checked={newDocData.indefinite} onChange={e => setNewDocData((prev: DocData) => ({...prev, indefinite: e.target.checked}))} className="w-4 h-4 text-blue-600 rounded" />
-                                <label htmlFor="indef_trial_skills_2" className="text-sm text-slate-700 font-medium">Bezterminowy</label>
-                            </div>
+
+                            {/* Panel Bezterminowy - Compact */}
+                            <label className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer ${newDocData.indefinite ? 'bg-blue-600 border-blue-600 text-white' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                                <div className={`w-5 h-5 rounded flex items-center justify-center border-2 ${newDocData.indefinite ? 'bg-white border-white text-blue-600' : 'bg-white border-slate-300'}`}>
+                                    {newDocData.indefinite && <CheckCircle size={14} />}
+                                </div>
+                                <span className="text-[9px] font-black uppercase tracking-widest">Dokument Bezterminowy</span>
+                                <input 
+                                    type="checkbox" 
+                                    className="hidden" 
+                                    checked={newDocData.indefinite} 
+                                    onChange={e => setNewDocData({...newDocData, indefinite: e.target.checked})} 
+                                />
+                            </label>
                         </div>
-                        <div className="flex justify-end gap-2 mt-6">
-                            <Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button>
-                            <Button onClick={handleSaveDocument}>Zapisz Dokument</Button>
+
+                        {/* Footer - Compressed */}
+                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                            <button onClick={() => setIsDocModalOpen(false)} className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">
+                                Anuluj
+                            </button>
+                            <Button 
+                                onClick={handleSaveDocument} 
+                                /* Fixed: cast files to any[] for length check to resolve 'unknown' type error */
+                                disabled={!newDocData.typeId || ((uploadedFiles as any[]).length === 0 && !editingDocId) || isSaving}
+                                className="flex-[2] h-11 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 text-xs"
+                            >
+                                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16}/>}
+                                {editingDocId ? 'ZAKTUALIZUJ' : 'ZAPISZ'}
+                            </Button>
                         </div>
                     </div>
                 </div>
             )}
-
-            <DocumentViewerModal isOpen={fileViewer.isOpen} onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} urls={fileViewer.urls} title={fileViewer.title} />
+            
+            <DocumentViewerModal 
+                isOpen={fileViewer.isOpen} 
+                onClose={() => setFileViewer({ ...fileViewer, isOpen: false })} 
+                urls={fileViewer.urls} 
+                initialIndex={fileViewer.index} 
+                title={fileViewer.title} 
+            />
         </div>
     );
 };
