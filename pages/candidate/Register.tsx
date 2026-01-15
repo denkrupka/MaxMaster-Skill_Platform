@@ -104,28 +104,42 @@ export const CandidateRegisterPage = () => {
             let finalUser: any = null;
 
             if (existingUser) {
-                console.log('Profile exists. Syncing ID and status...');
-                const updates: any = {
-                    id: authId,
-                    status: UserStatus.STARTED,
-                    first_name: formData.firstName,
-                    last_name: formData.lastName,
-                    phone: formData.phone
-                };
-                if (referrerId) updates.referred_by_id = referrerId;
+                console.log('Profile exists. Recreating with auth ID...');
 
-                const { data: updated, error: updateError } = await supabase
+                // Delete old record (can't update primary key)
+                const { error: deleteError } = await supabase
                     .from('users')
-                    .update(updates)
-                    .eq('email', cleanEmail)
+                    .delete()
+                    .eq('email', cleanEmail);
+
+                if (deleteError) {
+                    console.error('Delete existing user error:', deleteError);
+                    throw deleteError;
+                }
+
+                // Create new record with correct auth ID
+                const { data: inserted, error: insertError } = await supabase
+                    .from('users')
+                    .insert([{
+                        id: authId,
+                        email: cleanEmail,
+                        first_name: formData.firstName,
+                        last_name: formData.lastName,
+                        phone: formData.phone,
+                        role: 'candidate',
+                        status: UserStatus.STARTED,
+                        referred_by_id: referrerId || existingUser.referred_by_id || null,
+                        source: referrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
+                        hired_date: existingUser.hired_date || new Date().toISOString()
+                    }])
                     .select()
                     .single();
 
-                if (updateError) {
-                    console.error('Update existing user error:', updateError);
-                    throw updateError;
+                if (insertError) {
+                    console.error('Insert user after delete error:', insertError);
+                    throw insertError;
                 }
-                finalUser = updated;
+                finalUser = inserted;
             } else {
                 console.log('No existing profile. Creating new one...');
                 const { data: inserted, error: insertError } = await supabase
