@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, ChevronUp, ChevronDown, ChevronRight, Edit, Trash2, X, Archive, RotateCcw, Image as ImageIcon, AlertTriangle, Clock, Layers, Award, Target, Sparkles, FilePlus } from 'lucide-react';
+import { Plus, ChevronUp, ChevronDown, ChevronRight, Edit, Trash2, X, Archive, RotateCcw, Image as ImageIcon, AlertTriangle, Clock, Layers, Award, Target, Sparkles, FilePlus, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { Test, SkillCategory, Question, GradingStrategy, Skill } from '../../types';
+import * as XLSX from 'xlsx';
 
 export const HRTestsPage = () => {
-    const { state, addTest, updateTest, updateSkill } = useAppContext();
+    const { state, addTest, updateTest, updateSkill, addSkill } = useAppContext();
     const [activeCategory, setActiveCategory] = useState<SkillCategory | null>(null);
     const [isTestDetailOpen, setIsTestDetailOpen] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -36,6 +37,11 @@ export const HRTestsPage = () => {
         actionLabel: string;
         onConfirm: () => void;
     }>({ isOpen: false, title: '', message: '', actionLabel: '', onConfirm: () => {} });
+
+    // Import Modal State
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importFiles, setImportFiles] = useState<File[]>([]);
+    const importFileInputRef = useRef<HTMLInputElement>(null);
 
     // Group tests by category.
     const categorizedTests = useMemo(() => {
@@ -201,6 +207,221 @@ export const HRTestsPage = () => {
     };
 
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+
+    // Import Functions
+    const generateExcelTemplate = () => {
+        // Get all categories and skills for the template
+        const categories = Object.values(SkillCategory);
+        const skillsList = state.skills.map(s => `${s.name_pl} (${s.category})`).join('\n');
+
+        const templateData = [
+            ['INSTRUKCJA:', 'Wypełnij poniższe pola według szablonu. Nie usuwaj nagłówków!'],
+            [],
+            ['NAZWA TESTU', 'np. Test wiedzy: Instalacje elektryczne'],
+            ['KATEGORIA UMIEJĘTNOŚCI', categories.join(' LUB ')],
+            ['NAZWA UMIEJĘTNOŚCI', 'Wpisz istniejącą lub nową (jeśli nowa, wypełnij pola poniżej)'],
+            ['STAWKA ZŁ/H (dla nowej umiejętności)', 'np. 5'],
+            ['WYMAGANY % ZALICZENIA (dla nowej)', 'np. 80'],
+            ['LICZBA PYTAŃ DO WYŚWIETLENIA', 'Pozostaw puste = wszystkie pytania, lub np. 20'],
+            [],
+            ['ISTNIEJĄCE UMIEJĘTNOŚCI W SYSTEMIE:'],
+            [skillsList],
+            [],
+            ['PYTANIA - zaczynaj od wiersza poniżej:', '', '', '', '', '', ''],
+            ['Nr', 'Treść pytania', 'Czas (sekundy)', 'Opcja A', 'Opcja B', 'Opcja C', 'Opcja D', 'Opcja E', 'Poprawne odpowiedzi (np. A,C)', 'Kryterium (ALL_CORRECT/ANY_CORRECT/MIN_2_CORRECT)', 'URL obrazu (opcjonalnie)'],
+            ['1', 'Przykładowe pytanie testowe?', '30', 'Odpowiedź A', 'Odpowiedź B', 'Odpowiedź C', 'Odpowiedź D', '', 'A,C', 'ALL_CORRECT', ''],
+            ['2', 'Kolejne pytanie...', '45', 'Tak', 'Nie', '', '', '', 'A', 'ALL_CORRECT', ''],
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(templateData);
+
+        // Set column widths
+        ws['!cols'] = [
+            { wch: 5 },   // Nr
+            { wch: 50 },  // Treść pytania
+            { wch: 15 },  // Czas
+            { wch: 20 },  // Opcja A
+            { wch: 20 },  // Opcja B
+            { wch: 20 },  // Opcja C
+            { wch: 20 },  // Opcja D
+            { wch: 20 },  // Opcja E
+            { wch: 25 },  // Poprawne
+            { wch: 30 },  // Kryterium
+            { wch: 30 },  // URL obrazu
+        ];
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Szablon Testu');
+        XLSX.writeFile(wb, 'szablon_testu.xlsx');
+    };
+
+    const handleImportFiles = async () => {
+        if (importFiles.length === 0) {
+            alert('Wybierz przynajmniej jeden plik do importu');
+            return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+        const errors: string[] = [];
+
+        for (const file of importFiles) {
+            try {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+                // Parse test metadata
+                const testName = jsonData[2]?.[1] || '';
+                const categoryName = jsonData[3]?.[1] || '';
+                const skillName = jsonData[4]?.[1] || '';
+                const hourlyBonus = parseFloat(jsonData[5]?.[1] || '0');
+                const requiredPassRate = parseFloat(jsonData[6]?.[1] || '80');
+                const questionsToDisplay = jsonData[7]?.[1] ? parseInt(jsonData[7]?.[1]) : undefined;
+
+                if (!testName || !categoryName || !skillName) {
+                    errors.push(`${file.name}: Brak wymaganych danych (nazwa, kategoria lub umiejętność)`);
+                    errorCount++;
+                    continue;
+                }
+
+                // Find or create skill
+                let skill = state.skills.find(s => s.name_pl.toLowerCase() === skillName.toLowerCase());
+
+                if (!skill) {
+                    // Create new skill automatically
+                    try {
+                        const newSkill: Omit<Skill, 'id'> = {
+                            name_pl: skillName,
+                            category: categoryName as SkillCategory,
+                            description_pl: `Automatycznie utworzona z importu: ${skillName}`,
+                            verification_type: 'theory_practice' as any,
+                            hourly_bonus: hourlyBonus || 0,
+                            required_pass_rate: requiredPassRate || 80,
+                            is_active: true,
+                            is_archived: false
+                        };
+
+                        await addSkill(newSkill);
+
+                        // Refresh state to get the newly created skill
+                        skill = state.skills.find(s => s.name_pl.toLowerCase() === skillName.toLowerCase());
+
+                        if (!skill) {
+                            errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);
+                            errorCount++;
+                            continue;
+                        }
+                    } catch (err) {
+                        console.error(`Error creating skill:`, err);
+                        errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);
+                        errorCount++;
+                        continue;
+                    }
+                }
+
+                // Parse questions (starting from row 13, index 13 in 0-based)
+                const questions: Question[] = [];
+                const questionErrors: string[] = [];
+
+                for (let i = 14; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    if (!row || !row[1]) continue; // Skip empty rows
+
+                    const questionText = row[1];
+                    const timeLimit = parseInt(row[2]) || 30;
+                    const options = [row[3], row[4], row[5], row[6], row[7]].filter(Boolean);
+                    const correctAnswersStr = row[8] || '';
+                    const gradingStrategy = (row[9] || 'ALL_CORRECT') as GradingStrategy;
+                    const imageUrl = row[10] || undefined;
+
+                    // Validate minimum 2 options
+                    if (options.length < 2) {
+                        questionErrors.push(`Pytanie ${i - 13}: minimum 2 opcje odpowiedzi są wymagane (znaleziono: ${options.length})`);
+                        continue;
+                    }
+
+                    // Parse correct answers (e.g., "A,C" -> [0, 2])
+                    const correctOptionIndices: number[] = [];
+                    if (correctAnswersStr) {
+                        const letters = correctAnswersStr.split(',').map((s: string) => s.trim().toUpperCase());
+                        letters.forEach((letter: string) => {
+                            const index = letter.charCodeAt(0) - 65; // A=0, B=1, etc.
+                            if (index >= 0 && index < options.length) {
+                                correctOptionIndices.push(index);
+                            }
+                        });
+                    }
+
+                    if (correctOptionIndices.length === 0) {
+                        correctOptionIndices.push(0); // Default to first option
+                    }
+
+                    questions.push({
+                        id: `q_${Date.now()}_${i}`,
+                        text: questionText,
+                        options,
+                        correctOptionIndices,
+                        gradingStrategy,
+                        timeLimit,
+                        imageUrl
+                    });
+                }
+
+                // Check for question errors
+                if (questionErrors.length > 0) {
+                    errors.push(`${file.name}:\n  ${questionErrors.join('\n  ')}`);
+                    errorCount++;
+                    continue;
+                }
+
+                if (questions.length === 0) {
+                    errors.push(`${file.name}: Brak pytań w pliku`);
+                    errorCount++;
+                    continue;
+                }
+
+                // Calculate total time
+                const totalSeconds = questions.reduce((acc, q) => acc + (q.timeLimit || 30), 0);
+                const timeLimitMinutes = Math.ceil(totalSeconds / 60);
+
+                // Create test
+                addTest({
+                    title: testName,
+                    skill_ids: [skill.id],
+                    questions,
+                    time_limit_minutes: timeLimitMinutes,
+                    is_active: true,
+                    is_archived: false,
+                    questions_to_display: questionsToDisplay
+                });
+
+                successCount++;
+            } catch (error) {
+                console.error(`Error importing ${file.name}:`, error);
+                errors.push(`${file.name}: Błąd podczas przetwarzania pliku`);
+                errorCount++;
+            }
+        }
+
+        // Show results
+        let message = `Zaimportowano: ${successCount} testów`;
+        if (errorCount > 0) {
+            message += `\nBłędy: ${errorCount}\n\n${errors.join('\n')}`;
+        }
+        alert(message);
+
+        // Close modal and reset
+        setIsImportModalOpen(false);
+        setImportFiles([]);
+        if (importFileInputRef.current) importFileInputRef.current.value = '';
+    };
+
+    const handleImportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        setImportFiles(files);
+    };
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
@@ -557,20 +778,32 @@ export const HRTestsPage = () => {
                             </div>
                         </div>
 
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                            <button 
-                                onClick={() => setIsCreateModalOpen(false)} 
-                                className="px-5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between gap-3">
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setIsCreateModalOpen(false);
+                                    setIsImportModalOpen(true);
+                                }}
+                                className="h-10 px-6 rounded-xl font-black uppercase text-[10px] tracking-widest"
                             >
-                                Anuluj
-                            </button>
-                            <Button 
-                                onClick={submitCreateTest} 
-                                disabled={!createTitle || createSkillIds.length === 0}
-                                className="h-10 px-8 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/10"
-                            >
-                                <Sparkles size={16} className="mr-2"/> Utwórz Test
+                                <FileSpreadsheet size={16} className="mr-2"/> Import Testów
                             </Button>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setIsCreateModalOpen(false)}
+                                    className="px-5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    Anuluj
+                                </button>
+                                <Button
+                                    onClick={submitCreateTest}
+                                    disabled={!createTitle || createSkillIds.length === 0}
+                                    className="h-10 px-8 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/10"
+                                >
+                                    <Sparkles size={16} className="mr-2"/> Utwórz Test
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -597,6 +830,129 @@ export const HRTestsPage = () => {
                                     {confirmation.actionLabel}
                                 </Button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Import Modal */}
+            {isImportModalOpen && (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                        {/* Header */}
+                        <div className="bg-[#1A1C1E] px-6 py-4 flex justify-between items-center text-white">
+                            <div>
+                                <h2 className="text-lg font-black tracking-tight leading-tight">Import Testów</h2>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Masowe dodawanie testów z plików Excel</p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setIsImportModalOpen(false);
+                                    setImportFiles([]);
+                                }}
+                                className="text-slate-400 hover:text-white p-1.5 hover:bg-white/10 rounded-full transition-all"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {/* Instructions */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                <h3 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
+                                    <AlertTriangle size={16} />
+                                    Jak przeprowadzić import?
+                                </h3>
+                                <ol className="text-xs text-blue-800 space-y-1.5 list-decimal list-inside">
+                                    <li>Pobierz szablon Excel klikając "Pobierz szablon"</li>
+                                    <li>Wypełnij szablon danymi testowymi (1 test = 1 plik)</li>
+                                    <li>Upewnij się, że nazwy umiejętności są identyczne z istniejącymi</li>
+                                    <li>Możesz wgrać wiele plików jednocześnie</li>
+                                    <li>Kliknij "Wgraj plik" i wybierz pliki do importu</li>
+                                </ol>
+                            </div>
+
+                            {/* Download Template Button */}
+                            <div className="space-y-3">
+                                <Button
+                                    fullWidth
+                                    variant="outline"
+                                    onClick={generateExcelTemplate}
+                                    className="h-12 rounded-xl font-bold text-sm border-2 border-green-500 text-green-700 hover:bg-green-50"
+                                >
+                                    <Download size={18} className="mr-2" />
+                                    Pobierz szablon Excel
+                                </Button>
+
+                                {/* Upload Files Button */}
+                                <div>
+                                    <input
+                                        type="file"
+                                        ref={importFileInputRef}
+                                        className="hidden"
+                                        accept=".xlsx,.xls"
+                                        multiple
+                                        onChange={handleImportFileSelect}
+                                    />
+                                    <Button
+                                        fullWidth
+                                        variant="outline"
+                                        onClick={() => importFileInputRef.current?.click()}
+                                        className="h-12 rounded-xl font-bold text-sm border-2 border-blue-500 text-blue-700 hover:bg-blue-50"
+                                    >
+                                        <Upload size={18} className="mr-2" />
+                                        Wybierz pliki do importu
+                                    </Button>
+                                </div>
+
+                                {/* Selected Files List */}
+                                {importFiles.length > 0 && (
+                                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                                        <h4 className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                                            Wybrane pliki ({importFiles.length}):
+                                        </h4>
+                                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                                            {importFiles.map((file, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 text-xs text-slate-600 bg-white px-3 py-2 rounded-lg border border-slate-100">
+                                                    <FileSpreadsheet size={14} className="text-green-600" />
+                                                    <span className="flex-1 truncate">{file.name}</span>
+                                                    <button
+                                                        onClick={() => setImportFiles(importFiles.filter((_, i) => i !== idx))}
+                                                        className="text-red-500 hover:text-red-700"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Import Button */}
+                                {importFiles.length > 0 && (
+                                    <Button
+                                        fullWidth
+                                        onClick={handleImportFiles}
+                                        className="h-12 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/10"
+                                    >
+                                        <Sparkles size={16} className="mr-2" />
+                                        Importuj {importFiles.length} {importFiles.length === 1 ? 'test' : 'testów'}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+                            <button
+                                onClick={() => {
+                                    setIsImportModalOpen(false);
+                                    setImportFiles([]);
+                                }}
+                                className="px-5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                Zamknij
+                            </button>
                         </div>
                     </div>
                 </div>
