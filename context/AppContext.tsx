@@ -54,7 +54,7 @@ interface AppContextType {
   addEmployeeNote: (note: any) => Promise<void>;
   deleteEmployeeNote: (id: string) => Promise<void>;
   payReferralBonus: (userId: string) => Promise<void>;
-  addSkill: (skill: Omit<Skill, 'id'>) => Promise<void>;
+  addSkill: (skill: Omit<Skill, 'id'>) => Promise<Skill>;
   updateSkill: (id: string, skill: Partial<Skill>) => Promise<void>;
   deleteSkill: (id: string) => Promise<void>;
   addLibraryResource: (res: LibraryResource) => Promise<void>;
@@ -408,6 +408,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data, error } = await supabase.from('skills').insert([skill]).select().single();
     if (error) throw error;
     setState(prev => ({ ...prev, skills: [...prev.skills, data] }));
+    return data; // Return the created skill
   };
 
   const updateSkill = async (id: string, skill: Partial<Skill>) => {
