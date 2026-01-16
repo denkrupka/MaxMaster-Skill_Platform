@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Wallet, TrendingUp, AlertTriangle, ChevronDown, ChevronUp, Lock, CheckCircle, Clock, Play, AlertCircle, Info, User, Briefcase, Phone, Mail, X, BookOpen, Award, Star, Eye, HardHat } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { calculateSalary } from '../../services/salaryService';
-import { SkillStatus, ContractType, VerificationType, Role, UserStatus } from '../../types';
+import { SkillStatus, ContractType, VerificationType, Role } from '../../types';
 import { CONTRACT_TYPE_LABELS } from '../../constants';
 import { Button } from '../../components/Button';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
@@ -19,18 +19,9 @@ export const EmployeeDashboard = () => {
     const [showContactModal, setShowContactModal] = useState<{type: 'brigadir' | 'hr' | 'coordinator', user: any} | null>(null);
     const [isQualityOpen, setIsQualityOpen] = useState(false);
     const [selectedQualitySkillId, setSelectedQualitySkillId] = useState<string | null>(null);
-    const [trialNow, setTrialNow] = useState(new Date());
 
     // File Viewer State
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
-
-    // Update time for trial progress bar
-    React.useEffect(() => {
-        if (currentUser?.status === UserStatus.TRIAL) {
-            const interval = setInterval(() => setTrialNow(new Date()), 60000); // Update every minute
-            return () => clearInterval(interval);
-        }
-    }, [currentUser?.status]);
 
     if (!currentUser) return null;
 
@@ -157,21 +148,6 @@ export const EmployeeDashboard = () => {
             penalty: skill.hourly_bonus
         };
     }).filter(Boolean);
-
-    // --- LOGIC: TRIAL TIME DATA ---
-    const trialTimeData = useMemo(() => {
-        if (currentUser.status !== UserStatus.TRIAL || !currentUser?.trial_end_date || !currentUser?.hired_date) return null;
-        const start = new Date(currentUser.hired_date).getTime();
-        const end = new Date(currentUser.trial_end_date).getTime();
-        const currentTime = trialNow.getTime();
-        const remaining = end - currentTime;
-        const isEnded = remaining <= 0;
-        const daysLeft = isEnded ? 0 : Math.ceil(remaining / (1000 * 3600 * 24));
-        const total = end - start;
-        const elapsed = currentTime - start;
-        const percent = isEnded ? 100 : Math.min(100, Math.max(0, (elapsed / total) * 100));
-        return { daysLeft, percent, isEnded };
-    }, [currentUser, trialNow]);
 
     // --- LOGIC: BADGES ---
     const myBadges = employeeBadges
@@ -459,41 +435,6 @@ export const EmployeeDashboard = () => {
                     </button>
                 </div>
             </div>
-
-            {/* TRIAL PROGRESS BAR - Only for employees on trial period */}
-            {currentUser.status === UserStatus.TRIAL && trialTimeData && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600">
-                            <Clock size={28}/>
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Twój Okres Próbny</h2>
-                            <p className="text-sm text-slate-500 font-medium">Status: {trialTimeData.isEnded ? 'Zakończony' : 'W trakcie'}</p>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 max-w-md w-full">
-                        <div className="flex justify-between text-xs font-black uppercase tracking-widest text-slate-400 mb-2">
-                            <span>Postęp czasu</span>
-                            <span className={trialTimeData.daysLeft <= 7 ? 'text-red-500' : 'text-orange-600'}>
-                                Zostało: {trialTimeData.daysLeft} dni
-                            </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden shadow-inner">
-                            <div
-                                className="bg-gradient-to-r from-orange-400 to-orange-600 h-full transition-all duration-1000 shadow-sm"
-                                style={{ width: `${trialTimeData.percent}%` }}
-                            ></div>
-                        </div>
-                    </div>
-
-                    <div className="hidden md:block border-l border-slate-100 pl-6">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Koniec okresu</div>
-                        <div className="font-bold text-slate-700">{currentUser.trial_end_date?.split('T')[0]}</div>
-                    </div>
-                </div>
-            )}
 
             {/* BADGES SECTION */}
             {myBadges.length > 0 && (
