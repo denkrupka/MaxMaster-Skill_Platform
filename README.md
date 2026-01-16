@@ -19,15 +19,32 @@
 3. Запустите сервер из корневой директории проекта.
 4. Откройте `http://127.0.0.1:5500` (или ваш порт).
 
-## Конфигурация AI (опционально)
+## Конфигурация AI (обязательно для production)
 
-Для работы функции автоматического парсинга CV через AI, необходимо настроить Google Gemini API:
+Парсинг CV через AI работает через **Supabase Edge Function** для безопасности.
 
-1. Получите API ключ на [https://ai.google.dev/](https://ai.google.dev/)
-2. Скопируйте `.env.example` в `.env`
-3. Добавьте свой API ключ: `VITE_GEMINI_API_KEY=your_api_key_here`
+### Быстрая настройка:
 
-Без настройки AI, система будет работать, но парсинг CV будет недоступен (можно вводить данные вручную).
+1. **Получите Google Gemini API ключ:**
+   - Перейдите на https://ai.google.dev/
+   - Нажмите "Get API key" и создайте ключ
+
+2. **Добавьте ключ в Supabase:**
+   ```bash
+   # Через Supabase CLI
+   supabase secrets set GEMINI_API_KEY=your_api_key_here
+   ```
+
+   Или через Dashboard: **Settings** → **Secrets** → добавьте `GEMINI_API_KEY`
+
+3. **Задеплойте Edge Function:**
+   ```bash
+   supabase functions deploy parse-cv
+   ```
+
+**Подробные инструкции:** см. `supabase/functions/README.md`
+
+Без настройки AI парсинг CV будет недоступен (можно вводить данные вручную).
 
 ## Миграции базы данных
 

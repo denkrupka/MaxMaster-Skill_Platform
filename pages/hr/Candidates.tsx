@@ -12,9 +12,8 @@ import { Button } from '../../components/Button';
 import { User, Role, UserStatus, SkillStatus, VerificationType, CandidateHistoryEntry, ContractType } from '../../types';
 import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
-import { uploadDocument } from '../../lib/supabase';
+import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
-import { GoogleGenAI, Type } from "@google/genai";
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -286,6 +285,7 @@ export const HRCandidatesPage = () => {
             }
             setIsAILoading(true);
             try {
+                // Read file as base64
                 const reader = new FileReader();
                 const base64Promise = new Promise<string>((resolve) => {
                     reader.onload = () => {
@@ -295,35 +295,36 @@ export const HRCandidatesPage = () => {
                 });
                 reader.readAsDataURL(file);
                 const base64Data = await base64Promise;
-                const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-                
-                const posNames = positions.map(p => p.name).join(', ');
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
-                    contents: {
-                        parts: [
-                            { inlineData: { mimeType: 'application/pdf', data: base64Data } },
-                            { text: `Extract candidate details from this resume. Return a JSON object with fields: first_name, last_name, email, phone (formatted with +48), target_position (must be one of: ${posNames}). If a field is not found, use an empty string.` }
-                        ]
-                    },
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                first_name: { type: Type.STRING },
-                                last_name: { type: Type.STRING },
-                                email: { type: Type.STRING },
-                                phone: { type: Type.STRING },
-                                target_position: { type: Type.STRING }
-                            },
-                            required: ["first_name", "last_name", "email", "phone", "target_position"]
-                        }
+
+                const posNames = positions.map(p => p.name);
+
+                // Call Supabase Edge Function instead of direct Gemini API
+                const { data, error } = await supabase.functions.invoke('parse-cv', {
+                    body: {
+                        pdfBase64: base64Data,
+                        positions: posNames
                     }
                 });
-                const result = JSON.parse(response.text || '{}');
-                setNewCandidateData({ first_name: result.first_name || '', last_name: result.last_name || '', email: result.email || '', phone: result.phone ? formatPhone(result.phone) : '', target_position: positions.some(p => p.name === result.target_position) ? result.target_position : '', source: 'Import z CV (AI)', cvFile: file });
+
+                if (error) {
+                    console.error('Edge function error:', error);
+                    throw error;
+                }
+
+                if (!data?.success) {
+                    throw new Error(data?.error || 'Failed to parse CV');
+                }
+
+                const result = data.data;
+                setNewCandidateData({
+                    first_name: result.first_name || '',
+                    last_name: result.last_name || '',
+                    email: result.email || '',
+                    phone: result.phone ? formatPhone(result.phone) : '',
+                    target_position: positions.some(p => p.name === result.target_position) ? result.target_position : '',
+                    source: 'Import z CV (AI)',
+                    cvFile: file
+                });
                 setIsSelectionModalOpen(false);
                 setIsAddModalOpen(true);
                 triggerNotification('success', 'AI Przetworzyło CV', 'Dane zostały wyodrębnione i uzupełnione w formularzu.');
@@ -331,7 +332,7 @@ export const HRCandidatesPage = () => {
                 console.error('AI Import error:', err);
                 setIsSelectionModalOpen(false);
                 setNewCandidateData(prev => ({ ...prev, cvFile: file, source: 'Import z CV (Błąd AI)' }));
-                setIsAddModalOpen(true); 
+                setIsAddModalOpen(true);
                 triggerNotification('info', 'Problem z AI', 'Nie udało się przeanalizować CV automatycznie. Proszę uzupełnić dane ręcznie.');
             } finally {
                 setIsAILoading(false);
