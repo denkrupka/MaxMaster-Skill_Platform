@@ -114,18 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 </>
             )}
 
-            {/* --- TRIAL EMPLOYEE VIEW --- */}
-            {currentUser?.status === UserStatus.TRIAL && (
-                <>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Okres Próbny</p>
-                    <NavItem to="/trial/dashboard" icon={Clock} label="Mój Okres Próbny" />
-                    <NavItem to="/trial/library" icon={BookOpen} label="Biblioteka" />
-                    <NavItem to="/trial/profile" icon={User} label="Mój Profil" />
-                </>
-            )}
-
-            {/* --- FULL EMPLOYEE VIEW (POST-TRIAL) --- */}
-            {((currentUser?.role === Role.EMPLOYEE || currentUser?.role === Role.BRIGADIR) && currentUser?.status !== UserStatus.TRIAL) && (
+            {/* --- EMPLOYEE VIEW (BOTH TRIAL AND ACTIVE) --- */}
+            {(currentUser?.role === Role.EMPLOYEE || currentUser?.role === Role.BRIGADIR) && (
               <>
                 {/* --- BRIGADIR VIEW EXTENSION --- */}
                 {currentUser?.role === Role.BRIGADIR && (
@@ -139,8 +129,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                   </>
                 )}
 
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Pracownik</p>
-                
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                  {currentUser?.status === UserStatus.TRIAL ? 'Okres Próbny' : 'Pracownik'}
+                </p>
+
                 <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
                 <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i Uprawnienia" />
                 <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia Jakości" />
