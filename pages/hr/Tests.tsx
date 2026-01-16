@@ -7,7 +7,7 @@ import { Test, SkillCategory, Question, GradingStrategy, Skill } from '../../typ
 import * as XLSX from 'xlsx';
 
 export const HRTestsPage = () => {
-    const { state, addTest, updateTest, updateSkill } = useAppContext();
+    const { state, addTest, updateTest, updateSkill, addSkill } = useAppContext();
     const [activeCategory, setActiveCategory] = useState<SkillCategory | null>(null);
     const [isTestDetailOpen, setIsTestDetailOpen] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -290,27 +290,41 @@ export const HRTestsPage = () => {
                 let skill = state.skills.find(s => s.name_pl.toLowerCase() === skillName.toLowerCase());
 
                 if (!skill) {
-                    // Create new skill
-                    const newSkill: Omit<Skill, 'id'> = {
-                        name_pl: skillName,
-                        category: categoryName as SkillCategory,
-                        description_pl: `Automatycznie utworzona z importu: ${skillName}`,
-                        verification_type: 'theory_practice' as any,
-                        hourly_bonus: hourlyBonus,
-                        required_pass_rate: requiredPassRate,
-                        is_active: true,
-                        is_archived: false
-                    };
+                    // Create new skill automatically
+                    try {
+                        const newSkill: Omit<Skill, 'id'> = {
+                            name_pl: skillName,
+                            category: categoryName as SkillCategory,
+                            description_pl: `Automatycznie utworzona z importu: ${skillName}`,
+                            verification_type: 'theory_practice' as any,
+                            hourly_bonus: hourlyBonus || 0,
+                            required_pass_rate: requiredPassRate || 80,
+                            is_active: true,
+                            is_archived: false
+                        };
 
-                    // Add skill to context (assuming addSkill exists or using updateSkill)
-                    // For now, we'll skip this and show error
-                    errors.push(`${file.name}: Umiejętność "${skillName}" nie istnieje. Dodaj ją ręcznie przed importem.`);
-                    errorCount++;
-                    continue;
+                        await addSkill(newSkill);
+
+                        // Refresh state to get the newly created skill
+                        skill = state.skills.find(s => s.name_pl.toLowerCase() === skillName.toLowerCase());
+
+                        if (!skill) {
+                            errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);
+                            errorCount++;
+                            continue;
+                        }
+                    } catch (err) {
+                        console.error(`Error creating skill:`, err);
+                        errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);
+                        errorCount++;
+                        continue;
+                    }
                 }
 
                 // Parse questions (starting from row 13, index 13 in 0-based)
                 const questions: Question[] = [];
+                const questionErrors: string[] = [];
+
                 for (let i = 14; i < jsonData.length; i++) {
                     const row = jsonData[i];
                     if (!row || !row[1]) continue; // Skip empty rows
@@ -321,6 +335,12 @@ export const HRTestsPage = () => {
                     const correctAnswersStr = row[8] || '';
                     const gradingStrategy = (row[9] || 'ALL_CORRECT') as GradingStrategy;
                     const imageUrl = row[10] || undefined;
+
+                    // Validate minimum 2 options
+                    if (options.length < 2) {
+                        questionErrors.push(`Pytanie ${i - 13}: minimum 2 opcje odpowiedzi są wymagane (znaleziono: ${options.length})`);
+                        continue;
+                    }
 
                     // Parse correct answers (e.g., "A,C" -> [0, 2])
                     const correctOptionIndices: number[] = [];
@@ -347,6 +367,13 @@ export const HRTestsPage = () => {
                         timeLimit,
                         imageUrl
                     });
+                }
+
+                // Check for question errors
+                if (questionErrors.length > 0) {
+                    errors.push(`${file.name}:\n  ${questionErrors.join('\n  ')}`);
+                    errorCount++;
+                    continue;
                 }
 
                 if (questions.length === 0) {
