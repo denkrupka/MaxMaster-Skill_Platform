@@ -528,22 +528,54 @@ export const HRCandidatesPage = () => {
         if (!selectedCandidate) return null;
 
         const candidateSkills = userSkills.filter(us => us.user_id === selectedCandidate.id);
-        
-        // Obliczenia używające systemConfig.baseRate
-        const salaryInfo = calculateSalary(
-            systemConfig.baseRate,
-            skills,
-            candidateSkills.filter(us => !us.is_archived),
-            { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
-            new Date(),
-            []
-        );
+
+        // Calculate skills bonus from test attempts (like in candidate dashboard)
+        const candidateTestAttempts = testAttempts.filter(ta => ta.user_id === selectedCandidate.id);
+        let skillsBonus = 0;
+        const countedSkillIds = new Set<string>();
+
+        candidateTestAttempts.forEach(ta => {
+            if (ta.passed) {
+                const test = tests.find(t => t.id === ta.test_id);
+                if (test) {
+                    test.skill_ids.forEach(sid => {
+                        if (!countedSkillIds.has(sid)) {
+                            const skill = skills.find(s => s.id === sid);
+                            if (skill) {
+                                skillsBonus += skill.hourly_bonus;
+                                countedSkillIds.add(sid);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        // Calculate qualifications bonus (like in candidate dashboard)
+        const QUALIFICATIONS_LIST = [
+            { id: 'sep_e', label: 'SEP E z pomiarami', value: 0.5 },
+            { id: 'sep_d', label: 'SEP D z pomiarami', value: 0.5 },
+            { id: 'udt', label: 'UDT na podnośniki', value: 1.0 }
+        ];
+
+        const userQuals = selectedCandidate.qualifications || [];
+        let qualBonus = 0;
+
+        QUALIFICATIONS_LIST
+            .filter(q => userQuals.includes(q.id))
+            .forEach(q => {
+                const expectedDocName = `Certyfikat ${q.label}`;
+                const doc = candidateSkills.find(d => d.custom_name === expectedDocName);
+                if (!doc || doc.status !== SkillStatus.FAILED) {
+                    qualBonus += q.value;
+                }
+            });
 
         const contractType = selectedCandidate.contract_type || 'uop';
         const contractBonus = systemConfig.contractBonuses[contractType] || 0;
         const studentBonus = (contractType === 'uz' && selectedCandidate.is_student) ? systemConfig.studentBonus : 0;
         const totalExtras = contractBonus + studentBonus;
-        const totalRate = salaryInfo.total + totalExtras;
+        const totalRate = systemConfig.baseRate + skillsBonus + qualBonus + totalExtras;
 
         const candidateAttempts = testAttempts.filter(ta => ta.user_id === selectedCandidate.id);
         const dataReady = isDataComplete(selectedCandidate);
@@ -708,11 +740,11 @@ export const HRCandidatesPage = () => {
                                     </div>
                                     <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
                                         <div className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">UMIEJĘTNOŚCI</div>
-                                        <div className="text-2xl font-black text-green-600">+{salaryInfo.breakdown.skills.toFixed(2)} zł</div>
+                                        <div className="text-2xl font-black text-green-600">+{skillsBonus.toFixed(2)} zł</div>
                                     </div>
                                     <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm text-center flex flex-col justify-center min-h-[110px]">
                                         <div className="text-[9px] font-black text-purple-600 uppercase tracking-widest mb-1">UPRAWNIENIA</div>
-                                        <div className="text-2xl font-black text-purple-600">+{salaryInfo.breakdown.monthly.toFixed(2)} zł</div>
+                                        <div className="text-2xl font-black text-purple-600">+{qualBonus.toFixed(2)} zł</div>
                                     </div>
                                     <div className="relative">
                                         <div 
@@ -890,12 +922,53 @@ export const HRCandidatesPage = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {filteredCandidates.map(candidate => {
-                            const cs = userSkills.filter(us => us.user_id === candidate.id && !us.is_archived);
-                            const s = calculateSalary(systemConfig.baseRate, skills, cs, { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 });
+                            // Calculate skills bonus from test attempts
+                            const candTestAttempts = testAttempts.filter(ta => ta.user_id === candidate.id);
+                            let candSkillsBonus = 0;
+                            const candCountedSkillIds = new Set<string>();
+
+                            candTestAttempts.forEach(ta => {
+                                if (ta.passed) {
+                                    const test = tests.find(t => t.id === ta.test_id);
+                                    if (test) {
+                                        test.skill_ids.forEach(sid => {
+                                            if (!candCountedSkillIds.has(sid)) {
+                                                const skill = skills.find(s => s.id === sid);
+                                                if (skill) {
+                                                    candSkillsBonus += skill.hourly_bonus;
+                                                    candCountedSkillIds.add(sid);
+                                                }
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+
+                            // Calculate qualifications bonus
+                            const QUALIFICATIONS_LIST = [
+                                { id: 'sep_e', label: 'SEP E z pomiarami', value: 0.5 },
+                                { id: 'sep_d', label: 'SEP D z pomiarami', value: 0.5 },
+                                { id: 'udt', label: 'UDT na podnośniki', value: 1.0 }
+                            ];
+
+                            const candUserQuals = candidate.qualifications || [];
+                            let candQualBonus = 0;
+                            const candUserSkills = userSkills.filter(us => us.user_id === candidate.id);
+
+                            QUALIFICATIONS_LIST
+                                .filter(q => candUserQuals.includes(q.id))
+                                .forEach(q => {
+                                    const expectedDocName = `Certyfikat ${q.label}`;
+                                    const doc = candUserSkills.find(d => d.custom_name === expectedDocName);
+                                    if (!doc || doc.status !== SkillStatus.FAILED) {
+                                        candQualBonus += q.value;
+                                    }
+                                });
+
                             const ct = candidate.contract_type || ContractType.UOP;
                             const cb = systemConfig.contractBonuses[ct] || 0;
                             const sb = (ct === ContractType.UZ && candidate.is_student) ? systemConfig.studentBonus : 0;
-                            const total = (s.total + cb + sb).toFixed(2);
+                            const total = (systemConfig.baseRate + candSkillsBonus + candQualBonus + cb + sb).toFixed(2);
 
                             return (
                                 <tr key={candidate.id} className="hover:bg-slate-50 cursor-pointer transition-colors group" onClick={() => setSelectedCandidate(candidate)}>
