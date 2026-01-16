@@ -76,7 +76,7 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
       return <Navigate to="/terminated" replace />;
   }
 
-  // Trial User Logic
+  // Trial User Logic - redirect to /trial/* routes
   if (state.currentUser.status === UserStatus.TRIAL) {
       if (checkTrial && window.location.hash.includes('/dashboard') && !window.location.hash.includes('/trial')) {
           return <Navigate to="/trial/dashboard" replace />;
@@ -134,27 +134,33 @@ export default function App() {
           <Route path="/candidate/thank-you" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateThankYouPage /></ProtectedRoute>} />
           <Route path="/candidate/profile" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateProfilePage /></ProtectedRoute>} />
 
-          <Route path="/trial/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><TrialDashboard /></ProtectedRoute>} />
-          <Route path="/trial/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><EmployeeLibrary /></ProtectedRoute>} />
-          <Route path="/trial/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><TrialProfilePage /></ProtectedRoute>} />
-          <Route path="/trial/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><CandidateTestsPage /></ProtectedRoute>} />
+          {/* Trial Employee Routes - Old URLs with full functionality */}
+          <Route path="/trial/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><TrialDashboard /></ProtectedRoute>} />
+          <Route path="/trial/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeSkills /></ProtectedRoute>} />
+          <Route path="/trial/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeQualityHistory /></ProtectedRoute>} />
+          <Route path="/trial/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeLibrary /></ProtectedRoute>} />
+          <Route path="/trial/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeCareer /></ProtectedRoute>} />
+          <Route path="/trial/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeReferrals /></ProtectedRoute>} />
+          <Route path="/trial/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><TrialProfilePage /></ProtectedRoute>} />
+          <Route path="/trial/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeTests /></ProtectedRoute>} />
+          <Route path="/trial/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeePractice /></ProtectedRoute>} />
 
-          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeDashboard /></ProtectedRoute>} />
-          <Route path="/dashboard/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeSkills /></ProtectedRoute>} />
-          <Route path="/dashboard/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeTests /></ProtectedRoute>} />
-          <Route path="/dashboard/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeePractice /></ProtectedRoute>} />
-          <Route path="/dashboard/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeQualityHistory /></ProtectedRoute>} />
-          <Route path="/dashboard/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeReferrals /></ProtectedRoute>} />
-          <Route path="/dashboard/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeLibrary /></ProtectedRoute>} />
-          <Route path="/dashboard/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeCareer /></ProtectedRoute>} />
-          <Route path="/dashboard/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeProfile /></ProtectedRoute>} />
-          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} checkTrial={true}><CandidateTestsPage /></ProtectedRoute>} />
-          <Route path="/dashboard/salary" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} checkTrial={true}><EmployeeSalaryPage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSkills /></ProtectedRoute>} />
+          <Route path="/dashboard/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeTests /></ProtectedRoute>} />
+          <Route path="/dashboard/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeePractice /></ProtectedRoute>} />
+          <Route path="/dashboard/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeQualityHistory /></ProtectedRoute>} />
+          <Route path="/dashboard/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeReferrals /></ProtectedRoute>} />
+          <Route path="/dashboard/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeLibrary /></ProtectedRoute>} />
+          <Route path="/dashboard/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeCareer /></ProtectedRoute>} />
+          <Route path="/dashboard/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeProfile /></ProtectedRoute>} />
+          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} ><CandidateTestsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/salary" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSalaryPage /></ProtectedRoute>} />
 
-          <Route path="/brigadir/dashboard" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} checkTrial={true}><BrigadirDashboard /></ProtectedRoute>} />
-          <Route path="/brigadir/checks" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} checkTrial={true}><BrigadirChecksPage /></ProtectedRoute>} />
-          <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} checkTrial={true}><BrigadirTeamPage /></ProtectedRoute>} />
-          <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} checkTrial={true}><BrigadirQualityPage /></ProtectedRoute>} />
+          <Route path="/brigadir/dashboard" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirDashboard /></ProtectedRoute>} />
+          <Route path="/brigadir/checks" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirChecksPage /></ProtectedRoute>} />
+          <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirTeamPage /></ProtectedRoute>} />
+          <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirQualityPage /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

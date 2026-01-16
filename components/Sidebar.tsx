@@ -119,7 +119,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 <>
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Okres Próbny</p>
                     <NavItem to="/trial/dashboard" icon={Clock} label="Mój Okres Próbny" />
+                    <NavItem to="/trial/skills" icon={Award} label="Umiejętności i Uprawnienia" />
+                    <NavItem to="/trial/quality" icon={AlertTriangle} label="Historia Jakości" />
                     <NavItem to="/trial/library" icon={BookOpen} label="Biblioteka" />
+                    <NavItem to="/trial/career" icon={Briefcase} label="Rozwój Zawodowy" />
+                    <NavItem to="/trial/referrals" icon={UserPlus} label="Zaproś znajomego" />
                     <NavItem to="/trial/profile" icon={User} label="Mój Profil" />
                 </>
             )}
@@ -140,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 )}
 
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Pracownik</p>
-                
+
                 <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
                 <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i Uprawnienia" />
                 <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia Jakości" />

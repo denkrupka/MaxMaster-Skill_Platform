@@ -13,13 +13,13 @@ export const EmployeeDashboard = () => {
     const { state } = useAppContext();
     const { currentUser, userSkills, skills, systemConfig, monthlyBonuses, tests, testAttempts, qualityIncidents, libraryResources, employeeBadges } = state;
     const navigate = useNavigate();
-    
+
     // UI States
     const [breakdownType, setBreakdownType] = useState<'current' | 'potential' | null>(null);
     const [showContactModal, setShowContactModal] = useState<{type: 'brigadir' | 'hr' | 'coordinator', user: any} | null>(null);
     const [isQualityOpen, setIsQualityOpen] = useState(false);
     const [selectedQualitySkillId, setSelectedQualitySkillId] = useState<string | null>(null);
-    
+
     // File Viewer State
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
 
