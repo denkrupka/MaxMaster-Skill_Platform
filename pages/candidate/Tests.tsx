@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, CheckCircle, Clock, AlertTriangle, ChevronRight, Lock, Circle, ArrowRight, X, ZoomIn } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { Test, GradingStrategy, UserStatus, Role } from '../../types';
+import { Test, GradingStrategy, UserStatus, Role, Question } from '../../types';
 
 export const CandidateTestsPage = () => {
     const { state, startTest, submitTest, updateUser } = useAppContext();
@@ -22,6 +22,7 @@ export const CandidateTestsPage = () => {
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
     const [answers, setAnswers] = useState<number[][]>([]);
     const [testStarted, setTestStarted] = useState(false);
+    const [displayedQuestions, setDisplayedQuestions] = useState<Question[]>([]);
     
     // Timer State
     const [timeLeft, setTimeLeft] = useState(30);
@@ -55,14 +56,24 @@ export const CandidateTestsPage = () => {
     const activeTest = testQueue[currentTestIndex];
     const progressPercent = testQueue.length > 0 ? ((currentTestIndex) / testQueue.length) * 100 : 0;
 
+    // Helper function to shuffle array
+    const shuffleArray = <T,>(array: T[]): T[] => {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    };
+
     // --- Timer Logic ---
     useEffect(() => {
-        if (activeTest && testStarted) {
+        if (displayedQuestions.length > 0 && testStarted) {
             // Set time based on question config or default 30s
-            const questionTime = activeTest.questions[currentQuestionIdx]?.timeLimit || 30;
+            const questionTime = displayedQuestions[currentQuestionIdx]?.timeLimit || 30;
             setTimeLeft(questionTime);
         }
-    }, [currentQuestionIdx, activeTest, testStarted]);
+    }, [currentQuestionIdx, displayedQuestions, testStarted]);
 
     useEffect(() => {
         if (!testStarted) return;
@@ -88,12 +99,23 @@ export const CandidateTestsPage = () => {
             alert("Ten test nie ma jeszcze pytań. Skontaktuj się z administratorem.");
             return;
         }
-        setAnswers(new Array(activeTest.questions.length).fill([]));
+
+        // Shuffle and potentially limit questions
+        let questionsToUse = [...activeTest.questions];
+        questionsToUse = shuffleArray(questionsToUse);
+
+        // If questions_to_display is set and less than total, select that many questions
+        if (activeTest.questions_to_display && activeTest.questions_to_display < questionsToUse.length) {
+            questionsToUse = questionsToUse.slice(0, activeTest.questions_to_display);
+        }
+
+        setDisplayedQuestions(questionsToUse);
+        setAnswers(new Array(questionsToUse.length).fill([]));
         setCurrentQuestionIdx(0);
         setTestStarted(true);
         setStartTime(Date.now()); // Capture start time
         startTest(activeTest.skill_ids[0]); // Log
-        
+
         // Update status to 'tests_in_progress' if not already and ONLY IF CANDIDATE
         if (currentUser && currentUser.status === UserStatus.STARTED && currentUser.role === Role.CANDIDATE) {
             updateUser(currentUser.id, { status: UserStatus.TESTS_IN_PROGRESS });
@@ -120,7 +142,7 @@ export const CandidateTestsPage = () => {
     };
 
     const handleNextQuestion = () => {
-        if (activeTest && currentQuestionIdx < activeTest.questions.length - 1) {
+        if (currentQuestionIdx < displayedQuestions.length - 1) {
             setCurrentQuestionIdx(currentQuestionIdx + 1);
         } else {
             finishCurrentTest();
@@ -136,15 +158,15 @@ export const CandidateTestsPage = () => {
 
         // Calculate Score
         let correctCount = 0;
-        const totalQuestions = activeTest.questions.length;
+        const totalQuestions = displayedQuestions.length;
 
-        activeTest.questions.forEach((q, idx) => {
-            const userAnswers = answers[idx] || []; 
+        displayedQuestions.forEach((q, idx) => {
+            const userAnswers = answers[idx] || [];
             const correctAnswers = q.correctOptionIndices;
             const strategy = q.gradingStrategy || GradingStrategy.ALL_CORRECT;
 
             let isCorrect = false;
-            
+
             if (userAnswers.length > 0) {
                 if (strategy === GradingStrategy.ANY_CORRECT) {
                     const intersection = userAnswers.filter(a => correctAnswers.includes(a));
@@ -158,7 +180,7 @@ export const CandidateTestsPage = () => {
                     if (hasAllCorrect && hasNoIncorrect) isCorrect = true;
                 }
             }
-            
+
             if (isCorrect) correctCount++;
         });
 
@@ -214,7 +236,7 @@ export const CandidateTestsPage = () => {
         );
     }
 
-    const currentQuestion = activeTest?.questions[currentQuestionIdx];
+    const currentQuestion = displayedQuestions[currentQuestionIdx];
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
@@ -294,11 +316,15 @@ export const CandidateTestsPage = () => {
                             </div>
                             <h2 className="text-3xl font-bold text-slate-900 mb-4">{activeTest.title}</h2>
                             <p className="text-slate-500 mb-8 leading-relaxed">
-                                Test składa się z <strong>{activeTest.questions.length} pytań</strong>. 
+                                Test składa się z <strong>
+                                    {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length
+                                        ? `${activeTest.questions_to_display} losowo wybranych`
+                                        : activeTest.questions.length
+                                    } pytań</strong>.
                                 <br />
                                 Czas na cały test: ok. <strong>{activeTest.time_limit_minutes} min</strong>.
                                 <br />
-                                Pamiętaj, na każde pytanie masz ograniczony czas.
+                                Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
                             </p>
                             <Button size="lg" onClick={handleStartTest} className="px-12 shadow-blue-500/30 shadow-lg">
                                 Rozpocznij Test
@@ -307,8 +333,8 @@ export const CandidateTestsPage = () => {
                     ) : currentQuestion ? (
                         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-3xl mx-auto animate-in slide-in-from-right duration-300">
                             <div className="mb-6 flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
-                                <span>Pytanie {currentQuestionIdx + 1} z {activeTest.questions.length}</span>
-                                <span>Postęp w teście: {Math.round(((currentQuestionIdx + 1) / activeTest.questions.length) * 100)}%</span>
+                                <span>Pytanie {currentQuestionIdx + 1} z {displayedQuestions.length}</span>
+                                <span>Postęp w teście: {Math.round(((currentQuestionIdx + 1) / displayedQuestions.length) * 100)}%</span>
                             </div>
 
                             {currentQuestion.imageUrl && (
@@ -364,12 +390,12 @@ export const CandidateTestsPage = () => {
                             </div>
 
                             <div className="flex justify-end pt-6 border-t border-slate-100">
-                                <Button 
-                                    size="lg" 
-                                    onClick={handleNextQuestion} 
+                                <Button
+                                    size="lg"
+                                    onClick={handleNextQuestion}
                                     className="px-8"
                                 >
-                                    {currentQuestionIdx < activeTest.questions.length - 1 ? 'Następne Pytanie' : 'Zakończ Test'}
+                                    {currentQuestionIdx < displayedQuestions.length - 1 ? 'Następne Pytanie' : 'Zakończ Test'}
                                     <ChevronRight size={18} className="ml-2" />
                                 </Button>
                             </div>
