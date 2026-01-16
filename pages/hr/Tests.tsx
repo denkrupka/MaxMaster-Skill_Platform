@@ -303,16 +303,8 @@ export const HRTestsPage = () => {
                             is_archived: false
                         };
 
-                        await addSkill(newSkill);
-
-                        // Refresh state to get the newly created skill
-                        skill = state.skills.find(s => s.name_pl.toLowerCase() === skillName.toLowerCase());
-
-                        if (!skill) {
-                            errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);
-                            errorCount++;
-                            continue;
-                        }
+                        // Use the returned skill directly instead of searching state
+                        skill = await addSkill(newSkill);
                     } catch (err) {
                         console.error(`Error creating skill:`, err);
                         errors.push(`${file.name}: Błąd podczas tworzenia umiejętności "${skillName}"`);

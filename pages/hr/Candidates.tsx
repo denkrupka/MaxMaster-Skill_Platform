@@ -1,20 +1,19 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-    ArrowLeft, Send, Clock, XCircle, Search, ChevronRight, Download, FileText, 
-    Plus, Archive, RotateCcw, AlertTriangle, User as UserIcon, Calendar, 
-    CheckCircle, Edit, Trash2, UserPlus, Briefcase, UserCheck, Eye, X, 
-    Upload, ChevronDown, Bot, Loader2, Share2, Copy, FileInput, Save, 
-    Shield, Wallet, Award, Calculator, ChevronLeft, Globe, Mail, Phone, ExternalLink, Activity, Info as InfoIcon, MapPin, Sparkles
+import {
+    ArrowLeft, Send, Clock, XCircle, Search, ChevronRight, Download, FileText,
+    Plus, Archive, RotateCcw, AlertTriangle, User as UserIcon, Calendar,
+    Check, CheckCircle, Edit, Trash2, UserPlus, Briefcase, UserCheck, Eye, X,
+    Upload, ChevronDown, Bot, Loader2, Share2, Copy, FileInput, Save,
+    Shield, Wallet, Award, Calculator, ChevronLeft, Globe, Mail, Phone, ExternalLink, Activity, Info as InfoIcon, MapPin, Sparkles, Link2, MessageCircle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { User, Role, UserStatus, SkillStatus, VerificationType, CandidateHistoryEntry, ContractType } from '../../types';
 import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
-import { uploadDocument } from '../../lib/supabase';
+import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
-import { GoogleGenAI, Type } from "@google/genai";
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -99,6 +98,10 @@ export const HRCandidatesPage = () => {
 
     // Validation state
     const [validationErrors, setValidationErrors] = useState<{email?: string, phone?: string}>({});
+
+    // Invitation link modal
+    const [isInvitationModalOpen, setIsInvitationModalOpen] = useState(false);
+    const [invitationLink, setInvitationLink] = useState('');
 
     const brigadirsList = useMemo(() => {
         return users.filter(u => u.role === Role.BRIGADIR);
@@ -282,6 +285,7 @@ export const HRCandidatesPage = () => {
             }
             setIsAILoading(true);
             try {
+                // Read file as base64
                 const reader = new FileReader();
                 const base64Promise = new Promise<string>((resolve) => {
                     reader.onload = () => {
@@ -291,35 +295,36 @@ export const HRCandidatesPage = () => {
                 });
                 reader.readAsDataURL(file);
                 const base64Data = await base64Promise;
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                
-                const posNames = positions.map(p => p.name).join(', ');
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
-                    contents: {
-                        parts: [
-                            { inlineData: { mimeType: 'application/pdf', data: base64Data } },
-                            { text: `Extract candidate details from this resume. Return a JSON object with fields: first_name, last_name, email, phone (formatted with +48), target_position (must be one of: ${posNames}). If a field is not found, use an empty string.` }
-                        ]
-                    },
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                first_name: { type: Type.STRING },
-                                last_name: { type: Type.STRING },
-                                email: { type: Type.STRING },
-                                phone: { type: Type.STRING },
-                                target_position: { type: Type.STRING }
-                            },
-                            required: ["first_name", "last_name", "email", "phone", "target_position"]
-                        }
+
+                const posNames = positions.map(p => p.name);
+
+                // Call Supabase Edge Function instead of direct Gemini API
+                const { data, error } = await supabase.functions.invoke('parse-cv', {
+                    body: {
+                        pdfBase64: base64Data,
+                        positions: posNames
                     }
                 });
-                const result = JSON.parse(response.text || '{}');
-                setNewCandidateData({ first_name: result.first_name || '', last_name: result.last_name || '', email: result.email || '', phone: result.phone ? formatPhone(result.phone) : '', target_position: positions.some(p => p.name === result.target_position) ? result.target_position : '', source: 'Import z CV (AI)', cvFile: file });
+
+                if (error) {
+                    console.error('Edge function error:', error);
+                    throw error;
+                }
+
+                if (!data?.success) {
+                    throw new Error(data?.error || 'Failed to parse CV');
+                }
+
+                const result = data.data;
+                setNewCandidateData({
+                    first_name: result.first_name || '',
+                    last_name: result.last_name || '',
+                    email: result.email || '',
+                    phone: result.phone ? formatPhone(result.phone) : '',
+                    target_position: positions.some(p => p.name === result.target_position) ? result.target_position : '',
+                    source: 'Import z CV (AI)',
+                    cvFile: file
+                });
                 setIsSelectionModalOpen(false);
                 setIsAddModalOpen(true);
                 triggerNotification('success', 'AI Przetworzyło CV', 'Dane zostały wyodrębnione i uzupełnione w formularzu.');
@@ -327,13 +332,47 @@ export const HRCandidatesPage = () => {
                 console.error('AI Import error:', err);
                 setIsSelectionModalOpen(false);
                 setNewCandidateData(prev => ({ ...prev, cvFile: file, source: 'Import z CV (Błąd AI)' }));
-                setIsAddModalOpen(true); 
+                setIsAddModalOpen(true);
                 triggerNotification('info', 'Problem z AI', 'Nie udało się przeanalizować CV automatycznie. Proszę uzupełnić dane ręcznie.');
             } finally {
                 setIsAILoading(false);
                 if (aiFileInputRef.current) aiFileInputRef.current.value = '';
             }
         }
+    };
+
+    const generateInvitationLink = () => {
+        const origin = window.location.origin;
+        const registrationPath = '/register';
+        const link = `${origin}${registrationPath}`;
+        setInvitationLink(link);
+        setIsInvitationModalOpen(true);
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(invitationLink);
+        triggerNotification('success', 'Skopiowano', 'Link został skopiowany do schowka');
+    };
+
+    const shareViaWhatsApp = () => {
+        const message = encodeURIComponent(`Zaproszenie do MaxMaster: ${invitationLink}`);
+        window.open(`https://wa.me/?text=${message}`, '_blank');
+    };
+
+    const shareViaTelegram = () => {
+        const message = encodeURIComponent(`Zaproszenie do MaxMaster: ${invitationLink}`);
+        window.open(`https://t.me/share/url?url=${invitationLink}&text=${message}`, '_blank');
+    };
+
+    const shareViaEmail = () => {
+        const subject = encodeURIComponent('Zaproszenie do MaxMaster');
+        const body = encodeURIComponent(`Witaj!\n\nZapraszam Cię do zarejestrowania się w systemie MaxMaster.\n\nLink do rejestracji: ${invitationLink}\n\nPozdrawiam`);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    };
+
+    const shareViaSMS = () => {
+        const message = encodeURIComponent(`Zaproszenie do MaxMaster: ${invitationLink}`);
+        window.location.href = `sms:?body=${message}`;
     };
 
     const handleSavePersonalData = async () => {
@@ -801,9 +840,14 @@ export const HRCandidatesPage = () => {
                             Odrzuceni
                         </button>
                     </div>
-                    <Button onClick={() => setIsSelectionModalOpen(true)}>
-                        <UserPlus size={18} className="mr-2"/> Dodaj Kandydata
-                    </Button>
+                    <div className="flex gap-3">
+                        <Button variant="outline" onClick={generateInvitationLink}>
+                            <Link2 size={18} className="mr-2"/> Wyślij zaproszenie
+                        </Button>
+                        <Button onClick={() => setIsSelectionModalOpen(true)}>
+                            <UserPlus size={18} className="mr-2"/> Dodaj Kandydata
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -1023,10 +1067,112 @@ export const HRCandidatesPage = () => {
         );
     };
 
+    const renderInvitationModal = () => {
+        if (!isInvitationModalOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-blue-600 to-indigo-600">
+                        <div>
+                            <h2 className="text-xl font-black text-white tracking-tight uppercase">Link Zaproszenia</h2>
+                            <p className="text-xs text-blue-100 font-medium mt-1">Udostępnij ten link kandydatowi do rejestracji</p>
+                        </div>
+                        <button onClick={() => setIsInvitationModalOpen(false)} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all">
+                            <X size={24}/>
+                        </button>
+                    </div>
+
+                    <div className="p-8 space-y-6">
+                        {/* Link Display */}
+                        <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 flex items-center gap-3">
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Link Rejestracyjny</p>
+                                <p className="text-sm font-bold text-slate-800 truncate">{invitationLink}</p>
+                            </div>
+                            <button
+                                onClick={copyToClipboard}
+                                className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl transition-all shadow-md hover:shadow-lg"
+                                title="Kopiuj do schowka"
+                            >
+                                <Copy size={20}/>
+                            </button>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Szybkie Udostępnianie</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    onClick={shareViaWhatsApp}
+                                    className="flex items-center justify-center gap-3 p-4 bg-green-50 hover:bg-green-600 hover:text-white rounded-2xl border-2 border-green-200 hover:border-green-600 transition-all group shadow-sm hover:shadow-lg"
+                                >
+                                    <MessageCircle size={24} className="text-green-600 group-hover:text-white" />
+                                    <div className="text-left">
+                                        <p className="text-xs font-black uppercase tracking-wide">WhatsApp</p>
+                                        <p className="text-[10px] text-green-600 group-hover:text-green-100">Wyślij wiadomość</p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={shareViaTelegram}
+                                    className="flex items-center justify-center gap-3 p-4 bg-blue-50 hover:bg-blue-600 hover:text-white rounded-2xl border-2 border-blue-200 hover:border-blue-600 transition-all group shadow-sm hover:shadow-lg"
+                                >
+                                    <Send size={24} className="text-blue-600 group-hover:text-white" />
+                                    <div className="text-left">
+                                        <p className="text-xs font-black uppercase tracking-wide">Telegram</p>
+                                        <p className="text-[10px] text-blue-600 group-hover:text-blue-100">Wyślij wiadomość</p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={shareViaEmail}
+                                    className="flex items-center justify-center gap-3 p-4 bg-purple-50 hover:bg-purple-600 hover:text-white rounded-2xl border-2 border-purple-200 hover:border-purple-600 transition-all group shadow-sm hover:shadow-lg"
+                                >
+                                    <Mail size={24} className="text-purple-600 group-hover:text-white" />
+                                    <div className="text-left">
+                                        <p className="text-xs font-black uppercase tracking-wide">Email</p>
+                                        <p className="text-[10px] text-purple-600 group-hover:text-purple-100">Otwórz program email</p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={shareViaSMS}
+                                    className="flex items-center justify-center gap-3 p-4 bg-orange-50 hover:bg-orange-600 hover:text-white rounded-2xl border-2 border-orange-200 hover:border-orange-600 transition-all group shadow-sm hover:shadow-lg"
+                                >
+                                    <Phone size={24} className="text-orange-600 group-hover:text-white" />
+                                    <div className="text-left">
+                                        <p className="text-xs font-black uppercase tracking-wide">SMS</p>
+                                        <p className="text-[10px] text-orange-600 group-hover:text-orange-100">Wyślij SMS</p>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Info Box */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
+                            <InfoIcon size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                            <div className="text-xs text-blue-800 leading-relaxed">
+                                <p className="font-bold mb-1">Jak to działa?</p>
+                                <p>Kandydat otrzyma link do strony rejestracji. Po wypełnieniu formularza i przesłaniu danych, będziesz mógł przeglądać jego profil i rozpocząć proces rekrutacji.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-end">
+                        <Button onClick={() => setIsInvitationModalOpen(false)} className="font-black uppercase text-xs tracking-widest px-8">
+                            Zamknij
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="p-6 max-w-7xl mx-auto">
             {selectedCandidate ? renderDetail() : renderList()}
             {renderSelectionModal()}
+            {renderInvitationModal()}
             {renderAddModal()}
             {renderEditBasicModal()}
             {renderDocModal()}
