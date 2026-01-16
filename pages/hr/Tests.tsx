@@ -22,7 +22,8 @@ export const HRTestsPage = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [createTitle, setCreateTitle] = useState('');
     const [createSkillIds, setCreateSkillIds] = useState<string[]>([]);
-    
+    const [createQuestionsToDisplay, setCreateQuestionsToDisplay] = useState<number | undefined>(undefined);
+
     // Create Modal - Temporary selections for adding a skill
     const [tempCategory, setTempCategory] = useState<SkillCategory | ''>('');
     const [tempSkillId, setTempSkillId] = useState('');
@@ -92,16 +93,20 @@ export const HRTestsPage = () => {
             alert("Proszę podać nazwę testu i wybrać przynajmniej jedną umiejętność.");
             return;
         }
-        
+
         addTest({
             title: createTitle,
             skill_ids: createSkillIds,
             questions: [],
             time_limit_minutes: 30,
             is_active: true,
-            is_archived: false
+            is_archived: false,
+            questions_to_display: createQuestionsToDisplay
         });
         setIsCreateModalOpen(false);
+        setCreateTitle('');
+        setCreateSkillIds([]);
+        setCreateQuestionsToDisplay(undefined);
     };
 
     const handleOpenTest = (test: Test) => {
@@ -506,6 +511,24 @@ export const HRTestsPage = () => {
                                 </div>
                             </div>
 
+                            {/* Questions to Display Field */}
+                            <div>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">
+                                    Liczba Pytań Do Wyświetlenia (opcjonalne)
+                                </label>
+                                <input
+                                    type="number"
+                                    className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl font-bold text-slate-800 text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner"
+                                    placeholder="Pozostaw puste = wszystkie pytania"
+                                    min="1"
+                                    value={createQuestionsToDisplay || ''}
+                                    onChange={e => setCreateQuestionsToDisplay(e.target.value ? parseInt(e.target.value) : undefined)}
+                                />
+                                <p className="text-[9px] text-slate-500 mt-1.5 ml-1">
+                                    Jeśli ustawisz np. 20, system losowo wybierze 20 pytań z całej puli przy każdym teście. Pytania będą zawsze w losowej kolejności.
+                                </p>
+                            </div>
+
                             {/* COMPACT Summed Rate Prediction Card (Create Modal) */}
                             <div className="bg-[#1A1C1E] rounded-2xl p-4 text-white relative overflow-hidden shadow-lg border border-slate-800">
                                 <div className="absolute top-0 right-0 p-4 opacity-5"><Award size={60} /></div>
@@ -582,24 +605,49 @@ export const HRTestsPage = () => {
             {/* Test Editor */}
             {isEditorOpen && selectedTest && (
                  <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col">
-                     <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-                         <div>
-                             <h2 className="font-bold text-lg">Redaktor Testu: {selectedTest.title}</h2>
-                             {(() => {
-                                const questions = selectedTest.questions || [];
-                                const totalSeconds = questions.reduce((acc, q) => acc + (q.timeLimit || 30), 0);
-                                const mins = Math.floor(totalSeconds / 60);
-                                const secs = totalSeconds % 60;
-                                return (
-                                    <p className="text-xs text-slate-500">
-                                        {questions.length} pytań • Czas łączny: {mins}m {secs}s (ok. {Math.ceil(totalSeconds/60)} min)
-                                    </p>
-                                );
-                             })()}
+                     <div className="bg-white border-b border-slate-200 px-6 py-4">
+                         <div className="flex justify-between items-start mb-3">
+                             <div>
+                                 <h2 className="font-bold text-lg">Redaktor Testu: {selectedTest.title}</h2>
+                                 {(() => {
+                                    const questions = selectedTest.questions || [];
+                                    const totalSeconds = questions.reduce((acc, q) => acc + (q.timeLimit || 30), 0);
+                                    const mins = Math.floor(totalSeconds / 60);
+                                    const secs = totalSeconds % 60;
+                                    return (
+                                        <p className="text-xs text-slate-500">
+                                            {questions.length} pytań • Czas łączny: {mins}m {secs}s (ok. {Math.ceil(totalSeconds/60)} min)
+                                        </p>
+                                    );
+                                 })()}
+                             </div>
+                             <div className="flex gap-2">
+                                 <Button variant="ghost" onClick={() => setIsEditorOpen(false)}>Anuluj</Button>
+                                 <Button onClick={handleSaveEditor}>Zapisz Zmiany</Button>
+                             </div>
                          </div>
-                         <div className="flex gap-2">
-                             <Button variant="ghost" onClick={() => setIsEditorOpen(false)}>Anuluj</Button>
-                             <Button onClick={handleSaveEditor}>Zapisz Zmiany</Button>
+                         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                             <Target size={18} className="text-blue-600 flex-shrink-0" />
+                             <div className="flex-1">
+                                 <label className="text-[10px] font-bold text-blue-900 uppercase tracking-wide block mb-1">
+                                     Liczba pytań do wyświetlenia
+                                 </label>
+                                 <input
+                                     type="number"
+                                     className="w-32 bg-white border border-blue-300 px-2 py-1 rounded text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none"
+                                     placeholder="Wszystkie"
+                                     min="1"
+                                     max={selectedTest.questions?.length || 0}
+                                     value={selectedTest.questions_to_display || ''}
+                                     onChange={e => setSelectedTest({
+                                         ...selectedTest,
+                                         questions_to_display: e.target.value ? parseInt(e.target.value) : undefined
+                                     })}
+                                 />
+                             </div>
+                             <p className="text-[10px] text-blue-700 leading-tight max-w-md">
+                                 System losowo wybierze tę liczbę pytań z całej puli. Jeśli puste, pokazane będą wszystkie pytania (w losowej kolejności).
+                             </p>
                          </div>
                      </div>
                      <div className="flex flex-1 overflow-hidden">

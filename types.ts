@@ -208,6 +208,7 @@ export interface Test {
   time_limit_minutes: number;
   is_active: boolean;
   is_archived?: boolean;
+  questions_to_display?: number; // Optional: number of questions to show from total pool. If not set, shows all questions.
 }
 
 /**
