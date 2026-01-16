@@ -43,8 +43,13 @@ export const TrialDashboard = () => {
     const nextMonthName = new Date(now.getFullYear(), now.getMonth() + 1, 1).toLocaleString('pl-PL', { month: 'long' });
 
     // --- LOGIC: SALARY ---
+    // During TRIAL period, use frozen rate (set at hiring time)
+    // This ensures candidate gets the rate they agreed to, even before completing practice verifications
+    const frozenRate = currentUser.base_rate || systemConfig.baseRate;
+
+    // For trial employees, calculate what WILL be their rate after trial ends
     const salaryInfo = calculateSalary(
-        currentUser.base_rate || systemConfig.baseRate,
+        systemConfig.baseRate,
         skills,
         userSkills.filter(us => us.user_id === currentUser.id),
         monthlyBonuses[currentUser.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
@@ -56,8 +61,10 @@ export const TrialDashboard = () => {
     const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
     const totalExtras = contractBonus + studentBonus;
 
-    const currentTotalRate = salaryInfo.total + totalExtras;
-    const nextMonthTotalRate = salaryInfo.nextMonthTotal + totalExtras;
+    // Current rate = frozen rate during trial
+    const currentTotalRate = frozenRate;
+    // Next month rate = what they'll get after trial ends (based on confirmed skills)
+    const nextMonthTotalRate = salaryInfo.total + totalExtras;
 
     // --- LOGIC: TRIAL TIME DATA ---
     const trialTimeData = useMemo(() => {
@@ -506,48 +513,44 @@ export const TrialDashboard = () => {
 
             {/* Salary Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Current Salary Card */}
+                {/* Current Salary Card - Frozen Rate */}
+                <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-xl shadow-lg text-white">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <h2 className="text-sm font-bold uppercase tracking-wider opacity-90">Twoja Stawka Gwarantowana</h2>
+                            <p className="text-xs opacity-75 mt-1">Podczas okresu próbnego</p>
+                        </div>
+                        <div className="bg-white/20 p-2 rounded-lg">
+                            <Wallet className="text-white" size={20}/>
+                        </div>
+                    </div>
+                    <div className="flex items-baseline gap-2 mb-4">
+                        <span className="text-4xl font-black">{currentTotalRate.toFixed(2)}</span>
+                        <span className="text-lg font-bold opacity-90">zł/h</span>
+                    </div>
+                    <p className="text-xs opacity-80">
+                        Zamrożona stawka z momentu zatrudnienia - gwarantowana przez cały okres próbny
+                    </p>
+                </div>
+
+                {/* Projected Salary Card - After Trial */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                         <div>
-                            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Bieżąca Stawka</h2>
-                            <p className="text-xs text-slate-400 mt-1">{currentMonthName} {now.getFullYear()}</p>
+                            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Prognoza Po Próbnym</h2>
+                            <p className="text-xs text-slate-400 mt-1">Na podstawie potwierdzonych umiejętności</p>
                         </div>
                         <div className="bg-blue-100 p-2 rounded-lg">
-                            <Wallet className="text-blue-600" size={20}/>
+                            <TrendingUp className="text-blue-600" size={20}/>
                         </div>
                     </div>
                     <div className="flex items-baseline gap-2 mb-4">
-                        <span className="text-4xl font-black text-slate-900">{currentTotalRate.toFixed(2)}</span>
+                        <span className="text-4xl font-black text-slate-900">{nextMonthTotalRate.toFixed(2)}</span>
                         <span className="text-lg font-bold text-slate-500">zł/h</span>
                     </div>
                     <button
-                        onClick={() => setBreakdownType('current')}
-                        className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                    >
-                        Zobacz szczegóły
-                        <ChevronDown size={16}/>
-                    </button>
-                </div>
-
-                {/* Projected Salary Card */}
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl shadow-lg text-white">
-                    <div className="flex justify-between items-start mb-4">
-                        <div>
-                            <h2 className="text-sm font-bold uppercase tracking-wider opacity-90">Prognoza Stawki</h2>
-                            <p className="text-xs opacity-75 mt-1">od 1. {nextMonthName}</p>
-                        </div>
-                        <div className="bg-white/20 p-2 rounded-lg">
-                            <TrendingUp className="text-white" size={20}/>
-                        </div>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-4">
-                        <span className="text-4xl font-black">{nextMonthTotalRate.toFixed(2)}</span>
-                        <span className="text-lg font-bold opacity-90">zł/h</span>
-                    </div>
-                    <button
                         onClick={() => setBreakdownType('potential')}
-                        className="text-sm font-medium flex items-center gap-1 hover:opacity-80 transition-opacity"
+                        className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
                     >
                         Zobacz szczegóły
                         <ChevronDown size={16}/>
