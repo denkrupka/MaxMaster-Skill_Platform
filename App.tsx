@@ -125,11 +125,11 @@ export default function App() {
           <Route path="/candidate/thank-you" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateThankYouPage /></ProtectedRoute>} />
           <Route path="/candidate/profile" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateProfilePage /></ProtectedRoute>} />
 
-          {/* Redirect old trial routes to unified dashboard */}
-          <Route path="/trial/dashboard" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/trial/library" element={<Navigate to="/dashboard/library" replace />} />
-          <Route path="/trial/profile" element={<Navigate to="/dashboard/profile" replace />} />
-          <Route path="/trial/tests" element={<Navigate to="/dashboard/tests" replace />} />
+          {/* Trial routes now use same components as employee dashboard */}
+          <Route path="/trial/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><EmployeeDashboard /></ProtectedRoute>} />
+          <Route path="/trial/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><EmployeeLibrary /></ProtectedRoute>} />
+          <Route path="/trial/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><EmployeeProfile /></ProtectedRoute>} />
+          <Route path="/trial/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]}><EmployeeTests /></ProtectedRoute>} />
 
           <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeDashboard /></ProtectedRoute>} />
           <Route path="/dashboard/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSkills /></ProtectedRoute>} />
