@@ -343,7 +343,7 @@ export const HRCandidatesPage = () => {
 
     const generateInvitationLink = () => {
         const origin = window.location.origin;
-        const registrationPath = '/register';
+        const registrationPath = '/#/candidate/welcome';
         const link = `${origin}${registrationPath}`;
         setInvitationLink(link);
         setIsInvitationModalOpen(true);
