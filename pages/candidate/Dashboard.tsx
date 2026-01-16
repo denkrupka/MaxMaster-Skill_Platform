@@ -207,6 +207,12 @@ export const CandidateDashboard = () => {
         triggerNotification('status_change', 'Rezygnacja Kandydata', `Kandydat ${currentUser.first_name} ${currentUser.last_name} zrezygnował.`, '/hr/candidates');
     };
 
+    const handleDeclineOffer = () => {
+        updateUser(currentUser.id, { status: UserStatus.NOT_INTERESTED });
+        logCandidateAction(currentUser.id, 'Kandydat odrzucił ofertę pracy.');
+        triggerNotification('status_change', 'Rezygnacja Kandydata', `Kandydat ${currentUser.first_name} ${currentUser.last_name} odrzucił ofertę pracy.`, '/hr/candidates');
+    };
+
     const toggleQual = (id: string) => {
         const currentQuals = currentUser.qualifications || [];
         let newQuals;
@@ -554,40 +560,49 @@ export const CandidateDashboard = () => {
                         </p>
                     </div>
 
-                    {/* Scenario A: DATA REQUESTED - Prominent Action Card */}
+                    {/* Scenario A: DATA REQUESTED - Job Offer Card */}
                     {(currentUser.status === UserStatus.DATA_REQUESTED || currentUser.status === UserStatus.OFFER_SENT) && (
-                        <div className="bg-purple-600 text-white p-6 rounded-xl shadow-lg border border-purple-500 flex flex-col md:flex-row items-center justify-between gap-6 animate-in zoom-in">
-                            <div className="flex items-start gap-4">
-                                <div className="bg-white/20 p-3 rounded-full">
-                                    <ClipboardList size={32} className="text-white" />
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-8 rounded-2xl shadow-xl border border-green-400 animate-in zoom-in">
+                            <div className="flex items-start gap-4 mb-6">
+                                <div className="bg-white/20 p-3 rounded-full flex-shrink-0">
+                                    <CheckCircle size={36} className="text-white" />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold mb-1">Dane do umowy</h2>
-                                    <p className="text-purple-100 text-sm">
-                                        Nasz dział HR przygotowuje dla Ciebie ofertę. <br className="hidden md:block"/>
-                                        Uzupełnij proszę dane osobowe niezbędne do przygotowania umowy.
+                                    <h2 className="text-2xl font-bold mb-2">Oferta Pracy!</h2>
+                                    <p className="text-green-50 text-base leading-relaxed">
+                                        Rozpatrzyliśmy Twoje wyniki i z przyjemnością proponujemy Ci pracę zgodnie z warunkami przedstawionymi powyżej.
+                                        Aby rozpocząć z nami współpracę, uzupełnij swoje dane do umowy.
                                     </p>
                                 </div>
                             </div>
-                            <Button 
-                                className="bg-white text-purple-700 hover:bg-purple-50 border-0 shadow-lg whitespace-nowrap"
-                                onClick={() => navigate('/candidate/profile')}
-                            >
-                                Uzupełnij dane do umowy
-                                <ArrowRight size={18} className="ml-2" />
-                            </Button>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <Button
+                                    className="flex-1 bg-white text-green-700 hover:bg-green-50 border-0 shadow-lg font-bold text-base h-14"
+                                    onClick={() => navigate('/candidate/profile')}
+                                >
+                                    Uzupełnij dane do umowy
+                                    <ArrowRight size={20} className="ml-2" />
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="bg-transparent border-2 border-white/30 text-white hover:bg-white/10 hover:border-white/50 font-medium h-14"
+                                    onClick={handleDeclineOffer}
+                                >
+                                    Rezygnuję
+                                </Button>
+                            </div>
                         </div>
                     )}
 
                     {/* Scenario A: DATA SUBMITTED - Confirmation */}
                     {currentUser.status === UserStatus.DATA_SUBMITTED && (
-                        <div className="bg-green-50 p-6 rounded-xl border border-green-200 flex items-center gap-4 animate-in zoom-in">
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600 flex-shrink-0">
+                        <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 flex items-center gap-4 animate-in zoom-in shadow-md">
+                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 flex-shrink-0">
                                 <CheckCircle size={24} />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-green-800">Dziękujemy!</h3>
-                                <p className="text-green-700">Twoje dane zostały przekazane do działu HR. Czekaj na kontakt w sprawie podpisania umowy.</p>
+                                <h3 className="text-lg font-bold text-blue-800">Dziękujemy za przekazane dane!</h3>
+                                <p className="text-blue-700">Przygotujemy umowę i skontaktujemy się z Tobą wkrótce w sprawie dalszych kroków.</p>
                             </div>
                         </div>
                     )}
