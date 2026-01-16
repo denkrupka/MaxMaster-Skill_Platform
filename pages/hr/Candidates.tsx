@@ -66,7 +66,8 @@ export const HRCandidatesPage = () => {
     const [trialDates, setTrialDates] = useState({
         start: new Date().toISOString().split('T')[0],
         end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
-        brigadirId: ''
+        brigadirId: '',
+        frozenRate: 0
     });
 
     // Form for adding new candidate
@@ -396,15 +397,64 @@ export const HRCandidatesPage = () => {
 
     const handleHireToTrial = async () => {
         if (!selectedCandidate) return;
-        
+
         if (!isDataComplete(selectedCandidate)) {
             return triggerNotification('error', 'Błąd Zatrudnienia', 'Nie można zatrudnić kandydata bez kompletnych danych osobowych.');
         }
-        
+
+        // Calculate current rate to freeze it during trial period
+        const candidateTestAttempts = testAttempts.filter(ta => ta.user_id === selectedCandidate.id);
+        let skillsBonus = 0;
+        const countedSkillIds = new Set<string>();
+
+        candidateTestAttempts.forEach(ta => {
+            if (ta.passed) {
+                const test = tests.find(t => t.id === ta.test_id);
+                if (test) {
+                    test.skill_ids.forEach(sid => {
+                        if (!countedSkillIds.has(sid)) {
+                            const skill = skills.find(s => s.id === sid);
+                            if (skill) {
+                                skillsBonus += skill.hourly_bonus;
+                                countedSkillIds.add(sid);
+                            }
+                        }
+                    });
+                }
+            }
+        });
+
+        const QUALIFICATIONS_LIST = [
+            { id: 'sep_e', label: 'SEP E z pomiarami', value: 0.5 },
+            { id: 'sep_d', label: 'SEP D z pomiarami', value: 0.5 },
+            { id: 'udt', label: 'UDT na podnośniki', value: 1.0 }
+        ];
+
+        const userQuals = selectedCandidate.qualifications || [];
+        let qualBonus = 0;
+        const candidateSkills = userSkills.filter(us => us.user_id === selectedCandidate.id);
+
+        QUALIFICATIONS_LIST
+            .filter(q => userQuals.includes(q.id))
+            .forEach(q => {
+                const expectedDocName = `Certyfikat ${q.label}`;
+                const doc = candidateSkills.find(d => d.custom_name === expectedDocName);
+                if (!doc || doc.status !== SkillStatus.FAILED) {
+                    qualBonus += q.value;
+                }
+            });
+
+        const contractType = selectedCandidate.contract_type || 'uop';
+        const contractBonus = systemConfig.contractBonuses[contractType] || 0;
+        const studentBonus = (contractType === 'uz' && selectedCandidate.is_student) ? systemConfig.studentBonus : 0;
+        const totalExtras = contractBonus + studentBonus;
+        const frozenRate = systemConfig.baseRate + skillsBonus + qualBonus + totalExtras;
+
         setTrialDates({
             start: new Date().toISOString().split('T')[0],
             end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
-            brigadirId: selectedCandidate.assigned_brigadir_id || ''
+            brigadirId: selectedCandidate.assigned_brigadir_id || '',
+            frozenRate
         });
         setIsTrialModalOpen(true);
     };
@@ -417,14 +467,15 @@ export const HRCandidatesPage = () => {
 
         setIsSubmitting(true);
         try {
-            await updateUser(selectedCandidate.id, { 
-                status: UserStatus.TRIAL, 
-                role: Role.EMPLOYEE, 
-                hired_date: trialDates.start, 
+            await updateUser(selectedCandidate.id, {
+                status: UserStatus.TRIAL,
+                role: Role.EMPLOYEE,
+                hired_date: trialDates.start,
                 trial_end_date: trialDates.end,
-                assigned_brigadir_id: trialDates.brigadirId
+                assigned_brigadir_id: trialDates.brigadirId,
+                base_rate: trialDates.frozenRate
             });
-            await logCandidateAction(selectedCandidate.id, `Zatrudniono na okres próbny: ${trialDates.start} - ${trialDates.end}. Brygadzista: ${users.find(u => u.id === trialDates.brigadirId)?.last_name}`);
+            await logCandidateAction(selectedCandidate.id, `Zatrudniono na okres próbny: ${trialDates.start} - ${trialDates.end}. Zamrożona stawka: ${trialDates.frozenRate.toFixed(2)} zł/h. Brygadzista: ${users.find(u => u.id === trialDates.brigadirId)?.last_name}`);
             triggerNotification('success', 'Zatrudniono', `Pracownik ${selectedCandidate.first_name} ${selectedCandidate.last_name} rozpoczął okres próbny.`);
             setIsTrialModalOpen(false);
             setSelectedCandidate(null); 
