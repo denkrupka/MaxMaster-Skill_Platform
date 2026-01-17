@@ -248,7 +248,7 @@ export const TrialDashboard = () => {
         if (isFrozenRate) {
             // Calculate frozen rate breakdown based on current user data
             // This shows what was frozen at hire time
-            const base = systemConfig?.baseRate || 24;
+            const base = systemConfig?.baseRate || 25;
 
             // Get passed tests for skills bonus
             const passedTests = (testAttempts || []).filter(ta =>

@@ -93,7 +93,7 @@ export const useAppContext = () => {
 const CONFIG_KEY = 'main';
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
-  baseRate: 24,
+  baseRate: 25,
   overtimeBonus: 3,
   holidayBonus: 5,
   seniorityBonus: 1,
