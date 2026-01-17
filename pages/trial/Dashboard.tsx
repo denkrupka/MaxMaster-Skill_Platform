@@ -30,6 +30,26 @@ export const TrialDashboard = () => {
         return () => clearInterval(interval);
     }, []);
 
+    // Auto-refresh data from storage every 10 seconds
+    useEffect(() => {
+        const handleStorageChange = () => {
+            // Force re-render by updating state
+            // The AppContext will automatically provide updated data
+            setTrialNow(new Date());
+        };
+
+        // Listen to storage events (for cross-tab sync)
+        window.addEventListener('storage', handleStorageChange);
+
+        // Also poll every 10 seconds
+        const pollInterval = setInterval(handleStorageChange, 10000);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(pollInterval);
+        };
+    }, []);
+
     if (!currentUser) return null;
 
     // --- HELPER DATA ---
@@ -48,7 +68,8 @@ export const TrialDashboard = () => {
     const frozenRate = currentUser.base_rate || systemConfig.baseRate;
 
     // For trial employees, calculate what WILL be their rate after trial ends
-    const salaryInfo = calculateSalary(
+    // This is based on CONFIRMED skills only (not just passed tests)
+    const postTrialSalaryInfo = calculateSalary(
         systemConfig.baseRate,
         skills,
         userSkills.filter(us => us.user_id === currentUser.id),
@@ -61,10 +82,10 @@ export const TrialDashboard = () => {
     const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
     const totalExtras = contractBonus + studentBonus;
 
-    // Current rate = frozen rate during trial
+    // Current rate = frozen rate during trial (includes ALL bonuses from hire time)
     const currentTotalRate = frozenRate;
-    // Next month rate = what they'll get after trial ends (based on confirmed skills)
-    const nextMonthTotalRate = salaryInfo.total + totalExtras;
+    // Next month rate = what they'll get after trial ends (based on confirmed skills only)
+    const nextMonthTotalRate = postTrialSalaryInfo.total + totalExtras;
 
     // --- LOGIC: TRIAL TIME DATA ---
     const trialTimeData = useMemo(() => {
@@ -197,11 +218,55 @@ export const TrialDashboard = () => {
     const renderBreakdownModal = () => {
         if (!breakdownType) return null;
 
-        const title = breakdownType === 'current' ? `Skład Stawki (Bieżący: ${currentMonthName})` : `Prognoza Stawki (Od 1. ${nextMonthName})`;
-        const total = breakdownType === 'current' ? currentTotalRate : nextMonthTotalRate;
+        // For TRIAL employees:
+        // - "current" shows frozen rate from hiring (no detailed breakdown available)
+        // - "potential" shows what they'll get after trial based on confirmed skills
+        const isFrozenRate = breakdownType === 'current';
+        const title = isFrozenRate ? 'Zamrożona Stawka' : `Prognoza Po Okresie Próbnym`;
+        const total = isFrozenRate ? currentTotalRate : nextMonthTotalRate;
 
-        const activeItems = salaryInfo.breakdown.details.activeSkills;
-        const pendingItems = salaryInfo.breakdown.details.pendingSkills;
+        if (isFrozenRate) {
+            // Show simple breakdown for frozen rate
+            return (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
+                            <h3 className="font-bold text-slate-900">{title}</h3>
+                            <button onClick={() => setBreakdownType(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <div className="font-bold text-green-900">Gwarantowana Stawka</div>
+                                        <div className="text-sm text-green-700 mt-1">
+                                            Zamrożona z momentu zatrudnienia na okres próbny
+                                        </div>
+                                    </div>
+                                    <div className="font-black text-3xl text-green-700">{currentTotalRate.toFixed(2)} zł</div>
+                                </div>
+                            </div>
+
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p className="text-sm text-blue-800">
+                                    <strong>Uwaga:</strong> Ta stawka zawiera bazę, wszystkie bonusy za testy, uprawnienia i typ umowy z momentu zatrudnienia.
+                                    Po zakończeniu okresu próbnego stawka zostanie przeliczona na podstawie potwierdzonych umiejętności.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex justify-end">
+                            <Button onClick={() => setBreakdownType(null)}>Zamknij</Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // For potential (post-trial) rate, show detailed breakdown
+        const activeItems = postTrialSalaryInfo.breakdown.details.activeSkills;
+        const pendingItems = postTrialSalaryInfo.breakdown.details.pendingSkills;
 
         return (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
@@ -217,7 +282,7 @@ export const TrialDashboard = () => {
                                 <div className="font-medium text-sm text-slate-800">Stawka Bazowa</div>
                                 <div className="text-xs text-slate-500">Podstawa</div>
                             </div>
-                            <div className="font-bold text-slate-900">+{salaryInfo.breakdown.base.toFixed(2)} zł</div>
+                            <div className="font-bold text-slate-900">+{postTrialSalaryInfo.breakdown.base.toFixed(2)} zł</div>
                         </div>
 
                         {totalExtras > 0 && (
@@ -232,7 +297,7 @@ export const TrialDashboard = () => {
 
                         {activeItems.length > 0 && (
                             <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Aktywne Umiejętności ({breakdownType === 'current' ? currentMonthName : nextMonthName})</div>
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Potwierdzone Umiejętności</div>
                                 {activeItems.map(item => (
                                     <div key={item.name} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
@@ -245,25 +310,31 @@ export const TrialDashboard = () => {
                             </>
                         )}
 
-                        {pendingItems.length > 0 && breakdownType === 'potential' && (
+                        {pendingItems.length > 0 && (
                             <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Przyszłe Umiejętności (Od 1. {nextMonthName})</div>
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Oczekujące (Teoria zdana, praktyka w toku)</div>
                                 {pendingItems.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-blue-50 border border-blue-100">
+                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
                                         <div>
-                                            <div className="font-medium text-sm text-blue-900">{item.name}</div>
-                                            <div className="text-xs text-blue-600">Skill (Nowy)</div>
+                                            <div className="font-medium text-sm text-orange-900">{item.name}</div>
+                                            <div className="text-xs text-orange-600">Wymaga potwierdzenia</div>
                                         </div>
-                                        <div className="font-bold text-blue-700">+{item.value.toFixed(2)} zł</div>
+                                        <div className="font-bold text-orange-700">+{item.value.toFixed(2)} zł</div>
                                     </div>
                                 ))}
                             </>
+                        )}
+
+                        {activeItems.length === 0 && pendingItems.length === 0 && (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center">
+                                <p className="text-sm text-slate-600">Brak potwierdzonych umiejętności. Po okresie próbnym otrzymasz stawkę bazową + bonus za umowę.</p>
+                            </div>
                         )}
                     </div>
 
                     <div className="mt-6 pt-4 border-t border-slate-100">
                         <div className="flex justify-between items-center">
-                            <span className="font-bold text-lg text-slate-900">TOTAL:</span>
+                            <span className="font-bold text-lg text-slate-900">RAZEM PO PRÓBNYM:</span>
                             <span className="font-black text-2xl text-blue-600">{total.toFixed(2)} zł/h</span>
                         </div>
                     </div>
@@ -528,9 +599,13 @@ export const TrialDashboard = () => {
                         <span className="text-4xl font-black">{currentTotalRate.toFixed(2)}</span>
                         <span className="text-lg font-bold opacity-90">zł/h</span>
                     </div>
-                    <p className="text-xs opacity-80">
-                        Zamrożona stawka z momentu zatrudnienia - gwarantowana przez cały okres próbny
-                    </p>
+                    <button
+                        onClick={() => setBreakdownType('current')}
+                        className="text-sm font-medium flex items-center gap-1 hover:opacity-80 transition-opacity"
+                    >
+                        Zobacz szczegóły
+                        <ChevronDown size={16}/>
+                    </button>
                 </div>
 
                 {/* Projected Salary Card - After Trial */}
