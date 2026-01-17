@@ -351,7 +351,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const hireCandidate = async (userId: string, hiredDate: string, contractEndDate?: string) => {
-    await updateUser(userId, { status: UserStatus.ACTIVE, hired_date: hiredDate, contract_end_date: contractEndDate });
+    // Reset base_rate to null so that system base rate is used after trial
+    // During TRIAL, base_rate holds the frozen rate from hiring
+    // After TRIAL ends (ACTIVE), we should use systemConfig.baseRate + confirmed skills
+    await updateUser(userId, {
+      status: UserStatus.ACTIVE,
+      hired_date: hiredDate,
+      contract_end_date: contractEndDate,
+      base_rate: null // Reset to use system base rate
+    });
   };
 
   const triggerNotification = (type: string, title: string, message: string, link?: string) => {
