@@ -49,8 +49,8 @@ export const TrialDashboard = () => {
     // If base_rate wasn't saved correctly during hiring, recalculate it
     let frozenRate = currentUser.base_rate;
 
-    // Recalculate if base_rate is missing or suspiciously low
-    if (!frozenRate || frozenRate < 20) {
+    // Recalculate if base_rate is missing or equals system base rate (not properly frozen)
+    if (!frozenRate || frozenRate <= systemConfig.baseRate) {
         // Recalculate from tests and qualifications
         const passedTests = testAttempts.filter(ta => ta.user_id === currentUser.id && ta.passed);
         const countedSkillIds = new Set<string>();
@@ -291,8 +291,8 @@ export const TrialDashboard = () => {
 
             // Calculate total from breakdown components (in case base_rate wasn't saved correctly)
             const calculatedFrozenTotal = base + skillsBonus + qualsBonus + totalExtras;
-            // Use saved base_rate if available and reasonable, otherwise use calculated
-            const displayedFrozenRate = (currentUser?.base_rate && currentUser.base_rate > 20)
+            // Use saved base_rate if available and greater than system base rate, otherwise use calculated
+            const displayedFrozenRate = (currentUser?.base_rate && currentUser.base_rate > systemConfig.baseRate)
                 ? currentUser.base_rate
                 : calculatedFrozenTotal;
 
