@@ -226,16 +226,60 @@ export const TrialDashboard = () => {
         const total = isFrozenRate ? currentTotalRate : nextMonthTotalRate;
 
         if (isFrozenRate) {
+            // Calculate frozen rate breakdown based on current user data
+            // This shows what was frozen at hire time
+            const base = systemConfig?.baseRate || 24;
+
+            // Get passed tests for skills bonus
+            const passedTests = (testAttempts || []).filter(ta =>
+                ta.user_id === currentUser?.id && ta.passed
+            );
+            const skillsFromTests: Array<{name: string, bonus: number}> = [];
+            const countedSkillIds = new Set<string>();
+
+            passedTests.forEach(ta => {
+                const test = (tests || []).find(t => t.id === ta.test_id);
+                if (test && test.skill_ids) {
+                    test.skill_ids.forEach(sid => {
+                        if (!countedSkillIds.has(sid)) {
+                            const skill = (skills || []).find(s => s.id === sid);
+                            if (skill && skill.name_pl && typeof skill.hourly_bonus === 'number') {
+                                skillsFromTests.push({
+                                    name: skill.name_pl,
+                                    bonus: skill.hourly_bonus
+                                });
+                                countedSkillIds.add(sid);
+                            }
+                        }
+                    });
+                }
+            });
+
+            const skillsBonus = skillsFromTests.reduce((sum, s) => sum + (s.bonus || 0), 0);
+
+            // Get qualifications bonus
+            const QUALIFICATIONS_LIST = [
+                { id: 'sep_e', label: 'SEP E z pomiarami', value: 0.5 },
+                { id: 'sep_d', label: 'SEP D z pomiarami', value: 0.5 },
+                { id: 'udt', label: 'UDT na podnośniki', value: 1.0 }
+            ];
+
+            const userQualsList = QUALIFICATIONS_LIST.filter(q =>
+                (currentUser?.qualifications || []).includes(q.id)
+            );
+            const qualsBonus = userQualsList.reduce((sum, q) => sum + (q.value || 0), 0);
+
             // Show simple breakdown for frozen rate
             return (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
                             <h3 className="font-bold text-slate-900">{title}</h3>
                             <button onClick={() => setBreakdownType(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
                         </div>
 
                         <div className="space-y-3">
+                            {/* Total Frozen Rate */}
                             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                                 <div className="flex justify-between items-center">
                                     <div>
@@ -244,15 +288,91 @@ export const TrialDashboard = () => {
                                             Zamrożona z momentu zatrudnienia na okres próbny
                                         </div>
                                     </div>
-                                    <div className="font-black text-3xl text-green-700">{currentTotalRate.toFixed(2)} zł</div>
+                                    <div className="font-black text-3xl text-green-700">{(currentTotalRate || 0).toFixed(2)} zł</div>
                                 </div>
                             </div>
 
-                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                <p className="text-sm text-blue-800">
-                                    <strong>Uwaga:</strong> Ta stawka zawiera bazę, wszystkie bonusy za testy, uprawnienia i typ umowy z momentu zatrudnienia.
-                                    Po zakończeniu okresu próbnego stawka zostanie przeliczona na podstawie potwierdzonych umiejętności.
-                                </p>
+                            {/* Breakdown of Frozen Rate */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Skład Zamrożonej Stawki</div>
+
+                                {/* Base Rate */}
+                                <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
+                                    <div>
+                                        <div className="font-medium text-sm text-slate-800">Stawka Bazowa</div>
+                                        <div className="text-xs text-slate-500">Podstawa</div>
+                                    </div>
+                                    <div className="font-bold text-slate-900">{(base || 0).toFixed(2)} zł</div>
+                                </div>
+
+                                {/* Skills from Tests */}
+                                {skillsFromTests && skillsFromTests.length > 0 && (
+                                    <>
+                                        <div className="text-xs font-bold text-green-600 uppercase tracking-wider pt-2">Umiejętności z Testów</div>
+                                        {skillsFromTests.map((skill, idx) => (
+                                            <div key={skill.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
+                                                <div>
+                                                    <div className="font-medium text-sm text-green-900">{skill.name || 'Nieznana'}</div>
+                                                    <div className="text-xs text-green-600">Test zaliczony</div>
+                                                </div>
+                                                <div className="font-bold text-green-700">+{(skill.bonus || 0).toFixed(2)} zł</div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* Qualifications */}
+                                {userQualsList && userQualsList.length > 0 && (
+                                    <>
+                                        <div className="text-xs font-bold text-purple-600 uppercase tracking-wider pt-2">Uprawnienia</div>
+                                        {userQualsList.map((qual, idx) => (
+                                            <div key={qual.id || idx} className="flex justify-between items-center p-2 rounded bg-purple-50 border border-purple-100">
+                                                <div>
+                                                    <div className="font-medium text-sm text-purple-900">{qual.label || 'Nieznane'}</div>
+                                                    <div className="text-xs text-purple-600">Wymaga weryfikacji</div>
+                                                </div>
+                                                <div className="font-bold text-purple-700">+{(qual.value || 0).toFixed(2)} zł</div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* Contract & Student Bonus */}
+                                {totalExtras > 0 && (
+                                    <div className="flex justify-between items-center p-2 rounded bg-blue-50 border border-blue-100">
+                                        <div>
+                                            <div className="font-medium text-sm text-blue-900">Umowa i Dodatkowe</div>
+                                            <div className="text-xs text-blue-600">
+                                                {currentUser?.contract_type ? String(currentUser.contract_type).toUpperCase() : 'UOP'}
+                                                {currentUser?.is_student ? ' + Student' : ''}
+                                            </div>
+                                        </div>
+                                        <div className="font-bold text-blue-700">+{(totalExtras || 0).toFixed(2)} zł</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                                <div>
+                                    <p className="text-sm font-bold text-blue-900 mb-2">Jak zachować tę stawkę?</p>
+                                    <ul className="text-sm text-blue-800 space-y-1.5 pl-4">
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-blue-600 font-bold">•</span>
+                                            <span>Potwierdź umiejętności praktyką na budowie podczas okresu próbnego</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-blue-600 font-bold">•</span>
+                                            <span>Załaduj dokumenty uprawnień do weryfikacji (jeśli zostały zadeklarowane)</span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="pt-2 border-t border-blue-200">
+                                    <p className="text-sm text-blue-800">
+                                        <strong className="text-orange-700">⚠️ Uwaga:</strong> Jeśli któryś z umiejętności nie zostanie potwierdzony praktyką lub uprawnienia nie przejdą weryfikacji –
+                                        dana umiejętność zostanie usunięta, a stawka zostanie przeliczona bez jej bonusu.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
