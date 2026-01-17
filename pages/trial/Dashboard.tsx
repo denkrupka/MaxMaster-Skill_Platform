@@ -65,7 +65,47 @@ export const TrialDashboard = () => {
     // --- LOGIC: SALARY ---
     // During TRIAL period, use frozen rate (set at hiring time)
     // This ensures candidate gets the rate they agreed to, even before completing practice verifications
-    const frozenRate = currentUser.base_rate || systemConfig.baseRate;
+
+    // If base_rate wasn't saved correctly during hiring, recalculate it
+    let frozenRate = currentUser.base_rate;
+
+    // Recalculate if base_rate is missing or suspiciously low
+    if (!frozenRate || frozenRate < 20) {
+        // Recalculate from tests and qualifications
+        const passedTests = testAttempts.filter(ta => ta.user_id === currentUser.id && ta.passed);
+        const countedSkillIds = new Set<string>();
+        let skillsBonus = 0;
+
+        passedTests.forEach(ta => {
+            const test = tests.find(t => t.id === ta.test_id);
+            if (test?.skill_ids) {
+                test.skill_ids.forEach(sid => {
+                    if (!countedSkillIds.has(sid)) {
+                        const skill = skills.find(s => s.id === sid);
+                        if (skill) {
+                            skillsBonus += skill.hourly_bonus;
+                            countedSkillIds.add(sid);
+                        }
+                    }
+                });
+            }
+        });
+
+        const QUALIFICATIONS_LIST = [
+            { id: 'sep_e', value: 0.5 },
+            { id: 'sep_d', value: 0.5 },
+            { id: 'udt', value: 1.0 }
+        ];
+        const qualsBonus = QUALIFICATIONS_LIST
+            .filter(q => (currentUser.qualifications || []).includes(q.id))
+            .reduce((sum, q) => sum + q.value, 0);
+
+        const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
+        const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
+        const totalExtras = contractBonus + studentBonus;
+
+        frozenRate = systemConfig.baseRate + skillsBonus + qualsBonus + totalExtras;
+    }
 
     // For trial employees, calculate what WILL be their rate after trial ends
     // This is based on CONFIRMED skills only (not just passed tests)
@@ -269,6 +309,13 @@ export const TrialDashboard = () => {
             );
             const qualsBonus = userQualsList.reduce((sum, q) => sum + (q.value || 0), 0);
 
+            // Calculate total from breakdown components (in case base_rate wasn't saved correctly)
+            const calculatedFrozenTotal = base + skillsBonus + qualsBonus + totalExtras;
+            // Use saved base_rate if available and reasonable, otherwise use calculated
+            const displayedFrozenRate = (currentUser?.base_rate && currentUser.base_rate > 20)
+                ? currentUser.base_rate
+                : calculatedFrozenTotal;
+
             // Show simple breakdown for frozen rate
             return (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
@@ -288,7 +335,7 @@ export const TrialDashboard = () => {
                                             Zamrożona z momentu zatrudnienia na okres próbny
                                         </div>
                                     </div>
-                                    <div className="font-black text-3xl text-green-700">{(currentTotalRate || 0).toFixed(2)} zł</div>
+                                    <div className="font-black text-3xl text-green-700">{(displayedFrozenRate || 0).toFixed(2)} zł</div>
                                 </div>
                             </div>
 
