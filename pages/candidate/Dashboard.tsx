@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, User, Clock, Coins, Calculator, ArrowRight, X, Building, Briefcase, TrendingUp, CheckCircle, ChevronRight, Wallet, Award, FileText, AlertTriangle, ChevronDown, ClipboardList, Shield, ChevronUp, MapPin, Gift, GraduationCap, Users, Calendar, Hammer, Shirt, PartyPopper, Zap, Star, ThumbsUp } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -19,6 +19,12 @@ export const CandidateDashboard = () => {
     const { state, updateUser, logCandidateAction, triggerNotification } = useAppContext();
     const { currentUser, systemConfig, testAttempts, tests, skills, userSkills, positions } = state;
     const navigate = useNavigate();
+
+    // Force re-render when testAttempts or userSkills change
+    const [, setRenderKey] = useState(0);
+    useEffect(() => {
+        setRenderKey(prev => prev + 1);
+    }, [testAttempts.length, userSkills.length]);
 
     // Modal State
     const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -666,8 +672,16 @@ export const CandidateDashboard = () => {
                                         {!isLocked && <ChevronDown size={16} className="text-blue-400" />}
                                     </div>
                                 </div>
-                                <div className="text-sm font-bold text-blue-400 mt-1">
-                                    {contractBonus > 0 ? `+${contractBonus} zł` : '+0 zł'}
+                                <div className="flex flex-col gap-0.5 mt-1">
+                                    <div className="text-sm font-bold text-blue-400">
+                                        {contractBonus > 0 ? `+${contractBonus} zł` : '+0 zł'}
+                                    </div>
+                                    {isStudent && selectedContract === 'uz' && (
+                                        <div className="text-xs font-bold text-indigo-500 flex items-center gap-1">
+                                            <GraduationCap size={12} />
+                                            Student +{systemConfig.studentBonus} zł
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
