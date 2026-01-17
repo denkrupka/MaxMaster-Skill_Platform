@@ -189,6 +189,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Refresh only system config (for real-time updates when HR changes settings)
+  const refreshSystemConfig = useCallback(async () => {
+    try {
+      const { data: configData } = await supabase
+        .from('system_config')
+        .select('config_data')
+        .eq('config_key', CONFIG_KEY)
+        .maybeSingle();
+
+      if (configData?.config_data) {
+        setState(prev => ({
+          ...prev,
+          systemConfig: {
+            ...DEFAULT_SYSTEM_CONFIG,
+            ...configData.config_data
+          }
+        }));
+      }
+    } catch (err) {
+      console.error('Error refreshing system config:', err);
+    }
+  }, []);
+
   // Listen for auth state changes and initial fetch
   useEffect(() => {
     refreshData();
@@ -203,6 +226,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subscription.unsubscribe();
     };
   }, [refreshData]);
+
+  // Auto-refresh system config every 30 seconds to sync HR settings changes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshSystemConfig();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [refreshSystemConfig]);
 
   const login = async (email: string, password: string) => {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
