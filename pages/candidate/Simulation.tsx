@@ -34,7 +34,7 @@ export const CandidateSimulationPage = () => {
     if (!currentUser) return null;
 
     // --- Calculations ---
-    const baseRate = Number(systemConfig.baseRate || 24);
+    const baseRate = Number(systemConfig.baseRate || 25);
 
     const skillsBonus = useMemo(() => {
         let total = 0;
