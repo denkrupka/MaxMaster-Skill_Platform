@@ -386,8 +386,47 @@ export const TrialDashboard = () => {
 
         // For potential (post-trial) rate, show detailed breakdown
         // Add safety checks to prevent white screen crashes
-        const activeItems = postTrialSalaryInfo?.breakdown?.details?.activeSkills || [];
-        const pendingItems = postTrialSalaryInfo?.breakdown?.details?.pendingSkills || [];
+
+        // For TRIAL employees prognosis, we need to show:
+        // 1. CONFIRMED skills (practice verified) - will count after trial
+        // 2. VERIFIED/PENDING skills (test passed, practice not confirmed) - won't count unless confirmed
+
+        const confirmedUserSkills = (userSkills || []).filter(us =>
+            us?.user_id === currentUser?.id &&
+            us?.status === SkillStatus.CONFIRMED &&
+            !us?.is_archived
+        );
+
+        const verifiedButNotConfirmed = (userSkills || []).filter(us =>
+            us?.user_id === currentUser?.id &&
+            (us?.status === SkillStatus.VERIFIED || us?.status === SkillStatus.PENDING) &&
+            !us?.is_archived
+        );
+
+        // Build active items from confirmed skills
+        const activeItems: Array<{name: string, value: number}> = [];
+        confirmedUserSkills.forEach(us => {
+            const skill = (skills || []).find(s => s?.id === us?.skill_id);
+            const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
+            const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
+
+            if (bonusAmount > 0) {
+                activeItems.push({ name, value: bonusAmount });
+            }
+        });
+
+        // Build pending items from verified but not confirmed
+        const pendingItems: Array<{name: string, value: number}> = [];
+        verifiedButNotConfirmed.forEach(us => {
+            const skill = (skills || []).find(s => s?.id === us?.skill_id);
+            const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
+            const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
+
+            if (bonusAmount > 0) {
+                pendingItems.push({ name, value: bonusAmount });
+            }
+        });
+
         const baseRate = postTrialSalaryInfo?.breakdown?.base || systemConfig?.baseRate || 24;
 
         return (
@@ -419,12 +458,15 @@ export const TrialDashboard = () => {
 
                         {activeItems && activeItems.length > 0 && (
                             <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Potwierdzone Umiejętności</div>
+                                <div className="text-xs font-bold text-green-600 uppercase tracking-wider pt-2">✓ Potwierdzone Umiejętności</div>
+                                <div className="text-xs text-slate-500 mb-2">Praktyka zweryfikowana - wliczone do stawki</div>
                                 {activeItems.map((item, idx) => (
                                     <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
                                             <div className="font-medium text-sm text-green-900">{item?.name || 'Nieznana'}</div>
-                                            <div className="text-xs text-green-600">Skill</div>
+                                            <div className="text-xs text-green-600 flex items-center gap-1">
+                                                <CheckCircle size={12}/> Potwierdzone
+                                            </div>
                                         </div>
                                         <div className="font-bold text-green-700">+{(item?.value || 0).toFixed(2)} zł</div>
                                     </div>
@@ -434,14 +476,17 @@ export const TrialDashboard = () => {
 
                         {pendingItems && pendingItems.length > 0 && (
                             <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Oczekujące (Teoria zdana, praktyka w toku)</div>
+                                <div className="text-xs font-bold text-orange-600 uppercase tracking-wider pt-2">⚠️ Nie Wliczone (Praktyka Nie Potwierdzona)</div>
+                                <div className="text-xs text-slate-500 mb-2">Test zdany, ale praktyka wymaga potwierdzenia - NIE wliczone do stawki</div>
                                 {pendingItems.map((item, idx) => (
                                     <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
                                         <div>
                                             <div className="font-medium text-sm text-orange-900">{item?.name || 'Nieznana'}</div>
-                                            <div className="text-xs text-orange-600">Wymaga potwierdzenia</div>
+                                            <div className="text-xs text-orange-600 flex items-center gap-1">
+                                                <AlertCircle size={12}/> Wymaga potwierdzenia
+                                            </div>
                                         </div>
-                                        <div className="font-bold text-orange-700">+{(item?.value || 0).toFixed(2)} zł</div>
+                                        <div className="font-bold text-slate-400 line-through">+{(item?.value || 0).toFixed(2)} zł</div>
                                     </div>
                                 ))}
                             </>
@@ -454,10 +499,23 @@ export const TrialDashboard = () => {
                         )}
                     </div>
 
-                    <div className="mt-6 pt-4 border-t border-slate-100">
+                    <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
+                        {pendingItems && pendingItems.length > 0 && (
+                            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                                <p className="text-xs text-orange-800">
+                                    <strong>⚠️ Uwaga:</strong> Umiejętności bez potwierdzonej praktyki <strong>NIE są wliczone</strong> do stawki po próbnym.
+                                    Aby je aktywować, potwierdź praktykę podczas okresu próbnego.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-center">
                             <span className="font-bold text-lg text-slate-900">RAZEM PO PRÓBNYM:</span>
                             <span className="font-black text-2xl text-blue-600">{(total || 0).toFixed(2)} zł/h</span>
+                        </div>
+
+                        <div className="text-xs text-slate-500">
+                            Obliczone na podstawie: bazy + potwierdzone umiejętności + umowa
                         </div>
                     </div>
                 </div>
