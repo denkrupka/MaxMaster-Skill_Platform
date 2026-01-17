@@ -385,67 +385,69 @@ export const TrialDashboard = () => {
         }
 
         // For potential (post-trial) rate, show detailed breakdown
-        const activeItems = postTrialSalaryInfo.breakdown.details.activeSkills;
-        const pendingItems = postTrialSalaryInfo.breakdown.details.pendingSkills;
+        // Add safety checks to prevent white screen crashes
+        const activeItems = postTrialSalaryInfo?.breakdown?.details?.activeSkills || [];
+        const pendingItems = postTrialSalaryInfo?.breakdown?.details?.pendingSkills || [];
+        const baseRate = postTrialSalaryInfo?.breakdown?.base || systemConfig?.baseRate || 24;
 
         return (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
                         <h3 className="font-bold text-slate-900">{title}</h3>
                         <button onClick={() => setBreakdownType(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
 
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                    <div className="space-y-3">
                         <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                             <div>
                                 <div className="font-medium text-sm text-slate-800">Stawka Bazowa</div>
                                 <div className="text-xs text-slate-500">Podstawa</div>
                             </div>
-                            <div className="font-bold text-slate-900">+{postTrialSalaryInfo.breakdown.base.toFixed(2)} zł</div>
+                            <div className="font-bold text-slate-900">+{(baseRate || 0).toFixed(2)} zł</div>
                         </div>
 
                         {totalExtras > 0 && (
                             <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                                 <div>
                                     <div className="font-medium text-sm text-slate-800">Umowa</div>
-                                    <div className="text-xs text-blue-600 font-bold">{CONTRACT_TYPE_LABELS[currentUser.contract_type || ContractType.UOP]}</div>
+                                    <div className="text-xs text-blue-600 font-bold">{CONTRACT_TYPE_LABELS[currentUser?.contract_type || ContractType.UOP] || 'UOP'}</div>
                                 </div>
-                                <div className="font-bold text-blue-600">+{totalExtras.toFixed(2)} zł</div>
+                                <div className="font-bold text-blue-600">+{(totalExtras || 0).toFixed(2)} zł</div>
                             </div>
                         )}
 
-                        {activeItems.length > 0 && (
+                        {activeItems && activeItems.length > 0 && (
                             <>
                                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Potwierdzone Umiejętności</div>
-                                {activeItems.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
+                                {activeItems.map((item, idx) => (
+                                    <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
-                                            <div className="font-medium text-sm text-green-900">{item.name}</div>
+                                            <div className="font-medium text-sm text-green-900">{item?.name || 'Nieznana'}</div>
                                             <div className="text-xs text-green-600">Skill</div>
                                         </div>
-                                        <div className="font-bold text-green-700">+{item.value.toFixed(2)} zł</div>
+                                        <div className="font-bold text-green-700">+{(item?.value || 0).toFixed(2)} zł</div>
                                     </div>
                                 ))}
                             </>
                         )}
 
-                        {pendingItems.length > 0 && (
+                        {pendingItems && pendingItems.length > 0 && (
                             <>
                                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Oczekujące (Teoria zdana, praktyka w toku)</div>
-                                {pendingItems.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
+                                {pendingItems.map((item, idx) => (
+                                    <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
                                         <div>
-                                            <div className="font-medium text-sm text-orange-900">{item.name}</div>
+                                            <div className="font-medium text-sm text-orange-900">{item?.name || 'Nieznana'}</div>
                                             <div className="text-xs text-orange-600">Wymaga potwierdzenia</div>
                                         </div>
-                                        <div className="font-bold text-orange-700">+{item.value.toFixed(2)} zł</div>
+                                        <div className="font-bold text-orange-700">+{(item?.value || 0).toFixed(2)} zł</div>
                                     </div>
                                 ))}
                             </>
                         )}
 
-                        {activeItems.length === 0 && pendingItems.length === 0 && (
+                        {(!activeItems || activeItems.length === 0) && (!pendingItems || pendingItems.length === 0) && (
                             <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center">
                                 <p className="text-sm text-slate-600">Brak potwierdzonych umiejętności. Po okresie próbnym otrzymasz stawkę bazową + bonus za umowę.</p>
                             </div>
@@ -455,7 +457,7 @@ export const TrialDashboard = () => {
                     <div className="mt-6 pt-4 border-t border-slate-100">
                         <div className="flex justify-between items-center">
                             <span className="font-bold text-lg text-slate-900">RAZEM PO PRÓBNYM:</span>
-                            <span className="font-black text-2xl text-blue-600">{total.toFixed(2)} zł/h</span>
+                            <span className="font-black text-2xl text-blue-600">{(total || 0).toFixed(2)} zł/h</span>
                         </div>
                     </div>
                 </div>
