@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardCheck, User, Clock, Coins, Calculator, ArrowRight, X, Building, Briefcase, TrendingUp, CheckCircle, ChevronRight, Wallet, Award, FileText, AlertTriangle, ChevronDown, ClipboardList, Shield, ChevronUp, MapPin, Gift, GraduationCap, Users, Calendar, Hammer, Shirt, PartyPopper, Zap, Star, ThumbsUp } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -20,9 +20,6 @@ export const CandidateDashboard = () => {
     const { currentUser, systemConfig, testAttempts, tests, skills, userSkills, positions } = state;
     const navigate = useNavigate();
 
-    // Auto-refresh state
-    const [candidateNow, setCandidateNow] = useState(new Date());
-    
     // Modal State
     const [activeModal, setActiveModal] = useState<ModalType>(null);
     const [salaryTab, setSalaryTab] = useState<'hourly' | 'piecework'>('hourly');
@@ -36,28 +33,13 @@ export const CandidateDashboard = () => {
 
     // New Interactive States for Monthly Simulator & Benefits
     const [isDelegation, setIsDelegation] = useState(false);
-    const [isSaturday, setIsSaturday] = useState(false); 
-    const [showSalarySim, setShowSalarySim] = useState(false); 
+    const [isSaturday, setIsSaturday] = useState(false);
+    const [showSalarySim, setShowSalarySim] = useState(false);
     const [showBenefits, setShowBenefits] = useState(false);
     const [benefitTab, setBenefitTab] = useState<'benefits' | 'dev' | 'career'>('career'); // Default to career to show the path
 
     // Qualifications State
     const [isQualModalOpen, setIsQualModalOpen] = useState(false);
-
-    // Auto-refresh data from storage every 10 seconds
-    useEffect(() => {
-        const handleStorageChange = () => {
-            setCandidateNow(new Date());
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        const pollInterval = setInterval(handleStorageChange, 10000); // Poll every 10 seconds
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            clearInterval(pollInterval);
-        };
-    }, []);
 
     if (!currentUser) return null;
 

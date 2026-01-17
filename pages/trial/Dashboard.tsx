@@ -24,30 +24,10 @@ export const TrialDashboard = () => {
     // File Viewer State
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
 
-    // Update time for trial progress bar
+    // Update time for trial progress bar every minute
     useEffect(() => {
         const interval = setInterval(() => setTrialNow(new Date()), 60000); // Update every minute
         return () => clearInterval(interval);
-    }, []);
-
-    // Auto-refresh data from storage every 10 seconds
-    useEffect(() => {
-        const handleStorageChange = () => {
-            // Force re-render by updating state
-            // The AppContext will automatically provide updated data
-            setTrialNow(new Date());
-        };
-
-        // Listen to storage events (for cross-tab sync)
-        window.addEventListener('storage', handleStorageChange);
-
-        // Also poll every 10 seconds
-        const pollInterval = setInterval(handleStorageChange, 10000);
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            clearInterval(pollInterval);
-        };
     }, []);
 
     if (!currentUser) return null;
