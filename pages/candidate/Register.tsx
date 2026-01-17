@@ -94,6 +94,24 @@ export const CandidateRegisterPage = () => {
             const authId = authData.user?.id;
             console.log('Auth signUp success. User ID:', authId);
 
+            // Validate referrer ID if provided
+            let validReferrerId: string | null = null;
+            if (referrerId) {
+                console.log('Validating referrer ID:', referrerId);
+                const { data: referrer } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('id', referrerId)
+                    .maybeSingle();
+
+                if (referrer) {
+                    validReferrerId = referrerId;
+                    console.log('Referrer ID valid');
+                } else {
+                    console.warn('Referrer ID not found in database, ignoring');
+                }
+            }
+
             console.log('Checking for existing public profile...');
             const { data: existingUser } = await supabase
                 .from('users')
@@ -128,8 +146,8 @@ export const CandidateRegisterPage = () => {
                         phone: formData.phone,
                         role: 'candidate',
                         status: UserStatus.STARTED,
-                        referred_by_id: referrerId || existingUser.referred_by_id || null,
-                        source: referrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
+                        referred_by_id: validReferrerId || existingUser.referred_by_id || null,
+                        source: validReferrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
                         hired_date: existingUser.hired_date || new Date().toISOString()
                     }])
                     .select()
@@ -152,8 +170,8 @@ export const CandidateRegisterPage = () => {
                         phone: formData.phone,
                         role: 'candidate',
                         status: UserStatus.STARTED,
-                        referred_by_id: referrerId || null,
-                        source: referrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
+                        referred_by_id: validReferrerId || null,
+                        source: validReferrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
                         hired_date: new Date().toISOString()
                     }])
                     .select()
