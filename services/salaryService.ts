@@ -65,6 +65,10 @@ export const calculateSalary = (
             effectiveDate = new Date(0); // Assume historical if missing
         }
 
+        // Normalize dates to midnight for fair comparison (removes timezone issues)
+        const effectiveDateNormalized = new Date(effectiveDate.getFullYear(), effectiveDate.getMonth(), effectiveDate.getDate());
+        const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
         // --- LOGIC: QUALITY BLOCK (Based on Incidents in current month) ---
         const incidentsCount = qualityIncidents.filter(inc => {
             if (!inc) return false;
@@ -80,9 +84,9 @@ export const calculateSalary = (
         // --- CURRENT RATE CALCULATION ---
         let status: 'active' | 'pending_month' | 'blocked' = 'active';
 
-        // Compare effectiveDate with today (not start of month)
+        // Compare normalized dates (without time) to avoid timezone issues
         // This allows skills to apply immediately when hired mid-month
-        if (effectiveDate <= today) {
+        if (effectiveDateNormalized <= todayNormalized) {
             if (isQualityBlocked) {
                 status = 'blocked';
             } else {
