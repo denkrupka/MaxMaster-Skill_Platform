@@ -388,6 +388,9 @@ export const HRCandidatesPage = () => {
         const portalUrl = window.location.origin + '/#/candidate/welcome';
         const defaultMessage = `Cześć {imię}, chcemy zaprosić Cię do nas na pracę na stanowisko {stanowisko}. Rekrutacja u nas przebiega zdalnie, przez nasz portal - aby rozpocząć proces rekrutacji, przejdź pod link: ${portalUrl}`;
 
+        console.log('📋 Available positions:', positions);
+        console.log('📋 Positions count:', positions?.length || 0);
+
         setSmsInvitationData({
             firstName: '',
             lastName: '',
@@ -1460,9 +1463,13 @@ export const HRCandidatesPage = () => {
                                     onChange={(e) => setSmsInvitationData({...smsInvitationData, position: e.target.value})}
                                 >
                                     <option value="">Wybierz stanowisko...</option>
-                                    {positions.map(pos => (
-                                        <option key={pos.id} value={pos.title_pl}>{pos.title_pl}</option>
-                                    ))}
+                                    {positions && positions.length > 0 ? (
+                                        positions.map(pos => (
+                                            <option key={pos.id} value={pos.title_pl}>{pos.title_pl}</option>
+                                        ))
+                                    ) : (
+                                        <option value="" disabled>Brak stanowisk (dodaj w Ustawieniach → Stanowiska)</option>
+                                    )}
                                 </select>
                             </div>
                         </div>
