@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-    Users, CheckSquare, AlertTriangle, Award, BookOpen, User as UserIcon, 
+import {
+    Users, CheckSquare, AlertTriangle, Award, BookOpen, User as UserIcon,
     Search, Filter, ChevronDown, Eye, MessageSquare, ArrowRight,
     MapPin, Calendar, HardHat, CheckCircle, Clock, XCircle, Shield,
     FileText, Paperclip, Camera, Plus, Save, Trash2, Lock, ShieldAlert,
@@ -16,7 +16,8 @@ import {
     Cake,
     ShieldCheck,
     ShieldAlert as ShieldAlertIcon,
-    Gift
+    Gift,
+    Circle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus, User, SkillStatus, VerificationType, ChecklistItemState, NoteCategory, QualityIncident, BadgeType, ContractType } from '../../types';
@@ -858,7 +859,17 @@ export const CoordinatorQuality = () => {
     const [search, setSearch] = useState('');
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
     const location = useLocation();
-    
+
+    // Read/Unread tracking
+    const [readIncidents, setReadIncidents] = useState<Set<string>>(() => {
+        const stored = localStorage.getItem('coordinator_read_incidents');
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    });
+
+    useEffect(() => {
+        localStorage.setItem('coordinator_read_incidents', JSON.stringify(Array.from(readIncidents)));
+    }, [readIncidents]);
+
     // Handle incoming navigation state (from Dashboard)
     useEffect(() => {
         if (location.state && location.state.search) {
@@ -895,6 +906,7 @@ export const CoordinatorQuality = () => {
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
+                            <th className="px-6 py-4"></th>
                             <th className="px-6 py-4">Data</th>
                             <th className="px-6 py-4">Pracownik</th>
                             <th className="px-6 py-4">Umiejętność</th>
@@ -908,16 +920,32 @@ export const CoordinatorQuality = () => {
                             const user = users.find(u => u.id === inc.user_id);
                             const skill = skills.find(s => s.id === inc.skill_id);
                             const urls = inc.image_urls || (inc.image_url ? [inc.image_url] : []);
+                            const isUnread = inc.id && !readIncidents.has(inc.id);
+
+                            const handleRowClick = () => {
+                                if (inc.id && !readIncidents.has(inc.id)) {
+                                    setReadIncidents(prev => new Set([...prev, inc.id!]));
+                                }
+                            };
+
                             return (
-                                <tr key={inc.id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={inc.id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${isUnread ? 'bg-blue-50' : ''}`} onClick={handleRowClick}>
+                                    <td className="px-6 py-4">
+                                        {isUnread && (
+                                            <Circle size={10} className="fill-blue-600 text-blue-600" />
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 text-slate-500">{new Date(inc.date).toLocaleDateString()}</td>
                                     <td className="px-6 py-4 font-bold text-slate-900">{user?.first_name} {user?.last_name}</td>
                                     <td className="px-6 py-4 text-slate-700">{skill?.name_pl}</td>
                                     <td className="px-6 py-4 text-slate-500">{inc.reported_by}</td>
                                     <td className="px-6 py-4">
                                         {urls.length > 0 ? (
-                                            <button 
-                                                onClick={() => setFileViewer({isOpen: true, urls, title: `Dowód - ${skill?.name_pl}`, index: 0})}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setFileViewer({isOpen: true, urls, title: `Dowód - ${skill?.name_pl}`, index: 0});
+                                                }}
                                                 className="flex items-center gap-1 text-blue-600 hover:underline font-bold"
                                             >
                                                 <ImageIcon size={16}/> {urls.length}
@@ -925,8 +953,8 @@ export const CoordinatorQuality = () => {
                                         ) : '-'}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        {inc.incident_number >= 2 ? 
-                                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200 uppercase">Blokada</span> : 
+                                        {inc.incident_number >= 2 ?
+                                            <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold border border-red-200 uppercase">Blokada</span> :
                                             <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs font-bold border border-yellow-200 uppercase">Ostrzeżenie</span>
                                         }
                                     </td>
@@ -935,7 +963,7 @@ export const CoordinatorQuality = () => {
                         })}
                         {filteredIncidents.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="p-12 text-center text-slate-400 italic">
+                                <td colSpan={7} className="p-12 text-center text-slate-400 italic">
                                     Brak zgłoszeń jakościowych.
                                 </td>
                             </tr>

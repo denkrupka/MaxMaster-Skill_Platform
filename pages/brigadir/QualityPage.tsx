@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useRef } from 'react';
-import { AlertTriangle, Lock, Camera, Upload, X, CheckCircle, Search, Calendar, Filter, Plus, User, Eye, Loader2, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { AlertTriangle, Lock, Camera, Upload, X, CheckCircle, Search, Calendar, Filter, Plus, User, Eye, Loader2, Image as ImageIcon, Circle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { SkillStatus, QualityIncident } from '../../types';
@@ -10,7 +10,7 @@ import { uploadDocument } from '../../lib/supabase';
 export const BrigadirQualityPage = () => {
     const { state, addQualityIncident } = useAppContext();
     const { currentUser, users, userSkills, skills, qualityIncidents } = state;
-    
+
     // View State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -20,6 +20,16 @@ export const BrigadirQualityPage = () => {
     // Modal State for viewing details
     const [selectedIncident, setSelectedIncident] = useState<QualityIncident | null>(null);
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
+
+    // Read/Unread tracking
+    const [readIncidents, setReadIncidents] = useState<Set<string>>(() => {
+        const stored = localStorage.getItem('brigadir_read_incidents');
+        return stored ? new Set(JSON.parse(stored)) : new Set();
+    });
+
+    useEffect(() => {
+        localStorage.setItem('brigadir_read_incidents', JSON.stringify(Array.from(readIncidents)));
+    }, [readIncidents]);
 
     // Form State
     const [selectedUserId, setSelectedUserId] = useState('');
@@ -144,6 +154,10 @@ export const BrigadirQualityPage = () => {
 
     const openIncidentDetail = (inc: QualityIncident) => {
         setSelectedIncident(inc);
+        // Mark as read when opened
+        if (inc.id && !readIncidents.has(inc.id)) {
+            setReadIncidents(prev => new Set([...prev, inc.id!]));
+        }
     };
 
     return (
@@ -168,6 +182,7 @@ export const BrigadirQualityPage = () => {
                 <table className="w-full text-left text-sm">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
+                            <th className="px-6 py-4"></th>
                             <th className="px-6 py-4">Data</th>
                             <th className="px-6 py-4">Pracownik</th>
                             <th className="px-6 py-4">Umiejętność</th>
@@ -182,11 +197,17 @@ export const BrigadirQualityPage = () => {
                             const skill = skills.find(s => s.id === inc.skill_id);
                             const isBlock = inc.incident_number >= 2;
                             const urls = inc.image_urls || (inc.image_url ? [inc.image_url] : []);
+                            const isUnread = inc.id && !readIncidents.has(inc.id);
 
                             return (
-                                <tr key={inc.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => openIncidentDetail(inc)}>
+                                <tr key={inc.id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${isUnread ? 'bg-blue-50' : ''}`} onClick={() => openIncidentDetail(inc)}>
+                                    <td className="px-6 py-4">
+                                        {isUnread && (
+                                            <Circle size={10} className="fill-blue-600 text-blue-600" />
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{new Date(inc.date).toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 font-bold text-slate-900">{user ? `${user.first_name} ${user.last_name}` : 'Nieznany'}</td>
+                                    <td className={`px-6 py-4 ${isUnread ? 'font-bold text-slate-900' : 'font-bold text-slate-900'}`}>{user ? `${user.first_name} ${user.last_name}` : 'Nieznany'}</td>
                                     <td className="px-6 py-4 text-slate-700">{skill?.name_pl}</td>
                                     <td className="px-6 py-4 text-blue-600 font-bold">
                                         {urls.length > 0 ? (
@@ -211,7 +232,7 @@ export const BrigadirQualityPage = () => {
                             );
                         })}
                         {filteredIncidents.length === 0 && (
-                            <tr><td colSpan={6} className="p-12 text-center text-slate-400">Brak zgłoszeń w wybranym okresie.</td></tr>
+                            <tr><td colSpan={7} className="p-12 text-center text-slate-400">Brak zgłoszeń w wybranym okresie.</td></tr>
                         )}
                     </tbody>
                 </table>
