@@ -34,7 +34,8 @@ export const CandidateSimulationPage = () => {
     if (!currentUser) return null;
 
     // --- Calculations ---
-    const baseRate = Number(systemConfig.baseRate || 25);
+    // Use HR-configured base rate from system settings (no hardcoded fallback)
+    const baseRate = systemConfig?.baseRate || 0;
 
     const skillsBonus = useMemo(() => {
         let total = 0;
