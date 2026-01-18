@@ -384,12 +384,13 @@ export const HRCandidatesPage = () => {
     };
 
     const shareViaSMS = () => {
-        // Initialize SMS invitation data with template
-        const portalUrl = window.location.origin + '/#/candidate/welcome';
-        const defaultMessage = `Cześć {imię}, chcemy zaprosić Cię do nas na pracę na stanowisko {stanowisko}. Rekrutacja u nas przebiega zdalnie, przez nasz portal - aby rozpocząć proces rekrutacji, przejdź pod link: ${portalUrl}`;
+        // Initialize SMS invitation data with template - SHORT VERSION
+        const shortUrl = 'portal.maxmaster.info/w';
+        const defaultMessage = `Witaj {imię}! Zapraszamy na stanowisko {stanowisko}. Zarejestruj się: ${shortUrl}`;
 
         console.log('📋 Available positions:', positions);
         console.log('📋 Positions count:', positions?.length || 0);
+        console.log('📋 State:', state);
 
         setSmsInvitationData({
             firstName: '',
@@ -1476,17 +1477,32 @@ export const HRCandidatesPage = () => {
 
                         {/* SMS Message */}
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS</label>
-                            <p className="text-xs text-slate-500 mb-2">Możesz edytować treść wiadomości. Użyj {'{imię}'} i {'{stanowisko}'} dla automatycznego podstawienia.</p>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
+                            <p className="text-xs text-slate-500 mb-2">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
                             <textarea
                                 className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
-                                rows={6}
+                                rows={4}
                                 placeholder="Treść SMS..."
                                 value={smsInvitationData.message}
                                 onChange={(e) => setSmsInvitationData({...smsInvitationData, message: e.target.value})}
                             />
-                            <div className="mt-2 text-xs text-slate-500">
-                                Liczba znaków: {smsInvitationData.message.length} / 160
+                            <div className="mt-2 flex justify-between text-xs">
+                                <span className={smsInvitationData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                                    Szablon: {smsInvitationData.message.length} znaków
+                                </span>
+                                {smsInvitationData.firstName && smsInvitationData.position && (
+                                    <span className={
+                                        smsInvitationData.message
+                                            .replace(/\{imię\}/g, smsInvitationData.firstName)
+                                            .replace(/\{stanowisko\}/g, smsInvitationData.position).length > 160
+                                            ? 'text-red-600 font-bold'
+                                            : 'text-green-600'
+                                    }>
+                                        Po podstawieniu: {smsInvitationData.message
+                                            .replace(/\{imię\}/g, smsInvitationData.firstName)
+                                            .replace(/\{stanowisko\}/g, smsInvitationData.position).length} / 160
+                                    </span>
+                                )}
                             </div>
                         </div>
 
