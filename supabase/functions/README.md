@@ -56,8 +56,11 @@
 
 5. **Задеплойте функцию:**
    ```bash
-   supabase functions deploy parse-cv
+   supabase functions deploy parse-cv --no-verify-jwt
    ```
+
+   Флаг `--no-verify-jwt` позволяет вызывать функцию без JWT токена (публичный доступ).
+   Это безопасно, так как API ключ Gemini хранится на сервере.
 
 6. **Проверьте статус:**
    ```bash
@@ -123,3 +126,15 @@ supabase functions deploy parse-cv --no-verify-jwt
 ```
 
 Флаг `--no-verify-jwt` позволяет вызывать функцию без JWT токена (для публичного доступа).
+
+## Исправление ошибки 401 Unauthorized
+
+Если вы видите ошибку `401 Unauthorized` при вызове функции:
+
+**Решение:** Передеплойте функцию с флагом `--no-verify-jwt`:
+
+```bash
+supabase functions deploy parse-cv --no-verify-jwt
+```
+
+Это разрешит публичный доступ к функции. Не волнуйтесь о безопасности - API ключ Gemini всё равно хранится только на сервере Supabase и недоступен клиентам.

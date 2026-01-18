@@ -561,29 +561,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       passed,
       completed_at: new Date().toISOString()
     };
-    
+
     const { data: attemptData, error: attemptError } = await supabase.from('test_attempts').insert([newAttempt]).select().single();
     if (attemptError) throw attemptError;
-    
+
     const test = state.tests.find(t => t.id === testId);
     const skillId = test?.skill_ids ? test.skill_ids[0] : null;
-    
+
     if (skillId) {
       const existingUs = state.userSkills.find(us => us.user_id === state.currentUser?.id && us.skill_id === skillId);
       const skill = state.skills.find(s => s.id === skillId);
       const newStatus = passed ? (skill?.verification_type === VerificationType.THEORY_ONLY ? SkillStatus.CONFIRMED : SkillStatus.THEORY_PASSED) : SkillStatus.FAILED;
-      
+
       if (existingUs) {
         await supabase.from('user_skills').update({ status: newStatus, theory_score: score }).eq('id', existingUs.id);
       } else {
         await supabase.from('user_skills').insert([{ user_id: state.currentUser.id, skill_id: skillId, status: newStatus, theory_score: score }]);
       }
-      
+
       const { data: refreshedSkills } = await supabase.from('user_skills').select('*').eq('user_id', state.currentUser.id);
       setState(prev => ({
         ...prev,
         testAttempts: [...prev.testAttempts, attemptData],
         userSkills: refreshedSkills || prev.userSkills
+      }));
+    } else {
+      // Even if no skill is associated, update testAttempts
+      setState(prev => ({
+        ...prev,
+        testAttempts: [...prev.testAttempts, attemptData]
       }));
     }
 

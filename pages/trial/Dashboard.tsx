@@ -24,30 +24,10 @@ export const TrialDashboard = () => {
     // File Viewer State
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
 
-    // Update time for trial progress bar
+    // Update time for trial progress bar every minute
     useEffect(() => {
         const interval = setInterval(() => setTrialNow(new Date()), 60000); // Update every minute
         return () => clearInterval(interval);
-    }, []);
-
-    // Auto-refresh data from storage every 10 seconds
-    useEffect(() => {
-        const handleStorageChange = () => {
-            // Force re-render by updating state
-            // The AppContext will automatically provide updated data
-            setTrialNow(new Date());
-        };
-
-        // Listen to storage events (for cross-tab sync)
-        window.addEventListener('storage', handleStorageChange);
-
-        // Also poll every 10 seconds
-        const pollInterval = setInterval(handleStorageChange, 10000);
-
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-            clearInterval(pollInterval);
-        };
     }, []);
 
     if (!currentUser) return null;
@@ -65,7 +45,47 @@ export const TrialDashboard = () => {
     // --- LOGIC: SALARY ---
     // During TRIAL period, use frozen rate (set at hiring time)
     // This ensures candidate gets the rate they agreed to, even before completing practice verifications
-    const frozenRate = currentUser.base_rate || systemConfig.baseRate;
+
+    // If base_rate wasn't saved correctly during hiring, recalculate it
+    let frozenRate = currentUser.base_rate;
+
+    // Recalculate if base_rate is missing or equals system base rate (not properly frozen)
+    if (!frozenRate || frozenRate <= systemConfig.baseRate) {
+        // Recalculate from tests and qualifications
+        const passedTests = testAttempts.filter(ta => ta.user_id === currentUser.id && ta.passed);
+        const countedSkillIds = new Set<string>();
+        let skillsBonus = 0;
+
+        passedTests.forEach(ta => {
+            const test = tests.find(t => t.id === ta.test_id);
+            if (test?.skill_ids) {
+                test.skill_ids.forEach(sid => {
+                    if (!countedSkillIds.has(sid)) {
+                        const skill = skills.find(s => s.id === sid);
+                        if (skill) {
+                            skillsBonus += skill.hourly_bonus;
+                            countedSkillIds.add(sid);
+                        }
+                    }
+                });
+            }
+        });
+
+        const QUALIFICATIONS_LIST = [
+            { id: 'sep_e', value: 0.5 },
+            { id: 'sep_d', value: 0.5 },
+            { id: 'udt', value: 1.0 }
+        ];
+        const qualsBonus = QUALIFICATIONS_LIST
+            .filter(q => (currentUser.qualifications || []).includes(q.id))
+            .reduce((sum, q) => sum + q.value, 0);
+
+        const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
+        const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
+        const totalExtras = contractBonus + studentBonus;
+
+        frozenRate = systemConfig.baseRate + skillsBonus + qualsBonus + totalExtras;
+    }
 
     // For trial employees, calculate what WILL be their rate after trial ends
     // This is based on CONFIRMED skills only (regardless of effective_from)
@@ -87,10 +107,10 @@ export const TrialDashboard = () => {
     // Calculate skills bonus from confirmed skills
     let postTrialSkillsBonus = 0;
     const postTrialSkillDetails: { name: string; amount: number }[] = [];
-    const countedSkillIds = new Set<string>();
+    const postTrialCountedSkillIds = new Set<string>();
 
     confirmedUserSkills.forEach(us => {
-        if (!countedSkillIds.has(us.skill_id)) {
+        if (!postTrialCountedSkillIds.has(us.skill_id)) {
             const skill = skills.find(s => s.id === us.skill_id);
             if (skill) {
                 postTrialSkillsBonus += skill.hourly_bonus;
@@ -98,7 +118,7 @@ export const TrialDashboard = () => {
                     name: skill.name_pl,
                     amount: skill.hourly_bonus
                 });
-                countedSkillIds.add(us.skill_id);
+                postTrialCountedSkillIds.add(us.skill_id);
                 console.log(`➕ Adding skill: ${skill.name_pl} = ${skill.hourly_bonus} zł`);
             }
         }
@@ -332,6 +352,13 @@ export const TrialDashboard = () => {
             );
             const qualsBonus = userQualsList.reduce((sum, q) => sum + (q.value || 0), 0);
 
+            // Calculate total from breakdown components (in case base_rate wasn't saved correctly)
+            const calculatedFrozenTotal = base + skillsBonus + qualsBonus + totalExtras;
+            // Use saved base_rate if available and greater than system base rate, otherwise use calculated
+            const displayedFrozenRate = (currentUser?.base_rate && currentUser.base_rate > systemConfig.baseRate)
+                ? currentUser.base_rate
+                : calculatedFrozenTotal;
+
             // Show simple breakdown for frozen rate
             return (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
@@ -351,7 +378,7 @@ export const TrialDashboard = () => {
                                             Zamrożona z momentu zatrudnienia na okres próbny
                                         </div>
                                     </div>
-                                    <div className="font-black text-3xl text-green-700">{(currentTotalRate || 0).toFixed(2)} zł</div>
+                                    <div className="font-black text-3xl text-green-700">{(displayedFrozenRate || 0).toFixed(2)} zł</div>
                                 </div>
                             </div>
 
@@ -448,77 +475,148 @@ export const TrialDashboard = () => {
         }
 
         // For potential (post-trial) rate, show detailed breakdown
-        const activeItems = postTrialSalaryInfo.breakdown.details.activeSkills;
-        const pendingItems = postTrialSalaryInfo.breakdown.details.pendingSkills;
+        // Add safety checks to prevent white screen crashes
+
+        // For TRIAL employees prognosis, we need to show:
+        // 1. CONFIRMED skills (practice verified) - will count after trial
+        // 2. VERIFIED/PENDING skills (test passed, practice not confirmed) - won't count unless confirmed
+
+        const confirmedUserSkills = (userSkills || []).filter(us =>
+            us?.user_id === currentUser?.id &&
+            us?.status === SkillStatus.CONFIRMED &&
+            !us?.is_archived
+        );
+
+        const verifiedButNotConfirmed = (userSkills || []).filter(us =>
+            us?.user_id === currentUser?.id &&
+            (us?.status === SkillStatus.VERIFIED || us?.status === SkillStatus.PENDING) &&
+            !us?.is_archived
+        );
+
+        // Build active items from confirmed skills
+        const activeItems: Array<{name: string, value: number}> = [];
+        confirmedUserSkills.forEach(us => {
+            const skill = (skills || []).find(s => s?.id === us?.skill_id);
+            const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
+            const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
+
+            if (bonusAmount > 0) {
+                activeItems.push({ name, value: bonusAmount });
+            }
+        });
+
+        // Build pending items from verified but not confirmed
+        const pendingItems: Array<{name: string, value: number}> = [];
+        verifiedButNotConfirmed.forEach(us => {
+            const skill = (skills || []).find(s => s?.id === us?.skill_id);
+            const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
+            const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
+
+            if (bonusAmount > 0) {
+                pendingItems.push({ name, value: bonusAmount });
+            }
+        });
+
+        const baseRate = postTrialSalaryInfo?.breakdown?.base || systemConfig?.baseRate || 24;
 
         return (
             <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setBreakdownType(null)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+                <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-4">
                         <h3 className="font-bold text-slate-900">{title}</h3>
                         <button onClick={() => setBreakdownType(null)}><X size={24} className="text-slate-400 hover:text-slate-600"/></button>
                     </div>
 
-                    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+                    <div className="space-y-3">
                         <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                             <div>
                                 <div className="font-medium text-sm text-slate-800">Stawka Bazowa</div>
                                 <div className="text-xs text-slate-500">Podstawa</div>
                             </div>
-                            <div className="font-bold text-slate-900">+{postTrialSalaryInfo.breakdown.base.toFixed(2)} zł</div>
+                            <div className="font-bold text-slate-900">+{(baseRate || 0).toFixed(2)} zł</div>
                         </div>
 
                         {totalExtras > 0 && (
                             <div className="flex justify-between items-center p-2 rounded bg-white border border-slate-100">
                                 <div>
                                     <div className="font-medium text-sm text-slate-800">Umowa</div>
-                                    <div className="text-xs text-blue-600 font-bold">{CONTRACT_TYPE_LABELS[currentUser.contract_type || ContractType.UOP]}</div>
+                                    <div className="text-xs text-blue-600 font-bold">{CONTRACT_TYPE_LABELS[currentUser?.contract_type || ContractType.UOP] || 'UOP'}</div>
                                 </div>
-                                <div className="font-bold text-blue-600">+{totalExtras.toFixed(2)} zł</div>
+                                <div className="font-bold text-blue-600">+{(totalExtras || 0).toFixed(2)} zł</div>
                             </div>
                         )}
 
-                        {activeItems.length > 0 && (
+                        {activeItems && activeItems.length > 0 && (
                             <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Potwierdzone Umiejętności</div>
-                                {activeItems.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
+                                <div className="text-xs font-bold text-green-600 uppercase tracking-wider pt-2">✓ Potwierdzone Umiejętności</div>
+                                <div className="text-xs text-slate-500 mb-2">Praktyka zweryfikowana - wliczone do stawki</div>
+                                {activeItems.map((item, idx) => (
+                                    <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
+<<<<<<< HEAD
                                             <div className="font-medium text-sm text-green-900">{item.name}</div>
                                             <div className="text-xs text-green-600">✓ Potwierdzone</div>
                                         </div>
                                         <div className="font-bold text-green-700">+{item.amount.toFixed(2)} zł</div>
-                                    </div>
-                                ))}
-                            </>
-                        )}
-
-                        {pendingItems.length > 0 && (
-                            <>
-                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider pt-2">Oczekujące (Teoria zdana, praktyka w toku)</div>
-                                {pendingItems.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
-                                        <div>
-                                            <div className="font-medium text-sm text-orange-900">{item.name}</div>
-                                            <div className="text-xs text-orange-600">Wymaga potwierdzenia</div>
+=======
+                                            <div className="font-medium text-sm text-green-900">{item?.name || 'Nieznana'}</div>
+                                            <div className="text-xs text-green-600 flex items-center gap-1">
+                                                <CheckCircle size={12}/> Potwierdzone
+                                            </div>
                                         </div>
-                                        <div className="font-bold text-orange-700">+{item.amount.toFixed(2)} zł</div>
+                                        <div className="font-bold text-green-700">+{(item?.value || 0).toFixed(2)} zł</div>
+>>>>>>> origin/main
                                     </div>
                                 ))}
                             </>
                         )}
 
-                        {activeItems.length === 0 && pendingItems.length === 0 && (
+                        {pendingItems && pendingItems.length > 0 && (
+                            <>
+                                <div className="text-xs font-bold text-orange-600 uppercase tracking-wider pt-2">⚠️ Nie Wliczone (Praktyka Nie Potwierdzona)</div>
+                                <div className="text-xs text-slate-500 mb-2">Test zdany, ale praktyka wymaga potwierdzenia - NIE wliczone do stawki</div>
+                                {pendingItems.map((item, idx) => (
+                                    <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-orange-50 border border-orange-100">
+                                        <div>
+                                            <div className="font-medium text-sm text-orange-900">{item?.name || 'Nieznana'}</div>
+                                            <div className="text-xs text-orange-600 flex items-center gap-1">
+                                                <AlertCircle size={12}/> Wymaga potwierdzenia
+                                            </div>
+                                        </div>
+<<<<<<< HEAD
+                                        <div className="font-bold text-orange-700">+{item.amount.toFixed(2)} zł</div>
+=======
+                                        <div className="font-bold text-slate-400 line-through">+{(item?.value || 0).toFixed(2)} zł</div>
+>>>>>>> origin/main
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {(!activeItems || activeItems.length === 0) && (!pendingItems || pendingItems.length === 0) && (
                             <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center">
                                 <p className="text-sm text-slate-600">Brak potwierdzonych umiejętności. Po okresie próbnym otrzymasz stawkę bazową + bonus za umowę.</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-6 pt-4 border-t border-slate-100">
+                    <div className="mt-6 pt-4 border-t border-slate-100 space-y-3">
+                        {pendingItems && pendingItems.length > 0 && (
+                            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                                <p className="text-xs text-orange-800">
+                                    <strong>⚠️ Uwaga:</strong> Umiejętności bez potwierdzonej praktyki <strong>NIE są wliczone</strong> do stawki po próbnym.
+                                    Aby je aktywować, potwierdź praktykę podczas okresu próbnego.
+                                </p>
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-center">
                             <span className="font-bold text-lg text-slate-900">RAZEM PO PRÓBNYM:</span>
-                            <span className="font-black text-2xl text-blue-600">{total.toFixed(2)} zł/h</span>
+                            <span className="font-black text-2xl text-blue-600">{(total || 0).toFixed(2)} zł/h</span>
+                        </div>
+
+                        <div className="text-xs text-slate-500">
+                            Obliczone na podstawie: bazy + potwierdzone umiejętności + umowa
                         </div>
                     </div>
                 </div>

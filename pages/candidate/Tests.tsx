@@ -141,15 +141,15 @@ export const CandidateTestsPage = () => {
         setAnswers(newAnswers);
     };
 
-    const handleNextQuestion = () => {
+    const handleNextQuestion = async () => {
         if (currentQuestionIdx < displayedQuestions.length - 1) {
             setCurrentQuestionIdx(currentQuestionIdx + 1);
         } else {
-            finishCurrentTest();
+            await finishCurrentTest();
         }
     };
 
-    const finishCurrentTest = () => {
+    const finishCurrentTest = async () => {
         if (!activeTest) return;
 
         // Calculate Duration
@@ -187,8 +187,8 @@ export const CandidateTestsPage = () => {
         const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
         const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
-        
-        submitTest(activeTest.id, answers, calculatedScore, passed);
+
+        await submitTest(activeTest.id, answers, calculatedScore, passed);
 
         setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
         setTestStarted(false); // Stop "running" mode
