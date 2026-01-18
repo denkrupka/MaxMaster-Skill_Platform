@@ -1,9 +1,10 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { 
-  User, UserSkill, Skill, Test, TestAttempt, SystemConfig, 
-  AppNotification, NotificationSetting, Position, CandidateHistoryEntry, 
+import { sendTemplatedSMS } from '../lib/smsService';
+import {
+  User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
+  AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
   QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
   Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory
 } from '../types';
@@ -313,7 +314,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const moveCandidateToTrial = async (id: string, config: any) => {
+    const user = state.users.find(u => u.id === id);
     await updateUser(id, { status: UserStatus.TRIAL, role: Role.EMPLOYEE, ...config });
+
+    // Send SMS notification about trial start
+    if (user?.phone && config.contract_end_date) {
+      const trialEndDate = new Date(config.contract_end_date).toLocaleDateString('pl-PL');
+      const brigadir = config.assigned_brigadir_id
+        ? state.users.find(u => u.id === config.assigned_brigadir_id)
+        : null;
+      const hrName = brigadir ? `${brigadir.first_name} ${brigadir.last_name}` : 'HR';
+
+      try {
+        await sendTemplatedSMS(
+          'TRIAL_START',
+          user.phone,
+          { firstName: user.first_name, trialEndDate, hrName },
+          user.id
+        );
+      } catch (error) {
+        console.error('Failed to send trial start SMS:', error);
+      }
+    }
   };
 
   const logCandidateAction = async (candidateId: string, action: string) => {
@@ -627,9 +649,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, toast: null }));
   };
 
-  const inviteFriend = (firstName: string, lastName: string, phone: string, targetPosition: string) => {
+  const inviteFriend = async (firstName: string, lastName: string, phone: string, targetPosition: string) => {
     if (state.currentUser) logCandidateAction(state.currentUser.id, `Zaproszono znajomego: ${firstName} ${lastName} (${targetPosition})`);
-    triggerNotification('info', 'Zaproszenie wysłane', `Wysłano zaproszenie do ${firstName} ${lastName}.`);
+
+    // Send SMS invitation
+    const portalUrl = window.location.origin;
+    try {
+      await sendTemplatedSMS(
+        'CAND_INVITE_LINK',
+        phone,
+        { firstName, portalUrl },
+        undefined
+      );
+      triggerNotification('success', 'Zaproszenie wysłane', `Wysłano SMS do ${firstName} ${lastName}.`);
+    } catch (error) {
+      console.error('Failed to send invitation SMS:', error);
+      triggerNotification('warning', 'Zaproszenie wysłane', `Dodano ${firstName} ${lastName}, ale SMS nie został wysłany.`);
+    }
   };
 
   const confirmSkillPractice = async (userSkillId: string, brigadirId: string) => {
@@ -668,6 +704,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       userSkills: prev.userSkills.map(us => us.id === userSkillId ? { ...us, ...data } : us)
     }));
+
+    // Send SMS notification about approved skill
+    const skill = state.skills.find(s => s.id === userSkill.skill_id);
+    if (user.phone && skill) {
+      try {
+        await sendTemplatedSMS(
+          'PRACTICE_VERIFICATION_RESULT_APPROVED',
+          user.phone,
+          { firstName: user.first_name, skillName: skill.title_pl },
+          user.id
+        );
+      } catch (error) {
+        console.error('Failed to send skill approval SMS:', error);
+      }
+    }
   };
 
   const saveSkillChecklistProgress = async (userSkillId: string, progress: any) => {
