@@ -392,11 +392,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       us => us.user_id === userId && us.status === SkillStatus.CONFIRMED && !us.is_archived
     );
 
-    // Set effective_from to 1st of current month so skills apply immediately
-    // (not 1st of next month)
+    // Set effective_from to the exact hired date so skills apply immediately
+    // This ensures the forecast rate applies from the day of transition to ACTIVE
     const hiredDateObj = new Date(hiredDate);
-    const effectiveFromDate = new Date(hiredDateObj.getFullYear(), hiredDateObj.getMonth(), 1);
-    const effectiveFromISO = effectiveFromDate.toISOString();
+    const effectiveFromISO = hiredDateObj.toISOString();
 
     // Update effective_from for ALL confirmed skills (force update)
     // This ensures skills confirmed during TRIAL apply immediately when transitioning to ACTIVE

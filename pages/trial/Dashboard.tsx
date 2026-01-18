@@ -128,8 +128,10 @@ export const TrialDashboard = () => {
         .filter(q => (currentUser.qualifications || []).includes(q.id))
         .reduce((sum, q) => sum + q.value, 0);
 
-    // Post-trial rate = base + skills + qualifications + contract + student
-    const postTrialBaseRate = systemConfig.baseRate + qualsBonus;
+    // Post-trial rate = base + skills + contract + student
+    // NOTE: Qualifications are NOT included in the forecast until they are verified
+    // They are only included in the frozen rate during trial period
+    const postTrialBaseRate = systemConfig.baseRate; // Show only HR-configured base rate
     const nextMonthTotalRate = postTrialBaseRate + postTrialSkillsBonus + totalExtras;
 
     // Create postTrialSalaryInfo structure for modal
