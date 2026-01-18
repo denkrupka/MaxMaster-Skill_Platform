@@ -540,29 +540,42 @@ export const HRCandidatesPage = () => {
         setIsStatusPopoverOpen(false);
 
         // Send SMS notification based on status change
+        console.log('🔍 SMS Debug:', {
+            hasPhone: !!selectedCandidate.phone,
+            phone: selectedCandidate.phone,
+            newStatus: newStatus,
+            firstName: selectedCandidate.first_name
+        });
+
         if (selectedCandidate.phone) {
             try {
                 if (newStatus === UserStatus.REJECTED) {
+                    console.log('📱 Sending rejection SMS to:', selectedCandidate.phone);
                     // Send rejection SMS
-                    await sendTemplatedSMS(
+                    const result = await sendTemplatedSMS(
                         'CAND_REJECTED',
                         selectedCandidate.phone,
                         { firstName: selectedCandidate.first_name, companyName: 'MaxMaster' },
                         selectedCandidate.id
                     );
+                    console.log('✅ SMS sent result:', result);
                 } else if (newStatus === UserStatus.DATA_REQUESTED) {
+                    console.log('📱 Sending data request SMS to:', selectedCandidate.phone);
                     // Send data request SMS
                     const actionUrl = `${window.location.origin}/#/candidate/profile`;
-                    await sendTemplatedSMS(
+                    const result = await sendTemplatedSMS(
                         'CAND_DOCS_REQUEST',
                         selectedCandidate.phone,
                         { firstName: selectedCandidate.first_name, actionUrl },
                         selectedCandidate.id
                     );
+                    console.log('✅ SMS sent result:', result);
                 }
             } catch (error) {
-                console.error('Failed to send status change SMS:', error);
+                console.error('❌ Failed to send status change SMS:', error);
             }
+        } else {
+            console.warn('⚠️ No phone number for candidate, SMS not sent');
         }
     };
 
