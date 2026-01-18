@@ -1,8 +1,9 @@
 // Supabase Edge Function for sending SMS via SMSAPI.pl
 // This keeps the API token secure on the server side
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+
+import { createClient } from '@supabase/supabase-js';
 
 const SMSAPI_TOKEN = Deno.env.get('SMSAPI_TOKEN');
 const SMSAPI_SENDER_NAME = Deno.env.get('SMSAPI_SENDER_NAME') || 'MAXMASTER';
@@ -33,7 +34,7 @@ interface SMSAPIResponse {
   }>;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
