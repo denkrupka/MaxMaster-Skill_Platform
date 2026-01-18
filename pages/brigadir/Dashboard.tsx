@@ -1,9 +1,9 @@
 
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-    CheckSquare, AlertTriangle, Star, 
-    Calendar, TrendingUp, AlertCircle, ChevronRight
+import {
+    CheckSquare, AlertTriangle, Star,
+    TrendingUp, AlertCircle, ChevronRight
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -96,20 +96,11 @@ export const BrigadirDashboard = () => {
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-8 pb-24">
             
-            {/* Header with Date Picker */}
+            {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Panel Zarządzania</h1>
                     <p className="text-slate-500">Przegląd zadań, weryfikacji i statusu zespołu.</p>
-                </div>
-                <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-                    <Calendar size={18} className="text-slate-400 ml-2"/>
-                    <input 
-                        type="month" 
-                        className="text-sm font-bold text-slate-700 bg-transparent border-none focus:ring-0 outline-none cursor-pointer"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                    />
                 </div>
             </div>
 
