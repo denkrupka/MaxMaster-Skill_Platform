@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { NotificationChannel } from '../types';
 
 const SUPABASE_URL = 'https://diytvuczpciikzdhldny.supabase.co';
 
@@ -108,7 +109,7 @@ export const sendTemplatedSMS = async (
   }
 
   // Check if this template should be sent via SMS
-  if (template.channel !== 'BOTH' && template.channel !== 'SMS') {
+  if (template.channel !== NotificationChannel.BOTH && template.channel !== NotificationChannel.SMS) {
     return {
       success: false,
       error: `Template ${templateCode} is not configured for SMS (channel: ${template.channel})`,
