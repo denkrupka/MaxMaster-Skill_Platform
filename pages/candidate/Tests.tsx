@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, CheckCircle, Clock, AlertTriangle, ChevronRight, Lock, Circle, ArrowRight, X, ZoomIn } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -89,7 +89,7 @@ export const CandidateTestsPage = () => {
         }, 1000);
 
         return () => clearInterval(timerId);
-    }, [timeLeft, testStarted]);
+    }, [timeLeft, testStarted, handleNextQuestion]);
 
     // --- Handlers ---
 
@@ -141,15 +141,7 @@ export const CandidateTestsPage = () => {
         setAnswers(newAnswers);
     };
 
-    const handleNextQuestion = async () => {
-        if (currentQuestionIdx < displayedQuestions.length - 1) {
-            setCurrentQuestionIdx(currentQuestionIdx + 1);
-        } else {
-            await finishCurrentTest();
-        }
-    };
-
-    const finishCurrentTest = async () => {
+    const finishCurrentTest = useCallback(async () => {
         if (!activeTest) return;
 
         // Calculate Duration
@@ -193,7 +185,15 @@ export const CandidateTestsPage = () => {
         setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
         setTestStarted(false); // Stop "running" mode
         setShowInterimModal(true); // Show summary
-    };
+    }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
+
+    const handleNextQuestion = useCallback(async () => {
+        if (currentQuestionIdx < displayedQuestions.length - 1) {
+            setCurrentQuestionIdx(currentQuestionIdx + 1);
+        } else {
+            await finishCurrentTest();
+        }
+    }, [currentQuestionIdx, displayedQuestions.length, finishCurrentTest]);
 
     const handleNextTestInQueue = () => {
         setShowInterimModal(false);
@@ -242,7 +242,7 @@ export const CandidateTestsPage = () => {
         <div className="min-h-screen bg-slate-50 flex">
             
             {/* 1. LEFT SIDEBAR (Progress) */}
-            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 pt-16 z-10 hidden lg:flex">
+            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 z-10 hidden lg:flex">
                 <div className="p-6 border-b border-slate-100">
                     <h2 className="font-bold text-slate-900">Twoje Testy</h2>
                     <p className="text-xs text-slate-500 mt-1">Postęp weryfikacji: {Math.round(progressPercent)}%</p>
