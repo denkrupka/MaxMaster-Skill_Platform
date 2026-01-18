@@ -29,6 +29,10 @@ export const calculateSalary = (
   const currentYear = referenceDate.getFullYear();
   const currentMonth = referenceDate.getMonth();
   const startOfCurrentMonth = new Date(currentYear, currentMonth, 1);
+
+  // For skill effective date comparison, use current date (not start of month)
+  // This ensures skills apply immediately when transitioning from TRIAL to ACTIVE
+  const today = new Date(currentYear, currentMonth, referenceDate.getDate());
   
   // 2. Calculate Skill Bonuses
   let currentSkillsBonus = 0;
@@ -75,19 +79,21 @@ export const calculateSalary = (
 
         // --- CURRENT RATE CALCULATION ---
         let status: 'active' | 'pending_month' | 'blocked' = 'active';
-        
-        if (effectiveDate <= startOfCurrentMonth) {
+
+        // Compare effectiveDate with today (not start of month)
+        // This allows skills to apply immediately when hired mid-month
+        if (effectiveDate <= today) {
             if (isQualityBlocked) {
                 status = 'blocked';
             } else {
                 currentSkillsBonus += bonusAmount;
                 status = 'active';
             }
-            
-            activeSkillDetails.push({ 
-                name, 
-                amount: bonusAmount, 
-                isBlocked: isQualityBlocked, 
+
+            activeSkillDetails.push({
+                name,
+                amount: bonusAmount,
+                isBlocked: isQualityBlocked,
                 effectiveFrom: effectiveDate.toISOString(),
                 status
             });
