@@ -398,14 +398,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const effectiveFromDate = new Date(hiredDateObj.getFullYear(), hiredDateObj.getMonth(), 1);
     const effectiveFromISO = effectiveFromDate.toISOString();
 
-    // Update effective_from for skills that were confirmed during TRIAL period
+    // Update effective_from for ALL confirmed skills (force update)
+    // This ensures skills confirmed during TRIAL apply immediately when transitioning to ACTIVE
     for (const userSkill of confirmedSkills) {
-      if (!userSkill.effective_from) {
-        await supabase
-          .from('user_skills')
-          .update({ effective_from: effectiveFromISO })
-          .eq('id', userSkill.id);
-      }
+      await supabase
+        .from('user_skills')
+        .update({ effective_from: effectiveFromISO })
+        .eq('id', userSkill.id);
     }
 
     // Reset base_rate to null so that calculateSalary() uses systemConfig.baseRate
