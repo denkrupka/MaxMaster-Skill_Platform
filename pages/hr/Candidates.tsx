@@ -105,6 +105,17 @@ export const HRCandidatesPage = () => {
     const [isInvitationModalOpen, setIsInvitationModalOpen] = useState(false);
     const [invitationLink, setInvitationLink] = useState('');
 
+    // SMS Invitation modal
+    const [isSMSInvitationModalOpen, setIsSMSInvitationModalOpen] = useState(false);
+    const [smsInvitationData, setSmsInvitationData] = useState({
+        firstName: '',
+        lastName: '',
+        phone: '',
+        position: '',
+        message: ''
+    });
+    const [isSendingSMS, setIsSendingSMS] = useState(false);
+
     const brigadirsList = useMemo(() => {
         return users.filter(u => u.role === Role.BRIGADIR);
     }, [users]);
@@ -373,8 +384,66 @@ export const HRCandidatesPage = () => {
     };
 
     const shareViaSMS = () => {
-        const message = encodeURIComponent(`Zaproszenie do MaxMaster: ${invitationLink}`);
-        window.location.href = `sms:?body=${message}`;
+        // Initialize SMS invitation data with template
+        const portalUrl = window.location.origin + '/#/candidate/welcome';
+        const defaultMessage = `Cześć {imię}, chcemy zaprosić Cię do nas na pracę na stanowisko {stanowisko}. Rekrutacja u nas przebiega zdalnie, przez nasz portal - aby rozpocząć proces rekrutacji, przejdź pod link: ${portalUrl}`;
+
+        setSmsInvitationData({
+            firstName: '',
+            lastName: '',
+            phone: '',
+            position: '',
+            message: defaultMessage
+        });
+        setIsInvitationModalOpen(false);
+        setIsSMSInvitationModalOpen(true);
+    };
+
+    const handleSendSMSInvitation = async () => {
+        // Validate fields
+        if (!smsInvitationData.firstName || !smsInvitationData.lastName || !smsInvitationData.phone || !smsInvitationData.position) {
+            triggerNotification('error', 'Błąd', 'Wypełnij wszystkie pola');
+            return;
+        }
+
+        setIsSendingSMS(true);
+        try {
+            // Replace placeholders in message
+            const finalMessage = smsInvitationData.message
+                .replace(/\{imię\}/g, smsInvitationData.firstName)
+                .replace(/\{stanowisko\}/g, smsInvitationData.position);
+
+            // Send SMS
+            const result = await sendTemplatedSMS(
+                'CAND_INVITE_LINK',
+                smsInvitationData.phone,
+                {
+                    firstName: smsInvitationData.firstName,
+                    portalUrl: window.location.origin + '/#/candidate/welcome'
+                },
+                undefined
+            );
+
+            if (result.success) {
+                triggerNotification('success', 'SMS wysłany', `Zaproszenie SMS wysłane do ${smsInvitationData.firstName} ${smsInvitationData.lastName}`);
+                setIsSMSInvitationModalOpen(false);
+
+                // Log the action
+                if (state.currentUser) {
+                    await logCandidateAction(
+                        state.currentUser.id,
+                        `Wysłano SMS zaproszenie do: ${smsInvitationData.firstName} ${smsInvitationData.lastName} (${smsInvitationData.phone})`
+                    );
+                }
+            } else {
+                triggerNotification('error', 'Błąd wysyłania SMS', result.error || 'Nie udało się wysłać SMS');
+            }
+        } catch (error) {
+            console.error('Failed to send SMS invitation:', error);
+            triggerNotification('error', 'Błąd', 'Nie udało się wysłać zaproszenia SMS');
+        } finally {
+            setIsSendingSMS(false);
+        }
     };
 
     const handleSavePersonalData = async () => {
@@ -1332,11 +1401,138 @@ export const HRCandidatesPage = () => {
         );
     };
 
+    const renderSMSInvitationModal = () => {
+        if (!isSMSInvitationModalOpen) return null;
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-orange-600 to-orange-500">
+                        <div>
+                            <h2 className="text-xl font-black text-white tracking-tight uppercase">Wyślij SMS Zaproszenie</h2>
+                            <p className="text-xs text-orange-100 font-medium mt-1">Wypełnij dane i wyślij zaproszenie SMS</p>
+                        </div>
+                        <button onClick={() => setIsSMSInvitationModalOpen(false)} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all">
+                            <X size={24}/>
+                        </button>
+                    </div>
+
+                    <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                        {/* Personal Info */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Imię</label>
+                                <input
+                                    type="text"
+                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
+                                    placeholder="np. Jan"
+                                    value={smsInvitationData.firstName}
+                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, firstName: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nazwisko</label>
+                                <input
+                                    type="text"
+                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
+                                    placeholder="np. Kowalski"
+                                    value={smsInvitationData.lastName}
+                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, lastName: e.target.value})}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Numer Telefonu</label>
+                                <input
+                                    type="tel"
+                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
+                                    placeholder="+48 500 123 456"
+                                    value={smsInvitationData.phone}
+                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, phone: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Stanowisko</label>
+                                <select
+                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
+                                    value={smsInvitationData.position}
+                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, position: e.target.value})}
+                                >
+                                    <option value="">Wybierz stanowisko...</option>
+                                    {positions.map(pos => (
+                                        <option key={pos.id} value={pos.title_pl}>{pos.title_pl}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* SMS Message */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS</label>
+                            <p className="text-xs text-slate-500 mb-2">Możesz edytować treść wiadomości. Użyj {'{imię}'} i {'{stanowisko}'} dla automatycznego podstawienia.</p>
+                            <textarea
+                                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
+                                rows={6}
+                                placeholder="Treść SMS..."
+                                value={smsInvitationData.message}
+                                onChange={(e) => setSmsInvitationData({...smsInvitationData, message: e.target.value})}
+                            />
+                            <div className="mt-2 text-xs text-slate-500">
+                                Liczba znaków: {smsInvitationData.message.length} / 160
+                            </div>
+                        </div>
+
+                        {/* Preview */}
+                        {smsInvitationData.firstName && smsInvitationData.position && (
+                            <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+                                <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Podgląd wiadomości</p>
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                    {smsInvitationData.message
+                                        .replace(/\{imię\}/g, smsInvitationData.firstName)
+                                        .replace(/\{stanowisko\}/g, smsInvitationData.position)}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-3">
+                        <button
+                            onClick={() => setIsSMSInvitationModalOpen(false)}
+                            className="flex-1 text-sm font-black uppercase text-slate-500 hover:text-slate-700 transition-colors"
+                            disabled={isSendingSMS}
+                        >
+                            Wróć
+                        </button>
+                        <Button
+                            onClick={handleSendSMSInvitation}
+                            className="flex-[2] font-black uppercase text-sm tracking-widest bg-orange-600 hover:bg-orange-700"
+                            disabled={isSendingSMS}
+                        >
+                            {isSendingSMS ? (
+                                <>
+                                    <Loader2 size={16} className="mr-2 animate-spin" />
+                                    Wysyłanie...
+                                </>
+                            ) : (
+                                <>
+                                    <Phone size={16} className="mr-2" />
+                                    Wyślij SMS
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="p-6 max-w-7xl mx-auto">
             {selectedCandidate ? renderDetail() : renderList()}
             {renderSelectionModal()}
             {renderInvitationModal()}
+            {renderSMSInvitationModal()}
             {renderAddModal()}
             {renderEditBasicModal()}
             {renderDocModal()}
