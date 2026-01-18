@@ -75,6 +75,15 @@ export const TrialDashboard = () => {
               !us.is_archived
     );
 
+    // Debug: log all user skills for troubleshooting
+    console.log('🔍 Trial Dashboard - User Skills:', userSkills.filter(us => us.user_id === currentUser.id).map(us => ({
+        skill_id: us.skill_id,
+        status: us.status,
+        is_archived: us.is_archived,
+        effective_from: us.effective_from
+    })));
+    console.log('✅ Confirmed User Skills:', confirmedUserSkills.length);
+
     // Calculate skills bonus from confirmed skills
     let postTrialSkillsBonus = 0;
     const postTrialSkillDetails: { name: string; amount: number }[] = [];
@@ -90,9 +99,13 @@ export const TrialDashboard = () => {
                     amount: skill.hourly_bonus
                 });
                 countedSkillIds.add(us.skill_id);
+                console.log(`➕ Adding skill: ${skill.name_pl} = ${skill.hourly_bonus} zł`);
             }
         }
     });
+
+    console.log('💰 Post-trial skills bonus:', postTrialSkillsBonus);
+    console.log('📊 Skill details:', postTrialSkillDetails);
 
     const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
     const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
