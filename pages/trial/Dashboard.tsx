@@ -95,15 +95,6 @@ export const TrialDashboard = () => {
               !us.is_archived
     );
 
-    // Debug: log all user skills for troubleshooting
-    console.log('🔍 Trial Dashboard - User Skills:', userSkills.filter(us => us.user_id === currentUser.id).map(us => ({
-        skill_id: us.skill_id,
-        status: us.status,
-        is_archived: us.is_archived,
-        effective_from: us.effective_from
-    })));
-    console.log('✅ Confirmed User Skills:', confirmedUserSkills.length);
-
     // Calculate skills bonus from confirmed skills
     let postTrialSkillsBonus = 0;
     const postTrialSkillDetails: { name: string; amount: number }[] = [];
@@ -119,13 +110,9 @@ export const TrialDashboard = () => {
                     amount: skill.hourly_bonus
                 });
                 postTrialCountedSkillIds.add(us.skill_id);
-                console.log(`➕ Adding skill: ${skill.name_pl} = ${skill.hourly_bonus} zł`);
             }
         }
     });
-
-    console.log('💰 Post-trial skills bonus:', postTrialSkillsBonus);
-    console.log('📊 Skill details:', postTrialSkillDetails);
 
     const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
     const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
@@ -494,26 +481,26 @@ export const TrialDashboard = () => {
         );
 
         // Build active items from confirmed skills
-        const activeItems: Array<{name: string, value: number}> = [];
+        const activeItems: Array<{name: string, amount: number}> = [];
         confirmedUserSkills.forEach(us => {
             const skill = (skills || []).find(s => s?.id === us?.skill_id);
             const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
             const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
 
             if (bonusAmount > 0) {
-                activeItems.push({ name, value: bonusAmount });
+                activeItems.push({ name, amount: bonusAmount });
             }
         });
 
         // Build pending items from verified but not confirmed
-        const pendingItems: Array<{name: string, value: number}> = [];
+        const pendingItems: Array<{name: string, amount: number}> = [];
         verifiedButNotConfirmed.forEach(us => {
             const skill = (skills || []).find(s => s?.id === us?.skill_id);
             const bonusAmount = skill?.hourly_bonus || us?.bonus_value || 0;
             const name = us?.custom_name || skill?.name_pl || 'Nieznana umiejętność';
 
             if (bonusAmount > 0) {
-                pendingItems.push({ name, value: bonusAmount });
+                pendingItems.push({ name, amount: bonusAmount });
             }
         });
 
