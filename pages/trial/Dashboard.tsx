@@ -553,19 +553,10 @@ export const TrialDashboard = () => {
                                 {activeItems.map((item, idx) => (
                                     <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
-<<<<<<< HEAD
                                             <div className="font-medium text-sm text-green-900">{item.name}</div>
                                             <div className="text-xs text-green-600">✓ Potwierdzone</div>
                                         </div>
                                         <div className="font-bold text-green-700">+{item.amount.toFixed(2)} zł</div>
-=======
-                                            <div className="font-medium text-sm text-green-900">{item?.name || 'Nieznana'}</div>
-                                            <div className="text-xs text-green-600 flex items-center gap-1">
-                                                <CheckCircle size={12}/> Potwierdzone
-                                            </div>
-                                        </div>
-                                        <div className="font-bold text-green-700">+{(item?.value || 0).toFixed(2)} zł</div>
->>>>>>> origin/main
                                     </div>
                                 ))}
                             </>
@@ -583,11 +574,7 @@ export const TrialDashboard = () => {
                                                 <AlertCircle size={12}/> Wymaga potwierdzenia
                                             </div>
                                         </div>
-<<<<<<< HEAD
                                         <div className="font-bold text-orange-700">+{item.amount.toFixed(2)} zł</div>
-=======
-                                        <div className="font-bold text-slate-400 line-through">+{(item?.value || 0).toFixed(2)} zł</div>
->>>>>>> origin/main
                                     </div>
                                 ))}
                             </>
