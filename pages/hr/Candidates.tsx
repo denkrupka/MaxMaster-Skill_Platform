@@ -14,6 +14,7 @@ import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DO
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
+import { sendTemplatedSMS } from '../../lib/smsService';
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -537,6 +538,32 @@ export const HRCandidatesPage = () => {
         await logCandidateAction(selectedCandidate.id, `Zmieniono status na: ${CANDIDATE_DISPLAY_LABELS[newStatus]}`);
         setSelectedCandidate({ ...selectedCandidate, status: newStatus });
         setIsStatusPopoverOpen(false);
+
+        // Send SMS notification based on status change
+        if (selectedCandidate.phone) {
+            try {
+                if (newStatus === UserStatus.REJECTED) {
+                    // Send rejection SMS
+                    await sendTemplatedSMS(
+                        'CAND_REJECTED',
+                        selectedCandidate.phone,
+                        { firstName: selectedCandidate.first_name, companyName: 'MaxMaster' },
+                        selectedCandidate.id
+                    );
+                } else if (newStatus === UserStatus.DATA_REQUESTED) {
+                    // Send data request SMS
+                    const actionUrl = `${window.location.origin}/#/candidate/profile`;
+                    await sendTemplatedSMS(
+                        'CAND_DOCS_REQUEST',
+                        selectedCandidate.phone,
+                        { firstName: selectedCandidate.first_name, actionUrl },
+                        selectedCandidate.id
+                    );
+                }
+            } catch (error) {
+                console.error('Failed to send status change SMS:', error);
+            }
+        }
     };
 
     const handleContractChange = async (type: string) => {
