@@ -1466,7 +1466,7 @@ export const HRCandidatesPage = () => {
                                     <option value="">Wybierz stanowisko...</option>
                                     {positions && positions.length > 0 ? (
                                         positions.map(pos => (
-                                            <option key={pos.id} value={pos.title_pl}>{pos.title_pl}</option>
+                                            <option key={pos.id} value={pos.name}>{pos.name}</option>
                                         ))
                                     ) : (
                                         <option value="" disabled>Brak stanowisk (dodaj w Ustawieniach → Stanowiska)</option>
