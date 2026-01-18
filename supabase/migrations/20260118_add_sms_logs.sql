@@ -29,7 +29,7 @@ CREATE POLICY "HR and ADMIN can view all SMS logs"
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-      AND users.role IN ('ADMIN', 'HR')
+      AND users.role IN ('admin', 'hr')
     )
   );
 
