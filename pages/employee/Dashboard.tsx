@@ -46,7 +46,7 @@ export const EmployeeDashboard = () => {
     );
 
     const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
-    const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
+    const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
     const totalExtras = contractBonus + studentBonus;
 
     const currentTotalRate = salaryInfo.total + totalExtras;

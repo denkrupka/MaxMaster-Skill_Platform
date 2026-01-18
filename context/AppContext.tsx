@@ -383,7 +383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const hireCandidate = async (userId: string, hiredDate: string, contractEndDate?: string) => {
-    // When transitioning from TRIAL to ACTIVE, calculate the new rate based on CONFIRMED skills
+    // When transitioning from TRIAL to ACTIVE, skills should apply immediately
     const user = state.users.find(u => u.id === userId);
     if (!user) return;
 
@@ -392,57 +392,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       us => us.user_id === userId && us.status === SkillStatus.CONFIRMED && !us.is_archived
     );
 
+    // Set effective_from to 1st of current month so skills apply immediately
+    // (not 1st of next month)
+    const hiredDateObj = new Date(hiredDate);
+    const effectiveFromDate = new Date(hiredDateObj.getFullYear(), hiredDateObj.getMonth(), 1);
+    const effectiveFromISO = effectiveFromDate.toISOString();
+
     // Update effective_from for skills that were confirmed during TRIAL period
-    // Set effective_from to hired_date so they apply immediately upon transitioning to ACTIVE
     for (const userSkill of confirmedSkills) {
       if (!userSkill.effective_from) {
         await supabase
           .from('user_skills')
-          .update({ effective_from: hiredDate })
+          .update({ effective_from: effectiveFromISO })
           .eq('id', userSkill.id);
       }
     }
 
-    // Calculate skills bonus
-    let skillsBonus = 0;
-    const countedSkillIds = new Set<string>();
-    confirmedSkills.forEach(us => {
-      if (!countedSkillIds.has(us.skill_id)) {
-        const skill = state.skills.find(s => s.id === us.skill_id);
-        if (skill) {
-          skillsBonus += skill.hourly_bonus;
-          countedSkillIds.add(us.skill_id);
-        }
-      }
-    });
-
-    // Calculate qualifications bonus
-    const QUALIFICATIONS_LIST = [
-      { id: 'sep_e', value: 0.5 },
-      { id: 'sep_d', value: 0.5 },
-      { id: 'udt', value: 1.0 }
-    ];
-    const qualsBonus = QUALIFICATIONS_LIST
-      .filter(q => (user.qualifications || []).includes(q.id))
-      .reduce((sum, q) => sum + q.value, 0);
-
-    // Calculate contract type bonus
-    const contractBonus = state.systemConfig.contractBonuses[user.contract_type || ContractType.UOP] || 0;
-
-    // Calculate student bonus (only for UZ contracts and is_student = true)
-    const studentBonus = (user.contract_type === ContractType.UZ && user.is_student)
-      ? state.systemConfig.studentBonus
-      : 0;
-
-    // Calculate total rate: base + skills + qualifications + contract + student
-    const newBaseRate = state.systemConfig.baseRate + skillsBonus + qualsBonus + contractBonus + studentBonus;
-
-    // Update user with new status and calculated rate
+    // Reset base_rate to null so that calculateSalary() uses systemConfig.baseRate
+    // and calculates skills based on effective_from dates
     await updateUser(userId, {
       status: UserStatus.ACTIVE,
       hired_date: hiredDate,
       contract_end_date: contractEndDate,
-      base_rate: newBaseRate // Apply the new rate immediately
+      base_rate: null // Use system base rate + skills from effective_from
     });
 
     // Refresh data to ensure state is updated with new effective_from values
