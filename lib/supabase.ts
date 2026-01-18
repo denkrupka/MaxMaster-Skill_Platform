@@ -5,6 +5,9 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co'
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY'
 
+// Export for use in Edge Functions
+export const SUPABASE_ANON_KEY = supabaseAnonKey;
+
 // Klient dla standardowych operacji użytkownika
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {

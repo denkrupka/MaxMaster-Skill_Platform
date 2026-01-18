@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, SUPABASE_ANON_KEY } from './supabase';
 import { NotificationChannel } from '../types';
 
 const SUPABASE_URL = 'https://diytvuczpciikzdhldny.supabase.co';
@@ -30,13 +30,12 @@ export const sendSMS = async ({
   templateCode,
 }: SendSMSParams): Promise<SMSResponse> => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-
     const response = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || ''}`,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
         phoneNumber,
