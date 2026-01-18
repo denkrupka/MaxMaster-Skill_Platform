@@ -81,31 +81,94 @@ export const TrialDashboard = () => {
             .reduce((sum, q) => sum + q.value, 0);
 
         const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
-        const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
+        const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
         const totalExtras = contractBonus + studentBonus;
 
         frozenRate = systemConfig.baseRate + skillsBonus + qualsBonus + totalExtras;
     }
 
     // For trial employees, calculate what WILL be their rate after trial ends
-    // This is based on CONFIRMED skills only (not just passed tests)
-    const postTrialSalaryInfo = calculateSalary(
-        systemConfig.baseRate,
-        skills,
-        userSkills.filter(us => us.user_id === currentUser.id),
-        monthlyBonuses[currentUser.id] || { kontrola_pracownikow: false, realizacja_planu: false, brak_usterek: false, brak_naduzyc_materialowych: false, staz_pracy_years: 0 },
-        now,
-        qualityIncidents
+    // This is based on CONFIRMED skills only (regardless of effective_from)
+    const confirmedUserSkills = userSkills.filter(
+        us => us.user_id === currentUser.id &&
+              us.status === SkillStatus.CONFIRMED &&
+              !us.is_archived
     );
 
+    // Debug: log all user skills for troubleshooting
+    console.log('🔍 Trial Dashboard - User Skills:', userSkills.filter(us => us.user_id === currentUser.id).map(us => ({
+        skill_id: us.skill_id,
+        status: us.status,
+        is_archived: us.is_archived,
+        effective_from: us.effective_from
+    })));
+    console.log('✅ Confirmed User Skills:', confirmedUserSkills.length);
+
+    // Calculate skills bonus from confirmed skills
+    let postTrialSkillsBonus = 0;
+    const postTrialSkillDetails: { name: string; amount: number }[] = [];
+    const postTrialCountedSkillIds = new Set<string>();
+
+    confirmedUserSkills.forEach(us => {
+        if (!postTrialCountedSkillIds.has(us.skill_id)) {
+            const skill = skills.find(s => s.id === us.skill_id);
+            if (skill) {
+                postTrialSkillsBonus += skill.hourly_bonus;
+                postTrialSkillDetails.push({
+                    name: skill.name_pl,
+                    amount: skill.hourly_bonus
+                });
+                postTrialCountedSkillIds.add(us.skill_id);
+                console.log(`➕ Adding skill: ${skill.name_pl} = ${skill.hourly_bonus} zł`);
+            }
+        }
+    });
+
+    console.log('💰 Post-trial skills bonus:', postTrialSkillsBonus);
+    console.log('📊 Skill details:', postTrialSkillDetails);
+
     const contractBonus = systemConfig.contractBonuses[currentUser.contract_type || ContractType.UOP] || 0;
-    const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? 3 : 0;
+    const studentBonus = (currentUser.contract_type === ContractType.UZ && currentUser.is_student) ? systemConfig.studentBonus : 0;
     const totalExtras = contractBonus + studentBonus;
+
+    // Calculate qualifications bonus
+    const QUALIFICATIONS_LIST = [
+        { id: 'sep_e', value: 0.5 },
+        { id: 'sep_d', value: 0.5 },
+        { id: 'udt', value: 1.0 }
+    ];
+    const qualsBonus = QUALIFICATIONS_LIST
+        .filter(q => (currentUser.qualifications || []).includes(q.id))
+        .reduce((sum, q) => sum + q.value, 0);
+
+    // Post-trial rate = base + skills + qualifications + contract + student
+    const postTrialBaseRate = systemConfig.baseRate + qualsBonus;
+    const nextMonthTotalRate = postTrialBaseRate + postTrialSkillsBonus + totalExtras;
+
+    // Create postTrialSalaryInfo structure for modal
+    const postTrialSalaryInfo = {
+        total: postTrialBaseRate + postTrialSkillsBonus,
+        nextMonthTotal: postTrialBaseRate + postTrialSkillsBonus,
+        breakdown: {
+            base: postTrialBaseRate,
+            skills: postTrialSkillsBonus,
+            monthly: 0,
+            details: {
+                activeSkills: postTrialSkillDetails.map(s => ({ ...s, status: 'active' as const })),
+                pendingSkills: [],
+                bonuses: monthlyBonuses[currentUser.id] || {
+                    kontrola_pracownikow: false,
+                    realizacja_planu: false,
+                    brak_usterek: false,
+                    brak_naduzyc_materialowych: false,
+                    staz_pracy_years: 0
+                }
+            }
+        }
+    };
 
     // Current rate = frozen rate during trial (includes ALL bonuses from hire time)
     const currentTotalRate = frozenRate;
-    // Next month rate = what they'll get after trial ends (based on confirmed skills only)
-    const nextMonthTotalRate = postTrialSalaryInfo.total + totalExtras;
 
     // --- LOGIC: TRIAL TIME DATA ---
     const trialTimeData = useMemo(() => {
@@ -490,12 +553,19 @@ export const TrialDashboard = () => {
                                 {activeItems.map((item, idx) => (
                                     <div key={item?.name || idx} className="flex justify-between items-center p-2 rounded bg-green-50 border border-green-100">
                                         <div>
+<<<<<<< HEAD
+                                            <div className="font-medium text-sm text-green-900">{item.name}</div>
+                                            <div className="text-xs text-green-600">✓ Potwierdzone</div>
+                                        </div>
+                                        <div className="font-bold text-green-700">+{item.amount.toFixed(2)} zł</div>
+=======
                                             <div className="font-medium text-sm text-green-900">{item?.name || 'Nieznana'}</div>
                                             <div className="text-xs text-green-600 flex items-center gap-1">
                                                 <CheckCircle size={12}/> Potwierdzone
                                             </div>
                                         </div>
                                         <div className="font-bold text-green-700">+{(item?.value || 0).toFixed(2)} zł</div>
+>>>>>>> origin/main
                                     </div>
                                 ))}
                             </>
@@ -513,7 +583,11 @@ export const TrialDashboard = () => {
                                                 <AlertCircle size={12}/> Wymaga potwierdzenia
                                             </div>
                                         </div>
+<<<<<<< HEAD
+                                        <div className="font-bold text-orange-700">+{item.amount.toFixed(2)} zł</div>
+=======
                                         <div className="font-bold text-slate-400 line-through">+{(item?.value || 0).toFixed(2)} zł</div>
+>>>>>>> origin/main
                                     </div>
                                 ))}
                             </>

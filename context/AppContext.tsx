@@ -189,6 +189,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Refresh only system config (for real-time updates when HR changes settings)
+  const refreshSystemConfig = useCallback(async () => {
+    try {
+      const { data: configData } = await supabase
+        .from('system_config')
+        .select('config_data')
+        .eq('config_key', CONFIG_KEY)
+        .maybeSingle();
+
+      if (configData?.config_data) {
+        setState(prev => ({
+          ...prev,
+          systemConfig: {
+            ...DEFAULT_SYSTEM_CONFIG,
+            ...configData.config_data
+          }
+        }));
+      }
+    } catch (err) {
+      console.error('Error refreshing system config:', err);
+    }
+  }, []);
+
   // Listen for auth state changes and initial fetch
   useEffect(() => {
     refreshData();
@@ -203,6 +226,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subscription.unsubscribe();
     };
   }, [refreshData]);
+
+  // Auto-refresh system config every 30 seconds to sync HR settings changes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshSystemConfig();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [refreshSystemConfig]);
 
   const login = async (email: string, password: string) => {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
@@ -351,15 +383,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const hireCandidate = async (userId: string, hiredDate: string, contractEndDate?: string) => {
-    // Reset base_rate to null so that system base rate is used after trial
-    // During TRIAL, base_rate holds the frozen rate from hiring
-    // After TRIAL ends (ACTIVE), we should use systemConfig.baseRate + confirmed skills
+    // When transitioning from TRIAL to ACTIVE, calculate the new rate based on CONFIRMED skills
+    const user = state.users.find(u => u.id === userId);
+    if (!user) return;
+
+    // Get all CONFIRMED skills for this user
+    const confirmedSkills = state.userSkills.filter(
+      us => us.user_id === userId && us.status === SkillStatus.CONFIRMED && !us.is_archived
+    );
+
+    // Update effective_from for skills that were confirmed during TRIAL period
+    // Set effective_from to hired_date so they apply immediately upon transitioning to ACTIVE
+    for (const userSkill of confirmedSkills) {
+      if (!userSkill.effective_from) {
+        await supabase
+          .from('user_skills')
+          .update({ effective_from: hiredDate })
+          .eq('id', userSkill.id);
+      }
+    }
+
+    // Calculate skills bonus
+    let skillsBonus = 0;
+    const countedSkillIds = new Set<string>();
+    confirmedSkills.forEach(us => {
+      if (!countedSkillIds.has(us.skill_id)) {
+        const skill = state.skills.find(s => s.id === us.skill_id);
+        if (skill) {
+          skillsBonus += skill.hourly_bonus;
+          countedSkillIds.add(us.skill_id);
+        }
+      }
+    });
+
+    // Calculate qualifications bonus
+    const QUALIFICATIONS_LIST = [
+      { id: 'sep_e', value: 0.5 },
+      { id: 'sep_d', value: 0.5 },
+      { id: 'udt', value: 1.0 }
+    ];
+    const qualsBonus = QUALIFICATIONS_LIST
+      .filter(q => (user.qualifications || []).includes(q.id))
+      .reduce((sum, q) => sum + q.value, 0);
+
+    // Calculate contract type bonus
+    const contractBonus = state.systemConfig.contractBonuses[user.contract_type || ContractType.UOP] || 0;
+
+    // Calculate student bonus (only for UZ contracts and is_student = true)
+    const studentBonus = (user.contract_type === ContractType.UZ && user.is_student)
+      ? state.systemConfig.studentBonus
+      : 0;
+
+    // Calculate total rate: base + skills + qualifications + contract + student
+    const newBaseRate = state.systemConfig.baseRate + skillsBonus + qualsBonus + contractBonus + studentBonus;
+
+    // Update user with new status and calculated rate
     await updateUser(userId, {
       status: UserStatus.ACTIVE,
       hired_date: hiredDate,
       contract_end_date: contractEndDate,
-      base_rate: null // Reset to use system base rate
+      base_rate: newBaseRate // Apply the new rate immediately
     });
+
+    // Refresh data to ensure state is updated with new effective_from values
+    await refreshData();
   };
 
   const triggerNotification = (type: string, title: string, message: string, link?: string) => {
@@ -576,12 +663,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const confirmSkillPractice = async (userSkillId: string, brigadirId: string) => {
-    const updates = { 
-      status: SkillStatus.CONFIRMED, 
-      practice_checked_by: brigadirId, 
+    // Get the userSkill to find the user
+    const userSkill = state.userSkills.find(us => us.id === userSkillId);
+    if (!userSkill) return;
+
+    const user = state.users.find(u => u.id === userSkill.user_id);
+    if (!user) return;
+
+    // Determine effective_from based on user status
+    let effectiveFrom: string | null;
+
+    if (user.status === UserStatus.TRIAL) {
+      // For TRIAL employees, set effective_from to null
+      // It will be updated to hired_date when transitioning to ACTIVE
+      effectiveFrom = null;
+    } else {
+      // For ACTIVE employees, set effective_from to 1st of next month
+      const now = new Date();
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      effectiveFrom = nextMonth.toISOString();
+    }
+
+    const updates = {
+      status: SkillStatus.CONFIRMED,
+      practice_checked_by: brigadirId,
       practice_date: new Date().toISOString(),
-      confirmed_at: new Date().toISOString()
+      confirmed_at: new Date().toISOString(),
+      effective_from: effectiveFrom
     };
+
     const { data, error } = await supabase.from('user_skills').update(updates).eq('id', userSkillId).select().single();
     if (error) throw error;
     setState(prev => ({
