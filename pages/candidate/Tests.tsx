@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, CheckCircle, Clock, AlertTriangle, ChevronRight, Lock, Circle, ArrowRight, X, ZoomIn } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -122,6 +122,12 @@ export const CandidateTestsPage = () => {
         }
     }, [currentQuestionIdx, displayedQuestions.length, finishCurrentTest]);
 
+    // Store handleNextQuestion in a ref so timer useEffect doesn't need it as dependency
+    const handleNextQuestionRef = useRef(handleNextQuestion);
+    useEffect(() => {
+        handleNextQuestionRef.current = handleNextQuestion;
+    }, [handleNextQuestion]);
+
     // --- Timer Logic ---
     useEffect(() => {
         if (displayedQuestions.length > 0 && testStarted) {
@@ -135,8 +141,8 @@ export const CandidateTestsPage = () => {
         if (!testStarted) return;
 
         if (timeLeft <= 0) {
-            // Time is up! Auto advance.
-            handleNextQuestion();
+            // Time is up! Auto advance using ref to avoid re-creating interval
+            handleNextQuestionRef.current();
             return;
         }
 
@@ -145,7 +151,7 @@ export const CandidateTestsPage = () => {
         }, 1000);
 
         return () => clearInterval(timerId);
-    }, [timeLeft, testStarted, handleNextQuestion]);
+    }, [timeLeft, testStarted]);
 
     // --- Handlers ---
 
