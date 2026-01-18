@@ -519,7 +519,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const startTest = (skillId: string) => {
-    if (state.currentUser) logCandidateAction(state.currentUser.id, `Rozpoczęto test dla umiejętności ID: ${skillId}`);
+    // Activity logging removed - only log test completion
   };
 
   const submitTest = async (testId: string, answers: number[][], score: number, passed: boolean) => {
