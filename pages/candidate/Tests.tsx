@@ -66,6 +66,62 @@ export const CandidateTestsPage = () => {
         return shuffled;
     };
 
+    // --- Handlers (defined before useEffects that use them) ---
+
+    const finishCurrentTest = useCallback(async () => {
+        if (!activeTest) return;
+
+        // Calculate Duration
+        const durationMs = startTime ? Date.now() - startTime : 0;
+        const durationSeconds = Math.round(durationMs / 1000);
+
+        // Calculate Score
+        let correctCount = 0;
+        const totalQuestions = displayedQuestions.length;
+
+        displayedQuestions.forEach((q, idx) => {
+            const userAnswers = answers[idx] || [];
+            const correctAnswers = q.correctOptionIndices;
+            const strategy = q.gradingStrategy || GradingStrategy.ALL_CORRECT;
+
+            let isCorrect = false;
+
+            if (userAnswers.length > 0) {
+                if (strategy === GradingStrategy.ANY_CORRECT) {
+                    const intersection = userAnswers.filter(a => correctAnswers.includes(a));
+                    if (intersection.length > 0) isCorrect = true;
+                } else if (strategy === GradingStrategy.MIN_2_CORRECT) {
+                    const intersection = userAnswers.filter(a => correctAnswers.includes(a));
+                    if (intersection.length >= 2) isCorrect = true;
+                } else {
+                    const hasAllCorrect = correctAnswers.every(a => userAnswers.includes(a));
+                    const hasNoIncorrect = userAnswers.every(a => correctAnswers.includes(a));
+                    if (hasAllCorrect && hasNoIncorrect) isCorrect = true;
+                }
+            }
+
+            if (isCorrect) correctCount++;
+        });
+
+        const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+        const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
+        const passed = calculatedScore >= (skill?.required_pass_rate || 80);
+
+        await submitTest(activeTest.id, answers, calculatedScore, passed);
+
+        setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
+        setTestStarted(false); // Stop "running" mode
+        setShowInterimModal(true); // Show summary
+    }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
+
+    const handleNextQuestion = useCallback(async () => {
+        if (currentQuestionIdx < displayedQuestions.length - 1) {
+            setCurrentQuestionIdx(currentQuestionIdx + 1);
+        } else {
+            await finishCurrentTest();
+        }
+    }, [currentQuestionIdx, displayedQuestions.length, finishCurrentTest]);
+
     // --- Timer Logic ---
     useEffect(() => {
         if (displayedQuestions.length > 0 && testStarted) {
@@ -140,60 +196,6 @@ export const CandidateTestsPage = () => {
         newAnswers[currentQuestionIdx] = newSelected;
         setAnswers(newAnswers);
     };
-
-    const finishCurrentTest = useCallback(async () => {
-        if (!activeTest) return;
-
-        // Calculate Duration
-        const durationMs = startTime ? Date.now() - startTime : 0;
-        const durationSeconds = Math.round(durationMs / 1000);
-
-        // Calculate Score
-        let correctCount = 0;
-        const totalQuestions = displayedQuestions.length;
-
-        displayedQuestions.forEach((q, idx) => {
-            const userAnswers = answers[idx] || [];
-            const correctAnswers = q.correctOptionIndices;
-            const strategy = q.gradingStrategy || GradingStrategy.ALL_CORRECT;
-
-            let isCorrect = false;
-
-            if (userAnswers.length > 0) {
-                if (strategy === GradingStrategy.ANY_CORRECT) {
-                    const intersection = userAnswers.filter(a => correctAnswers.includes(a));
-                    if (intersection.length > 0) isCorrect = true;
-                } else if (strategy === GradingStrategy.MIN_2_CORRECT) {
-                    const intersection = userAnswers.filter(a => correctAnswers.includes(a));
-                    if (intersection.length >= 2) isCorrect = true;
-                } else {
-                    const hasAllCorrect = correctAnswers.every(a => userAnswers.includes(a));
-                    const hasNoIncorrect = userAnswers.every(a => correctAnswers.includes(a));
-                    if (hasAllCorrect && hasNoIncorrect) isCorrect = true;
-                }
-            }
-
-            if (isCorrect) correctCount++;
-        });
-
-        const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-        const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
-        const passed = calculatedScore >= (skill?.required_pass_rate || 80);
-
-        await submitTest(activeTest.id, answers, calculatedScore, passed);
-
-        setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
-        setTestStarted(false); // Stop "running" mode
-        setShowInterimModal(true); // Show summary
-    }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
-
-    const handleNextQuestion = useCallback(async () => {
-        if (currentQuestionIdx < displayedQuestions.length - 1) {
-            setCurrentQuestionIdx(currentQuestionIdx + 1);
-        } else {
-            await finishCurrentTest();
-        }
-    }, [currentQuestionIdx, displayedQuestions.length, finishCurrentTest]);
 
     const handleNextTestInQueue = () => {
         setShowInterimModal(false);
