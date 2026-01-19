@@ -14,7 +14,7 @@ import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DO
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
-import { sendTemplatedSMS } from '../../lib/smsService';
+import { sendTemplatedSMS, sendSMS } from '../../lib/smsService';
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -109,12 +109,17 @@ export const HRCandidatesPage = () => {
     const [isSMSInvitationModalOpen, setIsSMSInvitationModalOpen] = useState(false);
     const [smsInvitationData, setSmsInvitationData] = useState({
         firstName: '',
-        lastName: '',
         phone: '',
         position: '',
         message: ''
     });
     const [isSendingSMS, setIsSendingSMS] = useState(false);
+
+    // Welcome SMS modal
+    const [isWelcomeSMSModalOpen, setIsWelcomeSMSModalOpen] = useState(false);
+    const [welcomeSMSData, setWelcomeSMSData] = useState({
+        message: ''
+    });
 
     const brigadirsList = useMemo(() => {
         return users.filter(u => u.role === Role.BRIGADIR);
@@ -383,6 +388,27 @@ export const HRCandidatesPage = () => {
         window.location.href = `mailto:?subject=${subject}&body=${body}`;
     };
 
+    // Format phone number as user types
+    const formatPhoneNumber = (value: string) => {
+        // Remove all non-digit characters
+        const digits = value.replace(/\D/g, '');
+
+        // Handle Polish phone numbers (9 digits without country code)
+        // Format: +48 XXX XXX XXX or XXX XXX XXX
+        if (digits.startsWith('48')) {
+            // Has country code
+            const withoutCode = digits.slice(2);
+            if (withoutCode.length <= 3) return `+48 ${withoutCode}`;
+            if (withoutCode.length <= 6) return `+48 ${withoutCode.slice(0, 3)} ${withoutCode.slice(3)}`;
+            return `+48 ${withoutCode.slice(0, 3)} ${withoutCode.slice(3, 6)} ${withoutCode.slice(6, 9)}`;
+        } else {
+            // No country code
+            if (digits.length <= 3) return digits;
+            if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+            return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+        }
+    };
+
     const shareViaSMS = () => {
         // Initialize SMS invitation data with template - SHORT VERSION
         const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: portal.maxmaster.info/w`;
@@ -393,7 +419,6 @@ export const HRCandidatesPage = () => {
 
         setSmsInvitationData({
             firstName: '',
-            lastName: '',
             phone: '',
             position: '',
             message: defaultMessage
@@ -402,9 +427,66 @@ export const HRCandidatesPage = () => {
         setIsSMSInvitationModalOpen(true);
     };
 
+    const openWelcomeSMSModal = () => {
+        if (!selectedCandidate) return;
+
+        // Check if candidate has phone number
+        if (!selectedCandidate.phone) {
+            triggerNotification('error', 'Błąd', 'Kandydat nie ma przypisanego numeru telefonu');
+            return;
+        }
+
+        // Load WELCOME message template
+        const fullUrl = `${window.location.origin}/#/candidate/welcome`;
+        const defaultMessage = `Cześć ${selectedCandidate.first_name}, zapraszamy do portalu MaxMaster! Tutaj sprawdzisz swoją stawkę: ${fullUrl}`;
+
+        setWelcomeSMSData({
+            message: defaultMessage
+        });
+        setIsWelcomeSMSModalOpen(true);
+    };
+
+    const handleSendWelcomeSMS = async () => {
+        if (!selectedCandidate || !selectedCandidate.phone) return;
+
+        setIsSendingSMS(true);
+        try {
+            // Send welcome SMS using the CAND_INVITE_LINK template
+            const result = await sendTemplatedSMS(
+                'CAND_INVITE_LINK',
+                selectedCandidate.phone,
+                {
+                    firstName: selectedCandidate.first_name,
+                    portalUrl: `${window.location.origin}/#/candidate/welcome`
+                },
+                selectedCandidate.id
+            );
+
+            if (result.success) {
+                triggerNotification('success', 'SMS wysłany', `Link wysłany do ${selectedCandidate.first_name}`);
+                setIsWelcomeSMSModalOpen(false);
+
+                // Log the action
+                if (state.currentUser) {
+                    await logCandidateAction(
+                        state.currentUser.id,
+                        `Wysłano link powitalny SMS do: ${selectedCandidate.first_name} ${selectedCandidate.last_name} (${selectedCandidate.phone})`
+                    );
+                }
+            } else {
+                triggerNotification('error', 'Błąd wysyłania SMS', result.error || 'Nie udało się wysłać SMS');
+            }
+        } catch (error) {
+            console.error('Error sending welcome SMS:', error);
+            triggerNotification('error', 'Błąd', 'Wystąpił błąd podczas wysyłania SMS');
+        } finally {
+            setIsSendingSMS(false);
+        }
+    };
+
     const handleSendSMSInvitation = async () => {
         // Validate fields
-        if (!smsInvitationData.firstName || !smsInvitationData.lastName || !smsInvitationData.phone || !smsInvitationData.position) {
+        if (!smsInvitationData.firstName || !smsInvitationData.phone || !smsInvitationData.position) {
             triggerNotification('error', 'Błąd', 'Wypełnij wszystkie pola');
             return;
         }
@@ -416,26 +498,22 @@ export const HRCandidatesPage = () => {
                 .replace(/\{imię\}/g, smsInvitationData.firstName)
                 .replace(/\{stanowisko\}/g, smsInvitationData.position);
 
-            // Send SMS
-            const result = await sendTemplatedSMS(
-                'CAND_INVITE_LINK',
-                smsInvitationData.phone,
-                {
-                    firstName: smsInvitationData.firstName,
-                    portalUrl: window.location.origin + '/#/candidate/welcome'
-                },
-                undefined
-            );
+            // Send SMS with custom message (INVITE message)
+            const result = await sendSMS({
+                phoneNumber: smsInvitationData.phone,
+                message: finalMessage,
+                templateCode: 'SMS_INVITE'
+            });
 
             if (result.success) {
-                triggerNotification('success', 'SMS wysłany', `Zaproszenie SMS wysłane do ${smsInvitationData.firstName} ${smsInvitationData.lastName}`);
+                triggerNotification('success', 'SMS wysłany', `Zaproszenie SMS wysłane do ${smsInvitationData.firstName}`);
                 setIsSMSInvitationModalOpen(false);
 
                 // Log the action
                 if (state.currentUser) {
                     await logCandidateAction(
                         state.currentUser.id,
-                        `Wysłano SMS zaproszenie do: ${smsInvitationData.firstName} ${smsInvitationData.lastName} (${smsInvitationData.phone})`
+                        `Wysłano SMS zaproszenie do: ${smsInvitationData.firstName} (${smsInvitationData.phone}) - stanowisko: ${smsInvitationData.position}`
                     );
                 }
             } else {
@@ -811,6 +889,17 @@ export const HRCandidatesPage = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 ml-auto lg:ml-0 pr-10">
+                            {/* Send Link button - always visible for candidates with phone */}
+                            {selectedCandidate.phone && (
+                                <Button
+                                    variant="outline"
+                                    className="h-9 px-3 text-xs font-bold border-orange-500 text-orange-600 hover:bg-orange-50"
+                                    onClick={openWelcomeSMSModal}
+                                >
+                                    <MessageCircle size={14} className="mr-2"/> Отправить линк
+                                </Button>
+                            )}
+
                             {!isRejected && ![UserStatus.DATA_SUBMITTED, UserStatus.TRIAL, UserStatus.ACTIVE].includes(selectedCandidate.status) && (
                                 selectedCandidate.status === UserStatus.DATA_REQUESTED ? (
                                     <Button variant="outline" className="h-9 px-3 text-xs font-bold border-blue-600 text-blue-600 hover:bg-blue-50" onClick={() => triggerNotification('info', 'Przypomnienie', 'Wysłano przypomnienie o uzupełnieniu danych.')}>
@@ -830,9 +919,9 @@ export const HRCandidatesPage = () => {
                             )}
 
                             {isRejected ? (
-                                <Button 
-                                    variant="primary" 
-                                    className="h-9 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10" 
+                                <Button
+                                    variant="primary"
+                                    className="h-9 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10"
                                     onClick={() => {
                                         const nextStatus = candidateAttempts.length > 0 ? UserStatus.TESTS_COMPLETED : UserStatus.STARTED;
                                         handleStatusChange(nextStatus);
@@ -841,9 +930,9 @@ export const HRCandidatesPage = () => {
                                     <RotateCcw size={14} className="mr-2"/> Przywróć
                                 </Button>
                             ) : (
-                                <Button 
-                                    variant="danger" 
-                                    className="h-9 px-3 text-xs font-bold shadow-md shadow-red-600/10" 
+                                <Button
+                                    variant="danger"
+                                    className="h-9 px-3 text-xs font-bold shadow-md shadow-red-600/10"
                                     onClick={() => handleStatusChange(UserStatus.REJECTED)}
                                 >
                                     <XCircle size={14} className="mr-2"/> Odrzuć
@@ -1404,6 +1493,95 @@ export const HRCandidatesPage = () => {
         );
     };
 
+    const renderWelcomeSMSModal = () => {
+        if (!isWelcomeSMSModalOpen || !selectedCandidate) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-500">
+                        <div>
+                            <h2 className="text-xl font-black text-white tracking-tight uppercase">Отправить Welcome линк</h2>
+                            <p className="text-xs text-blue-100 font-medium mt-1">Отправить ссылку на портал кандидату {selectedCandidate.first_name}</p>
+                        </div>
+                        <button onClick={() => setIsWelcomeSMSModalOpen(false)} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all">
+                            <X size={24}/>
+                        </button>
+                    </div>
+
+                    <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                        {/* Candidate Info */}
+                        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Получатель</p>
+                            <p className="text-sm font-bold text-slate-800">{selectedCandidate.first_name} {selectedCandidate.last_name}</p>
+                            <p className="text-sm text-slate-600">{selectedCandidate.phone}</p>
+                        </div>
+
+                        {/* SMS Message */}
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
+                            <p className="text-xs text-slate-500 mb-2">Możesz edytować wiadomość przed wysłaniem.</p>
+                            <textarea
+                                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"
+                                rows={5}
+                                placeholder="Treść SMS..."
+                                value={welcomeSMSData.message}
+                                onChange={(e) => setWelcomeSMSData({...welcomeSMSData, message: e.target.value})}
+                            />
+                            <div className="mt-2 flex justify-between text-xs">
+                                <span className={welcomeSMSData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                                    Długość: {welcomeSMSData.message.length} / 160 znaków
+                                </span>
+                                {welcomeSMSData.message.length > 160 && (
+                                    <span className="text-red-600 font-bold">
+                                        ⚠️ Wiadomość za długa!
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Preview */}
+                        <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
+                            <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-2">Podgląd wiadomości</p>
+                            <div className="bg-white rounded-lg p-3 border border-slate-300 shadow-sm">
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                    {welcomeSMSData.message}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-3">
+                        <button
+                            onClick={() => setIsWelcomeSMSModalOpen(false)}
+                            className="flex-1 text-sm font-black uppercase text-slate-500 hover:text-slate-700 transition-colors"
+                            disabled={isSendingSMS}
+                        >
+                            Anuluj
+                        </button>
+                        <Button
+                            onClick={handleSendWelcomeSMS}
+                            className="flex-[2] font-black uppercase text-sm tracking-widest bg-blue-600 hover:bg-blue-700"
+                            disabled={isSendingSMS || welcomeSMSData.message.length > 160}
+                        >
+                            {isSendingSMS ? (
+                                <>
+                                    <Loader2 size={16} className="mr-2 animate-spin" />
+                                    Wysyłanie...
+                                </>
+                            ) : (
+                                <>
+                                    <MessageCircle size={16} className="mr-2" />
+                                    Wyślij SMS
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const renderSMSInvitationModal = () => {
         if (!isSMSInvitationModalOpen) return null;
         return (
@@ -1433,45 +1611,33 @@ export const HRCandidatesPage = () => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nazwisko</label>
-                                <input
-                                    type="text"
-                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
-                                    placeholder="np. Kowalski"
-                                    value={smsInvitationData.lastName}
-                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, lastName: e.target.value})}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Numer Telefonu</label>
                                 <input
                                     type="tel"
                                     className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
                                     placeholder="+48 500 123 456"
                                     value={smsInvitationData.phone}
-                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, phone: e.target.value})}
+                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, phone: formatPhoneNumber(e.target.value)})}
                                 />
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Stanowisko</label>
-                                <select
-                                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
-                                    value={smsInvitationData.position}
-                                    onChange={(e) => setSmsInvitationData({...smsInvitationData, position: e.target.value})}
-                                >
-                                    <option value="">Wybierz stanowisko...</option>
-                                    {positions && positions.length > 0 ? (
-                                        positions.map(pos => (
-                                            <option key={pos.id} value={pos.name}>{pos.name}</option>
-                                        ))
-                                    ) : (
-                                        <option value="" disabled>Brak stanowisk (dodaj w Ustawieniach → Stanowiska)</option>
-                                    )}
-                                </select>
-                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Stanowisko</label>
+                            <select
+                                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors"
+                                value={smsInvitationData.position}
+                                onChange={(e) => setSmsInvitationData({...smsInvitationData, position: e.target.value})}
+                            >
+                                <option value="">Wybierz stanowisko...</option>
+                                {positions && positions.length > 0 ? (
+                                    positions.map(pos => (
+                                        <option key={pos.id} value={pos.name}>{pos.name}</option>
+                                    ))
+                                ) : (
+                                    <option value="" disabled>Brak stanowisk (dodaj w Ustawieniach → Stanowiska)</option>
+                                )}
+                            </select>
                         </div>
 
                         {/* SMS Message */}
@@ -1555,6 +1721,7 @@ export const HRCandidatesPage = () => {
             {renderSelectionModal()}
             {renderInvitationModal()}
             {renderSMSInvitationModal()}
+            {renderWelcomeSMSModal()}
             {renderAddModal()}
             {renderEditBasicModal()}
             {renderDocModal()}
