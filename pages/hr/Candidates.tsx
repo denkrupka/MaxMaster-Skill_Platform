@@ -385,7 +385,7 @@ export const HRCandidatesPage = () => {
 
     const shareViaSMS = () => {
         // Initialize SMS invitation data with template - SHORT VERSION
-        const defaultMessage = `Witaj {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: [%idzdo:https://portal.maxmaster.info/w%]`;
+        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: portal.maxmaster.info/w`;
 
         console.log('📋 Available positions:', positions);
         console.log('📋 Positions count:', positions?.length || 0);
