@@ -888,32 +888,32 @@ export const HRCandidatesPage = () => {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 ml-auto lg:ml-0 pr-10">
+                        <div className="flex items-center gap-2 ml-auto lg:ml-0 pr-10 overflow-x-auto">
                             {/* Send Link button - always visible for candidates with phone */}
                             {selectedCandidate.phone && (
                                 <Button
                                     variant="outline"
-                                    className="h-9 px-3 text-xs font-bold border-orange-500 text-orange-600 hover:bg-orange-50"
+                                    className="h-9 px-3 text-xs font-bold border-orange-500 text-orange-600 hover:bg-orange-50 whitespace-nowrap"
                                     onClick={openWelcomeSMSModal}
                                 >
-                                    <MessageCircle size={14} className="mr-2"/> Отправить линк
+                                    <MessageCircle size={14} className="mr-2"/> Wyślij link
                                 </Button>
                             )}
 
                             {!isRejected && ![UserStatus.DATA_SUBMITTED, UserStatus.TRIAL, UserStatus.ACTIVE].includes(selectedCandidate.status) && (
                                 selectedCandidate.status === UserStatus.DATA_REQUESTED ? (
-                                    <Button variant="outline" className="h-9 px-3 text-xs font-bold border-blue-600 text-blue-600 hover:bg-blue-50" onClick={() => triggerNotification('info', 'Przypomnienie', 'Wysłano przypomnienie o uzupełnieniu danych.')}>
+                                    <Button variant="outline" className="h-9 px-3 text-xs font-bold border-blue-600 text-blue-600 hover:bg-blue-50 whitespace-nowrap" onClick={() => triggerNotification('info', 'Przypomnienie', 'Wysłano przypomnienie o uzupełnieniu danych.')}>
                                         <Clock size={14} className="mr-2"/> Oczekiwanie na dane (Przypomnij)
                                     </Button>
                                 ) : (
-                                    <Button variant="primary" className="h-9 px-3 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white" onClick={() => handleStatusChange(UserStatus.DATA_REQUESTED)}>
+                                    <Button variant="primary" className="h-9 px-3 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap" onClick={() => handleStatusChange(UserStatus.DATA_REQUESTED)}>
                                         <FileText size={14} className="mr-2"/> Poproś o dane
                                     </Button>
                                 )
                             )}
 
                             {canHire && selectedCandidate.status !== UserStatus.TRIAL && selectedCandidate.status !== UserStatus.ACTIVE && (
-                                <Button className="h-9 px-3 text-xs font-black uppercase tracking-tighter bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 rounded-lg" onClick={handleHireToTrial}>
+                                <Button className="h-9 px-3 text-xs font-black uppercase tracking-tighter bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 rounded-lg whitespace-nowrap" onClick={handleHireToTrial}>
                                     <UserCheck size={14} className="mr-1.5"/> Zatrudnij na okres próbny
                                 </Button>
                             )}
@@ -921,7 +921,7 @@ export const HRCandidatesPage = () => {
                             {isRejected ? (
                                 <Button
                                     variant="primary"
-                                    className="h-9 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10"
+                                    className="h-9 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/10 whitespace-nowrap"
                                     onClick={() => {
                                         const nextStatus = candidateAttempts.length > 0 ? UserStatus.TESTS_COMPLETED : UserStatus.STARTED;
                                         handleStatusChange(nextStatus);
@@ -932,7 +932,7 @@ export const HRCandidatesPage = () => {
                             ) : (
                                 <Button
                                     variant="danger"
-                                    className="h-9 px-3 text-xs font-bold shadow-md shadow-red-600/10"
+                                    className="h-9 px-3 text-xs font-bold shadow-md shadow-red-600/10 whitespace-nowrap"
                                     onClick={() => handleStatusChange(UserStatus.REJECTED)}
                                 >
                                     <XCircle size={14} className="mr-2"/> Odrzuć
@@ -1501,8 +1501,8 @@ export const HRCandidatesPage = () => {
                 <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-blue-600 to-blue-500">
                         <div>
-                            <h2 className="text-xl font-black text-white tracking-tight uppercase">Отправить Welcome линк</h2>
-                            <p className="text-xs text-blue-100 font-medium mt-1">Отправить ссылку на портал кандидату {selectedCandidate.first_name}</p>
+                            <h2 className="text-xl font-black text-white tracking-tight uppercase">Wyślij Link Powitalny</h2>
+                            <p className="text-xs text-blue-100 font-medium mt-1">Wyślij link do portalu kandydatowi {selectedCandidate.first_name}</p>
                         </div>
                         <button onClick={() => setIsWelcomeSMSModalOpen(false)} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all">
                             <X size={24}/>
@@ -1512,7 +1512,7 @@ export const HRCandidatesPage = () => {
                     <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
                         {/* Candidate Info */}
                         <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Получатель</p>
+                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Odbiorca</p>
                             <p className="text-sm font-bold text-slate-800">{selectedCandidate.first_name} {selectedCandidate.last_name}</p>
                             <p className="text-sm text-slate-600">{selectedCandidate.phone}</p>
                         </div>
@@ -1520,7 +1520,13 @@ export const HRCandidatesPage = () => {
                         {/* SMS Message */}
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
-                            <p className="text-xs text-slate-500 mb-2">Możesz edytować wiadomość przed wysłaniem.</p>
+                            <details className="mb-2">
+                                <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1">
+                                    <span>ℹ️</span>
+                                    <span>Możesz edytować wiadomość przed wysłaniem</span>
+                                </summary>
+                                <p className="text-xs text-slate-500 mt-1 ml-5">Edytuj treść wiadomości, aby dostosować ją do swoich potrzeb.</p>
+                            </details>
                             <textarea
                                 className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"
                                 rows={5}
@@ -1643,7 +1649,13 @@ export const HRCandidatesPage = () => {
                         {/* SMS Message */}
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
-                            <p className="text-xs text-slate-500 mb-2">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
+                            <details className="mb-2">
+                                <summary className="text-xs text-orange-600 cursor-pointer hover:text-orange-800 font-medium flex items-center gap-1">
+                                    <span>ℹ️</span>
+                                    <span>Możesz edytować wiadomość przed wysłaniem</span>
+                                </summary>
+                                <p className="text-xs text-slate-500 mt-1 ml-5">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
+                            </details>
                             <textarea
                                 className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
                                 rows={4}
