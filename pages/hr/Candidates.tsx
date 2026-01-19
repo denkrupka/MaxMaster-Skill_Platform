@@ -888,7 +888,7 @@ export const HRCandidatesPage = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 ml-auto lg:ml-0 pr-10 overflow-x-auto">
+                        <div className="flex flex-wrap items-center justify-end gap-2 ml-auto lg:ml-0 pr-10">
                             {/* Send Link button - always visible for candidates with phone */}
                             {selectedCandidate.phone && (
                                 <Button
@@ -1520,30 +1520,34 @@ export const HRCandidatesPage = () => {
                         {/* SMS Message */}
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
-                            <details className="mb-2">
-                                <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1">
-                                    <span>ℹ️</span>
-                                    <span>Możesz edytować wiadomość przed wysłaniem</span>
-                                </summary>
-                                <p className="text-xs text-slate-500 mt-1 ml-5">Edytuj treść wiadomości, aby dostosować ją do swoich potrzeb.</p>
-                            </details>
-                            <textarea
-                                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"
-                                rows={5}
-                                placeholder="Treść SMS..."
-                                value={welcomeSMSData.message}
-                                onChange={(e) => setWelcomeSMSData({...welcomeSMSData, message: e.target.value})}
-                            />
-                            <div className="mt-2 flex justify-between text-xs">
-                                <span className={welcomeSMSData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
-                                    Długość: {welcomeSMSData.message.length} / 160 znaków
-                                </span>
-                                {welcomeSMSData.message.length > 160 && (
-                                    <span className="text-red-600 font-bold">
-                                        ⚠️ Wiadomość za długa!
+                            <details className="rounded-xl border-2 border-slate-200 bg-white">
+                                <summary className="cursor-pointer select-none px-4 py-3 text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center justify-between">
+                                    <span>Edytuj treść wiadomości</span>
+                                    <span className={welcomeSMSData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-400'}>
+                                        {welcomeSMSData.message.length} / 160
                                     </span>
-                                )}
-                            </div>
+                                </summary>
+                                <div className="px-4 pb-4 pt-2 space-y-2">
+                                    <p className="text-xs text-slate-500">Edytuj treść wiadomości, aby dostosować ją do swoich potrzeb.</p>
+                                    <textarea
+                                        className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors resize-none"
+                                        rows={5}
+                                        placeholder="Treść SMS..."
+                                        value={welcomeSMSData.message}
+                                        onChange={(e) => setWelcomeSMSData({...welcomeSMSData, message: e.target.value})}
+                                    />
+                                    <div className="flex justify-between text-xs">
+                                        <span className={welcomeSMSData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                                            Długość: {welcomeSMSData.message.length} / 160 znaków
+                                        </span>
+                                        {welcomeSMSData.message.length > 160 && (
+                                            <span className="text-red-600 font-bold">
+                                                ⚠️ Wiadomość za długa!
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </details>
                         </div>
 
                         {/* Preview */}
@@ -1590,6 +1594,9 @@ export const HRCandidatesPage = () => {
 
     const renderSMSInvitationModal = () => {
         if (!isSMSInvitationModalOpen) return null;
+        const resolvedInvitationMessage = smsInvitationData.message
+            .replace(/\{imię\}/g, smsInvitationData.firstName || '{imię}')
+            .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}');
         return (
             <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
@@ -1649,51 +1656,45 @@ export const HRCandidatesPage = () => {
                         {/* SMS Message */}
                         <div>
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
-                            <details className="mb-2">
-                                <summary className="text-xs text-orange-600 cursor-pointer hover:text-orange-800 font-medium flex items-center gap-1">
-                                    <span>ℹ️</span>
-                                    <span>Możesz edytować wiadomość przed wysłaniem</span>
-                                </summary>
-                                <p className="text-xs text-slate-500 mt-1 ml-5">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
-                            </details>
-                            <textarea
-                                className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
-                                rows={4}
-                                placeholder="Treść SMS..."
-                                value={smsInvitationData.message}
-                                onChange={(e) => setSmsInvitationData({...smsInvitationData, message: e.target.value})}
-                            />
-                            <div className="mt-2 flex justify-between text-xs">
-                                <span className={smsInvitationData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
-                                    Szablon: {smsInvitationData.message.length} znaków
-                                </span>
-                                {smsInvitationData.firstName && smsInvitationData.position && (
-                                    <span className={
-                                        smsInvitationData.message
-                                            .replace(/\{imię\}/g, smsInvitationData.firstName)
-                                            .replace(/\{stanowisko\}/g, smsInvitationData.position).length > 160
-                                            ? 'text-red-600 font-bold'
-                                            : 'text-green-600'
-                                    }>
-                                        Po podstawieniu: {smsInvitationData.message
-                                            .replace(/\{imię\}/g, smsInvitationData.firstName)
-                                            .replace(/\{stanowisko\}/g, smsInvitationData.position).length} / 160
+                            <details className="rounded-xl border-2 border-slate-200 bg-white">
+                                <summary className="cursor-pointer select-none px-4 py-3 text-xs font-bold text-orange-600 hover:text-orange-800 flex items-center justify-between">
+                                    <span>Edytuj treść wiadomości</span>
+                                    <span className={smsInvitationData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-400'}>
+                                        {smsInvitationData.message.length} / 160
                                     </span>
-                                )}
-                            </div>
+                                </summary>
+                                <div className="px-4 pb-4 pt-2 space-y-2">
+                                    <p className="text-xs text-slate-500">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
+                                    <textarea
+                                        className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
+                                        rows={4}
+                                        placeholder="Treść SMS..."
+                                        value={smsInvitationData.message}
+                                        onChange={(e) => setSmsInvitationData({...smsInvitationData, message: e.target.value})}
+                                    />
+                                    <div className="flex justify-between text-xs">
+                                        <span className={smsInvitationData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                                            Szablon: {smsInvitationData.message.length} znaków
+                                        </span>
+                                        <span className={
+                                            resolvedInvitationMessage.length > 160
+                                                ? 'text-red-600 font-bold'
+                                                : 'text-green-600'
+                                        }>
+                                            Po podstawieniu: {resolvedInvitationMessage.length} / 160
+                                        </span>
+                                    </div>
+                                </div>
+                            </details>
                         </div>
 
                         {/* Preview */}
-                        {smsInvitationData.firstName && smsInvitationData.position && (
-                            <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
-                                <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Podgląd wiadomości</p>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                                    {smsInvitationData.message
-                                        .replace(/\{imię\}/g, smsInvitationData.firstName)
-                                        .replace(/\{stanowisko\}/g, smsInvitationData.position)}
-                                </p>
-                            </div>
-                        )}
+                        <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+                            <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-2">Podgląd wiadomości</p>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                {resolvedInvitationMessage}
+                            </p>
+                        </div>
                     </div>
 
                     <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-3">
