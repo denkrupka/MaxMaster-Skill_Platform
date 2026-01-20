@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAdmin } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
@@ -190,6 +190,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const syncCurrentUser = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        setState(prev => ({ ...prev, currentUser: null }));
+        return;
+      }
+
+      const userId = session.user.id;
+      const userEmail = session.user.email;
+
+      let { data: dbUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (!dbUser && userEmail) {
+        const { data: userByEmail } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', userEmail)
+          .maybeSingle();
+        dbUser = userByEmail || null;
+      }
+
+      if (dbUser) {
+        setState(prev => ({ ...prev, currentUser: dbUser }));
+      }
+    } catch (err) {
+      console.error('Error syncing current user:', err);
+    }
+  }, []);
+
   // Refresh only system config (for real-time updates when HR changes settings)
   const refreshSystemConfig = useCallback(async () => {
     try {
@@ -216,17 +250,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Listen for auth state changes and initial fetch
   useEffect(() => {
     refreshData();
+    syncCurrentUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         refreshData();
+        syncCurrentUser();
+      }
+      if (event === 'SIGNED_OUT' || !session) {
+        setState(prev => ({ ...prev, currentUser: null }));
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [refreshData]);
+  }, [refreshData, syncCurrentUser]);
 
   // Auto-refresh system config every 30 seconds to sync HR settings changes
   useEffect(() => {
@@ -307,7 +346,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCandidate = async (userData: Partial<User>) => {
-    const { data, error } = await supabase.from('users').insert([{ role: Role.CANDIDATE, status: UserStatus.STARTED, ...userData }]).select().single();
+    const cleanEmail = userData.email?.trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new Error('Adres email jest wymagany do utworzenia konta kandydata.');
+    }
+    if (!supabaseAdmin) {
+      throw new Error('Brak klucza serwisowego Supabase. Nie można utworzyć konta Auth.');
+    }
+
+    const inviteMessage = `Cześć ${userData.first_name || ''}! Zapraszamy do rekrutacji na stanowisko ${userData.target_position || 'wybrane stanowisko'} przez nasz portal. Sprawdz poczte i potwierdz maila.`;
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/#/setup-password`
+      : undefined;
+
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(cleanEmail, {
+      data: {
+        first_name: userData.first_name || '',
+        last_name: userData.last_name || '',
+        target_position: userData.target_position || '',
+        invite_message_pl: inviteMessage
+      },
+      redirectTo
+    });
+
+    if (inviteError) throw inviteError;
+
+    const authId = inviteData?.user?.id;
+    if (!authId) {
+      throw new Error('Nie udało się utworzyć konta Auth dla kandydata.');
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .insert([{
+        id: authId,
+        role: Role.CANDIDATE,
+        status: UserStatus.STARTED,
+        ...userData,
+        email: cleanEmail
+      }])
+      .select()
+      .single();
     if (error) throw error;
     setState(prev => ({ ...prev, users: [...prev.users, data] }));
     return data;
