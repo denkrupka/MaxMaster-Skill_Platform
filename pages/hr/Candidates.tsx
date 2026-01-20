@@ -889,6 +889,7 @@ export const HRCandidatesPage = () => {
                         </div>
 
                         <div className="flex flex-wrap items-center justify-end gap-2 ml-auto lg:ml-0 pr-12">
+
                             {/* Send Link button - always visible for candidates with phone */}
                             {selectedCandidate.phone && (
                                 <Button
