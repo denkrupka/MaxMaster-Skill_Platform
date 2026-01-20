@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { useAppContext } from '../context/AppContext';
 import { Lock, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 export const SetupPasswordPage = () => {
@@ -16,7 +15,6 @@ export const SetupPasswordPage = () => {
   const [userName, setUserName] = useState('');
   const [validToken, setValidToken] = useState(false);
   const navigate = useNavigate();
-  const { loginAsUser } = useAppContext();
 
   useEffect(() => {
     const checkToken = async () => {
@@ -105,25 +103,7 @@ export const SetupPasswordPage = () => {
       setSuccess(true);
 
       setTimeout(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (user) {
-            supabase
-              .from('users')
-              .select('*')
-              .eq('id', user.id)
-              .maybeSingle()
-              .then(({ data: dbUser }) => {
-                if (dbUser) {
-                  loginAsUser(dbUser);
-                  navigate(dbUser.role === 'candidate' ? '/candidate/dashboard' : '/');
-                  return;
-                }
-                navigate('/login');
-              });
-          } else {
-            navigate('/login');
-          }
-        });
+        navigate('/login');
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Błąd podczas ustawiania hasła');

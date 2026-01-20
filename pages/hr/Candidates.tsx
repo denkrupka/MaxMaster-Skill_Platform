@@ -254,7 +254,7 @@ export const HRCandidatesPage = () => {
 
             setIsAddModalOpen(false);
             setNewCandidateData({ first_name: '', last_name: '', email: '', phone: '', target_position: '', source: 'OLX', cvFile: null });
-            triggerNotification('success', 'Dodano kandydata', `Pomyślnie dodano kandydata ${addedCandidate.first_name} ${addedCandidate.last_name}. Konto zostało utworzone, a zaproszenie email wysłane.`);
+            triggerNotification('success', 'Dodano kandydata', `Pomyślnie dodano kandydata ${addedCandidate.first_name} ${addedCandidate.last_name}.`);
         } catch (err: any) {
             alert('Błąd podczas dodawania kandydata: ' + err.message);
         } finally {
