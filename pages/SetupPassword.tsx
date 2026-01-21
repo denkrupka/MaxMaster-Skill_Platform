@@ -102,8 +102,25 @@ export const SetupPasswordPage = () => {
 
       setSuccess(true);
 
+      // Check user's role to determine redirect
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      let redirectPath = '/login';
+      if (userId) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (userData?.role === 'candidate') {
+          redirectPath = '/candidate/dashboard';
+        }
+      }
+
       setTimeout(() => {
-        navigate('/login');
+        navigate(redirectPath);
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Błąd podczas ustawiania hasła');
@@ -123,11 +140,11 @@ export const SetupPasswordPage = () => {
             Hasło ustawione! 🎉
           </h2>
           <p className="text-slate-600 mb-6">
-            Twoje konto zostało aktywowane. Możesz teraz zalogować się do platformy MaxMaster Skills.
+            Twoje konto zostało aktywowane. Możesz teraz korzystać z platformy MaxMaster Skills.
           </p>
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
             <p className="text-sm text-blue-800 font-bold">
-              Przekierowanie do logowania za 3 sekundy...
+              Przekierowanie za 3 sekundy...
             </p>
           </div>
         </div>

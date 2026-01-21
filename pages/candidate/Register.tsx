@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -13,71 +13,173 @@ export const CandidateRegisterPage = () => {
     const [searchParams] = useSearchParams();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [step, setStep] = useState<'details' | 'password'>('details');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
+    const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+    const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
         email: '',
-        phone: '',
+        phone: '+48',
         resumeFile: null as File | null,
         resumeUrl: ''
     });
-
-    const [passData, setPassData] = useState({
-        password: '',
-        confirmPassword: ''
-    });
-    const [showPassword, setShowPassword] = useState(false);
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const referrerId = searchParams.get('ref');
 
-    const validateDetails = () => {
+    // Format phone number as +48 XXX XXX XXX
+    const formatPhoneNumber = (value: string) => {
+        // Remove all non-digits
+        const digits = value.replace(/\D/g, '');
+
+        // Start with +48
+        let formatted = '+48';
+
+        // Add remaining digits with spaces
+        if (digits.length > 2) {
+            const remaining = digits.slice(2);
+            if (remaining.length <= 3) {
+                formatted += ' ' + remaining;
+            } else if (remaining.length <= 6) {
+                formatted += ' ' + remaining.slice(0, 3) + ' ' + remaining.slice(3);
+            } else {
+                formatted += ' ' + remaining.slice(0, 3) + ' ' + remaining.slice(3, 6) + ' ' + remaining.slice(6, 9);
+            }
+        }
+
+        return formatted;
+    };
+
+    // Validate phone number (Polish format)
+    const validatePhone = (phone: string) => {
+        const digits = phone.replace(/\D/g, '');
+        return digits.length === 11 && digits.startsWith('48');
+    };
+
+    // Validate email format
+    const validateEmail = (email: string) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email.trim());
+    };
+
+    // Check if email already exists in database
+    const checkEmailExists = async (email: string): Promise<boolean> => {
+        if (!email.trim() || !validateEmail(email)) return false;
+
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id')
+                .eq('email', email.trim().toLowerCase())
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error checking email:', error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error('Exception checking email:', err);
+            return false;
+        }
+    };
+
+    // Check if phone already exists in database
+    const checkPhoneExists = async (phone: string): Promise<boolean> => {
+        if (!phone.trim() || phone === '+48' || !validatePhone(phone)) return false;
+
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id')
+                .eq('phone', phone.trim())
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error checking phone:', error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error('Exception checking phone:', err);
+            return false;
+        }
+    };
+
+    const validateDetails = async () => {
         const newErrors: Record<string, string> = {};
+
+        // Validate basic fields
         if (!formData.firstName.trim()) newErrors.firstName = 'Imię jest wymagane';
         if (!formData.lastName.trim()) newErrors.lastName = 'Nazwisko jest wymagane';
-        if (!formData.email.trim()) newErrors.email = 'Email jest wymagany';
-        else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) newErrors.email = 'Nieprawidłowy format email';
-        if (!formData.phone.trim()) newErrors.phone = 'Numer telefonu jest wymagany';
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
 
-    const validatePassword = () => {
-        const newErrors: Record<string, string> = {};
-        if (!passData.password) newErrors.password = 'Hasło jest wymagane';
-        if (passData.password.length < 6) newErrors.password = 'Hasło musi mieć min. 6 znaków';
-        if (passData.password !== passData.confirmPassword) newErrors.confirmPassword = 'Hasła nie są identyczne';
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const handleDetailsSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (validateDetails()) {
-            setStep('password');
-            setErrors({});
+        // Validate email
+        if (!formData.email.trim()) {
+            newErrors.email = 'Email jest wymagany';
+        } else if (!validateEmail(formData.email)) {
+            newErrors.email = 'Nieprawidłowy format email';
+        } else {
+            // Check if email already exists
+            const emailExists = await checkEmailExists(formData.email);
+            if (emailExists) {
+                newErrors.email = 'Ten adres email jest już zarejestrowany';
+            }
         }
+
+        // Validate phone
+        if (!formData.phone.trim() || formData.phone === '+48') {
+            newErrors.phone = 'Numer telefonu jest wymagany';
+        } else if (!validatePhone(formData.phone)) {
+            newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+        } else {
+            // Check if phone already exists
+            const phoneExists = await checkPhoneExists(formData.phone);
+            if (phoneExists) {
+                newErrors.phone = 'Ten numer telefonu jest już zarejestrowany';
+            }
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // Generate a secure random password for temporary use
+    const generateTemporaryPassword = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        const array = new Uint8Array(16);
+        crypto.getRandomValues(array);
+        for (let i = 0; i < 16; i++) {
+            password += chars[array[i] % chars.length];
+        }
+        return password;
     };
 
     const handleFinalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validatePassword()) return;
+
+        const isValid = await validateDetails();
+        if (!isValid) return;
         
         console.log('=== CANDIDATE REGISTRATION START ===');
         setIsSubmitting(true);
 
         const cleanEmail = formData.email.trim().toLowerCase();
+        const temporaryPassword = generateTemporaryPassword();
 
         try {
             console.log('Attempting Supabase Auth signUp for:', cleanEmail);
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: cleanEmail,
-                password: passData.password,
+                password: temporaryPassword,
                 options: {
+                    emailRedirectTo: `${window.location.origin}/#/setup-password`,
                     data: {
                         first_name: formData.firstName,
                         last_name: formData.lastName,
@@ -212,20 +314,106 @@ export const CandidateRegisterPage = () => {
         if (file) setFormData(prev => ({ ...prev, resumeFile: file, resumeUrl: 'pending' }));
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const formatted = formatPhoneNumber(e.target.value);
+        setFormData({ ...formData, phone: formatted });
+
+        // Real-time validation
+        if (touched.phone) {
+            const newErrors = { ...errors };
+            if (!formatted.trim() || formatted === '+48') {
+                newErrors.phone = 'Numer telefonu jest wymagany';
+            } else if (!validatePhone(formatted)) {
+                newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+            } else {
+                delete newErrors.phone;
+            }
+            setErrors(newErrors);
+        }
+    };
+
+    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const email = e.target.value;
+        setFormData({ ...formData, email });
+
+        // Real-time validation
+        if (touched.email) {
+            const newErrors = { ...errors };
+            if (!email.trim()) {
+                newErrors.email = 'Email jest wymagany';
+            } else if (!validateEmail(email)) {
+                newErrors.email = 'Nieprawidłowy format email';
+            } else {
+                delete newErrors.email;
+            }
+            setErrors(newErrors);
+        }
+    };
+
+    const handleBlur = async (field: string) => {
+        setTouched({ ...touched, [field]: true });
+
+        // Trigger validation on blur
+        const newErrors = { ...errors };
+
+        if (field === 'email') {
+            if (!formData.email.trim()) {
+                newErrors.email = 'Email jest wymagany';
+                setErrors(newErrors);
+            } else if (!validateEmail(formData.email)) {
+                newErrors.email = 'Nieprawidłowy format email';
+                setErrors(newErrors);
+            } else {
+                // Check if email exists in database
+                setIsCheckingEmail(true);
+                const exists = await checkEmailExists(formData.email);
+                setIsCheckingEmail(false);
+
+                if (exists) {
+                    newErrors.email = 'Ten adres email jest już zarejestrowany';
+                } else {
+                    delete newErrors.email;
+                }
+                setErrors(newErrors);
+            }
+        }
+
+        if (field === 'phone') {
+            if (!formData.phone.trim() || formData.phone === '+48') {
+                newErrors.phone = 'Numer telefonu jest wymagany';
+                setErrors(newErrors);
+            } else if (!validatePhone(formData.phone)) {
+                newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+                setErrors(newErrors);
+            } else {
+                // Check if phone exists in database
+                setIsCheckingPhone(true);
+                const exists = await checkPhoneExists(formData.phone);
+                setIsCheckingPhone(false);
+
+                if (exists) {
+                    newErrors.phone = 'Ten numer telefonu jest już zarejestrowany';
+                } else {
+                    delete newErrors.phone;
+                }
+                setErrors(newErrors);
+            }
+        }
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden animate-in fade-in zoom-in duration-300">
                 <div className="bg-blue-600 p-6 text-center">
                     <h1 className="text-2xl font-bold text-white mb-2">
-                        {step === 'details' ? 'Rejestracja Kandydata' : 'Utwórz Hasło'}
+                        Rejestracja Kandydata
                     </h1>
                     <p className="text-blue-100 text-sm">
-                        {step === 'details' ? 'Wprowadź swoje dane, aby rozpocząć.' : 'Zabezpiecz swoje konto.'}
+                        Wprowadź swoje dane, aby rozpocząć. Hasło ustalisz po potwierdzeniu email.
                     </p>
                 </div>
 
-                {step === 'details' ? (
-                    <form onSubmit={handleDetailsSubmit} className="p-8 space-y-5">
+                <form onSubmit={handleFinalSubmit} className="p-8 space-y-5">
                         {referrerId && (
                             <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex items-center gap-3 text-xs text-green-700 font-bold mb-4">
                                 <CheckCircle size={16}/> Rejestrujesz się z polecenia znajomego!
@@ -235,26 +423,103 @@ export const CandidateRegisterPage = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
-                                <input type="text" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.firstName ? 'border-red-500' : 'border-slate-300'}`} placeholder="Jan" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
-                                {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        className={`w-full pl-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.firstName ? 'border-red-500' : 'border-slate-300'}`}
+                                        placeholder="Jan"
+                                        value={formData.firstName}
+                                        onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                    />
+                                </div>
+                                {errors.firstName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.firstName}</p>}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
-                                <input type="text" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.lastName ? 'border-red-500' : 'border-slate-300'}`} placeholder="Kowalski" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
-                                {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        className={`w-full pl-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.lastName ? 'border-red-500' : 'border-slate-300'}`}
+                                        placeholder="Kowalski"
+                                        value={formData.lastName}
+                                        onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                    />
+                                </div>
+                                {errors.lastName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.lastName}</p>}
                             </div>
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Adres Email *</label>
-                            <input type="email" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.email ? 'border-red-500' : 'border-slate-300'}`} placeholder="jan.kowalski@example.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                            <div className="relative">
+                                <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="email"
+                                    className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                                        errors.email
+                                            ? 'border-red-500'
+                                            : touched.email && !isCheckingEmail && validateEmail(formData.email)
+                                            ? 'border-green-500'
+                                            : 'border-slate-300'
+                                    }`}
+                                    placeholder="jan.kowalski@example.com"
+                                    value={formData.email}
+                                    onChange={handleEmailChange}
+                                    onBlur={() => handleBlur('email')}
+                                    disabled={isCheckingEmail}
+                                />
+                                {isCheckingEmail && (
+                                    <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+                                )}
+                                {!isCheckingEmail && touched.email && !errors.email && validateEmail(formData.email) && (
+                                    <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
+                                )}
+                                {!isCheckingEmail && errors.email && (
+                                    <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
+                                )}
+                            </div>
+                            {errors.email && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.email}</p>}
+                            {!isCheckingEmail && touched.email && !errors.email && validateEmail(formData.email) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Email jest dostępny</p>
+                            )}
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Numer Telefonu *</label>
-                            <input type="tel" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.phone ? 'border-red-500' : 'border-slate-300'}`} placeholder="+48 000 000 000" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                            <div className="relative">
+                                <Phone size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="tel"
+                                    className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                                        errors.phone
+                                            ? 'border-red-500'
+                                            : touched.phone && !isCheckingPhone && validatePhone(formData.phone)
+                                            ? 'border-green-500'
+                                            : 'border-slate-300'
+                                    }`}
+                                    placeholder="+48 XXX XXX XXX"
+                                    value={formData.phone}
+                                    onChange={handlePhoneChange}
+                                    onBlur={() => handleBlur('phone')}
+                                    maxLength={15}
+                                    disabled={isCheckingPhone}
+                                />
+                                {isCheckingPhone && (
+                                    <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+                                )}
+                                {!isCheckingPhone && touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                    <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
+                                )}
+                                {!isCheckingPhone && errors.phone && (
+                                    <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
+                                )}
+                            </div>
+                            {errors.phone && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.phone}</p>}
+                            {!isCheckingPhone && touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Numer telefonu jest dostępny</p>
+                            )}
                         </div>
 
                         <div>
@@ -266,32 +531,17 @@ export const CandidateRegisterPage = () => {
                             </div>
                         </div>
 
-                        <Button type="submit" fullWidth size="lg" className="mt-4 bg-blue-600 hover:bg-blue-700">Dalej <ArrowRight size={18} className="ml-2" /></Button>
-                    </form>
-                ) : (
-                    <form onSubmit={handleFinalSubmit} className="p-8 space-y-6">
-                        <div className="text-center mb-6">
-                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mx-auto mb-4"><Lock size={32} /></div>
-                            <h3 className="font-bold text-slate-900">Ustaw hasło</h3>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Hasło</label>
-                                <input type={showPassword ? "text" : "password"} className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.password ? 'border-red-500' : 'border-slate-300'}`} placeholder="Min. 6 znaków" value={passData.password} onChange={e => setPassData({...passData, password: e.target.value})} />
-                                {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Powtórz Hasło</label>
-                                <input type={showPassword ? "text" : "password"} className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.confirmPassword ? 'border-red-500' : 'border-slate-300'}`} placeholder="Powtórz hasło" value={passData.confirmPassword} onChange={e => setPassData({...passData, confirmPassword: e.target.value})} />
-                                {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
-                            </div>
-                        </div>
-                        <div className="flex gap-3 pt-4">
-                            <Button variant="ghost" onClick={() => setStep('details')} className="w-1/3">Wróć</Button>
-                            <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={isSubmitting}>{isSubmitting ? 'Tworzenie...' : 'Zakończ rejestrację'}</Button>
+                        <Button type="submit" fullWidth size="lg" className="mt-4 bg-green-600 hover:bg-green-700" disabled={isSubmitting}>
+                            {isSubmitting ? 'Tworzenie konta...' : 'Zarejestruj się'}
+                            {!isSubmitting && <ArrowRight size={18} className="ml-2" />}
+                        </Button>
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <p className="text-xs text-blue-700">
+                                <CheckCircle size={14} className="inline mr-1" />
+                                Po rejestracji otrzymasz email z linkiem do ustawienia hasła.
+                            </p>
                         </div>
                     </form>
-                )}
             </div>
         </div>
     );
