@@ -1118,6 +1118,7 @@ export const CandidateDashboard = () => {
                             i dowiedzieć się, ile możesz zarabiać w MaxMaster. <strong className="text-white">Już prawie jesteś na mecie!</strong>
                         </p>
                         <Button
+                            variant="custom"
                             size="lg"
                             className="bg-white text-blue-600 hover:bg-blue-50 border-0 shadow-xl font-bold"
                             onClick={() => navigate('/candidate/tests')}

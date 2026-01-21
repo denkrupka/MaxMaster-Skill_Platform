@@ -319,7 +319,7 @@ export const CandidateTestsPage = () => {
         <div className="min-h-screen bg-slate-50 flex">
             
             {/* 1. LEFT SIDEBAR (Progress) */}
-            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 z-10 hidden lg:flex">
+            <aside className="w-80 bg-white border-r border-slate-200 flex flex-col h-screen fixed left-0 top-0 z-10 hidden lg:flex overflow-hidden">
                 <div className="p-6 border-b border-slate-100">
                     <h2 className="font-bold text-slate-900">Twoje Testy</h2>
                     <p className="text-xs text-slate-500 mt-1">Postęp weryfikacji: {Math.round(progressPercent)}%</p>
