@@ -1117,24 +1117,14 @@ export const CandidateDashboard = () => {
                             Świetnie zacząłeś! Dokończ testy weryfikacyjne, żeby poznać swoją pełną stawkę
                             i dowiedzieć się, ile możesz zarabiać w MaxMaster. <strong className="text-white">Już prawie jesteś na mecie!</strong>
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <Button
-                                size="lg"
-                                className="bg-white text-blue-600 hover:bg-blue-50 border-0 shadow-xl font-bold"
-                                onClick={() => navigate('/candidate/tests')}
-                            >
-                                Kontynuuj weryfikację umiejętności
-                                <ArrowRight size={20} className="ml-2" />
-                            </Button>
-                            <Button
-                                size="lg"
-                                variant="outline"
-                                className="bg-transparent border-2 border-white/30 text-white hover:bg-white/10 hover:border-white/50"
-                                onClick={() => navigate('/candidate/simulation')}
-                            >
-                                Zacznij od nowa
-                            </Button>
-                        </div>
+                        <Button
+                            size="lg"
+                            className="bg-white text-blue-600 hover:bg-blue-50 border-0 shadow-xl font-bold"
+                            onClick={() => navigate('/candidate/tests')}
+                        >
+                            Kontynuuj weryfikację umiejętności
+                            <ArrowRight size={20} className="ml-2" />
+                        </Button>
                     </div>
                 </div>
             )}
