@@ -107,6 +107,14 @@ export const CandidateDashboard = () => {
 
     const showEstimateBanner = !isPostTestStage && [UserStatus.INVITED, UserStatus.STARTED, UserStatus.TESTS_IN_PROGRESS].includes(currentUser.status);
 
+    // Check if candidate has incomplete tests
+    const hasIncompleteTests = useMemo(() => {
+        if (!currentUser) return false;
+        const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+        const savedTests = localStorage.getItem(savedTestsKey);
+        return savedTests && JSON.parse(savedTests).length > 0;
+    }, [currentUser, testAttempts.length]);
+
     // --- Post Test Calculations ---
     const passedAttempts = useMemo(() => {
         return testAttempts.filter(ta => ta.user_id === currentUser.id);
@@ -1074,7 +1082,7 @@ export const CandidateDashboard = () => {
                 <InfoTile type="career" label="Rozwój Zawodowy" icon={TrendingUp} colorClass="bg-purple-100 text-purple-600"/>
             </div>
 
-            {showEstimateBanner && (
+            {showEstimateBanner && !hasIncompleteTests && (
                 <div className="bg-slate-900 rounded-xl p-8 text-white shadow-lg relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-700">
                         <Calculator size={160} />
@@ -1082,11 +1090,39 @@ export const CandidateDashboard = () => {
                     <div className="relative z-10 max-w-2xl">
                         <h2 className="text-2xl font-bold mb-4">Ile możesz zarobić w MaxMaster?</h2>
                         <p className="text-blue-200 mb-8 text-lg">
-                            Na początek sprawdź swoją stawkę godzinową na podstawie tego, co już potrafisz. 
+                            Na początek sprawdź swoją stawkę godzinową na podstawie tego, co już potrafisz.
                             Wybierz swoje umiejętności z listy, a system wyliczy Twoją ofertę.
                         </p>
                         <Button size="lg" className="bg-blue-600 hover:bg-blue-500 text-white border-0 shadow-xl shadow-blue-900/50" onClick={() => navigate('/candidate/simulation')}>
                             Poznaj swoją stawkę – wybierz umiejętności
+                            <ArrowRight size={20} className="ml-2" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {showEstimateBanner && hasIncompleteTests && (
+                <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl p-8 text-white shadow-lg relative overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
+                        <Zap size={160} />
+                    </div>
+                    <div className="relative z-10 max-w-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-white/20 p-2 rounded-lg">
+                                <Star size={28} className="text-yellow-300 fill-yellow-300" />
+                            </div>
+                            <h2 className="text-2xl font-bold">Jeszcze trochę Ci zostało!</h2>
+                        </div>
+                        <p className="text-blue-100 mb-6 text-lg leading-relaxed">
+                            Świetnie zacząłeś! Dokończ testy weryfikacyjne, żeby poznać swoją pełną stawkę
+                            i dowiedzieć się, ile możesz zarabiać w MaxMaster. <strong className="text-white">Już prawie jesteś na mecie!</strong>
+                        </p>
+                        <Button
+                            size="lg"
+                            className="bg-white text-blue-600 hover:bg-blue-50 border-0 shadow-xl font-bold"
+                            onClick={() => navigate('/candidate/tests')}
+                        >
+                            Kontynuuj weryfikację umiejętności
                             <ArrowRight size={20} className="ml-2" />
                         </Button>
                     </div>

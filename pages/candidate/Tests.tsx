@@ -8,7 +8,7 @@ import { Test, GradingStrategy, UserStatus, Role, Question } from '../../types';
 
 export const CandidateTestsPage = () => {
     const { state, startTest, submitTest, updateUser } = useAppContext();
-    const { currentUser, tests, skills } = state;
+    const { currentUser, tests, skills, testAttempts } = state;
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -35,22 +35,51 @@ export const CandidateTestsPage = () => {
     const [showInterimModal, setShowInterimModal] = useState(false);
     const [lastCompletedTest, setLastCompletedTest] = useState<{test: Test, passed: boolean, score: number} | null>(null);
 
+    // Exit Confirmation Modal
+    const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+
     // Initialize
     useEffect(() => {
         if (!currentUser) return;
 
         let queueIds: string[] = [];
-        
+
         // 1. Try to get from location state (Simulated selection)
         if (location.state && location.state.selectedTestIds) {
             queueIds = location.state.selectedTestIds;
-        } 
+        } else {
+            // 2. Try to restore from localStorage (if candidate is returning)
+            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTests = localStorage.getItem(savedTestsKey);
+            if (savedTests) {
+                try {
+                    queueIds = JSON.parse(savedTests);
+                } catch (e) {
+                    console.error('Failed to parse saved tests:', e);
+                }
+            }
+        }
 
         if (queueIds.length > 0) {
-            const queue = tests.filter(t => queueIds.includes(t.id));
-            setTestQueue(queue);
+            // Filter out tests that have already been attempted
+            const completedTestIds = testAttempts
+                .filter(ta => ta.user_id === currentUser.id)
+                .map(ta => ta.test_id);
+
+            const remainingTestIds = queueIds.filter(id => !completedTestIds.includes(id));
+
+            // Save remaining tests to localStorage for later resuming
+            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            if (remainingTestIds.length > 0) {
+                localStorage.setItem(savedTestsKey, JSON.stringify(remainingTestIds));
+                const queue = tests.filter(t => remainingTestIds.includes(t.id));
+                setTestQueue(queue);
+            } else {
+                // All tests completed, clear localStorage
+                localStorage.removeItem(savedTestsKey);
+            }
         }
-    }, [currentUser, tests, location.state]);
+    }, [currentUser, tests, testAttempts, location.state]);
 
     // Active Test Data
     const activeTest = testQueue[currentTestIndex];
@@ -226,21 +255,52 @@ export const CandidateTestsPage = () => {
 
     const handleAllTestsCompleted = () => {
         if (currentUser) {
+            // Clear saved tests from localStorage since all tests are completed
+            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            localStorage.removeItem(savedTestsKey);
+
             if (currentUser.role === Role.CANDIDATE) {
                 updateUser(currentUser.id, { status: UserStatus.TESTS_COMPLETED });
-                navigate('/candidate/thank-you'); 
+                navigate('/candidate/thank-you');
             } else {
-                navigate('/dashboard/tests'); 
+                navigate('/dashboard/tests');
             }
         }
     };
 
     const handlePause = () => {
+        // If test is in progress, show confirmation modal
+        if (testStarted) {
+            setShowExitConfirmModal(true);
+            return;
+        }
+
+        // Otherwise navigate directly
         if (currentUser?.role === Role.CANDIDATE) {
             navigate('/candidate/dashboard');
         } else {
             navigate('/dashboard/tests');
         }
+    };
+
+    const handleConfirmExit = async () => {
+        // Record test as failed before exiting
+        if (activeTest && testStarted) {
+            await submitTest(activeTest.id, [], 0, false);
+        }
+
+        setShowExitConfirmModal(false);
+
+        // Navigate away
+        if (currentUser?.role === Role.CANDIDATE) {
+            navigate('/candidate/dashboard');
+        } else {
+            navigate('/dashboard/tests');
+        }
+    };
+
+    const handleCancelExit = () => {
+        setShowExitConfirmModal(false);
     };
 
     if (!currentUser || testQueue.length === 0) {
@@ -482,7 +542,46 @@ export const CandidateTestsPage = () => {
                 </div>
             )}
 
-            {/* 4. IMAGE ZOOM MODAL */}
+            {/* 4. EXIT CONFIRMATION MODAL */}
+            {showExitConfirmModal && (
+                <div className="fixed inset-0 bg-slate-900/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center animate-in zoom-in duration-300">
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <AlertTriangle size={32} />
+                        </div>
+
+                        <h2 className="text-2xl font-bold text-slate-900 mb-2">Czy na pewno chcesz zakończyć test?</h2>
+
+                        <p className="text-slate-500 mb-8 leading-relaxed">
+                            Twój obecny wynik zostanie <strong className="text-red-600">anulowany</strong>,
+                            a dostęp do tego testu <strong className="text-red-600">nie będzie już możliwy</strong>.
+                            Po wyjściu test zostanie zaliczony jako niezaliczony.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Button
+                                fullWidth
+                                variant="outline"
+                                onClick={handleCancelExit}
+                                className="shadow-sm"
+                            >
+                                Anuluj - zostań na teście
+                            </Button>
+                            <Button
+                                fullWidth
+                                variant="danger"
+                                onClick={handleConfirmExit}
+                                className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20"
+                            >
+                                Tak, zakończ i wyjdź
+                                <X size={18} className="ml-2" />
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 5. IMAGE ZOOM MODAL */}
             {zoomedImage && (
                 <div 
                     className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-zoom-out"
