@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -14,12 +14,13 @@ export const CandidateRegisterPage = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [touched, setTouched] = useState<Record<string, boolean>>({});
 
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
         email: '',
-        phone: '',
+        phone: '+48',
         resumeFile: null as File | null,
         resumeUrl: ''
     });
@@ -28,13 +29,55 @@ export const CandidateRegisterPage = () => {
 
     const referrerId = searchParams.get('ref');
 
+    // Format phone number as +48 XXX XXX XXX
+    const formatPhoneNumber = (value: string) => {
+        // Remove all non-digits
+        const digits = value.replace(/\D/g, '');
+
+        // Start with +48
+        let formatted = '+48';
+
+        // Add remaining digits with spaces
+        if (digits.length > 2) {
+            const remaining = digits.slice(2);
+            if (remaining.length <= 3) {
+                formatted += ' ' + remaining;
+            } else if (remaining.length <= 6) {
+                formatted += ' ' + remaining.slice(0, 3) + ' ' + remaining.slice(3);
+            } else {
+                formatted += ' ' + remaining.slice(0, 3) + ' ' + remaining.slice(3, 6) + ' ' + remaining.slice(6, 9);
+            }
+        }
+
+        return formatted;
+    };
+
+    // Validate phone number (Polish format)
+    const validatePhone = (phone: string) => {
+        const digits = phone.replace(/\D/g, '');
+        return digits.length === 11 && digits.startsWith('48');
+    };
+
+    // Validate email format
+    const validateEmail = (email: string) => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email.trim());
+    };
+
     const validateDetails = () => {
         const newErrors: Record<string, string> = {};
         if (!formData.firstName.trim()) newErrors.firstName = 'Imię jest wymagane';
         if (!formData.lastName.trim()) newErrors.lastName = 'Nazwisko jest wymagane';
-        if (!formData.email.trim()) newErrors.email = 'Email jest wymagany';
-        else if (!/^\S+@\S+\.\S+$/.test(formData.email.trim())) newErrors.email = 'Nieprawidłowy format email';
-        if (!formData.phone.trim()) newErrors.phone = 'Numer telefonu jest wymagany';
+        if (!formData.email.trim()) {
+            newErrors.email = 'Email jest wymagany';
+        } else if (!validateEmail(formData.email)) {
+            newErrors.email = 'Nieprawidłowy format email';
+        }
+        if (!formData.phone.trim() || formData.phone === '+48') {
+            newErrors.phone = 'Numer telefonu jest wymagany';
+        } else if (!validatePhone(formData.phone)) {
+            newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -202,6 +245,71 @@ export const CandidateRegisterPage = () => {
         if (file) setFormData(prev => ({ ...prev, resumeFile: file, resumeUrl: 'pending' }));
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const formatted = formatPhoneNumber(e.target.value);
+        setFormData({ ...formData, phone: formatted });
+
+        // Real-time validation
+        if (touched.phone) {
+            const newErrors = { ...errors };
+            if (!formatted.trim() || formatted === '+48') {
+                newErrors.phone = 'Numer telefonu jest wymagany';
+            } else if (!validatePhone(formatted)) {
+                newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+            } else {
+                delete newErrors.phone;
+            }
+            setErrors(newErrors);
+        }
+    };
+
+    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const email = e.target.value;
+        setFormData({ ...formData, email });
+
+        // Real-time validation
+        if (touched.email) {
+            const newErrors = { ...errors };
+            if (!email.trim()) {
+                newErrors.email = 'Email jest wymagany';
+            } else if (!validateEmail(email)) {
+                newErrors.email = 'Nieprawidłowy format email';
+            } else {
+                delete newErrors.email;
+            }
+            setErrors(newErrors);
+        }
+    };
+
+    const handleBlur = (field: string) => {
+        setTouched({ ...touched, [field]: true });
+
+        // Trigger validation on blur
+        const newErrors = { ...errors };
+
+        if (field === 'email') {
+            if (!formData.email.trim()) {
+                newErrors.email = 'Email jest wymagany';
+            } else if (!validateEmail(formData.email)) {
+                newErrors.email = 'Nieprawidłowy format email';
+            } else {
+                delete newErrors.email;
+            }
+        }
+
+        if (field === 'phone') {
+            if (!formData.phone.trim() || formData.phone === '+48') {
+                newErrors.phone = 'Numer telefonu jest wymagany';
+            } else if (!validatePhone(formData.phone)) {
+                newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+            } else {
+                delete newErrors.phone;
+            }
+        }
+
+        setErrors(newErrors);
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
             <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden animate-in fade-in zoom-in duration-300">
@@ -224,26 +332,95 @@ export const CandidateRegisterPage = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
-                                <input type="text" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.firstName ? 'border-red-500' : 'border-slate-300'}`} placeholder="Jan" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
-                                {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        className={`w-full pl-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.firstName ? 'border-red-500' : 'border-slate-300'}`}
+                                        placeholder="Jan"
+                                        value={formData.firstName}
+                                        onChange={e => setFormData({...formData, firstName: e.target.value})}
+                                    />
+                                </div>
+                                {errors.firstName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.firstName}</p>}
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
-                                <input type="text" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.lastName ? 'border-red-500' : 'border-slate-300'}`} placeholder="Kowalski" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
-                                {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
+                                <div className="relative">
+                                    <User size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        className={`w-full pl-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.lastName ? 'border-red-500' : 'border-slate-300'}`}
+                                        placeholder="Kowalski"
+                                        value={formData.lastName}
+                                        onChange={e => setFormData({...formData, lastName: e.target.value})}
+                                    />
+                                </div>
+                                {errors.lastName && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.lastName}</p>}
                             </div>
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Adres Email *</label>
-                            <input type="email" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.email ? 'border-red-500' : 'border-slate-300'}`} placeholder="jan.kowalski@example.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                            <div className="relative">
+                                <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="email"
+                                    className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                                        errors.email
+                                            ? 'border-red-500'
+                                            : touched.email && validateEmail(formData.email)
+                                            ? 'border-green-500'
+                                            : 'border-slate-300'
+                                    }`}
+                                    placeholder="jan.kowalski@example.com"
+                                    value={formData.email}
+                                    onChange={handleEmailChange}
+                                    onBlur={() => handleBlur('email')}
+                                />
+                                {touched.email && !errors.email && validateEmail(formData.email) && (
+                                    <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
+                                )}
+                                {errors.email && (
+                                    <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
+                                )}
+                            </div>
+                            {errors.email && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.email}</p>}
+                            {touched.email && !errors.email && validateEmail(formData.email) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Email poprawny</p>
+                            )}
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Numer Telefonu *</label>
-                            <input type="tel" className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.phone ? 'border-red-500' : 'border-slate-300'}`} placeholder="+48 000 000 000" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
-                            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                            <div className="relative">
+                                <Phone size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="tel"
+                                    className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                                        errors.phone
+                                            ? 'border-red-500'
+                                            : touched.phone && validatePhone(formData.phone)
+                                            ? 'border-green-500'
+                                            : 'border-slate-300'
+                                    }`}
+                                    placeholder="+48 XXX XXX XXX"
+                                    value={formData.phone}
+                                    onChange={handlePhoneChange}
+                                    onBlur={() => handleBlur('phone')}
+                                    maxLength={15}
+                                />
+                                {touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                    <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
+                                )}
+                                {errors.phone && (
+                                    <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
+                                )}
+                            </div>
+                            {errors.phone && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.phone}</p>}
+                            {touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Numer telefonu poprawny</p>
+                            )}
                         </div>
 
                         <div>
