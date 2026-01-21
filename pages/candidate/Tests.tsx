@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useBlocker } from 'react-router-dom';
 import { Play, CheckCircle, Clock, AlertTriangle, ChevronRight, Lock, Circle, ArrowRight, X, ZoomIn } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -287,6 +287,24 @@ export const CandidateTestsPage = () => {
         // Record test as failed before exiting
         if (activeTest && testStarted) {
             await submitTest(activeTest.id, [], 0, false);
+
+            // Remove failed test from localStorage to prevent resuming
+            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTests = localStorage.getItem(savedTestsKey);
+            if (savedTests) {
+                try {
+                    const testIds = JSON.parse(savedTests);
+                    const updatedIds = testIds.filter((id: string) => id !== activeTest.id);
+
+                    if (updatedIds.length > 0) {
+                        localStorage.setItem(savedTestsKey, JSON.stringify(updatedIds));
+                    } else {
+                        localStorage.removeItem(savedTestsKey);
+                    }
+                } catch (e) {
+                    console.error('Failed to update saved tests:', e);
+                }
+            }
         }
 
         setShowExitConfirmModal(false);
@@ -301,6 +319,34 @@ export const CandidateTestsPage = () => {
 
     const handleCancelExit = () => {
         setShowExitConfirmModal(false);
+    };
+
+    // Block navigation when test is in progress
+    const blocker = useBlocker(
+        ({ currentLocation, nextLocation }) =>
+            testStarted && currentLocation.pathname !== nextLocation.pathname
+    );
+
+    // Handle blocked navigation
+    useEffect(() => {
+        if (blocker.state === "blocked") {
+            setShowExitConfirmModal(true);
+        }
+    }, [blocker.state]);
+
+    // Update handleConfirmExit to proceed with blocked navigation
+    const handleConfirmExitWithNavigation = async () => {
+        await handleConfirmExit();
+        if (blocker.state === "blocked") {
+            blocker.proceed();
+        }
+    };
+
+    const handleCancelExitWithNavigation = () => {
+        setShowExitConfirmModal(false);
+        if (blocker.state === "blocked") {
+            blocker.reset();
+        }
     };
 
     if (!currentUser || testQueue.length === 0) {
@@ -562,7 +608,7 @@ export const CandidateTestsPage = () => {
                             <Button
                                 fullWidth
                                 variant="outline"
-                                onClick={handleCancelExit}
+                                onClick={handleCancelExitWithNavigation}
                                 className="shadow-sm"
                             >
                                 Anuluj - zostań na teście
@@ -570,7 +616,7 @@ export const CandidateTestsPage = () => {
                             <Button
                                 fullWidth
                                 variant="danger"
-                                onClick={handleConfirmExit}
+                                onClick={handleConfirmExitWithNavigation}
                                 className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20"
                             >
                                 Tak, zakończ i wyjdź
