@@ -81,14 +81,17 @@ export const CandidateSimulationPage = () => {
     };
 
     const handleConfirm = async () => {
-        updateUser(currentUser.id, { 
+        updateUser(currentUser.id, {
             contract_type: selectedContract as any,
             is_student: isStudent,
-            status: UserStatus.STARTED 
+            status: UserStatus.STARTED
         });
 
         const testNames = tests.filter(t => selectedTestIds.includes(t.id)).map(t => t.title).join(', ');
         logCandidateAction(currentUser.id, `Zakończono kalkulację stawki. Wybrano: ${selectedContract}. Wybrane testy: ${testNames}`);
+
+        // Save selected test IDs to localStorage for resuming later
+        localStorage.setItem(`candidate_${currentUser.id}_selectedTests`, JSON.stringify(selectedTestIds));
 
         navigate('/candidate/tests', { state: { selectedTestIds } });
     };
