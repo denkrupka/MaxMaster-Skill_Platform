@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -15,6 +15,8 @@ export const CandidateRegisterPage = () => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [touched, setTouched] = useState<Record<string, boolean>>({});
+    const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+    const [isCheckingPhone, setIsCheckingPhone] = useState(false);
 
     const [formData, setFormData] = useState({
         firstName: '',
@@ -64,20 +66,85 @@ export const CandidateRegisterPage = () => {
         return emailRegex.test(email.trim());
     };
 
-    const validateDetails = () => {
+    // Check if email already exists in database
+    const checkEmailExists = async (email: string): Promise<boolean> => {
+        if (!email.trim() || !validateEmail(email)) return false;
+
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id')
+                .eq('email', email.trim().toLowerCase())
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error checking email:', error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error('Exception checking email:', err);
+            return false;
+        }
+    };
+
+    // Check if phone already exists in database
+    const checkPhoneExists = async (phone: string): Promise<boolean> => {
+        if (!phone.trim() || phone === '+48' || !validatePhone(phone)) return false;
+
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id')
+                .eq('phone', phone.trim())
+                .maybeSingle();
+
+            if (error) {
+                console.error('Error checking phone:', error);
+                return false;
+            }
+
+            return !!data;
+        } catch (err) {
+            console.error('Exception checking phone:', err);
+            return false;
+        }
+    };
+
+    const validateDetails = async () => {
         const newErrors: Record<string, string> = {};
+
+        // Validate basic fields
         if (!formData.firstName.trim()) newErrors.firstName = 'Imię jest wymagane';
         if (!formData.lastName.trim()) newErrors.lastName = 'Nazwisko jest wymagane';
+
+        // Validate email
         if (!formData.email.trim()) {
             newErrors.email = 'Email jest wymagany';
         } else if (!validateEmail(formData.email)) {
             newErrors.email = 'Nieprawidłowy format email';
+        } else {
+            // Check if email already exists
+            const emailExists = await checkEmailExists(formData.email);
+            if (emailExists) {
+                newErrors.email = 'Ten adres email jest już zarejestrowany';
+            }
         }
+
+        // Validate phone
         if (!formData.phone.trim() || formData.phone === '+48') {
             newErrors.phone = 'Numer telefonu jest wymagany';
         } else if (!validatePhone(formData.phone)) {
             newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+        } else {
+            // Check if phone already exists
+            const phoneExists = await checkPhoneExists(formData.phone);
+            if (phoneExists) {
+                newErrors.phone = 'Ten numer telefonu jest już zarejestrowany';
+            }
         }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -96,7 +163,9 @@ export const CandidateRegisterPage = () => {
 
     const handleFinalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validateDetails()) return;
+
+        const isValid = await validateDetails();
+        if (!isValid) return;
         
         console.log('=== CANDIDATE REGISTRATION START ===');
         setIsSubmitting(true);
@@ -281,7 +350,7 @@ export const CandidateRegisterPage = () => {
         }
     };
 
-    const handleBlur = (field: string) => {
+    const handleBlur = async (field: string) => {
         setTouched({ ...touched, [field]: true });
 
         // Trigger validation on blur
@@ -290,24 +359,46 @@ export const CandidateRegisterPage = () => {
         if (field === 'email') {
             if (!formData.email.trim()) {
                 newErrors.email = 'Email jest wymagany';
+                setErrors(newErrors);
             } else if (!validateEmail(formData.email)) {
                 newErrors.email = 'Nieprawidłowy format email';
+                setErrors(newErrors);
             } else {
-                delete newErrors.email;
+                // Check if email exists in database
+                setIsCheckingEmail(true);
+                const exists = await checkEmailExists(formData.email);
+                setIsCheckingEmail(false);
+
+                if (exists) {
+                    newErrors.email = 'Ten adres email jest już zarejestrowany';
+                } else {
+                    delete newErrors.email;
+                }
+                setErrors(newErrors);
             }
         }
 
         if (field === 'phone') {
             if (!formData.phone.trim() || formData.phone === '+48') {
                 newErrors.phone = 'Numer telefonu jest wymagany';
+                setErrors(newErrors);
             } else if (!validatePhone(formData.phone)) {
                 newErrors.phone = 'Numer telefonu musi mieć format +48 XXX XXX XXX';
+                setErrors(newErrors);
             } else {
-                delete newErrors.phone;
+                // Check if phone exists in database
+                setIsCheckingPhone(true);
+                const exists = await checkPhoneExists(formData.phone);
+                setIsCheckingPhone(false);
+
+                if (exists) {
+                    newErrors.phone = 'Ten numer telefonu jest już zarejestrowany';
+                } else {
+                    delete newErrors.phone;
+                }
+                setErrors(newErrors);
             }
         }
-
-        setErrors(newErrors);
     };
 
     return (
@@ -369,7 +460,7 @@ export const CandidateRegisterPage = () => {
                                     className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                                         errors.email
                                             ? 'border-red-500'
-                                            : touched.email && validateEmail(formData.email)
+                                            : touched.email && !isCheckingEmail && validateEmail(formData.email)
                                             ? 'border-green-500'
                                             : 'border-slate-300'
                                     }`}
@@ -377,17 +468,21 @@ export const CandidateRegisterPage = () => {
                                     value={formData.email}
                                     onChange={handleEmailChange}
                                     onBlur={() => handleBlur('email')}
+                                    disabled={isCheckingEmail}
                                 />
-                                {touched.email && !errors.email && validateEmail(formData.email) && (
+                                {isCheckingEmail && (
+                                    <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+                                )}
+                                {!isCheckingEmail && touched.email && !errors.email && validateEmail(formData.email) && (
                                     <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
                                 )}
-                                {errors.email && (
+                                {!isCheckingEmail && errors.email && (
                                     <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
                                 )}
                             </div>
                             {errors.email && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.email}</p>}
-                            {touched.email && !errors.email && validateEmail(formData.email) && (
-                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Email poprawny</p>
+                            {!isCheckingEmail && touched.email && !errors.email && validateEmail(formData.email) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Email jest dostępny</p>
                             )}
                         </div>
 
@@ -400,7 +495,7 @@ export const CandidateRegisterPage = () => {
                                     className={`w-full pl-10 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                                         errors.phone
                                             ? 'border-red-500'
-                                            : touched.phone && validatePhone(formData.phone)
+                                            : touched.phone && !isCheckingPhone && validatePhone(formData.phone)
                                             ? 'border-green-500'
                                             : 'border-slate-300'
                                     }`}
@@ -409,17 +504,21 @@ export const CandidateRegisterPage = () => {
                                     onChange={handlePhoneChange}
                                     onBlur={() => handleBlur('phone')}
                                     maxLength={15}
+                                    disabled={isCheckingPhone}
                                 />
-                                {touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                {isCheckingPhone && (
+                                    <Loader2 size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 animate-spin" />
+                                )}
+                                {!isCheckingPhone && touched.phone && !errors.phone && validatePhone(formData.phone) && (
                                     <CheckCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500" />
                                 )}
-                                {errors.phone && (
+                                {!isCheckingPhone && errors.phone && (
                                     <AlertCircle size={18} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-500" />
                                 )}
                             </div>
                             {errors.phone && <p className="text-red-500 text-xs mt-1 flex items-center gap-1"><AlertCircle size={12} />{errors.phone}</p>}
-                            {touched.phone && !errors.phone && validatePhone(formData.phone) && (
-                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Numer telefonu poprawny</p>
+                            {!isCheckingPhone && touched.phone && !errors.phone && validatePhone(formData.phone) && (
+                                <p className="text-green-600 text-xs mt-1 flex items-center gap-1"><CheckCircle size={12} />Numer telefonu jest dostępny</p>
                             )}
                         </div>
 
