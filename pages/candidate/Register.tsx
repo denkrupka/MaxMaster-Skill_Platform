@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -13,9 +13,8 @@ export const CandidateRegisterPage = () => {
     const [searchParams] = useSearchParams();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [step, setStep] = useState<'details' | 'password'>('details');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -24,12 +23,6 @@ export const CandidateRegisterPage = () => {
         resumeFile: null as File | null,
         resumeUrl: ''
     });
-
-    const [passData, setPassData] = useState({
-        password: '',
-        confirmPassword: ''
-    });
-    const [showPassword, setShowPassword] = useState(false);
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -46,38 +39,35 @@ export const CandidateRegisterPage = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-    const validatePassword = () => {
-        const newErrors: Record<string, string> = {};
-        if (!passData.password) newErrors.password = 'Hasło jest wymagane';
-        if (passData.password.length < 6) newErrors.password = 'Hasło musi mieć min. 6 znaków';
-        if (passData.password !== passData.confirmPassword) newErrors.confirmPassword = 'Hasła nie są identyczne';
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const handleDetailsSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (validateDetails()) {
-            setStep('password');
-            setErrors({});
+    // Generate a secure random password for temporary use
+    const generateTemporaryPassword = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+        let password = '';
+        const array = new Uint8Array(16);
+        crypto.getRandomValues(array);
+        for (let i = 0; i < 16; i++) {
+            password += chars[array[i] % chars.length];
         }
+        return password;
     };
 
     const handleFinalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!validatePassword()) return;
+        if (!validateDetails()) return;
         
         console.log('=== CANDIDATE REGISTRATION START ===');
         setIsSubmitting(true);
 
         const cleanEmail = formData.email.trim().toLowerCase();
+        const temporaryPassword = generateTemporaryPassword();
 
         try {
             console.log('Attempting Supabase Auth signUp for:', cleanEmail);
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: cleanEmail,
-                password: passData.password,
+                password: temporaryPassword,
                 options: {
+                    emailRedirectTo: `${window.location.origin}/#/setup-password`,
                     data: {
                         first_name: formData.firstName,
                         last_name: formData.lastName,
@@ -217,15 +207,14 @@ export const CandidateRegisterPage = () => {
             <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden animate-in fade-in zoom-in duration-300">
                 <div className="bg-blue-600 p-6 text-center">
                     <h1 className="text-2xl font-bold text-white mb-2">
-                        {step === 'details' ? 'Rejestracja Kandydata' : 'Utwórz Hasło'}
+                        Rejestracja Kandydata
                     </h1>
                     <p className="text-blue-100 text-sm">
-                        {step === 'details' ? 'Wprowadź swoje dane, aby rozpocząć.' : 'Zabezpiecz swoje konto.'}
+                        Wprowadź swoje dane, aby rozpocząć. Hasło ustalisz po potwierdzeniu email.
                     </p>
                 </div>
 
-                {step === 'details' ? (
-                    <form onSubmit={handleDetailsSubmit} className="p-8 space-y-5">
+                <form onSubmit={handleFinalSubmit} className="p-8 space-y-5">
                         {referrerId && (
                             <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex items-center gap-3 text-xs text-green-700 font-bold mb-4">
                                 <CheckCircle size={16}/> Rejestrujesz się z polecenia znajomego!
@@ -266,32 +255,17 @@ export const CandidateRegisterPage = () => {
                             </div>
                         </div>
 
-                        <Button type="submit" fullWidth size="lg" className="mt-4 bg-blue-600 hover:bg-blue-700">Dalej <ArrowRight size={18} className="ml-2" /></Button>
-                    </form>
-                ) : (
-                    <form onSubmit={handleFinalSubmit} className="p-8 space-y-6">
-                        <div className="text-center mb-6">
-                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 mx-auto mb-4"><Lock size={32} /></div>
-                            <h3 className="font-bold text-slate-900">Ustaw hasło</h3>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Hasło</label>
-                                <input type={showPassword ? "text" : "password"} className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.password ? 'border-red-500' : 'border-slate-300'}`} placeholder="Min. 6 znaków" value={passData.password} onChange={e => setPassData({...passData, password: e.target.value})} />
-                                {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Powtórz Hasło</label>
-                                <input type={showPassword ? "text" : "password"} className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${errors.confirmPassword ? 'border-red-500' : 'border-slate-300'}`} placeholder="Powtórz hasło" value={passData.confirmPassword} onChange={e => setPassData({...passData, confirmPassword: e.target.value})} />
-                                {errors.confirmPassword && <p className="text-red-500 text-xs mt-1">{errors.confirmPassword}</p>}
-                            </div>
-                        </div>
-                        <div className="flex gap-3 pt-4">
-                            <Button variant="ghost" onClick={() => setStep('details')} className="w-1/3">Wróć</Button>
-                            <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700 text-white" disabled={isSubmitting}>{isSubmitting ? 'Tworzenie...' : 'Zakończ rejestrację'}</Button>
+                        <Button type="submit" fullWidth size="lg" className="mt-4 bg-green-600 hover:bg-green-700" disabled={isSubmitting}>
+                            {isSubmitting ? 'Tworzenie konta...' : 'Zarejestruj się'}
+                            {!isSubmitting && <ArrowRight size={18} className="ml-2" />}
+                        </Button>
+                        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <p className="text-xs text-blue-700">
+                                <CheckCircle size={14} className="inline mr-1" />
+                                Po rejestracji otrzymasz email z linkiem do ustawienia hasła.
+                            </p>
                         </div>
                     </form>
-                )}
             </div>
         </div>
     );
