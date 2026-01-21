@@ -126,6 +126,7 @@ export interface Position {
   name: string;
   responsibilities: string[];
   required_skill_ids: string[];
+  required_document_ids?: string[];
   min_monthly_rate?: number;
   max_monthly_rate?: number;
   salary_type: 'hourly' | 'monthly';
