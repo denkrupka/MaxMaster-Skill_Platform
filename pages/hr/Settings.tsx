@@ -58,6 +58,7 @@ export const HRSettingsPage = () => {
     const [editingPosition, setEditingPosition] = useState<Partial<Position> | null>(null);
     const [newResp, setNewResp] = useState('');
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+    const [collapsedModalSections, setCollapsedModalSections] = useState<Set<string>>(new Set());
 
     const sortedPositions = useMemo(() => [...positions].sort((a, b) => a.order - b.order), [positions]);
 
@@ -295,7 +296,104 @@ export const HRSettingsPage = () => {
                 </div>
             </AccordionItem>
             
-            <AccordionItem id="doc-permissions" icon={ShieldCheck} title="Dokumenty i Uprawnienia" description="Zarządzaj typami dokumentów (SEP, UDT) i stawkami bonusowymi za nie." isOpen={openAccordion === 'doc-permissions'} onToggle={toggleAccordion}><div className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-2 gap-4">{(localSystemConfig.bonusDocumentTypes || []).map((doc, idx) => (<div key={doc.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between group"><div className="flex-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">NAZWA DOKUMENTU</p><input className="w-full bg-transparent border-none p-0 font-bold text-slate-800 text-sm focus:ring-0" value={doc.label} onChange={e => { const newDocs = [...localSystemConfig.bonusDocumentTypes]; newDocs[idx].label = e.target.value; setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }}/></div><div className="w-24 px-4"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-right">PLN/H</p><input type="number" step="0.1" className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-right font-black text-blue-600 outline-none" value={doc.bonus} onChange={e => { const newDocs = [...localSystemConfig.bonusDocumentTypes]; newDocs[idx].bonus = Number(e.target.value); setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }}/></div><button type="button" onClick={() => { const newDocs = localSystemConfig.bonusDocumentTypes.filter((_, i) => i !== idx); setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs}); }} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button></div>))}</div><div className="bg-blue-50 p-5 rounded-[24px] border border-blue-100 flex flex-col md:flex-row gap-4 items-end"><div className="flex-1 w-full"><label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">NOWY TYP DOKUMENTU</label><input className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" placeholder="np. SEP G1 Eksploatacja" value={newDocLabel} onChange={e => setNewDocLabel(e.target.value)}/></div><div className="w-full md:w-32"><label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">BONUS PLN/H</label><input type="number" step="0.1" className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" value={newDocBonus} onChange={e => setNewDocBonus(Number(e.target.value))}/></div><Button type="button" onClick={() => { if (newDocLabel) { const newDoc = { id: 'doc_' + Date.now(), label: newDocLabel, bonus: newDocBonus }; setLocalSystemConfig({ ...localSystemConfig, bonusDocumentTypes: [...(localSystemConfig.bonusDocumentTypes || []), newDoc] }); setNewDocLabel(''); setNewDocBonus(0); } }} disabled={!newDocLabel} className="h-12 px-8 rounded-xl font-black shadow-lg shadow-blue-600/20"><Plus size={20} className="mr-2" /> Dodaj Dokument</Button></div></div></AccordionItem>
+            <AccordionItem
+                id="doc-permissions"
+                icon={ShieldCheck}
+                title="Dokumenty i Uprawnienia"
+                description="Zarządzaj typami dokumentów (SEP, UDT) i stawkami bonusowymi za nie."
+                isOpen={openAccordion === 'doc-permissions'}
+                onToggle={toggleAccordion}
+            >
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(localSystemConfig.bonusDocumentTypes || []).map((doc, idx) => (
+                            <div key={doc.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between group">
+                                <div className="flex-1">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">NAZWA DOKUMENTU</p>
+                                    <input
+                                        className="w-full bg-transparent border-none p-0 font-bold text-slate-800 text-sm focus:ring-0"
+                                        value={doc.label}
+                                        onChange={e => {
+                                            const newDocs = [...localSystemConfig.bonusDocumentTypes];
+                                            newDocs[idx].label = e.target.value;
+                                            setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs});
+                                        }}
+                                    />
+                                </div>
+                                <div className="w-24 px-4">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-right">PLN/H</p>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        className="w-full bg-white border border-slate-200 p-1.5 rounded-lg text-right font-black text-blue-600 outline-none"
+                                        value={doc.bonus}
+                                        onChange={e => {
+                                            const newDocs = [...localSystemConfig.bonusDocumentTypes];
+                                            newDocs[idx].bonus = Number(e.target.value);
+                                            setLocalSystemConfig({...localSystemConfig, bonusDocumentTypes: newDocs});
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newDocs = localSystemConfig.bonusDocumentTypes.filter((_, i) => i !== idx);
+                                        const updated = {...localSystemConfig, bonusDocumentTypes: newDocs};
+                                        setLocalSystemConfig(updated);
+                                        updateSystemConfig(updated);
+                                        showSuccess('Dokument usunięty.');
+                                    }}
+                                    className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="bg-blue-50 p-5 rounded-[24px] border border-blue-100 flex flex-col md:flex-row gap-4 items-end">
+                        <div className="flex-1 w-full">
+                            <label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">NOWY TYP DOKUMENTU</label>
+                            <input
+                                className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                placeholder="np. SEP G1 Eksploatacja"
+                                value={newDocLabel}
+                                onChange={e => setNewDocLabel(e.target.value)}
+                            />
+                        </div>
+                        <div className="w-full md:w-32">
+                            <label className="block text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1.5 ml-1">BONUS PLN/H</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                className="w-full bg-white border border-blue-200 p-3 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                value={newDocBonus}
+                                onChange={e => setNewDocBonus(Number(e.target.value))}
+                            />
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                if (newDocLabel) {
+                                    const newDoc = { id: 'doc_' + Date.now(), label: newDocLabel, bonus: newDocBonus };
+                                    const updated = {
+                                        ...localSystemConfig,
+                                        bonusDocumentTypes: [...(localSystemConfig.bonusDocumentTypes || []), newDoc]
+                                    };
+                                    setLocalSystemConfig(updated);
+                                    updateSystemConfig(updated);
+                                    setNewDocLabel('');
+                                    setNewDocBonus(0);
+                                    showSuccess('Dokument dodany!');
+                                }
+                            }}
+                            disabled={!newDocLabel}
+                            className="h-12 px-8 rounded-xl font-black shadow-lg shadow-blue-600/20"
+                        >
+                            <Plus size={20} className="mr-2" /> Dodaj Dokument
+                        </Button>
+                    </div>
+                </div>
+            </AccordionItem>
             <AccordionItem id="contracts" icon={FileJson} title="Formy Zatrudnienia" description="Zarządzaj typami umów i bonusami za formę współpracy." isOpen={openAccordion === 'contracts'} onToggle={toggleAccordion}>
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -396,105 +494,162 @@ export const HRSettingsPage = () => {
                                 </div>
                             </div>
 
-                            {/* Responsibilities */}
-                            <div className="space-y-2">
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Obowiązki</label>
-                                <div className="flex gap-2">
-                                    <input className="flex-1 bg-slate-100 border-none rounded-lg p-2 text-slate-700 font-medium text-xs focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="Dodaj obowiązek..." value={newResp} onChange={e => setNewResp(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } } }} />
-                                    <button type="button" onClick={() => { if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } }} className="bg-blue-600 text-white p-2 rounded-lg shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"><Plus size={14}/></button>
-                                </div>
-                                <div className="space-y-1 max-h-24 overflow-y-auto scrollbar-hide">
-                                    {(editingPosition.responsibilities || []).map((resp, i) => (
-                                        <div key={i} className="flex items-center justify-between p-1.5 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-blue-200 transition-all">
-                                            <div className="flex items-center gap-1.5 truncate flex-1">
-                                                <Check size={10} className="text-green-500 shrink-0" />
-                                                <span className="text-[11px] font-bold text-slate-700 truncate">{resp}</span>
-                                            </div>
-                                            <button type="button" onClick={() => setEditingPosition({...editingPosition, responsibilities: (editingPosition.responsibilities || []).filter((_, idx) => idx !== i)})} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
+                            {/* Section 1: Required Skills */}
+                            <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newCollapsed = new Set(collapsedModalSections);
+                                        if (newCollapsed.has('skills')) newCollapsed.delete('skills');
+                                        else newCollapsed.add('skills');
+                                        setCollapsedModalSections(newCollapsed);
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {collapsedModalSections.has('skills') ? <ChevronRight size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+                                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Wymagane umiejętności</span>
+                                        <span className="text-[8px] font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">{editingPosition.required_skill_ids?.length || 0}</span>
+                                    </div>
+                                </button>
+                                {!collapsedModalSections.has('skills') && (
+                                    <div className="p-3 bg-white">
+                                        <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden shadow-inner max-h-[220px] overflow-y-auto scrollbar-hide">
+                                            {Object.entries(skillsByCategory).map(([category, categorySkills]) => {
+                                                const isCollapsed = collapsedCategories.has(category);
+                                                const selectedCount = categorySkills.filter(s => editingPosition.required_skill_ids?.includes(s.id)).length;
+                                                return (
+                                                    <div key={category} className="border-b border-slate-100 last:border-b-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                const newCollapsed = new Set(collapsedCategories);
+                                                                if (isCollapsed) newCollapsed.delete(category);
+                                                                else newCollapsed.add(category);
+                                                                setCollapsedCategories(newCollapsed);
+                                                            }}
+                                                            className="w-full flex items-center justify-between p-2 bg-slate-100 hover:bg-slate-200 transition-colors"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                {isCollapsed ? <ChevronRight size={12} className="text-slate-400"/> : <ChevronDown size={12} className="text-slate-400"/>}
+                                                                <span className="text-[9px] font-black text-slate-700 uppercase tracking-wide">{category}</span>
+                                                                {selectedCount > 0 && <span className="text-[8px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">{selectedCount}</span>}
+                                                            </div>
+                                                            <span className="text-[8px] font-medium text-slate-400">{categorySkills.length} umiejętności</span>
+                                                        </button>
+                                                        {!isCollapsed && (
+                                                            <div className="divide-y divide-slate-100">
+                                                                {categorySkills.map(skill => {
+                                                                    const isSelected = editingPosition.required_skill_ids?.includes(skill.id);
+                                                                    return (
+                                                                        <label key={skill.id} className={`flex items-center justify-between p-2 cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'}`}>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
+                                                                                    {isSelected && <Check size={10} />}
+                                                                                </div>
+                                                                                <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
+                                                                                    const current = editingPosition.required_skill_ids || [];
+                                                                                    const updated = isSelected ? current.filter(id => id !== skill.id) : [...current, skill.id];
+                                                                                    setEditingPosition({...editingPosition, required_skill_ids: updated});
+                                                                                }}/>
+                                                                                <span className="text-[11px] font-bold text-slate-800 leading-tight">{skill.name_pl}</span>
+                                                                            </div>
+                                                                            <span className="text-[9px] font-black text-green-600">+{skill.hourly_bonus.toFixed(2)} zł</span>
+                                                                        </label>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Required Skills - Grouped by Categories */}
-                            <div className="space-y-2">
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Wymagane umiejętności</label>
-                                <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden shadow-inner max-h-[220px] overflow-y-auto scrollbar-hide">
-                                    {Object.entries(skillsByCategory).map(([category, categorySkills]) => {
-                                        const isCollapsed = collapsedCategories.has(category);
-                                        const selectedCount = categorySkills.filter(s => editingPosition.required_skill_ids?.includes(s.id)).length;
-                                        return (
-                                            <div key={category} className="border-b border-slate-100 last:border-b-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const newCollapsed = new Set(collapsedCategories);
-                                                        if (isCollapsed) newCollapsed.delete(category);
-                                                        else newCollapsed.add(category);
-                                                        setCollapsedCategories(newCollapsed);
-                                                    }}
-                                                    className="w-full flex items-center justify-between p-2 bg-slate-100 hover:bg-slate-200 transition-colors"
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        {isCollapsed ? <ChevronRight size={12} className="text-slate-400"/> : <ChevronDown size={12} className="text-slate-400"/>}
-                                                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-wide">{category}</span>
-                                                        {selectedCount > 0 && <span className="text-[8px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">{selectedCount}</span>}
-                                                    </div>
-                                                    <span className="text-[8px] font-medium text-slate-400">{categorySkills.length} umiejętności</span>
-                                                </button>
-                                                {!isCollapsed && (
-                                                    <div className="divide-y divide-slate-100">
-                                                        {categorySkills.map(skill => {
-                                                            const isSelected = editingPosition.required_skill_ids?.includes(skill.id);
-                                                            return (
-                                                                <label key={skill.id} className={`flex items-center justify-between p-2 cursor-pointer transition-all ${isSelected ? 'bg-blue-50/50' : 'hover:bg-white'}`}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-slate-300'}`}>
-                                                                            {isSelected && <Check size={10} />}
-                                                                        </div>
-                                                                        <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
-                                                                            const current = editingPosition.required_skill_ids || [];
-                                                                            const updated = isSelected ? current.filter(id => id !== skill.id) : [...current, skill.id];
-                                                                            setEditingPosition({...editingPosition, required_skill_ids: updated});
-                                                                        }}/>
-                                                                        <span className="text-[11px] font-bold text-slate-800 leading-tight">{skill.name_pl}</span>
-                                                                    </div>
-                                                                    <span className="text-[9px] font-black text-green-600">+{skill.hourly_bonus.toFixed(2)} zł</span>
-                                                                </label>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                            {/* Section 2: Required Documents */}
+                            <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newCollapsed = new Set(collapsedModalSections);
+                                        if (newCollapsed.has('documents')) newCollapsed.delete('documents');
+                                        else newCollapsed.add('documents');
+                                        setCollapsedModalSections(newCollapsed);
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {collapsedModalSections.has('documents') ? <ChevronRight size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+                                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Wymagane uprawnienia / dokumenty</span>
+                                        <span className="text-[8px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded">{editingPosition.required_document_ids?.length || 0}</span>
+                                    </div>
+                                </button>
+                                {!collapsedModalSections.has('documents') && (
+                                    <div className="p-3 bg-white">
+                                        <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden shadow-inner max-h-[180px] overflow-y-auto scrollbar-hide divide-y divide-slate-100">
+                                            {localSystemConfig.bonusDocumentTypes.map(doc => {
+                                                const isSelected = editingPosition.required_document_ids?.includes(doc.id);
+                                                return (
+                                                    <label key={doc.id} className={`flex items-center justify-between p-2 cursor-pointer transition-all ${isSelected ? 'bg-purple-50/50' : 'hover:bg-white'}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white border-slate-300'}`}>
+                                                                {isSelected && <Check size={10} />}
+                                                            </div>
+                                                            <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
+                                                                const current = editingPosition.required_document_ids || [];
+                                                                const updated = isSelected ? current.filter(id => id !== doc.id) : [...current, doc.id];
+                                                                setEditingPosition({...editingPosition, required_document_ids: updated});
+                                                            }}/>
+                                                            <span className="text-[11px] font-bold text-slate-800 leading-tight">{doc.label}</span>
+                                                        </div>
+                                                        <span className="text-[9px] font-black text-purple-600">+{doc.bonus.toFixed(2)} zł/h</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Required Documents/Certifications */}
-                            <div className="space-y-2">
-                                <label className="block text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Wymagane uprawnienia / dokumenty</label>
-                                <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden shadow-inner max-h-[180px] overflow-y-auto scrollbar-hide divide-y divide-slate-100">
-                                    {localSystemConfig.bonusDocumentTypes.map(doc => {
-                                        const isSelected = editingPosition.required_document_ids?.includes(doc.id);
-                                        return (
-                                            <label key={doc.id} className={`flex items-center justify-between p-2 cursor-pointer transition-all ${isSelected ? 'bg-purple-50/50' : 'hover:bg-white'}`}>
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-4 h-4 rounded flex items-center justify-center border-2 transition-all ${isSelected ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white border-slate-300'}`}>
-                                                        {isSelected && <Check size={10} />}
+                            {/* Section 3: Responsibilities */}
+                            <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newCollapsed = new Set(collapsedModalSections);
+                                        if (newCollapsed.has('responsibilities')) newCollapsed.delete('responsibilities');
+                                        else newCollapsed.add('responsibilities');
+                                        setCollapsedModalSections(newCollapsed);
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        {collapsedModalSections.has('responsibilities') ? <ChevronRight size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+                                        <span className="text-[9px] font-black text-slate-700 uppercase tracking-widest">Obowiązki</span>
+                                        <span className="text-[8px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded">{editingPosition.responsibilities?.length || 0}</span>
+                                    </div>
+                                </button>
+                                {!collapsedModalSections.has('responsibilities') && (
+                                    <div className="p-3 bg-white space-y-2">
+                                        <div className="flex gap-2">
+                                            <input className="flex-1 bg-slate-100 border-none rounded-lg p-2 text-slate-700 font-medium text-xs focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="Dodaj obowiązek..." value={newResp} onChange={e => setNewResp(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } } }} />
+                                            <button type="button" onClick={() => { if(newResp) { setEditingPosition({...editingPosition, responsibilities: [...(editingPosition.responsibilities || []), newResp]}); setNewResp(''); } }} className="bg-blue-600 text-white p-2 rounded-lg shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"><Plus size={14}/></button>
+                                        </div>
+                                        <div className="space-y-1 max-h-24 overflow-y-auto scrollbar-hide">
+                                            {(editingPosition.responsibilities || []).map((resp, i) => (
+                                                <div key={i} className="flex items-center justify-between p-1.5 bg-slate-50 border border-slate-100 rounded-lg group hover:bg-white hover:border-blue-200 transition-all">
+                                                    <div className="flex items-center gap-1.5 truncate flex-1">
+                                                        <Check size={10} className="text-green-500 shrink-0" />
+                                                        <span className="text-[11px] font-bold text-slate-700 truncate">{resp}</span>
                                                     </div>
-                                                    <input type="checkbox" className="hidden" checked={isSelected} onChange={() => {
-                                                        const current = editingPosition.required_document_ids || [];
-                                                        const updated = isSelected ? current.filter(id => id !== doc.id) : [...current, doc.id];
-                                                        setEditingPosition({...editingPosition, required_document_ids: updated});
-                                                    }}/>
-                                                    <span className="text-[11px] font-bold text-slate-800 leading-tight">{doc.label}</span>
+                                                    <button type="button" onClick={() => setEditingPosition({...editingPosition, responsibilities: (editingPosition.responsibilities || []).filter((_, idx) => idx !== i)})} className="text-red-300 hover:text-red-500 transition-colors"><Trash2 size={12}/></button>
                                                 </div>
-                                                <span className="text-[9px] font-black text-purple-600">+{doc.bonus.toFixed(2)} zł/h</span>
-                                            </label>
-                                        );
-                                    })}
-                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
