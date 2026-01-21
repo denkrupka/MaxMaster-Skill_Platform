@@ -114,13 +114,20 @@ export const CandidateTestsPage = () => {
         setShowInterimModal(true); // Show summary
     }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
 
+    // Store currentQuestionIdx in a ref for access in callbacks
+    const currentQuestionIdxRef = useRef(currentQuestionIdx);
+    useEffect(() => {
+        currentQuestionIdxRef.current = currentQuestionIdx;
+    }, [currentQuestionIdx]);
+
     const handleNextQuestion = useCallback(async () => {
-        if (currentQuestionIdx < displayedQuestions.length - 1) {
-            setCurrentQuestionIdx(currentQuestionIdx + 1);
+        const idx = currentQuestionIdxRef.current;
+        if (idx < displayedQuestions.length - 1) {
+            setCurrentQuestionIdx(idx + 1);
         } else {
             await finishCurrentTest();
         }
-    }, [currentQuestionIdx, displayedQuestions.length, finishCurrentTest]);
+    }, [displayedQuestions.length, finishCurrentTest]);
 
     // Store handleNextQuestion in a ref so timer useEffect doesn't need it as dependency
     const handleNextQuestionRef = useRef(handleNextQuestion);
@@ -210,6 +217,8 @@ export const CandidateTestsPage = () => {
             setCurrentTestIndex(nextIndex);
             setAnswers([]);
             setCurrentQuestionIdx(0);
+            setDisplayedQuestions([]);
+            setTestStarted(false);
         } else {
             handleAllTestsCompleted();
         }
