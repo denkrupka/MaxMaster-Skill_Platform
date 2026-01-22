@@ -172,6 +172,9 @@ export interface User {
   termination_reason?: string;
   termination_initiator?: 'employee' | 'company';
   qualifications?: string[];
+  is_blocked?: boolean;
+  blocked_at?: string;
+  blocked_reason?: string;
 }
 
 export interface UserSkill {

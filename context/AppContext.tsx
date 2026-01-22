@@ -81,6 +81,10 @@ interface AppContextType {
   addEmployeeBadge: (badge: any) => Promise<void>;
   deleteEmployeeBadge: (id: string) => Promise<void>;
   addQualityIncident: (incident: any) => Promise<void>;
+  blockUser: (userId: string, reason?: string) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
+  updateUserWithPassword: (userId: string, updates: any, password?: string) => Promise<void>;
+  deleteUserCompletely: (userId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -254,6 +258,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (dbUser) {
+      // Check if user is blocked
+      if (dbUser.is_blocked) {
+        await supabase.auth.signOut();
+        throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
+      }
+
       setState(prev => ({ ...prev, currentUser: dbUser }));
       await refreshData();
     } else {
@@ -286,7 +296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addUser = async (userData: any) => {
-    // Generate a temporary password for the new user
+    // Generate a temporary password for the new user if not provided
     const generateTemporaryPassword = () => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
       let password = '';
@@ -299,14 +309,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const cleanEmail = userData.email.trim().toLowerCase();
-    const temporaryPassword = generateTemporaryPassword();
+    const password = userData.password || generateTemporaryPassword();
 
     // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: cleanEmail,
-      password: temporaryPassword,
+      password: password,
       options: {
-        emailRedirectTo: EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
+        emailRedirectTo: userData.password ? undefined : EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
         data: {
           first_name: userData.first_name,
           last_name: userData.last_name,
@@ -326,7 +336,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: authId,
       ...userData,
       email: cleanEmail,
-      status: UserStatus.ACTIVE
+      status: UserStatus.ACTIVE,
+      password: undefined // Don't store password in database
     }]).select().single();
 
     if (error) throw error;
@@ -823,6 +834,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, qualityIncidents: [...prev.qualityIncidents, data] }));
   };
 
+  const blockUser = async (userId: string, reason?: string) => {
+    const updates = {
+      is_blocked: true,
+      blocked_at: new Date().toISOString(),
+      blocked_reason: reason || 'Zablokowany przez administratora'
+    };
+    await updateUser(userId, updates);
+  };
+
+  const unblockUser = async (userId: string) => {
+    const updates = {
+      is_blocked: false,
+      blocked_at: null,
+      blocked_reason: null
+    };
+    await updateUser(userId, updates);
+  };
+
+  const updateUserWithPassword = async (userId: string, updates: any, password?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        action: 'updateUser',
+        userId,
+        email: updates.email,
+        first_name: updates.first_name,
+        last_name: updates.last_name,
+        phone: updates.phone,
+        role: updates.role,
+        password
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to update user');
+    }
+
+    // Refresh local data
+    await refreshData();
+  };
+
+  const deleteUserCompletely = async (userId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        action: 'deleteUser',
+        userId
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to delete user');
+    }
+
+    // Update local state
+    setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -873,7 +970,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveSkillChecklistProgress,
     addEmployeeBadge,
     deleteEmployeeBadge,
-    addQualityIncident
+    addQualityIncident,
+    blockUser,
+    unblockUser,
+    updateUserWithPassword,
+    deleteUserCompletely
   };
 
   return (
