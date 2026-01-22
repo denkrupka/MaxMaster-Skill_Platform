@@ -1,38 +1,26 @@
 # Database Migrations
 
-This folder contains SQL migration scripts for the Supabase database.
+## How to Apply Migrations
 
-## How to Run Migrations
+Execute these SQL commands in your Supabase SQL Editor (SQL Editor → New Query):
 
-### Option 1: Using Supabase Dashboard (Recommended)
+### Migration: 20260121_add_required_documents_to_positions.sql
 
-1. Go to your Supabase project dashboard: https://diytvuczpciikzdhldny.supabase.co
-2. Navigate to **SQL Editor** in the left sidebar
-3. Click **New Query**
-4. Copy and paste the contents of the migration file
-5. Click **Run** to execute the migration
+```sql
+-- Add required_document_ids column to positions table
+ALTER TABLE positions
+ADD COLUMN IF NOT EXISTS required_document_ids TEXT[];
 
-### Option 2: Using Supabase CLI
-
-If you have Supabase CLI installed:
-
-```bash
-# Login to Supabase
-supabase login
-
-# Link your project
-supabase link --project-ref diytvuczpciikzdhldny
-
-# Run migrations
-supabase db push
+-- Add comment for documentation
+COMMENT ON COLUMN positions.required_document_ids IS 'Optional: Array of required document/certification IDs for this position. Used in hourly wage range calculations.';
 ```
 
-## Migration Files
+After executing the migration, refresh your application.
 
-- `20260116_add_questions_to_display.sql` - Adds questions_to_display column to tests table for randomized question limiting
+## Quick Fix
 
-## Important Notes
+If you see errors about `required_document_ids` column not found, run this command in Supabase SQL Editor:
 
-- Always backup your database before running migrations
-- Migrations should be run in chronological order (by filename date)
-- Test migrations in a development environment first if possible
+```sql
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS required_document_ids TEXT[];
+```
