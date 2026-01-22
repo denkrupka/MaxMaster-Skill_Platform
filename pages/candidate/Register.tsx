@@ -6,6 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
 import { uploadDocument, supabase } from '../../lib/supabase';
+import { EMAIL_REDIRECT_URLS } from '../../config/app.config';
 
 export const CandidateRegisterPage = () => {
     const { addCandidate, loginAsUser, state, updateUser } = useAppContext();
@@ -179,7 +180,7 @@ export const CandidateRegisterPage = () => {
                 email: cleanEmail,
                 password: temporaryPassword,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/#/setup-password`,
+                    emailRedirectTo: EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
                     data: {
                         first_name: formData.firstName,
                         last_name: formData.lastName,
