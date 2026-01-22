@@ -285,7 +285,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addUser = async (userData: any) => {
-    const { data, error } = await supabase.from('users').insert([{ ...userData, status: UserStatus.ACTIVE }]).select().single();
+    // Generate a temporary password for the new user
+    const generateTemporaryPassword = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+      let password = '';
+      const array = new Uint8Array(16);
+      crypto.getRandomValues(array);
+      for (let i = 0; i < 16; i++) {
+        password += chars[array[i] % chars.length];
+      }
+      return password;
+    };
+
+    const cleanEmail = userData.email.trim().toLowerCase();
+    const temporaryPassword = generateTemporaryPassword();
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: temporaryPassword,
+      options: {
+        emailRedirectTo: `${window.location.origin}/#/setup-password`,
+        data: {
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          phone: userData.phone,
+          role: userData.role
+        }
+      }
+    });
+
+    if (authError) throw authError;
+
+    const authId = authData.user?.id;
+    if (!authId) throw new Error('Failed to create auth user');
+
+    // Create user in public.users table with the auth ID
+    const { data, error } = await supabase.from('users').insert([{
+      id: authId,
+      ...userData,
+      email: cleanEmail,
+      status: UserStatus.ACTIVE
+    }]).select().single();
+
     if (error) throw error;
     setState(prev => ({ ...prev, users: [...prev.users, data] }));
   };
