@@ -350,10 +350,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCandidate = async (userData: Partial<User>) => {
-    const { data, error } = await supabase.from('users').insert([{ role: Role.CANDIDATE, status: UserStatus.STARTED, ...userData }]).select().single();
-    if (error) throw error;
-    setState(prev => ({ ...prev, users: [...prev.users, data] }));
-    return data;
+    // Call Edge Function to create candidate with auth user and send invitation email
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/create-candidate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        email: userData.email,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        phone: userData.phone,
+        target_position: userData.target_position,
+        source: userData.source || 'OLX',
+        status: userData.status || UserStatus.STARTED
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to create candidate');
+    }
+
+    // Update local state with the created candidate
+    const createdCandidate = result.data;
+    setState(prev => ({ ...prev, users: [...prev.users, createdCandidate] }));
+    return createdCandidate;
   };
 
   const moveCandidateToTrial = async (id: string, config: any) => {
