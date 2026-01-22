@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 
 import { AppProvider, useAppContext } from './context/AppContext';
 import { Role, UserStatus } from './types';
@@ -97,28 +98,88 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
 
 // Component to handle email confirmation redirects
 const EmailConfirmationHandler = () => {
+  const [shouldRedirect, setShouldRedirect] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
   React.useEffect(() => {
-    // Check if there's an access_token in the URL hash
-    const fullHash = window.location.hash;
+    const handleRedirect = () => {
+      // Check both URL hash and query params for auth tokens
+      const fullHash = window.location.hash;
+      const queryParams = new URLSearchParams(window.location.search);
 
-    // Parse hash to find access_token
-    const hashParts = fullHash.split('#');
-    const authParamsString = hashParts.find(p => p.includes('access_token=') || p.includes('type='));
+      let authParamsString = '';
+      let params = null;
 
-    if (authParamsString) {
-      const params = new URLSearchParams(authParamsString);
-      const type = params.get('type');
-      const accessToken = params.get('access_token');
+      // First check hash (format: #access_token=...&type=... OR #error=...)
+      const hashParts = fullHash.split('#');
+      authParamsString = hashParts.find(p => p.includes('access_token=') || p.includes('type=') || p.includes('error=')) || '';
 
-      // If it's an email confirmation or signup, redirect to setup-password
-      if (accessToken && (type === 'signup' || type === 'email_confirmation' || type === 'invite')) {
-        // Preserve the hash params when redirecting
-        window.location.hash = `/setup-password#${authParamsString}`;
+      if (authParamsString) {
+        params = new URLSearchParams(authParamsString);
+      } else if (queryParams.has('access_token') || queryParams.has('type') || queryParams.has('error')) {
+        // Check query params (format: ?access_token=...&type=... OR ?error=...)
+        params = queryParams;
+        authParamsString = queryParams.toString();
       }
-    }
+
+      if (params) {
+        // Check for errors first
+        const errorCode = params.get('error_code');
+        const errorDescription = params.get('error_description');
+        const error = params.get('error');
+
+        if (error || errorCode) {
+          // Handle expired or invalid links
+          if (errorCode === 'otp_expired') {
+            setError('Link aktywacyjny wygasł lub został już wykorzystany. Skontaktuj się z działem HR aby otrzymać nowy link.');
+          } else {
+            setError(errorDescription || 'Wystąpił błąd podczas weryfikacji linku. Skontaktuj się z działem HR.');
+          }
+          setShouldRedirect(true);
+          return;
+        }
+
+        const type = params.get('type');
+        const accessToken = params.get('access_token');
+
+        // If it's an email confirmation or signup, redirect to setup-password
+        if (accessToken && (type === 'signup' || type === 'email_confirmation' || type === 'invite')) {
+          // Redirect to setup-password with tokens preserved in hash
+          window.location.hash = `/setup-password#${authParamsString}`;
+          return; // Don't set shouldRedirect, we're handling navigation
+        }
+      }
+
+      // No auth tokens found, redirect to login
+      setShouldRedirect(true);
+    };
+
+    handleRedirect();
   }, []);
 
-  return <Navigate to="/login" replace />;
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full border border-slate-100">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={32} className="text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Link wygasł</h2>
+            <p className="text-slate-600">{error}</p>
+          </div>
+          <button
+            onClick={() => window.location.hash = '/login'}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition"
+          >
+            Przejdź do logowania
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return shouldRedirect ? <Navigate to="/login" replace /> : null;
 };
 
 export default function App() {
