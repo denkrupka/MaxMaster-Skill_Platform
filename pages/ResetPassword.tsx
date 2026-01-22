@@ -17,10 +17,18 @@ export const ResetPasswordPage = () => {
   // Sprawdzenie czy użytkownik ma aktywną sesję resetowania (obsługiwane automatycznie przez Supabase po kliknięciu w link)
   useEffect(() => {
     const checkSession = async () => {
+      console.log('[ResetPassword] Checking session');
+      console.log('[ResetPassword] URL:', window.location.href);
+      console.log('[ResetPassword] Hash:', window.location.hash);
+
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('[ResetPassword] Session:', session ? 'Found' : 'Not found');
+
       if (!session) {
-        // Jeśli nie ma sesji, a link wygasł, przekieruj do odzyskiwania
-        // (Link resetujący hasło loguje użytkownika tymczasowo)
+        console.log('[ResetPassword] No session found - link may have expired');
+        setError('Link resetowania hasła wygasł lub jest nieprawidłowy. Spróbuj ponownie.');
+      } else {
+        console.log('[ResetPassword] Session valid, user can reset password');
       }
     };
     checkSession();
@@ -38,24 +46,37 @@ export const ResetPasswordPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
+    console.log('[ResetPassword] Form submitted');
+    console.log('[ResetPassword] Form valid:', isFormValid);
+
+    if (!isFormValid) {
+      console.log('[ResetPassword] Form validation failed');
+      return;
+    }
 
     setLoading(true);
     setError('');
 
     try {
+      console.log('[ResetPassword] Attempting to update password');
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('[ResetPassword] Update error:', updateError);
+        throw updateError;
+      }
 
+      console.log('[ResetPassword] Password updated successfully');
       setSuccess(true);
       // Przekierowanie do logowania po 2 sekundach
       setTimeout(() => {
+        console.log('[ResetPassword] Redirecting to login');
         navigate('/login');
       }, 2000);
     } catch (err: any) {
+      console.error('[ResetPassword] Error:', err);
       setError(err.message || 'Wystąpił błąd podczas zmiany hasła.');
     } finally {
       setLoading(false);

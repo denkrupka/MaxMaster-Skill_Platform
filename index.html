@@ -75,9 +75,18 @@
 
           // If we have auth tokens and we're on root path
           if (accessToken && !hashWithoutPound.startsWith('/')) {
-            console.log('[PreReact] Auth tokens found on root, redirecting to setup-password');
-            // Redirect to setup-password with tokens preserved
-            window.location.hash = '/setup-password#' + hashWithoutPound;
+            // Determine target route based on type
+            let targetRoute = '/setup-password'; // default for invite/signup
+
+            if (type === 'recovery') {
+              targetRoute = '/reset-password';
+              console.log('[PreReact] Recovery type detected, redirecting to reset-password');
+            } else {
+              console.log('[PreReact] Auth tokens found on root, redirecting to setup-password');
+            }
+
+            // Redirect with tokens preserved
+            window.location.hash = targetRoute + '#' + hashWithoutPound;
             console.log('[PreReact] Redirected to:', window.location.hash);
             return; // Stop execution, let redirect happen
           }

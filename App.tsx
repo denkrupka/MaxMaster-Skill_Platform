@@ -163,11 +163,20 @@ const EmailConfirmationHandler = () => {
 
         console.log('[EmailConfirmationHandler] Type:', type, 'AccessToken present:', !!accessToken);
 
-        // If it's an email confirmation or signup, redirect to setup-password
-        if (accessToken && (type === 'signup' || type === 'email_confirmation' || type === 'invite')) {
-          console.log('[EmailConfirmationHandler] Redirecting to setup-password with params');
-          // Redirect to setup-password with tokens preserved in hash
-          const newHash = `/setup-password#${authParamsString}`;
+        // If we have access token, redirect based on type
+        if (accessToken) {
+          let targetRoute = '/setup-password'; // default for invite/signup
+
+          if (type === 'recovery') {
+            targetRoute = '/reset-password';
+            console.log('[EmailConfirmationHandler] Redirecting to reset-password with params');
+          } else if (type === 'signup' || type === 'email_confirmation' || type === 'invite') {
+            targetRoute = '/setup-password';
+            console.log('[EmailConfirmationHandler] Redirecting to setup-password with params');
+          }
+
+          // Redirect with tokens preserved in hash
+          const newHash = `${targetRoute}#${authParamsString}`;
           console.log('[EmailConfirmationHandler] New hash:', newHash);
           window.location.hash = newHash;
           // Don't set redirecting to false, let the navigation happen

@@ -39,11 +39,23 @@
                 return;
             }
 
-            // If we have valid tokens, redirect to setup-password with tokens in hash
-            if (accessToken && (type === 'invite' || type === 'signup' || type === 'email_confirmation')) {
-                console.log('[email-redirect] Valid tokens found, redirecting to setup-password');
-                // For HashRouter, we need format: /#/setup-password#access_token=...
-                const newUrl = '/#/setup-password#' + hash;
+            // If we have valid tokens, redirect based on type
+            if (accessToken) {
+                // Determine target route based on type
+                let targetRoute = '/setup-password'; // default for invite/signup
+                let message = 'Przekierowujemy do ustawienia hasła...';
+
+                if (type === 'recovery') {
+                    targetRoute = '/reset-password';
+                    message = 'Przekierowujemy do resetowania hasła...';
+                    console.log('[email-redirect] Recovery type detected, redirecting to reset-password');
+                } else if (type === 'invite' || type === 'signup' || type === 'email_confirmation') {
+                    targetRoute = '/setup-password';
+                    console.log('[email-redirect] Invite/signup type detected, redirecting to setup-password');
+                }
+
+                // For HashRouter, we need format: /#/route#access_token=...
+                const newUrl = '/#' + targetRoute + '#' + hash;
                 console.log('[email-redirect] Redirecting to:', newUrl);
                 window.location.replace(newUrl);
                 return;
