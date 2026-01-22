@@ -21,11 +21,59 @@ export const ResetPasswordPage = () => {
       console.log('[ResetPassword] URL:', window.location.href);
       console.log('[ResetPassword] Hash:', window.location.hash);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('[ResetPassword] Session:', session ? 'Found' : 'Not found');
+      // First check if there's already a session
+      let { data: { session } } = await supabase.auth.getSession();
+      console.log('[ResetPassword] Existing session:', session ? 'Found' : 'Not found');
+
+      // If no session, try to extract tokens from URL hash and set session
+      if (!session) {
+        console.log('[ResetPassword] No session, trying to extract tokens from hash');
+
+        // Parse URL hash for access_token (format: #/reset-password#access_token=...&refresh_token=...)
+        const fullHash = window.location.hash;
+        const hashParts = fullHash.split('#');
+
+        console.log('[ResetPassword] Hash parts:', hashParts);
+
+        // Find part containing auth params
+        const authParamsString = hashParts.find(p => p.includes('access_token='));
+
+        if (authParamsString) {
+          const hashParams = new URLSearchParams(authParamsString);
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+
+          console.log('[ResetPassword] Tokens from hash - access_token:', !!accessToken, 'refresh_token:', !!refreshToken);
+
+          if (accessToken) {
+            try {
+              console.log('[ResetPassword] Setting session with tokens from hash');
+              const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || ''
+              });
+
+              if (sessionError) {
+                console.error('[ResetPassword] Session error:', sessionError);
+                setError('Link resetowania hasła wygasł lub jest nieprawidłowy. Spróbuj ponownie.');
+                return;
+              }
+
+              if (sessionData.session) {
+                console.log('[ResetPassword] Session created successfully from tokens');
+                session = sessionData.session;
+              }
+            } catch (err) {
+              console.error('[ResetPassword] Error setting session:', err);
+              setError('Wystąpił błąd podczas weryfikacji linku.');
+              return;
+            }
+          }
+        }
+      }
 
       if (!session) {
-        console.log('[ResetPassword] No session found - link may have expired');
+        console.log('[ResetPassword] No session found after all attempts - link may have expired');
         setError('Link resetowania hasła wygasł lub jest nieprawidłowy. Spróbuj ponownie.');
       } else {
         console.log('[ResetPassword] Session valid, user can reset password');
