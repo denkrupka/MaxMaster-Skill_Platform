@@ -35,26 +35,26 @@ serve(async (req) => {
 
     console.log('Redirect URL:', redirectUrl)
 
-    // 1. Use inviteUserByEmail - this will AUTOMATICALLY send email
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: {
-          first_name: first_name,
-          last_name: last_name,
-          role: 'candidate',
-          target_position: target_position
-        },
-        redirectTo: redirectUrl
+    // 1. First, create the auth user with admin.createUser
+    // This ensures we get a valid user ID immediately
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: email,
+      email_confirm: false, // User needs to confirm via email
+      user_metadata: {
+        first_name: first_name,
+        last_name: last_name,
+        role: 'candidate',
+        target_position: target_position,
+        phone: phone
       }
-    )
+    })
 
     if (authError || !authData.user) {
-      console.error('Auth error:', authError)
-      throw authError || new Error('Failed to invite user')
+      console.error('Auth user creation error:', authError)
+      throw authError || new Error('Failed to create auth user')
     }
 
-    console.log('Auth user invited:', authData.user.id)
+    console.log('Auth user created:', authData.user.id)
 
     // 2. Create record in public.users
     const { data: userData, error: userError } = await supabaseAdmin
@@ -82,6 +82,26 @@ serve(async (req) => {
     }
 
     console.log('Candidate created successfully:', userData.id)
+
+    // 3. Send invitation email with confirmation link
+    try {
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        email,
+        {
+          redirectTo: redirectUrl
+        }
+      )
+
+      if (inviteError) {
+        console.error('Invite email error (non-critical):', inviteError)
+        // Don't throw - user is created, email can be resent later
+      } else {
+        console.log('Invitation email sent to:', email)
+      }
+    } catch (emailError) {
+      console.error('Email sending failed (non-critical):', emailError)
+      // Continue - user is created successfully
+    }
 
     return new Response(
       JSON.stringify({
