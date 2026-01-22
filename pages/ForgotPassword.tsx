@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Mail, ArrowLeft, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/Button';
+import { EMAIL_REDIRECT_URLS } from '../config/app.config';
 
 export const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
@@ -20,7 +21,7 @@ export const ForgotPasswordPage = () => {
       // Wykorzystanie Supabase do wysłania linku resetującego
       // redirectTo musi pasować do adresu ustawionego w Supabase Dashboard
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/#/reset-password',
+        redirectTo: EMAIL_REDIRECT_URLS.RESET_PASSWORD,
       });
 
       if (resetError) throw resetError;

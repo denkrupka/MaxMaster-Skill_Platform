@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
+import { EMAIL_REDIRECT_URLS, APP_URL } from '../config/app.config';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
@@ -305,7 +306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: cleanEmail,
       password: temporaryPassword,
       options: {
-        emailRedirectTo: `${window.location.origin}/#/setup-password`,
+        emailRedirectTo: EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
         data: {
           first_name: userData.first_name,
           last_name: userData.last_name,
@@ -695,7 +696,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.currentUser) logCandidateAction(state.currentUser.id, `Zaproszono znajomego: ${firstName} ${lastName} (${targetPosition})`);
 
     // Send SMS invitation
-    const portalUrl = window.location.origin;
+    const portalUrl = APP_URL;
     try {
       await sendTemplatedSMS(
         'CAND_INVITE_LINK',
