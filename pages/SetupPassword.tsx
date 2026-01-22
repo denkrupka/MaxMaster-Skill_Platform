@@ -201,7 +201,7 @@ export const SetupPasswordPage = () => {
             MaxMaster Skills
           </h1>
           <h2 className="text-lg font-bold text-slate-800 mb-1">
-            Witaj{userName && `, ${userName}`}!
+            Witaj!
           </h2>
           <p className="text-sm text-slate-500">
             Utwórz hasło, aby aktywować swoje konto w systemie.
