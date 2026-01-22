@@ -98,11 +98,16 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
 
 // Component to handle email confirmation redirects
 const EmailConfirmationHandler = () => {
-  const [shouldRedirect, setShouldRedirect] = React.useState(false);
+  const [redirecting, setRedirecting] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const handleRedirect = () => {
+      console.log('[EmailConfirmationHandler] Starting redirect handling');
+      console.log('[EmailConfirmationHandler] Current URL:', window.location.href);
+      console.log('[EmailConfirmationHandler] Hash:', window.location.hash);
+      console.log('[EmailConfirmationHandler] Search:', window.location.search);
+
       // Check both URL hash and query params for auth tokens
       const fullHash = window.location.hash;
       const queryParams = new URLSearchParams(window.location.search);
@@ -111,47 +116,68 @@ const EmailConfirmationHandler = () => {
       let params = null;
 
       // First check hash (format: #access_token=...&type=... OR #error=...)
-      const hashParts = fullHash.split('#');
-      authParamsString = hashParts.find(p => p.includes('access_token=') || p.includes('type=') || p.includes('error=')) || '';
+      // When Supabase redirects, the URL looks like: domain.com/#access_token=...
+      // So fullHash = "#access_token=..."
+      // We need to remove the leading # and parse the rest
+      if (fullHash && fullHash.length > 1) {
+        const hashWithoutLeadingPound = fullHash.substring(1); // Remove leading #
+        console.log('[EmailConfirmationHandler] Hash params:', hashWithoutLeadingPound);
 
-      if (authParamsString) {
-        params = new URLSearchParams(authParamsString);
-      } else if (queryParams.has('access_token') || queryParams.has('type') || queryParams.has('error')) {
-        // Check query params (format: ?access_token=...&type=... OR ?error=...)
+        if (hashWithoutLeadingPound.includes('access_token=') ||
+            hashWithoutLeadingPound.includes('type=') ||
+            hashWithoutLeadingPound.includes('error=')) {
+          authParamsString = hashWithoutLeadingPound;
+          params = new URLSearchParams(authParamsString);
+        }
+      }
+
+      // Fallback: check query params
+      if (!params && (queryParams.has('access_token') || queryParams.has('type') || queryParams.has('error'))) {
+        console.log('[EmailConfirmationHandler] Found params in query string');
         params = queryParams;
         authParamsString = queryParams.toString();
       }
 
       if (params) {
+        console.log('[EmailConfirmationHandler] Parsed params:', Object.fromEntries(params.entries()));
+
         // Check for errors first
         const errorCode = params.get('error_code');
         const errorDescription = params.get('error_description');
         const error = params.get('error');
 
         if (error || errorCode) {
+          console.log('[EmailConfirmationHandler] Error detected:', { error, errorCode, errorDescription });
           // Handle expired or invalid links
           if (errorCode === 'otp_expired') {
             setError('Link aktywacyjny wygasł lub został już wykorzystany. Skontaktuj się z działem HR aby otrzymać nowy link.');
           } else {
             setError(errorDescription || 'Wystąpił błąd podczas weryfikacji linku. Skontaktuj się z działem HR.');
           }
-          setShouldRedirect(true);
+          setRedirecting(false);
           return;
         }
 
         const type = params.get('type');
         const accessToken = params.get('access_token');
 
+        console.log('[EmailConfirmationHandler] Type:', type, 'AccessToken present:', !!accessToken);
+
         // If it's an email confirmation or signup, redirect to setup-password
         if (accessToken && (type === 'signup' || type === 'email_confirmation' || type === 'invite')) {
+          console.log('[EmailConfirmationHandler] Redirecting to setup-password with params');
           // Redirect to setup-password with tokens preserved in hash
-          window.location.hash = `/setup-password#${authParamsString}`;
-          return; // Don't set shouldRedirect, we're handling navigation
+          const newHash = `/setup-password#${authParamsString}`;
+          console.log('[EmailConfirmationHandler] New hash:', newHash);
+          window.location.hash = newHash;
+          // Don't set redirecting to false, let the navigation happen
+          return;
         }
       }
 
       // No auth tokens found, redirect to login
-      setShouldRedirect(true);
+      console.log('[EmailConfirmationHandler] No valid auth tokens found, redirecting to login');
+      setRedirecting(false);
     };
 
     handleRedirect();
@@ -179,7 +205,19 @@ const EmailConfirmationHandler = () => {
     );
   }
 
-  return shouldRedirect ? <Navigate to="/login" replace /> : null;
+  // Show loading while processing redirect
+  if (redirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-600">Przetwarzanie linku aktywacyjnego...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Navigate to="/login" replace />;
 };
 
 export default function App() {
