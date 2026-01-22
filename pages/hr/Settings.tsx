@@ -163,7 +163,9 @@ export const HRSettingsPage = () => {
             referral_bonus: 0
         });
         setNewResp('');
-        setIsPositionModalOpen(true); 
+        // Start with all sections collapsed
+        setCollapsedModalSections(new Set(['skills', 'documents', 'responsibilities']));
+        setIsPositionModalOpen(true);
     };
 
     const handleSavePosition = () => { 
