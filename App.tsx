@@ -95,6 +95,32 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
   return <AppLayout>{children}</AppLayout>;
 };
 
+// Component to handle email confirmation redirects
+const EmailConfirmationHandler = () => {
+  React.useEffect(() => {
+    // Check if there's an access_token in the URL hash
+    const fullHash = window.location.hash;
+
+    // Parse hash to find access_token
+    const hashParts = fullHash.split('#');
+    const authParamsString = hashParts.find(p => p.includes('access_token=') || p.includes('type='));
+
+    if (authParamsString) {
+      const params = new URLSearchParams(authParamsString);
+      const type = params.get('type');
+      const accessToken = params.get('access_token');
+
+      // If it's an email confirmation or signup, redirect to setup-password
+      if (accessToken && (type === 'signup' || type === 'email_confirmation' || type === 'invite')) {
+        // Preserve the hash params when redirecting
+        window.location.hash = `/setup-password#${authParamsString}`;
+      }
+    }
+  }, []);
+
+  return <Navigate to="/login" replace />;
+};
+
 export default function App() {
   return (
     <HashRouter>
@@ -162,6 +188,7 @@ export default function App() {
           <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirTeamPage /></ProtectedRoute>} />
           <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirQualityPage /></ProtectedRoute>} />
 
+          <Route path="/" element={<EmailConfirmationHandler />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AppProvider>
