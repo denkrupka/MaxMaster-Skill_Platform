@@ -8,12 +8,12 @@ The following environment variables must be set in Supabase Dashboard:
 
 - `SUPABASE_URL` - Your Supabase project URL (auto-provided)
 - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (auto-provided)
-- `SITE_URL` - Your application URL (e.g., `https://portal.maxmaster.pl`)
+- `SITE_URL` - Your application URL (e.g., `https://portal.maxmaster.info`)
 
 ### Setting SITE_URL
 
 1. Go to Supabase Dashboard → Edge Functions → Secrets
-2. Add secret: `SITE_URL` = `https://portal.maxmaster.pl` (or your actual domain)
+2. Add secret: `SITE_URL` = `https://portal.maxmaster.info` (or your actual domain)
 3. Redeploy the function
 
 **Important:** The `SITE_URL` must include `https://` but NOT the `/#/setup-password` path - that's added automatically.
@@ -22,7 +22,7 @@ The following environment variables must be set in Supabase Dashboard:
 
 This function uses **HashRouter**, so the email confirmation link will be:
 ```
-https://portal.maxmaster.pl/#/setup-password
+https://portal.maxmaster.info/#/setup-password
 ```
 
 ### Add to Supabase Allowed Redirect URLs
@@ -30,7 +30,7 @@ https://portal.maxmaster.pl/#/setup-password
 1. Go to Supabase Dashboard → Authentication → URL Configuration
 2. Add to "Redirect URLs":
    ```
-   https://portal.maxmaster.pl/#/setup-password
+   https://portal.maxmaster.info/#/setup-password
    ```
 3. Also add for local development:
    ```
