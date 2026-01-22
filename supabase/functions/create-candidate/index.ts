@@ -28,9 +28,10 @@ serve(async (req) => {
     )
 
     // Get the site URL from environment or use default
-    // IMPORTANT: Must include https:// and /#/ for HashRouter
+    // IMPORTANT: Use email-redirect.html to properly handle Supabase auth tokens
+    // This page will extract tokens from hash and redirect to /#/setup-password
     const siteUrl = Deno.env.get('SITE_URL') || 'https://portal.maxmaster.info'
-    const redirectUrl = `${siteUrl}/#/setup-password`
+    const redirectUrl = `${siteUrl}/email-redirect.html`
 
     console.log('Redirect URL:', redirectUrl)
 
