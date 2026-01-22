@@ -22,24 +22,28 @@ export const SetupPasswordPage = () => {
       // Musimy rozbić hash na części
       const fullHash = window.location.hash;
       const hashParts = fullHash.split('#');
-      
+
       // Szukamy części zawierającej parametry auth
       const authParamsString = hashParts.find(p => p.includes('access_token='));
       const hashParams = new URLSearchParams(authParamsString);
-      
+
       let accessToken = hashParams.get('access_token');
+      let refreshToken = hashParams.get('refresh_token');
 
       // Rezerwowo sprawdź query params
       if (!accessToken) {
         const queryParams = new URLSearchParams(window.location.search);
         accessToken = queryParams.get('access_token');
+        refreshToken = queryParams.get('refresh_token');
       }
 
       if (!accessToken) {
         // Jeśli nie znaleźliśmy tokena, sprawdźmy czy sesja już nie została ustawiona automatycznie
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
-          accessToken = session.access_token;
+          setValidToken(true);
+          setUserName(`${session.user.user_metadata?.first_name || ''} ${session.user.user_metadata?.last_name || ''}`);
+          return;
         }
       }
 
@@ -49,15 +53,19 @@ export const SetupPasswordPage = () => {
       }
 
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-        
-        if (userError || !user) {
+        // IMPORTANT: Set the session first so Supabase client knows about the user
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || ''
+        });
+
+        if (sessionError || !sessionData.session) {
           setError('Nie udało się zweryfikować Twojej tożsamości. Link mógł wygasnąć.');
           return;
         }
 
         setValidToken(true);
-        setUserName(`${user.user_metadata?.first_name || ''} ${user.user_metadata?.last_name || ''}`);
+        setUserName(`${sessionData.session.user.user_metadata?.first_name || ''} ${sessionData.session.user.user_metadata?.last_name || ''}`);
       } catch (err) {
         setError('Wystąpił nieoczekiwany błąd podczas weryfikacji konta.');
       }
