@@ -29,7 +29,7 @@ serve(async (req) => {
 
     // Get the site URL from environment or use default
     // IMPORTANT: Must include https:// and /#/ for HashRouter
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://portal.maxmaster.pl'
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://portal.maxmaster.info'
     const redirectUrl = `${siteUrl}/#/setup-password`
 
     console.log('Redirect URL:', redirectUrl)
