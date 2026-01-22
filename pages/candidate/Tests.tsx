@@ -133,7 +133,9 @@ export const CandidateTestsPage = () => {
         });
 
         const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-        const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
+        // Fix: Ensure skill_ids is always treated as an array
+        const skillIds = Array.isArray(activeTest.skill_ids) ? activeTest.skill_ids : [];
+        const skill = skills.find(s => s.id === skillIds[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
 
         await submitTest(activeTest.id, answers, calculatedScore, passed);
@@ -212,7 +214,9 @@ export const CandidateTestsPage = () => {
         setCurrentQuestionIdx(0);
         setTestStarted(true);
         setStartTime(Date.now()); // Capture start time
-        startTest(activeTest.skill_ids[0]); // Log
+        // Fix: Ensure skill_ids is always treated as an array
+        const skillIds = Array.isArray(activeTest.skill_ids) ? activeTest.skill_ids : [];
+        startTest(skillIds[0]); // Log
 
         // Update status to 'tests_in_progress' if not already and ONLY IF CANDIDATE
         if (currentUser && currentUser.status === UserStatus.STARTED && currentUser.role === Role.CANDIDATE) {
@@ -376,7 +380,9 @@ export const CandidateTestsPage = () => {
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {testQueue.map((test, index) => {
-                        const skillName = skills.find(s => s.id === test.skill_ids[0])?.name_pl || test.title;
+                        // Fix: Ensure skill_ids is always treated as an array
+                        const skillIds = Array.isArray(test.skill_ids) ? test.skill_ids : [];
+                        const skillName = skills.find(s => s.id === skillIds[0])?.name_pl || test.title;
                         
                         let statusIcon = <Circle size={18} className="text-slate-300"/>;
                         let itemClass = "text-slate-500 hover:bg-slate-100";
