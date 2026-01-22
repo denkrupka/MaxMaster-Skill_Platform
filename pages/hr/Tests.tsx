@@ -211,7 +211,7 @@ export const HRTestsPage = () => {
     // Import Functions
     const generateExcelTemplate = () => {
         // Get all categories and skills for the template
-        const categories = Object.values(SkillCategory);
+        const categories = state.systemConfig?.skillCategories || [];
         const skillsList = state.skills.map(s => `${s.name_pl} (${s.category})`).join('\n');
 
         const templateData = [
@@ -564,13 +564,13 @@ export const HRTestsPage = () => {
                                 {/* Compact Form for adding skills */}
                                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
                                     <div className="flex gap-2">
-                                        <select 
+                                        <select
                                             className="bg-white px-2 py-2 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm flex-1 border border-slate-200"
                                             value={tempCategory}
                                             onChange={e => { setTempCategory(e.target.value as SkillCategory); setTempSkillId(''); }}
                                         >
                                             <option value="">Kategoria...</option>
-                                            {Object.values(SkillCategory).map(c => <option key={c} value={c}>{c}</option>)}
+                                            {(state.systemConfig?.skillCategories || []).map(c => <option key={c} value={c}>{c}</option>)}
                                         </select>
                                         <select 
                                             className="bg-white px-2 py-2 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm flex-[1.5] border border-slate-200 disabled:opacity-50"
@@ -699,13 +699,13 @@ export const HRTestsPage = () => {
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <select 
-                                        className="w-1/3 bg-white border border-slate-200 p-2 rounded-xl text-[11px] font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none" 
-                                        value={tempCategory} 
+                                    <select
+                                        className="w-1/3 bg-white border border-slate-200 p-2 rounded-xl text-[11px] font-bold text-slate-600 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={tempCategory}
                                         onChange={e => { setTempCategory(e.target.value as SkillCategory); setTempSkillId(''); }}
                                     >
                                         <option value="">Kategoria...</option>
-                                        {Object.values(SkillCategory).map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                        {(state.systemConfig?.skillCategories || []).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                     </select>
                                     
                                     <select 
