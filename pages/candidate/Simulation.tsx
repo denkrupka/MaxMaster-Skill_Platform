@@ -104,7 +104,8 @@ export const CandidateSimulationPage = () => {
     const toggleCategory = (category: string) => {
         setCollapsedCategories(prev => ({
             ...prev,
-            [category]: !prev[category]
+            // If collapsed (undefined or true), open it (false), otherwise close it (true)
+            [category]: prev[category] !== false ? false : true
         }));
     };
 
@@ -337,7 +338,8 @@ export const CandidateSimulationPage = () => {
                 >
                     <div className="space-y-2">
                         {Object.entries(testsByCategory).map(([category, categoryTests]) => {
-                            const isCollapsed = collapsedCategories[category];
+                            // Categories are collapsed by default (true if not explicitly set to false)
+                            const isCollapsed = collapsedCategories[category] !== false;
                             const categorySelectedCount = categoryTests.filter(t => selectedTestIds.includes(t.id)).length;
 
                             return (
