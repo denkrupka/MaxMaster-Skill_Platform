@@ -162,11 +162,16 @@ export const CandidateTestsPage = () => {
         const skill = skills.find(s => s.id === skillIds[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
 
-        await submitTest(activeTest.id, answers, calculatedScore, passed);
+        try {
+            await submitTest(activeTest.id, answers, calculatedScore, passed);
 
-        setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
-        setTestStarted(false); // Stop "running" mode
-        setShowInterimModal(true); // Show summary
+            setLastCompletedTest({ test: activeTest, passed, score: calculatedScore });
+            setTestStarted(false); // Stop "running" mode
+            setShowInterimModal(true); // Show summary
+        } catch (error) {
+            console.error('Error submitting test:', error);
+            alert('Wystąpił błąd podczas zapisywania wyniku testu. Spróbuj ponownie.');
+        }
     }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
 
     // Store currentQuestionIdx in a ref for access in callbacks
@@ -328,24 +333,29 @@ export const CandidateTestsPage = () => {
     const handleConfirmExit = async () => {
         // Record test as failed before exiting
         if (activeTest && testStarted) {
-            await submitTest(activeTest.id, [], 0, false);
+            try {
+                await submitTest(activeTest.id, [], 0, false);
 
-            // Remove failed test from localStorage to prevent resuming
-            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
-            const savedTests = localStorage.getItem(savedTestsKey);
-            if (savedTests) {
-                try {
-                    const testIds = JSON.parse(savedTests);
-                    const updatedIds = testIds.filter((id: string) => id !== activeTest.id);
+                // Remove failed test from localStorage to prevent resuming
+                const savedTestsKey = `user_${currentUser.id}_selectedTests`;
+                const savedTests = localStorage.getItem(savedTestsKey);
+                if (savedTests) {
+                    try {
+                        const testIds = JSON.parse(savedTests);
+                        const updatedIds = testIds.filter((id: string) => id !== activeTest.id);
 
-                    if (updatedIds.length > 0) {
-                        localStorage.setItem(savedTestsKey, JSON.stringify(updatedIds));
-                    } else {
-                        localStorage.removeItem(savedTestsKey);
+                        if (updatedIds.length > 0) {
+                            localStorage.setItem(savedTestsKey, JSON.stringify(updatedIds));
+                        } else {
+                            localStorage.removeItem(savedTestsKey);
+                        }
+                    } catch (e) {
+                        console.error('Failed to update saved tests:', e);
                     }
-                } catch (e) {
-                    console.error('Failed to update saved tests:', e);
                 }
+            } catch (error) {
+                console.error('Error submitting test on exit:', error);
+                // Continue with navigation even if submit fails
             }
         }
 

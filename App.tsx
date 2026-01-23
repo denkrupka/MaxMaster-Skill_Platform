@@ -65,9 +65,9 @@ import { CandidateRegisterPage } from './pages/candidate/Register';
 import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 
-const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean }) => {
+const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean }) => {
   const { state } = useAppContext();
-  
+
   if (!state.currentUser) {
     return <Navigate to="/login" replace />;
   }
@@ -91,6 +91,11 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
         return <Navigate to="/candidate/dashboard" replace />;
     }
     return <Navigate to="/dashboard" replace />;
+  }
+
+  // Skip AppLayout wrapper for certain pages (like full-screen test interfaces)
+  if (noLayout) {
+    return <>{children}</>;
   }
 
   return <AppLayout>{children}</AppLayout>;
@@ -264,7 +269,7 @@ export default function App() {
 
           <Route path="/candidate/dashboard" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateDashboard /></ProtectedRoute>} />
           <Route path="/candidate/simulation" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateSimulationPage /></ProtectedRoute>} />
-          <Route path="/candidate/tests" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateTestsPage /></ProtectedRoute>} />
+          <Route path="/candidate/tests" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]} noLayout={true}><CandidateTestsPage /></ProtectedRoute>} />
           <Route path="/candidate/thank-you" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateThankYouPage /></ProtectedRoute>} />
           <Route path="/candidate/profile" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateProfilePage /></ProtectedRoute>} />
 
@@ -288,7 +293,7 @@ export default function App() {
           <Route path="/dashboard/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeLibrary /></ProtectedRoute>} />
           <Route path="/dashboard/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeCareer /></ProtectedRoute>} />
           <Route path="/dashboard/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeProfile /></ProtectedRoute>} />
-          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} ><CandidateTestsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} noLayout={true}><CandidateTestsPage /></ProtectedRoute>} />
           <Route path="/dashboard/salary" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSalaryPage /></ProtectedRoute>} />
 
           <Route path="/brigadir/dashboard" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirDashboard /></ProtectedRoute>} />
