@@ -622,11 +622,16 @@ export const CandidateTestsPage = () => {
 
                         <h2 className="text-2xl font-bold text-slate-900 mb-2">Czy na pewno chcesz zakończyć test?</h2>
 
-                        <p className="text-slate-500 mb-8 leading-relaxed">
-                            Twój obecny wynik zostanie <strong className="text-red-600">anulowany</strong>,
-                            a dostęp do tego testu <strong className="text-red-600">nie będzie już możliwy</strong>.
-                            Po wyjściu test zostanie zaliczony jako niezaliczony.
+                        <p className="text-slate-500 mb-4 leading-relaxed">
+                            Twój obecny wynik zostanie <strong className="text-red-600">anulowany</strong>.
+                            Test zostanie zapisany jako <strong className="text-red-600">niezaliczony</strong>.
                         </p>
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-6 flex items-start gap-2">
+                            <Clock size={18} className="text-orange-600 flex-shrink-0 mt-0.5"/>
+                            <p className="text-sm text-orange-800">
+                                <strong>Test zostanie zablokowany na 24 godziny.</strong> Będziesz mógł powtórzyć test dopiero po upływie tego czasu.
+                            </p>
+                        </div>
 
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button
