@@ -68,6 +68,11 @@ export const EmployeeTests = () => {
     };
 
     const handleStartTest = (testId: string) => {
+        const cooldown = getCooldown(testId);
+        if (cooldown.isLocked) {
+            // Don't allow starting test during cooldown
+            return;
+        }
         navigate('/dashboard/run-test', { state: { selectedTestIds: [testId] } });
     };
 

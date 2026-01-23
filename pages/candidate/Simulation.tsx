@@ -124,7 +124,7 @@ export const CandidateSimulationPage = () => {
         logCandidateAction(currentUser.id, `Zakończono kalkulację stawki. Wybrano: ${selectedContract}. Wybrane testy: ${testNames}`);
 
         // Save selected test IDs to localStorage for resuming later
-        localStorage.setItem(`candidate_${currentUser.id}_selectedTests`, JSON.stringify(selectedTestIds));
+        localStorage.setItem(`user_${currentUser.id}_selectedTests`, JSON.stringify(selectedTestIds));
 
         navigate('/candidate/tests', { state: { selectedTestIds } });
     };

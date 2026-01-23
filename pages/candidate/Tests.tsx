@@ -49,7 +49,7 @@ export const CandidateTestsPage = () => {
             queueIds = location.state.selectedTestIds;
         } else {
             // 2. Try to restore from localStorage (if candidate is returning)
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             const savedTests = localStorage.getItem(savedTestsKey);
             if (savedTests) {
                 try {
@@ -93,7 +93,7 @@ export const CandidateTestsPage = () => {
             const remainingTestIds = queueIds.filter(id => !isInCooldown(id));
 
             // Save remaining tests to localStorage for later resuming
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             if (remainingTestIds.length > 0) {
                 localStorage.setItem(savedTestsKey, JSON.stringify(remainingTestIds));
                 const queue = tests.filter(t => remainingTestIds.includes(t.id));
@@ -280,7 +280,7 @@ export const CandidateTestsPage = () => {
     const handleAllTestsCompleted = () => {
         if (currentUser) {
             // Clear saved tests from localStorage since all tests are completed
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             localStorage.removeItem(savedTestsKey);
 
             if (currentUser.role === Role.CANDIDATE) {
@@ -313,7 +313,7 @@ export const CandidateTestsPage = () => {
             await submitTest(activeTest.id, [], 0, false);
 
             // Remove failed test from localStorage to prevent resuming
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             const savedTests = localStorage.getItem(savedTestsKey);
             if (savedTests) {
                 try {

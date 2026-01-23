@@ -110,7 +110,7 @@ export const CandidateDashboard = () => {
     // Check if candidate has incomplete tests
     const hasIncompleteTests = useMemo(() => {
         if (!currentUser) return false;
-        const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+        const savedTestsKey = `user_${currentUser.id}_selectedTests`;
         const savedTests = localStorage.getItem(savedTestsKey);
         return savedTests && JSON.parse(savedTests).length > 0;
     }, [currentUser, testAttempts.length]);
