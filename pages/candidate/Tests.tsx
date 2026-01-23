@@ -61,12 +61,36 @@ export const CandidateTestsPage = () => {
         }
 
         if (queueIds.length > 0) {
-            // Filter out tests that have already been attempted
-            const completedTestIds = testAttempts
-                .filter(ta => ta.user_id === currentUser.id)
-                .map(ta => ta.test_id);
+            // Filter out tests based on their attempt status
+            const userAttempts = testAttempts.filter(ta => ta.user_id === currentUser.id);
 
-            const remainingTestIds = queueIds.filter(id => !completedTestIds.includes(id));
+            // Helper function to check if test is in cooldown (24h after failed attempt)
+            const isInCooldown = (testId: string): boolean => {
+                const attempts = userAttempts
+                    .filter(ta => ta.test_id === testId)
+                    .sort((a, b) => new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime());
+
+                const lastAttempt = attempts[0];
+
+                // If last attempt was passed, test is permanently completed
+                if (lastAttempt && lastAttempt.passed) {
+                    return true; // Treated as "blocked" (completed)
+                }
+
+                // If last attempt failed, check 24h cooldown
+                if (lastAttempt && !lastAttempt.passed) {
+                    const lastDate = new Date(lastAttempt.completed_at);
+                    const unlockDate = new Date(lastDate.getTime() + 24 * 60 * 60 * 1000); // 24h lockout
+                    const now = new Date();
+
+                    return now < unlockDate; // Blocked if within 24h
+                }
+
+                return false; // No attempts or cooldown expired
+            };
+
+            // Remove passed tests and tests in cooldown
+            const remainingTestIds = queueIds.filter(id => !isInCooldown(id));
 
             // Save remaining tests to localStorage for later resuming
             const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
@@ -75,7 +99,7 @@ export const CandidateTestsPage = () => {
                 const queue = tests.filter(t => remainingTestIds.includes(t.id));
                 setTestQueue(queue);
             } else {
-                // All tests completed, clear localStorage
+                // All tests completed or in cooldown, clear localStorage
                 localStorage.removeItem(savedTestsKey);
             }
         }
