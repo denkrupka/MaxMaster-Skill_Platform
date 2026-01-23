@@ -66,7 +66,6 @@ export const CandidateSimulationPage = () => {
 
     const totalRate = baseRate + skillsBonus + qualBonus + contractBonus + studentBonus;
 
-<<<<<<< HEAD
     // --- Cooldown Check ---
     const getCooldown = (testId: string) => {
         const attempts = testAttempts
@@ -96,7 +95,7 @@ export const CandidateSimulationPage = () => {
 
         return { isLocked: false, isPassed: false, hours: 0, minutes: 0 };
     };
-=======
+
     // Group tests by category
     const testsByCategory = useMemo(() => {
         const grouped: Record<string, typeof tests> = {};
@@ -114,7 +113,6 @@ export const CandidateSimulationPage = () => {
         });
         return grouped;
     }, [tests, skills]);
->>>>>>> origin/main
 
     // --- Handlers ---
     const toggleTestSelection = (testId: string) => {
@@ -372,63 +370,6 @@ export const CandidateSimulationPage = () => {
                     colorClass="bg-green-600"
                 >
                     <div className="space-y-2">
-<<<<<<< HEAD
-                        {tests.filter(t => t.is_active && !t.is_archived).map(test => {
-                            const isSelected = selectedTestIds.includes(test.id);
-                            const skill = skills.find(s => s.id === (test.skill_ids && test.skill_ids[0]));
-                            const bonus = (test.skill_ids || []).reduce((acc, sid) => acc + (skills.find(s => s.id === sid)?.hourly_bonus || 0), 0);
-                            const cooldown = getCooldown(test.id);
-
-                            return (
-                                <button
-                                    key={test.id}
-                                    onClick={() => toggleTestSelection(test.id)}
-                                    disabled={cooldown.isLocked}
-                                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all ${
-                                        cooldown.isLocked
-                                            ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
-                                            : isSelected
-                                            ? 'border-green-600 bg-green-50 shadow-lg shadow-green-50 scale-[1.01]'
-                                            : 'border-slate-50 bg-slate-50/50 hover:border-green-200'
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                                            cooldown.isLocked
-                                                ? 'bg-slate-300 border-slate-300 text-white'
-                                                : isSelected
-                                                ? 'bg-green-600 border-green-600 text-white'
-                                                : 'bg-white border-slate-200'
-                                        }`}>
-                                            {cooldown.isLocked ? (
-                                                cooldown.isPassed ? <CheckCircle size={12}/> : <Lock size={12}/>
-                                            ) : (
-                                                isSelected && <Check size={12}/>
-                                            )}
-                                        </div>
-                                        <div className="text-left">
-                                            <div className={`font-black text-[11px] uppercase tracking-tighter leading-none ${
-                                                cooldown.isLocked ? 'text-slate-500' : isSelected ? 'text-green-900' : 'text-slate-700'
-                                            }`}>{skill?.name_pl || test.title}</div>
-                                            {cooldown.isLocked ? (
-                                                <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-1">
-                                                    <Clock size={10}/>
-                                                    {cooldown.isPassed ? (
-                                                        <span>Zaliczony</span>
-                                                    ) : (
-                                                        <span>Odblokuje za {cooldown.hours}h {cooldown.minutes}m</span>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                skill?.criteria && skill.criteria.length > 0 && <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter truncate max-w-[200px] mt-1 opacity-60">{skill.criteria[0]}</div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className={`text-[11px] font-black tabular-nums transition-colors ${
-                                        cooldown.isLocked ? 'text-slate-400' : isSelected ? 'text-green-600' : 'text-slate-300'
-                                    }`}>+{bonus.toFixed(2)} zł</div>
-                                </button>
-=======
                         {Object.entries(testsByCategory).map(([category, categoryTests]) => {
                             // Categories are collapsed by default (true if not explicitly set to false)
                             const isCollapsed = collapsedCategories[category] !== false;
@@ -466,34 +407,62 @@ export const CandidateSimulationPage = () => {
                                                 const skillIds = Array.isArray(test.skill_ids) ? test.skill_ids : [];
                                                 const skill = skills.find(s => s.id === skillIds[0]);
                                                 const bonus = skillIds.reduce((acc, sid) => acc + (skills.find(s => s.id === sid)?.hourly_bonus || 0), 0);
+                                                const cooldown = getCooldown(test.id);
 
                                                 return (
                                                     <button
                                                         key={test.id}
                                                         onClick={() => toggleTestSelection(test.id)}
+                                                        disabled={cooldown.isLocked}
                                                         className={`w-full flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all ${
-                                                            isSelected
-                                                            ? 'border-green-600 bg-green-50 shadow-lg shadow-green-50 scale-[1.01]'
-                                                            : 'border-slate-50 bg-slate-50/50 hover:border-green-200'
+                                                            cooldown.isLocked
+                                                                ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
+                                                                : isSelected
+                                                                ? 'border-green-600 bg-green-50 shadow-lg shadow-green-50 scale-[1.01]'
+                                                                : 'border-slate-50 bg-slate-50/50 hover:border-green-200'
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-4">
-                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-slate-200'}`}>
-                                                                {isSelected && <Check size={12}/>}
+                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                                                                cooldown.isLocked
+                                                                    ? 'bg-slate-300 border-slate-300 text-white'
+                                                                    : isSelected
+                                                                    ? 'bg-green-600 border-green-600 text-white'
+                                                                    : 'bg-white border-slate-200'
+                                                            }`}>
+                                                                {cooldown.isLocked ? (
+                                                                    cooldown.isPassed ? <CheckCircle size={12}/> : <Lock size={12}/>
+                                                                ) : (
+                                                                    isSelected && <Check size={12}/>
+                                                                )}
                                                             </div>
                                                             <div className="text-left">
-                                                                <div className={`font-black text-[11px] uppercase tracking-tighter leading-none ${isSelected ? 'text-green-900' : 'text-slate-700'}`}>{skill?.name_pl || test.title}</div>
-                                                                {skill?.criteria && skill.criteria.length > 0 && <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter truncate max-w-[200px] mt-1 opacity-60">{skill.criteria[0]}</div>}
+                                                                <div className={`font-black text-[11px] uppercase tracking-tighter leading-none ${
+                                                                    cooldown.isLocked ? 'text-slate-500' : isSelected ? 'text-green-900' : 'text-slate-700'
+                                                                }`}>{skill?.name_pl || test.title}</div>
+                                                                {cooldown.isLocked ? (
+                                                                    <div className="flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-1">
+                                                                        <Clock size={10}/>
+                                                                        {cooldown.isPassed ? (
+                                                                            <span>Zaliczony</span>
+                                                                        ) : (
+                                                                            <span>Odblokuje za {cooldown.hours}h {cooldown.minutes}m</span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : (
+                                                                    skill?.criteria && skill.criteria.length > 0 && <div className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter truncate max-w-[200px] mt-1 opacity-60">{skill.criteria[0]}</div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className={`text-[11px] font-black tabular-nums transition-colors ${isSelected ? 'text-green-600' : 'text-slate-300'}`}>+{bonus.toFixed(2)} zł</div>
+                                                        <div className={`text-[11px] font-black tabular-nums transition-colors ${
+                                                            cooldown.isLocked ? 'text-slate-400' : isSelected ? 'text-green-600' : 'text-slate-300'
+                                                        }`}>+{bonus.toFixed(2)} zł</div>
                                                     </button>
                                                 );
                                             })}
                                         </div>
                                     )}
                                 </div>
->>>>>>> origin/main
                             );
                         })}
                     </div>
