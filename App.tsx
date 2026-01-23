@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AlertCircle } from 'lucide-react';
 
 import { AppProvider, useAppContext } from './context/AppContext';
 import { Role, UserStatus } from './types';
@@ -95,6 +96,139 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false }: { childr
   return <AppLayout>{children}</AppLayout>;
 };
 
+// Component to handle email confirmation redirects
+const EmailConfirmationHandler = () => {
+  const [redirecting, setRedirecting] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const handleRedirect = () => {
+      console.log('[EmailConfirmationHandler] Starting redirect handling');
+      console.log('[EmailConfirmationHandler] Current URL:', window.location.href);
+      console.log('[EmailConfirmationHandler] Hash:', window.location.hash);
+      console.log('[EmailConfirmationHandler] Search:', window.location.search);
+
+      // Check both URL hash and query params for auth tokens
+      const fullHash = window.location.hash;
+      const queryParams = new URLSearchParams(window.location.search);
+
+      let authParamsString = '';
+      let params = null;
+
+      // First check hash (format: #access_token=...&type=... OR #error=...)
+      // When Supabase redirects, the URL looks like: domain.com/#access_token=...
+      // So fullHash = "#access_token=..."
+      // We need to remove the leading # and parse the rest
+      if (fullHash && fullHash.length > 1) {
+        const hashWithoutLeadingPound = fullHash.substring(1); // Remove leading #
+        console.log('[EmailConfirmationHandler] Hash params:', hashWithoutLeadingPound);
+
+        if (hashWithoutLeadingPound.includes('access_token=') ||
+            hashWithoutLeadingPound.includes('type=') ||
+            hashWithoutLeadingPound.includes('error=')) {
+          authParamsString = hashWithoutLeadingPound;
+          params = new URLSearchParams(authParamsString);
+        }
+      }
+
+      // Fallback: check query params
+      if (!params && (queryParams.has('access_token') || queryParams.has('type') || queryParams.has('error'))) {
+        console.log('[EmailConfirmationHandler] Found params in query string');
+        params = queryParams;
+        authParamsString = queryParams.toString();
+      }
+
+      if (params) {
+        console.log('[EmailConfirmationHandler] Parsed params:', Object.fromEntries(params.entries()));
+
+        // Check for errors first
+        const errorCode = params.get('error_code');
+        const errorDescription = params.get('error_description');
+        const error = params.get('error');
+
+        if (error || errorCode) {
+          console.log('[EmailConfirmationHandler] Error detected:', { error, errorCode, errorDescription });
+          // Handle expired or invalid links
+          if (errorCode === 'otp_expired') {
+            setError('Link aktywacyjny wygasł lub został już wykorzystany. Skontaktuj się z działem HR aby otrzymać nowy link.');
+          } else {
+            setError(errorDescription || 'Wystąpił błąd podczas weryfikacji linku. Skontaktuj się z działem HR.');
+          }
+          setRedirecting(false);
+          return;
+        }
+
+        const type = params.get('type');
+        const accessToken = params.get('access_token');
+
+        console.log('[EmailConfirmationHandler] Type:', type, 'AccessToken present:', !!accessToken);
+
+        // If we have access token, redirect based on type
+        if (accessToken) {
+          let targetRoute = '/setup-password'; // default for invite/signup
+
+          if (type === 'recovery') {
+            targetRoute = '/reset-password';
+            console.log('[EmailConfirmationHandler] Redirecting to reset-password with params');
+          } else if (type === 'signup' || type === 'email_confirmation' || type === 'invite') {
+            targetRoute = '/setup-password';
+            console.log('[EmailConfirmationHandler] Redirecting to setup-password with params');
+          }
+
+          // Redirect with tokens preserved in hash
+          const newHash = `${targetRoute}#${authParamsString}`;
+          console.log('[EmailConfirmationHandler] New hash:', newHash);
+          window.location.hash = newHash;
+          // Don't set redirecting to false, let the navigation happen
+          return;
+        }
+      }
+
+      // No auth tokens found, redirect to login
+      console.log('[EmailConfirmationHandler] No valid auth tokens found, redirecting to login');
+      setRedirecting(false);
+    };
+
+    handleRedirect();
+  }, []);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full border border-slate-100">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle size={32} className="text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Link wygasł</h2>
+            <p className="text-slate-600">{error}</p>
+          </div>
+          <button
+            onClick={() => window.location.hash = '/login'}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition"
+          >
+            Przejdź do logowania
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while processing redirect
+  if (redirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-600">Przetwarzanie linku aktywacyjnego...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Navigate to="/login" replace />;
+};
+
 export default function App() {
   return (
     <HashRouter>
@@ -162,6 +296,7 @@ export default function App() {
           <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirTeamPage /></ProtectedRoute>} />
           <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirQualityPage /></ProtectedRoute>} />
 
+          <Route path="/" element={<EmailConfirmationHandler />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AppProvider>

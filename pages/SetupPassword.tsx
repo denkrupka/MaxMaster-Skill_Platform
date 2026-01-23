@@ -18,47 +18,74 @@ export const SetupPasswordPage = () => {
 
   useEffect(() => {
     const checkToken = async () => {
-      // W HashRouter adres może wyglądać tak: domain.com/#/setup-password#access_token=...
-      // Musimy rozbić hash na części
+      console.log('[SetupPassword] Starting token check');
+      console.log('[SetupPassword] Full URL:', window.location.href);
+      console.log('[SetupPassword] Hash:', window.location.hash);
+      console.log('[SetupPassword] Search:', window.location.search);
+
+      // Check for existing session first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        console.log('[SetupPassword] Found existing session:', session.user.email);
+        setValidToken(true);
+        setUserName(`${session.user.user_metadata?.first_name || ''} ${session.user.user_metadata?.last_name || ''}`);
+        return;
+      }
+
+      // Parse URL hash for access_token (from Supabase redirect)
       const fullHash = window.location.hash;
       const hashParts = fullHash.split('#');
-      
-      // Szukamy części zawierającej parametry auth
+
+      console.log('[SetupPassword] Hash parts:', hashParts);
+
+      // Find part containing auth params
       const authParamsString = hashParts.find(p => p.includes('access_token='));
       const hashParams = new URLSearchParams(authParamsString);
-      
-      let accessToken = hashParams.get('access_token');
 
-      // Rezerwowo sprawdź query params
+      let accessToken = hashParams.get('access_token');
+      let refreshToken = hashParams.get('refresh_token');
+
+      console.log('[SetupPassword] Tokens from hash - access_token:', !!accessToken, 'refresh_token:', !!refreshToken);
+
+      // Fallback: check query params for access_token
       if (!accessToken) {
         const queryParams = new URLSearchParams(window.location.search);
         accessToken = queryParams.get('access_token');
+        refreshToken = queryParams.get('refresh_token');
+        console.log('[SetupPassword] Tokens from query - access_token:', !!accessToken, 'refresh_token:', !!refreshToken);
       }
 
       if (!accessToken) {
-        // Jeśli nie znaleźliśmy tokena, sprawdźmy czy sesja już nie została ustawiona automatycznie
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          accessToken = session.access_token;
-        }
-      }
-
-      if (!accessToken) {
+        console.error('[SetupPassword] No access_token found anywhere');
         setError('Nieprawidłowy lub wygasły link aktywacyjny. Skontaktuj się z działem HR.');
         return;
       }
 
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-        
-        if (userError || !user) {
+        console.log('[SetupPassword] Setting session with access_token...');
+        // Set the session using access_token
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || ''
+        });
+
+        if (sessionError) {
+          console.error('[SetupPassword] Session error:', sessionError);
           setError('Nie udało się zweryfikować Twojej tożsamości. Link mógł wygasnąć.');
           return;
         }
 
+        if (!sessionData.session) {
+          console.error('[SetupPassword] No session data returned');
+          setError('Nie udało się zweryfikować Twojej tożsamości. Link mógł wygasnąć.');
+          return;
+        }
+
+        console.log('[SetupPassword] Session created successfully for:', sessionData.session.user.email);
         setValidToken(true);
-        setUserName(`${user.user_metadata?.first_name || ''} ${user.user_metadata?.last_name || ''}`);
-      } catch (err) {
+        setUserName(`${sessionData.session.user.user_metadata?.first_name || ''} ${sessionData.session.user.user_metadata?.last_name || ''}`);
+      } catch (err: any) {
+        console.error('[SetupPassword] Unexpected error:', err);
         setError('Wystąpił nieoczekiwany błąd podczas weryfikacji konta.');
       }
     };
@@ -72,7 +99,7 @@ export const SetupPasswordPage = () => {
     if (!/[A-Z]/.test(pwd)) errors.push('jedną wielką literę');
     if (!/[a-z]/.test(pwd)) errors.push('jedną małą literę');
     if (!/[0-9]/.test(pwd)) errors.push('jedną cyfrę');
-    
+
     return errors;
   };
 
@@ -102,8 +129,25 @@ export const SetupPasswordPage = () => {
 
       setSuccess(true);
 
+      // Check user's role to determine redirect
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      let redirectPath = '/login';
+      if (userId) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (userData?.role === 'candidate') {
+          redirectPath = '/candidate/dashboard';
+        }
+      }
+
       setTimeout(() => {
-        navigate('/login');
+        navigate(redirectPath);
       }, 3000);
     } catch (err: any) {
       setError(err.message || 'Błąd podczas ustawiania hasła');
@@ -123,11 +167,11 @@ export const SetupPasswordPage = () => {
             Hasło ustawione! 🎉
           </h2>
           <p className="text-slate-600 mb-6">
-            Twoje konto zostało aktywowane. Możesz teraz zalogować się do platformy MaxMaster Skills.
+            Twoje konto zostało aktywowane. Możesz teraz korzystać z platformy MaxMaster Skills.
           </p>
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
             <p className="text-sm text-blue-800 font-bold">
-              Przekierowanie do logowania za 3 sekundy...
+              Przekierowanie za 3 sekundy...
             </p>
           </div>
         </div>
@@ -157,7 +201,7 @@ export const SetupPasswordPage = () => {
             MaxMaster Skills
           </h1>
           <h2 className="text-lg font-bold text-slate-800 mb-1">
-            Witaj{userName && `, ${userName}`}!
+            Witaj!
           </h2>
           <p className="text-sm text-slate-500">
             Utwórz hasło, aby aktywować swoje konto w systemie.

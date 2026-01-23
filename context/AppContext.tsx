@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
+import { EMAIL_REDIRECT_URLS, APP_URL } from '../config/app.config';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
@@ -80,6 +81,10 @@ interface AppContextType {
   addEmployeeBadge: (badge: any) => Promise<void>;
   deleteEmployeeBadge: (id: string) => Promise<void>;
   addQualityIncident: (incident: any) => Promise<void>;
+  blockUser: (userId: string, reason?: string) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
+  updateUserWithPassword: (userId: string, updates: any, password?: string) => Promise<void>;
+  deleteUserCompletely: (userId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -253,6 +258,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (dbUser) {
+      // Check if user is blocked
+      if (dbUser.is_blocked) {
+        await supabase.auth.signOut();
+        throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
+      }
+
       setState(prev => ({ ...prev, currentUser: dbUser }));
       await refreshData();
     } else {
@@ -285,7 +296,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addUser = async (userData: any) => {
-    const { data, error } = await supabase.from('users').insert([{ ...userData, status: UserStatus.ACTIVE }]).select().single();
+    // Generate a temporary password for the new user if not provided
+    const generateTemporaryPassword = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+      let password = '';
+      const array = new Uint8Array(16);
+      crypto.getRandomValues(array);
+      for (let i = 0; i < 16; i++) {
+        password += chars[array[i] % chars.length];
+      }
+      return password;
+    };
+
+    const cleanEmail = userData.email.trim().toLowerCase();
+    const password = userData.password || generateTemporaryPassword();
+
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: password,
+      options: {
+        emailRedirectTo: userData.password ? undefined : EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
+        data: {
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          phone: userData.phone,
+          role: userData.role
+        }
+      }
+    });
+
+    if (authError) throw authError;
+
+    const authId = authData.user?.id;
+    if (!authId) throw new Error('Failed to create auth user');
+
+    // Create user in public.users table with the auth ID
+    const { data, error } = await supabase.from('users').insert([{
+      id: authId,
+      ...userData,
+      email: cleanEmail,
+      status: UserStatus.ACTIVE,
+      password: undefined // Don't store password in database
+    }]).select().single();
+
     if (error) throw error;
     setState(prev => ({ ...prev, users: [...prev.users, data] }));
   };
@@ -307,10 +361,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCandidate = async (userData: Partial<User>) => {
-    const { data, error } = await supabase.from('users').insert([{ role: Role.CANDIDATE, status: UserStatus.STARTED, ...userData }]).select().single();
-    if (error) throw error;
-    setState(prev => ({ ...prev, users: [...prev.users, data] }));
-    return data;
+    // Call Edge Function to create candidate with auth user and send invitation email
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/create-candidate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        email: userData.email,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        phone: userData.phone,
+        target_position: userData.target_position,
+        source: userData.source || 'OLX',
+        status: userData.status || UserStatus.STARTED
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to create candidate');
+    }
+
+    // Update local state with the created candidate
+    const createdCandidate = result.data;
+    setState(prev => ({ ...prev, users: [...prev.users, createdCandidate] }));
+    return createdCandidate;
   };
 
   const moveCandidateToTrial = async (id: string, config: any) => {
@@ -653,7 +739,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.currentUser) logCandidateAction(state.currentUser.id, `Zaproszono znajomego: ${firstName} ${lastName} (${targetPosition})`);
 
     // Send SMS invitation
-    const portalUrl = window.location.origin;
+    const portalUrl = APP_URL;
     try {
       await sendTemplatedSMS(
         'CAND_INVITE_LINK',
@@ -748,6 +834,92 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => ({ ...prev, qualityIncidents: [...prev.qualityIncidents, data] }));
   };
 
+  const blockUser = async (userId: string, reason?: string) => {
+    const updates = {
+      is_blocked: true,
+      blocked_at: new Date().toISOString(),
+      blocked_reason: reason || 'Zablokowany przez administratora'
+    };
+    await updateUser(userId, updates);
+  };
+
+  const unblockUser = async (userId: string) => {
+    const updates = {
+      is_blocked: false,
+      blocked_at: null,
+      blocked_reason: null
+    };
+    await updateUser(userId, updates);
+  };
+
+  const updateUserWithPassword = async (userId: string, updates: any, password?: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        action: 'updateUser',
+        userId,
+        email: updates.email,
+        first_name: updates.first_name,
+        last_name: updates.last_name,
+        phone: updates.phone,
+        role: updates.role,
+        password
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to update user');
+    }
+
+    // Refresh local data
+    await refreshData();
+  };
+
+  const deleteUserCompletely = async (userId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        action: 'deleteUser',
+        userId
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to delete user');
+    }
+
+    // Update local state
+    setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -798,7 +970,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveSkillChecklistProgress,
     addEmployeeBadge,
     deleteEmployeeBadge,
-    addQualityIncident
+    addQualityIncident,
+    blockUser,
+    unblockUser,
+    updateUserWithPassword,
+    deleteUserCompletely
   };
 
   return (

@@ -126,6 +126,7 @@ export interface Position {
   name: string;
   responsibilities: string[];
   required_skill_ids: string[];
+  required_document_ids?: string[];
   min_monthly_rate?: number;
   max_monthly_rate?: number;
   salary_type: 'hourly' | 'monthly';
@@ -171,6 +172,9 @@ export interface User {
   termination_reason?: string;
   termination_initiator?: 'employee' | 'company';
   qualifications?: string[];
+  is_blocked?: boolean;
+  blocked_at?: string;
+  blocked_reason?: string;
 }
 
 export interface UserSkill {

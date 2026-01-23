@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate, useLocation, useBlocker } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Play, CheckCircle, Clock, AlertTriangle, ChevronRight, Lock, Circle, ArrowRight, X, ZoomIn } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -157,7 +157,9 @@ export const CandidateTestsPage = () => {
         });
 
         const calculatedScore = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
-        const skill = skills.find(s => s.id === activeTest.skill_ids[0]);
+        // Fix: Ensure skill_ids is always treated as an array
+        const skillIds = Array.isArray(activeTest.skill_ids) ? activeTest.skill_ids : [];
+        const skill = skills.find(s => s.id === skillIds[0]);
         const passed = calculatedScore >= (skill?.required_pass_rate || 80);
 
         await submitTest(activeTest.id, answers, calculatedScore, passed);
@@ -213,6 +215,20 @@ export const CandidateTestsPage = () => {
         return () => clearInterval(timerId);
     }, [timeLeft, testStarted]);
 
+    // Warn user before closing page during test
+    useEffect(() => {
+        if (!testStarted) return;
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [testStarted]);
+
     // --- Handlers ---
 
     const handleStartTest = () => {
@@ -236,7 +252,9 @@ export const CandidateTestsPage = () => {
         setCurrentQuestionIdx(0);
         setTestStarted(true);
         setStartTime(Date.now()); // Capture start time
-        startTest(activeTest.skill_ids[0]); // Log
+        // Fix: Ensure skill_ids is always treated as an array
+        const skillIds = Array.isArray(activeTest.skill_ids) ? activeTest.skill_ids : [];
+        startTest(skillIds[0]); // Log
 
         // Update status to 'tests_in_progress' if not already and ONLY IF CANDIDATE
         if (currentUser && currentUser.status === UserStatus.STARTED && currentUser.role === Role.CANDIDATE) {
@@ -345,34 +363,6 @@ export const CandidateTestsPage = () => {
         setShowExitConfirmModal(false);
     };
 
-    // Block navigation when test is in progress
-    const blocker = useBlocker(
-        ({ currentLocation, nextLocation }) =>
-            testStarted && currentLocation.pathname !== nextLocation.pathname
-    );
-
-    // Handle blocked navigation
-    useEffect(() => {
-        if (blocker.state === "blocked") {
-            setShowExitConfirmModal(true);
-        }
-    }, [blocker.state]);
-
-    // Update handleConfirmExit to proceed with blocked navigation
-    const handleConfirmExitWithNavigation = async () => {
-        await handleConfirmExit();
-        if (blocker.state === "blocked") {
-            blocker.proceed();
-        }
-    };
-
-    const handleCancelExitWithNavigation = () => {
-        setShowExitConfirmModal(false);
-        if (blocker.state === "blocked") {
-            blocker.reset();
-        }
-    };
-
     if (!currentUser || testQueue.length === 0) {
         return (
             <div className="p-12 text-center text-slate-500 h-screen flex flex-col items-center justify-center">
@@ -400,7 +390,9 @@ export const CandidateTestsPage = () => {
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2">
                     {testQueue.map((test, index) => {
-                        const skillName = skills.find(s => s.id === test.skill_ids[0])?.name_pl || test.title;
+                        // Fix: Ensure skill_ids is always treated as an array
+                        const skillIds = Array.isArray(test.skill_ids) ? test.skill_ids : [];
+                        const skillName = skills.find(s => s.id === skillIds[0])?.name_pl || test.title;
                         
                         let statusIcon = <Circle size={18} className="text-slate-300"/>;
                         let itemClass = "text-slate-500 hover:bg-slate-100";
@@ -464,14 +456,14 @@ export const CandidateTestsPage = () => {
                             <h2 className="text-3xl font-bold text-slate-900 mb-4">{activeTest.title}</h2>
                             <p className="text-slate-500 mb-8 leading-relaxed">
                                 Test składa się z <strong>
-                                    {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length
+                                    {activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length
                                         ? `${activeTest.questions_to_display} losowo wybranych`
-                                        : activeTest.questions.length
+                                        : activeTest.questions?.length || 0
                                     } pytań</strong>.
                                 <br />
                                 Czas na cały test: ok. <strong>{activeTest.time_limit_minutes} min</strong>.
                                 <br />
-                                Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
+                                Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
                             </p>
                             <Button size="lg" onClick={handleStartTest} className="px-12 shadow-blue-500/30 shadow-lg">
                                 Rozpocznij Test
@@ -637,7 +629,7 @@ export const CandidateTestsPage = () => {
                             <Button
                                 fullWidth
                                 variant="outline"
-                                onClick={handleCancelExitWithNavigation}
+                                onClick={handleCancelExit}
                                 className="shadow-sm"
                             >
                                 Anuluj - zostań na teście
@@ -645,7 +637,7 @@ export const CandidateTestsPage = () => {
                             <Button
                                 fullWidth
                                 variant="danger"
-                                onClick={handleConfirmExitWithNavigation}
+                                onClick={handleConfirmExit}
                                 className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20"
                             >
                                 Tak, zakończ i wyjdź
