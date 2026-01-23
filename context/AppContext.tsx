@@ -644,17 +644,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (attemptError) throw attemptError;
 
     const test = state.tests.find(t => t.id === testId);
-    const skillId = test?.skill_ids ? test.skill_ids[0] : null;
+    // Fix: Safely check if skill_ids array has elements
+    const skillId = Array.isArray(test?.skill_ids) && test.skill_ids.length > 0 ? test.skill_ids[0] : null;
 
     if (skillId) {
       const existingUs = state.userSkills.find(us => us.user_id === state.currentUser?.id && us.skill_id === skillId);
       const skill = state.skills.find(s => s.id === skillId);
       const newStatus = passed ? (skill?.verification_type === VerificationType.THEORY_ONLY ? SkillStatus.CONFIRMED : SkillStatus.THEORY_PASSED) : SkillStatus.FAILED;
 
+      // Fix: Add error handling for user_skills operations
       if (existingUs) {
-        await supabase.from('user_skills').update({ status: newStatus, theory_score: score }).eq('id', existingUs.id);
+        const { error: updateError } = await supabase.from('user_skills').update({ status: newStatus, theory_score: score }).eq('id', existingUs.id);
+        if (updateError) {
+          console.error('Error updating user_skills:', updateError);
+          throw updateError;
+        }
       } else {
-        await supabase.from('user_skills').insert([{ user_id: state.currentUser.id, skill_id: skillId, status: newStatus, theory_score: score }]);
+        const { error: insertError } = await supabase.from('user_skills').insert([{ user_id: state.currentUser.id, skill_id: skillId, status: newStatus, theory_score: score }]);
+        if (insertError) {
+          console.error('Error inserting user_skills:', insertError);
+          throw insertError;
+        }
       }
 
       const { data: refreshedSkills } = await supabase.from('user_skills').select('*').eq('user_id', state.currentUser.id);
@@ -671,7 +681,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
     }
 
-    logCandidateAction(state.currentUser.id, `Zakończono test: ${test?.title || 'Nieznany'}. Wynik: ${score}%, ${passed ? 'ZALICZONY' : 'NIEZALICZONY'}`);
+    // Fix: Don't let logging errors fail the entire operation
+    try {
+      await logCandidateAction(state.currentUser.id, `Zakończono test: ${test?.title || 'Nieznany'}. Wynik: ${score}%, ${passed ? 'ZALICZONY' : 'NIEZALICZONY'}`);
+    } catch (logError) {
+      console.error('Error logging candidate action:', logError);
+      // Don't throw - test results are already saved
+    }
   };
 
   const updateSystemConfig = async (config: SystemConfig) => {
