@@ -13,10 +13,11 @@ export const CandidateTestsPage = () => {
     const location = useLocation();
 
     // --- State Management ---
-    
+
     // Test Queue derived from previous step or default
     const [testQueue, setTestQueue] = useState<Test[]>([]);
     const [currentTestIndex, setCurrentTestIndex] = useState(0);
+    const [isQueueInitialized, setIsQueueInitialized] = useState(false);
     
     // Current Test State
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
@@ -42,6 +43,11 @@ export const CandidateTestsPage = () => {
     // Initialize
     useEffect(() => {
         if (!currentUser) return;
+
+        // CRITICAL FIX: Only initialize queue once to prevent recalculation bug
+        // If queue is already initialized, don't recalculate it when testAttempts changes
+        // This prevents skipping tests when user completes a test (testAttempts updates)
+        if (isQueueInitialized) return;
 
         let queueIds: string[] = [];
 
@@ -99,12 +105,13 @@ export const CandidateTestsPage = () => {
                 localStorage.setItem(savedTestsKey, JSON.stringify(remainingTestIds));
                 const queue = tests.filter(t => remainingTestIds.includes(t.id));
                 setTestQueue(queue);
+                setIsQueueInitialized(true); // Mark queue as initialized
             } else {
                 // All tests completed or in cooldown, clear localStorage
                 localStorage.removeItem(savedTestsKey);
             }
         }
-    }, [currentUser, tests, testAttempts, location.state]);
+    }, [currentUser, tests, testAttempts, location.state, isQueueInitialized]);
 
     // Active Test Data
     const activeTest = testQueue[currentTestIndex];
@@ -308,6 +315,9 @@ export const CandidateTestsPage = () => {
             const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             localStorage.removeItem(savedTestsKey);
 
+            // Reset queue initialization flag for next time
+            setIsQueueInitialized(false);
+
             if (currentUser.role === Role.CANDIDATE) {
                 updateUser(currentUser.id, { status: UserStatus.TESTS_COMPLETED });
                 navigate('/candidate/thank-you');
@@ -381,6 +391,7 @@ export const CandidateTestsPage = () => {
             // Reset test state
             setTestStarted(false);
             setShowExitConfirmModal(false);
+            setIsQueueInitialized(false); // Reset queue for next time
 
             // Navigate away
             if (currentUser.role === Role.CANDIDATE) {
