@@ -170,7 +170,8 @@ export const CandidateTestsPage = () => {
             setShowInterimModal(true); // Show summary
         } catch (error) {
             console.error('Error submitting test:', error);
-            alert('Wystąpił błąd podczas zapisywania wyniku testu. Spróbuj ponownie.');
+            const errorMessage = error instanceof Error ? error.message : 'Nieznany błąd';
+            alert(`Wystąpił błąd podczas zapisywania wyniku testu:\n${errorMessage}\n\nSprawdź konsolę przeglądarki (F12) dla szczegółów.`);
         }
     }, [activeTest, startTime, displayedQuestions, answers, skills, submitTest]);
 

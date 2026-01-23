@@ -631,7 +631,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const submitTest = async (testId: string, answers: number[][], score: number, passed: boolean) => {
-    if (!state.currentUser) return;
+    if (!state.currentUser) {
+      console.error('submitTest: No current user');
+      return;
+    }
+
+    console.log('submitTest: Starting test submission', { testId, score, passed, userId: state.currentUser.id });
+
     const newAttempt = {
       user_id: state.currentUser.id,
       test_id: testId,
@@ -640,40 +646,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completed_at: new Date().toISOString()
     };
 
+    console.log('submitTest: Inserting test attempt', newAttempt);
     const { data: attemptData, error: attemptError } = await supabase.from('test_attempts').insert([newAttempt]).select().single();
-    if (attemptError) throw attemptError;
+    if (attemptError) {
+      console.error('submitTest: Error inserting test attempt:', attemptError);
+      throw new Error(`Błąd podczas zapisywania próby testu: ${attemptError.message}`);
+    }
+    console.log('submitTest: Test attempt inserted successfully', attemptData);
 
     const test = state.tests.find(t => t.id === testId);
     // Fix: Safely check if skill_ids array has elements
     const skillId = Array.isArray(test?.skill_ids) && test.skill_ids.length > 0 ? test.skill_ids[0] : null;
+    console.log('submitTest: Processing skill', { testTitle: test?.title, skillId });
 
     if (skillId) {
       const existingUs = state.userSkills.find(us => us.user_id === state.currentUser?.id && us.skill_id === skillId);
       const skill = state.skills.find(s => s.id === skillId);
       const newStatus = passed ? (skill?.verification_type === VerificationType.THEORY_ONLY ? SkillStatus.CONFIRMED : SkillStatus.THEORY_PASSED) : SkillStatus.FAILED;
 
+      console.log('submitTest: Updating user skill', { existingUs: !!existingUs, newStatus });
+
       // Fix: Add error handling for user_skills operations
       if (existingUs) {
         const { error: updateError } = await supabase.from('user_skills').update({ status: newStatus, theory_score: score }).eq('id', existingUs.id);
         if (updateError) {
-          console.error('Error updating user_skills:', updateError);
-          throw updateError;
+          console.error('submitTest: Error updating user_skills:', updateError);
+          throw new Error(`Błąd podczas aktualizacji umiejętności: ${updateError.message}`);
         }
+        console.log('submitTest: User skill updated successfully');
       } else {
         const { error: insertError } = await supabase.from('user_skills').insert([{ user_id: state.currentUser.id, skill_id: skillId, status: newStatus, theory_score: score }]);
         if (insertError) {
-          console.error('Error inserting user_skills:', insertError);
-          throw insertError;
+          console.error('submitTest: Error inserting user_skills:', insertError);
+          throw new Error(`Błąd podczas tworzenia umiejętności: ${insertError.message}`);
         }
+        console.log('submitTest: User skill inserted successfully');
       }
 
       const { data: refreshedSkills } = await supabase.from('user_skills').select('*').eq('user_id', state.currentUser.id);
+      console.log('submitTest: Refreshing user skills', { count: refreshedSkills?.length });
       setState(prev => ({
         ...prev,
         testAttempts: [...prev.testAttempts, attemptData],
         userSkills: refreshedSkills || prev.userSkills
       }));
     } else {
+      console.log('submitTest: No skill associated, only updating test attempts');
       // Even if no skill is associated, update testAttempts
       setState(prev => ({
         ...prev,
@@ -683,11 +701,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Fix: Don't let logging errors fail the entire operation
     try {
+      console.log('submitTest: Logging candidate action');
       await logCandidateAction(state.currentUser.id, `Zakończono test: ${test?.title || 'Nieznany'}. Wynik: ${score}%, ${passed ? 'ZALICZONY' : 'NIEZALICZONY'}`);
     } catch (logError) {
-      console.error('Error logging candidate action:', logError);
+      console.error('submitTest: Error logging candidate action:', logError);
       // Don't throw - test results are already saved
     }
+
+    console.log('submitTest: Test submission completed successfully');
   };
 
   const updateSystemConfig = async (config: SystemConfig) => {
