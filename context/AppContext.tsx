@@ -730,7 +730,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const submitTest = async (testId: string, answers: number[][], score: number, passed: boolean) => {
     if (!state.currentUser) {
       console.error('submitTest: No current user');
-      return;
+      throw new Error('Nie można zapisać wyników testu: użytkownik nie zalogowany');
     }
 
     console.log('submitTest: Starting test submission', { testId, score, passed, userId: state.currentUser.id });

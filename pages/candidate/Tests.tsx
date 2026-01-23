@@ -37,6 +37,7 @@ export const CandidateTestsPage = () => {
 
     // Exit Confirmation Modal
     const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Initialize
     useEffect(() => {
@@ -331,44 +332,67 @@ export const CandidateTestsPage = () => {
         }
     };
 
-    const handleConfirmExit = async () => {
-        // Record test as failed before exiting
-        if (activeTest && testStarted) {
-            try {
-                await submitTest(activeTest.id, [], 0, false);
+    const handleConfirmExit = useCallback(async () => {
+        // Prevent double submission
+        if (isSubmitting) {
+            console.log('handleConfirmExit: Already submitting, ignoring duplicate call');
+            return;
+        }
 
-                // Remove failed test from localStorage to prevent resuming
-                const savedTestsKey = `user_${currentUser.id}_selectedTests`;
-                const savedTests = localStorage.getItem(savedTestsKey);
-                if (savedTests) {
-                    try {
-                        const testIds = JSON.parse(savedTests);
-                        const updatedIds = testIds.filter((id: string) => id !== activeTest.id);
+        // Guard: Check if currentUser exists before proceeding
+        if (!currentUser) {
+            console.error('handleConfirmExit: No current user, cannot exit test');
+            setShowExitConfirmModal(false);
+            navigate('/');
+            return;
+        }
 
-                        if (updatedIds.length > 0) {
-                            localStorage.setItem(savedTestsKey, JSON.stringify(updatedIds));
-                        } else {
-                            localStorage.removeItem(savedTestsKey);
+        setIsSubmitting(true);
+
+        try {
+            // Record test as failed before exiting
+            if (activeTest && testStarted) {
+                try {
+                    await submitTest(activeTest.id, [], 0, false);
+
+                    // Remove failed test from localStorage to prevent resuming
+                    const savedTestsKey = `user_${currentUser.id}_selectedTests`;
+                    const savedTests = localStorage.getItem(savedTestsKey);
+                    if (savedTests) {
+                        try {
+                            const testIds = JSON.parse(savedTests);
+                            const updatedIds = testIds.filter((id: string) => id !== activeTest.id);
+
+                            if (updatedIds.length > 0) {
+                                localStorage.setItem(savedTestsKey, JSON.stringify(updatedIds));
+                            } else {
+                                localStorage.removeItem(savedTestsKey);
+                            }
+                        } catch (e) {
+                            console.error('Failed to update saved tests:', e);
                         }
-                    } catch (e) {
-                        console.error('Failed to update saved tests:', e);
                     }
+                } catch (error) {
+                    console.error('Error submitting test on exit:', error);
+                    // Continue with navigation even if submit fails
                 }
-            } catch (error) {
-                console.error('Error submitting test on exit:', error);
-                // Continue with navigation even if submit fails
             }
-        }
 
-        setShowExitConfirmModal(false);
+            // Reset test state
+            setTestStarted(false);
+            setShowExitConfirmModal(false);
 
-        // Navigate away
-        if (currentUser?.role === Role.CANDIDATE) {
-            navigate('/candidate/dashboard');
-        } else {
-            navigate('/dashboard/tests');
+            // Navigate away
+            if (currentUser.role === Role.CANDIDATE) {
+                navigate('/candidate/dashboard');
+            } else {
+                navigate('/dashboard/tests');
+            }
+        } finally {
+            // Always reset submitting flag
+            setIsSubmitting(false);
         }
-    };
+    }, [isSubmitting, currentUser, activeTest, testStarted, submitTest, navigate]);
 
     const handleCancelExit = () => {
         setShowExitConfirmModal(false);
@@ -649,9 +673,10 @@ export const CandidateTestsPage = () => {
                                 fullWidth
                                 variant="danger"
                                 onClick={handleConfirmExit}
-                                className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20"
+                                disabled={isSubmitting}
+                                className="bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Tak, zakończ i wyjdź
+                                {isSubmitting ? 'Zapisywanie...' : 'Tak, zakończ i wyjdź'}
                                 <X size={18} className="ml-2" />
                             </Button>
                         </div>
