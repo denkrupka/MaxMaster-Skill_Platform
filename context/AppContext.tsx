@@ -221,59 +221,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Listen for auth state changes and initial fetch
   useEffect(() => {
     const initializeAuth = async () => {
-      // Check for existing auth session on mount
-      const { data: { session } } = await supabase.auth.getSession();
+      try {
+        console.log('Initializing auth...');
 
-      if (session?.user) {
-        console.log('Existing session found, restoring user:', session.user.email);
-        // Try to find user in database
-        const { data: dbUser } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', session.user.email)
-          .maybeSingle();
+        // Load all data first
+        await refreshData();
 
-        if (dbUser) {
-          console.log('User found in database:', dbUser);
-          setState(prev => ({ ...prev, currentUser: dbUser }));
-        } else {
-          // User authenticated but not in database - create record
-          console.log('User authenticated but missing from database, creating record...');
-          const newUserData = {
-            id: session.user.id,
-            email: session.user.email!,
-            first_name: session.user.user_metadata?.first_name || 'Użytkownik',
-            last_name: session.user.user_metadata?.last_name || '',
-            role: session.user.user_metadata?.role || Role.EMPLOYEE,
-            status: session.user.user_metadata?.status || UserStatus.ACTIVE,
-            hired_date: new Date().toISOString()
-          };
+        // Check for existing auth session on mount
+        const { data: { session } } = await supabase.auth.getSession();
 
-          const { data: createdUser, error: createError } = await supabase
-            .from('users')
-            .insert([newUserData])
-            .select()
-            .single();
-
-          if (!createError && createdUser) {
-            console.log('User record created successfully:', createdUser);
-            setState(prev => ({ ...prev, currentUser: createdUser }));
-          } else {
-            console.error('Failed to create user record:', createError);
-          }
-        }
-      }
-
-      // Load all other data
-      await refreshData();
-    };
-
-    initializeAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Re-check user when auth state changes
         if (session?.user) {
+          console.log('Existing session found, restoring user:', session.user.email);
+          // Try to find user in database
           const { data: dbUser } = await supabase
             .from('users')
             .select('*')
@@ -281,19 +240,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .maybeSingle();
 
           if (dbUser) {
+            console.log('User found in database:', dbUser);
             setState(prev => ({ ...prev, currentUser: dbUser }));
+          } else {
+            // User authenticated but not in database - create record
+            console.log('User authenticated but missing from database, creating record...');
+            const newUserData = {
+              id: session.user.id,
+              email: session.user.email!,
+              first_name: session.user.user_metadata?.first_name || 'Użytkownik',
+              last_name: session.user.user_metadata?.last_name || '',
+              role: session.user.user_metadata?.role || Role.EMPLOYEE,
+              status: session.user.user_metadata?.status || UserStatus.ACTIVE,
+              hired_date: new Date().toISOString()
+            };
+
+            const { data: createdUser, error: createError } = await supabase
+              .from('users')
+              .insert([newUserData])
+              .select()
+              .single();
+
+            if (!createError && createdUser) {
+              console.log('User record created successfully:', createdUser);
+              setState(prev => ({ ...prev, currentUser: createdUser }));
+            } else {
+              console.error('Failed to create user record:', createError);
+            }
           }
         }
-        await refreshData();
-      } else if (event === 'SIGNED_OUT') {
-        setState(prev => ({ ...prev, currentUser: null }));
+
+        console.log('Auth initialization complete');
+      } catch (error) {
+        console.error('Error during auth initialization:', error);
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+
+      try {
+        if (event === 'SIGNED_IN') {
+          console.log('Handling SIGNED_IN event...');
+          // Refresh data to get latest state
+          await refreshData();
+          console.log('SIGNED_IN event handled successfully');
+        } else if (event === 'SIGNED_OUT') {
+          console.log('Handling SIGNED_OUT event...');
+          setState(prev => ({ ...prev, currentUser: null }));
+        }
+        // Don't refresh on TOKEN_REFRESHED to avoid unnecessary requests
+      } catch (error) {
+        console.error('Error handling auth state change:', error);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshData]);
 
   // Auto-refresh system config every 30 seconds to sync HR settings changes
   useEffect(() => {
@@ -305,61 +312,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshSystemConfig]);
 
   const login = async (email: string, password: string) => {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) throw authError;
+    console.log('Login: Attempting authentication for', email);
 
-    // Use maybeSingle() instead of single() to avoid crashes if profile is missing
-    const { data: dbUser, error: dbError } = await supabase
+    // First check if user exists and is not blocked (before authenticating)
+    const { data: dbUser } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
       .maybeSingle();
 
-    if (dbError) {
-      console.warn('Profile fetch error:', dbError);
+    if (dbUser?.is_blocked) {
+      throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
     }
 
-    if (dbUser) {
-      // Check if user is blocked
-      if (dbUser.is_blocked) {
+    // Authenticate - this will trigger onAuthStateChange which handles the rest
+    console.log('Login: Authenticating with Supabase...');
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      console.error('Login: Authentication failed:', authError);
+      throw authError;
+    }
+
+    console.log('Login: Authentication successful');
+
+    // If user doesn't exist in database yet, create the record
+    if (!dbUser && authData.user) {
+      console.log('Login: User not in database, creating record...');
+      const newUserData = {
+        id: authData.user.id,
+        email: authData.user.email!,
+        first_name: authData.user.user_metadata?.first_name || 'Użytkownik',
+        last_name: authData.user.user_metadata?.last_name || '',
+        role: authData.user.user_metadata?.role || Role.EMPLOYEE,
+        status: authData.user.user_metadata?.status || UserStatus.ACTIVE,
+        hired_date: new Date().toISOString()
+      };
+
+      const { data: createdUser, error: createError } = await supabase
+        .from('users')
+        .insert([newUserData])
+        .select()
+        .single();
+
+      if (createError) {
+        console.error('Login: Error creating user record:', createError);
         await supabase.auth.signOut();
-        throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
+        throw new Error('Nie można utworzyć profilu użytkownika. Skontaktuj się z administratorem.');
       }
 
+      console.log('Login: User record created successfully');
+      setState(prev => ({ ...prev, currentUser: createdUser }));
+    } else if (dbUser) {
       setState(prev => ({ ...prev, currentUser: dbUser }));
-      await refreshData();
-    } else {
-        // Fallback: If record in public.users is missing but auth succeeded, CREATE it
-        console.log('User authenticated but missing from users table, creating record...');
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const newUserData = {
-                id: user.id,
-                email: user.email!,
-                first_name: user.user_metadata?.first_name || 'Użytkownik',
-                last_name: user.user_metadata?.last_name || '',
-                role: user.user_metadata?.role || Role.EMPLOYEE,
-                status: user.user_metadata?.status || UserStatus.ACTIVE,
-                hired_date: new Date().toISOString()
-            };
-
-            // Create the user record in the database
-            const { data: createdUser, error: createError } = await supabase
-                .from('users')
-                .insert([newUserData])
-                .select()
-                .single();
-
-            if (createError) {
-                console.error('Error creating user record:', createError);
-                throw new Error('Nie można utworzyć profilu użytkownika. Skontaktuj się z administratorem.');
-            }
-
-            console.log('User record created successfully:', createdUser);
-            setState(prev => ({ ...prev, currentUser: createdUser }));
-            await refreshData();
-        }
     }
+
+    // onAuthStateChange will handle refreshData
   };
 
   const logout = () => {
