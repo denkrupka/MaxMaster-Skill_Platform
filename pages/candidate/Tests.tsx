@@ -446,14 +446,14 @@ export const CandidateTestsPage = () => {
                             <h2 className="text-3xl font-bold text-slate-900 mb-4">{activeTest.title}</h2>
                             <p className="text-slate-500 mb-8 leading-relaxed">
                                 Test składa się z <strong>
-                                    {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length
+                                    {activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length
                                         ? `${activeTest.questions_to_display} losowo wybranych`
-                                        : activeTest.questions.length
+                                        : activeTest.questions?.length || 0
                                     } pytań</strong>.
                                 <br />
                                 Czas na cały test: ok. <strong>{activeTest.time_limit_minutes} min</strong>.
                                 <br />
-                                Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
+                                Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
                             </p>
                             <Button size="lg" onClick={handleStartTest} className="px-12 shadow-blue-500/30 shadow-lg">
                                 Rozpocznij Test
