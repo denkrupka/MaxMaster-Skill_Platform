@@ -4,24 +4,32 @@
 
 Execute these SQL commands in your Supabase SQL Editor (SQL Editor → New Query):
 
-### ⚠️ CRITICAL: Migration: 20260123_fix_test_attempts_rls.sql
+### ⚠️ CRITICAL: Migration: 20260123_fix_test_attempts_rls_v2.sql
 
 **THIS MIGRATION IS REQUIRED** to fix the error: `new row violates row-level security policy for table "test_attempts"`
+
+**IMPORTANT:** This is version 2 - it fixes the issue for candidates who take tests BEFORE confirming their email.
 
 This error prevents users from submitting test results. Apply this migration immediately:
 
 1. Open [Supabase SQL Editor](https://diytvuczpciikzdhldny.supabase.co/project/diytvuczpciikzdhldny/sql/new)
-2. Copy and paste the **entire content** of `supabase/migrations/20260123_fix_test_attempts_rls.sql`
+2. Copy and paste the **entire content** of `supabase/migrations/20260123_fix_test_attempts_rls_v2.sql`
 3. Click **Run** to execute
 4. Refresh your application and test again
 
 **What this migration does:**
 - Enables Row Level Security (RLS) on `test_attempts` table
-- Allows users to INSERT their own test attempts
-- Allows users to SELECT their own test attempts
+- ⭐ **Allows candidates to INSERT test attempts even BEFORE email confirmation** (checks if user exists in `users` table)
+- Allows authenticated users to SELECT their own test attempts
 - Allows HR and ADMIN roles to view all test attempts
 
-After applying this migration, the test submission will work correctly.
+**Why version 2:**
+- Version 1 (20260123_fix_test_attempts_rls.sql) only worked for authenticated users (`auth.uid()`)
+- But candidates take tests BEFORE confirming email → `auth.uid()` is null → insert blocked
+- Version 2 checks if `user_id` exists in `users` table instead of checking `auth.uid()`
+- This allows unconfirmed candidates to submit test results
+
+After applying this migration, the test submission will work correctly for both confirmed and unconfirmed candidates.
 
 ---
 

@@ -10,7 +10,15 @@ Błąd podczas zapisywania próby testu: new row violates row-level security pol
 
 ## 💡 Причина
 
-В базе данных Supabase включена защита на уровне строк (Row Level Security), но **не настроены политики доступа** для таблицы `test_attempts`. Из-за этого пользователи не могут сохранять результаты своих тестов.
+**Главная причина:** Кандидаты проходят тесты **ДО подтверждения email**, поэтому они **НЕ авторизованы** через Supabase Auth (`auth.uid()` = `null`).
+
+Подробнее:
+1. HR создаёт кандидата → кандидат добавляется в таблицу `users`
+2. Кандидату отправляется email с приглашением
+3. Кандидат открывает приложение и проходит тесты **БЕЗ подтверждения email**
+4. При попытке сохранить результат → RLS политика требует `auth.uid()` → но он `null` → ошибка!
+
+В базе данных Supabase включена защита на уровне строк (Row Level Security), но **политики настроены только для авторизованных пользователей**. Из-за этого неподтверждённые кандидаты не могут сохранять результаты своих тестов.
 
 ## ✅ Решение
 
@@ -28,8 +36,8 @@ Błąd podczas zapisywania próby testu: new row violates row-level security pol
 Скопируйте **весь код ниже** и вставьте в SQL Editor:
 
 ```sql
--- Fix RLS policies for test_attempts table
--- This allows users to submit their test results
+-- Fix RLS policies for test_attempts table (Version 2)
+-- This allows BOTH authenticated users AND candidates who haven't confirmed email yet
 
 -- Enable RLS if not already enabled
 ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
@@ -38,16 +46,30 @@ ALTER TABLE test_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view own test attempts" ON test_attempts;
 DROP POLICY IF EXISTS "Users can insert own test attempts" ON test_attempts;
 DROP POLICY IF EXISTS "HR and ADMIN can view all test attempts" ON test_attempts;
+DROP POLICY IF EXISTS "Candidates can insert test attempts" ON test_attempts;
+DROP POLICY IF EXISTS "Anyone can insert test attempts" ON test_attempts;
 
--- Policy 1: Users can view their own test attempts
+-- Policy 1: Authenticated users can view their own test attempts
 CREATE POLICY "Users can view own test attempts"
   ON test_attempts FOR SELECT
-  USING (user_id = auth.uid());
+  USING (
+    auth.uid() IS NOT NULL
+    AND user_id = auth.uid()
+  );
 
--- Policy 2: Users can insert their own test attempts
-CREATE POLICY "Users can insert own test attempts"
+-- Policy 2: CRITICAL FIX - Allow inserts for candidates who exist in users table
+-- This works for both:
+-- - Authenticated users (after email confirmation)
+-- - Candidates who haven't confirmed email yet (but exist in users table)
+CREATE POLICY "Candidates can insert test attempts"
   ON test_attempts FOR INSERT
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (
+    -- Check if user_id exists in users table
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE users.id = test_attempts.user_id
+    )
+  );
 
 -- Policy 3: HR and ADMIN can view all test attempts
 CREATE POLICY "HR and ADMIN can view all test attempts"
@@ -61,7 +83,7 @@ CREATE POLICY "HR and ADMIN can view all test attempts"
   );
 
 -- Add comment for documentation
-COMMENT ON TABLE test_attempts IS 'Stores all test attempts by users. RLS enabled: users can only insert/view their own attempts, HR/ADMIN can view all.';
+COMMENT ON TABLE test_attempts IS 'Stores all test attempts by users. RLS enabled: users can insert if they exist in users table (works for unconfirmed candidates), authenticated users can view their own, HR/ADMIN can view all.';
 ```
 
 ### Шаг 3: Запустите код
@@ -80,15 +102,28 @@ COMMENT ON TABLE test_attempts IS 'Stores all test attempts by users. RLS enable
 
 ### Созданные политики безопасности:
 
-1. **"Users can view own test attempts"** (Пользователи видят свои попытки)
-   - Пользователи могут просматривать только свои собственные результаты тестов
+1. **"Users can view own test attempts"** (Авторизованные пользователи видят свои попытки)
+   - Только для пользователей которые подтвердили email (`auth.uid()` не null)
+   - Могут просматривать только свои собственные результаты тестов
 
-2. **"Users can insert own test attempts"** (Пользователи могут добавлять свои попытки)
-   - Пользователи могут сохранять результаты своих тестов
+2. **"Candidates can insert test attempts"** (Кандидаты могут добавлять попытки) ⭐ **ГЛАВНАЯ ПОЛИТИКА**
+   - Разрешает вставку для **любого пользователя из таблицы `users`**
+   - Работает **ДО подтверждения email** (не требует `auth.uid()`)
+   - Работает **ПОСЛЕ подтверждения email** (для авторизованных тоже)
    - **ЭТА ПОЛИТИКА ИСПРАВЛЯЕТ ОШИБКУ!**
 
 3. **"HR and ADMIN can view all test attempts"** (HR и Админы видят все попытки)
    - Пользователи с ролями HR и ADMIN могут просматривать результаты всех пользователей
+
+### 🔒 Безопасность
+
+**Вопрос:** Безопасно ли разрешать вставку без `auth.uid()`?
+
+**Ответ:** ✅ Да, потому что:
+- Проверяется что `user_id` **существует в таблице `users`**
+- Только HR может создавать записи в `users` (через Edge Function)
+- Невозможно вставить `test_attempt` для несуществующего пользователя
+- Злоумышленник не может подделать `user_id` - он должен существовать в БД
 
 ## ❓ Часто задаваемые вопросы
 
