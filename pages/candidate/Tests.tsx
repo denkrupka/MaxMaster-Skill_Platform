@@ -49,7 +49,7 @@ export const CandidateTestsPage = () => {
             queueIds = location.state.selectedTestIds;
         } else {
             // 2. Try to restore from localStorage (if candidate is returning)
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             const savedTests = localStorage.getItem(savedTestsKey);
             if (savedTests) {
                 try {
@@ -93,7 +93,7 @@ export const CandidateTestsPage = () => {
             const remainingTestIds = queueIds.filter(id => !isInCooldown(id));
 
             // Save remaining tests to localStorage for later resuming
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             if (remainingTestIds.length > 0) {
                 localStorage.setItem(savedTestsKey, JSON.stringify(remainingTestIds));
                 const queue = tests.filter(t => remainingTestIds.includes(t.id));
@@ -298,7 +298,7 @@ export const CandidateTestsPage = () => {
     const handleAllTestsCompleted = () => {
         if (currentUser) {
             // Clear saved tests from localStorage since all tests are completed
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             localStorage.removeItem(savedTestsKey);
 
             if (currentUser.role === Role.CANDIDATE) {
@@ -331,7 +331,7 @@ export const CandidateTestsPage = () => {
             await submitTest(activeTest.id, [], 0, false);
 
             // Remove failed test from localStorage to prevent resuming
-            const savedTestsKey = `candidate_${currentUser.id}_selectedTests`;
+            const savedTestsKey = `user_${currentUser.id}_selectedTests`;
             const savedTests = localStorage.getItem(savedTestsKey);
             if (savedTests) {
                 try {
@@ -614,11 +614,16 @@ export const CandidateTestsPage = () => {
 
                         <h2 className="text-2xl font-bold text-slate-900 mb-2">Czy na pewno chcesz zakończyć test?</h2>
 
-                        <p className="text-slate-500 mb-8 leading-relaxed">
-                            Twój obecny wynik zostanie <strong className="text-red-600">anulowany</strong>,
-                            a dostęp do tego testu <strong className="text-red-600">nie będzie już możliwy</strong>.
-                            Po wyjściu test zostanie zaliczony jako niezaliczony.
+                        <p className="text-slate-500 mb-4 leading-relaxed">
+                            Twój obecny wynik zostanie <strong className="text-red-600">anulowany</strong>.
+                            Test zostanie zapisany jako <strong className="text-red-600">niezaliczony</strong>.
                         </p>
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-6 flex items-start gap-2">
+                            <Clock size={18} className="text-orange-600 flex-shrink-0 mt-0.5"/>
+                            <p className="text-sm text-orange-800">
+                                <strong>Test zostanie zablokowany na 24 godziny.</strong> Będziesz mógł powtórzyć test dopiero po upływie tego czasu.
+                            </p>
+                        </div>
 
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button
