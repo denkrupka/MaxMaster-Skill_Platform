@@ -220,18 +220,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Listen for auth state changes and initial fetch
   useEffect(() => {
-    refreshData();
+    const initializeAuth = async () => {
+      // Check for existing auth session on mount
+      const { data: { session } } = await supabase.auth.getSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        console.log('Existing session found, restoring user:', session.user.email);
+        // Try to find user in database
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', session.user.email)
+          .maybeSingle();
+
+        if (dbUser) {
+          console.log('User found in database:', dbUser);
+          setState(prev => ({ ...prev, currentUser: dbUser }));
+        } else {
+          // User authenticated but not in database - create record
+          console.log('User authenticated but missing from database, creating record...');
+          const newUserData = {
+            id: session.user.id,
+            email: session.user.email!,
+            first_name: session.user.user_metadata?.first_name || 'Użytkownik',
+            last_name: session.user.user_metadata?.last_name || '',
+            role: session.user.user_metadata?.role || Role.EMPLOYEE,
+            status: session.user.user_metadata?.status || UserStatus.ACTIVE,
+            hired_date: new Date().toISOString()
+          };
+
+          const { data: createdUser, error: createError } = await supabase
+            .from('users')
+            .insert([newUserData])
+            .select()
+            .single();
+
+          if (!createError && createdUser) {
+            console.log('User record created successfully:', createdUser);
+            setState(prev => ({ ...prev, currentUser: createdUser }));
+          } else {
+            console.error('Failed to create user record:', createError);
+          }
+        }
+      }
+
+      // Load all other data
+      await refreshData();
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        refreshData();
+        // Re-check user when auth state changes
+        if (session?.user) {
+          const { data: dbUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', session.user.email)
+            .maybeSingle();
+
+          if (dbUser) {
+            setState(prev => ({ ...prev, currentUser: dbUser }));
+          }
+        }
+        await refreshData();
+      } else if (event === 'SIGNED_OUT') {
+        setState(prev => ({ ...prev, currentUser: null }));
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [refreshData]);
+  }, []);
 
   // Auto-refresh system config every 30 seconds to sync HR settings changes
   useEffect(() => {
@@ -267,10 +329,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setState(prev => ({ ...prev, currentUser: dbUser }));
       await refreshData();
     } else {
-        // Fallback: If record in public.users is missing but auth succeeded
+        // Fallback: If record in public.users is missing but auth succeeded, CREATE it
+        console.log('User authenticated but missing from users table, creating record...');
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-            const fallbackUser: User = {
+            const newUserData = {
                 id: user.id,
                 email: user.email!,
                 first_name: user.user_metadata?.first_name || 'Użytkownik',
@@ -279,7 +342,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 status: user.user_metadata?.status || UserStatus.ACTIVE,
                 hired_date: new Date().toISOString()
             };
-            setState(prev => ({ ...prev, currentUser: fallbackUser }));
+
+            // Create the user record in the database
+            const { data: createdUser, error: createError } = await supabase
+                .from('users')
+                .insert([newUserData])
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating user record:', createError);
+                throw new Error('Nie można utworzyć profilu użytkownika. Skontaktuj się z administratorem.');
+            }
+
+            console.log('User record created successfully:', createdUser);
+            setState(prev => ({ ...prev, currentUser: createdUser }));
             await refreshData();
         }
     }
