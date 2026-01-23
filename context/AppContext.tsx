@@ -220,80 +220,117 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Listen for auth state changes and initial fetch
   useEffect(() => {
+    let isRefreshing = false; // Prevent concurrent refreshData calls
+
+    const handleAuthUser = async (user: any) => {
+      if (!user) return null;
+
+      console.log('handleAuthUser: Processing user', user.email);
+
+      // Try to find user in database
+      const { data: dbUser } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', user.email)
+        .maybeSingle();
+
+      if (dbUser) {
+        console.log('handleAuthUser: User found in database');
+        // Check if blocked
+        if (dbUser.is_blocked) {
+          console.log('handleAuthUser: User is blocked, signing out');
+          await supabase.auth.signOut();
+          throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
+        }
+        return dbUser;
+      } else {
+        // User authenticated but not in database - create record
+        console.log('handleAuthUser: Creating user record in database');
+        const newUserData = {
+          id: user.id,
+          email: user.email!,
+          first_name: user.user_metadata?.first_name || 'Użytkownik',
+          last_name: user.user_metadata?.last_name || '',
+          role: user.user_metadata?.role || Role.EMPLOYEE,
+          status: user.user_metadata?.status || UserStatus.ACTIVE,
+          hired_date: new Date().toISOString()
+        };
+
+        const { data: createdUser, error: createError } = await supabase
+          .from('users')
+          .insert([newUserData])
+          .select()
+          .single();
+
+        if (!createError && createdUser) {
+          console.log('handleAuthUser: User record created successfully');
+          return createdUser;
+        } else {
+          console.error('handleAuthUser: Failed to create user record:', createError);
+          throw new Error('Nie można utworzyć profilu użytkownika.');
+        }
+      }
+    };
+
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth...');
+        console.log('initializeAuth: Starting...');
 
-        // Load all data first
-        await refreshData();
-
-        // Check for existing auth session on mount
+        // Check for existing auth session
         const { data: { session } } = await supabase.auth.getSession();
 
         if (session?.user) {
-          console.log('Existing session found, restoring user:', session.user.email);
-          // Try to find user in database
-          const { data: dbUser } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', session.user.email)
-            .maybeSingle();
-
+          console.log('initializeAuth: Existing session found');
+          const dbUser = await handleAuthUser(session.user);
           if (dbUser) {
-            console.log('User found in database:', dbUser);
             setState(prev => ({ ...prev, currentUser: dbUser }));
-          } else {
-            // User authenticated but not in database - create record
-            console.log('User authenticated but missing from database, creating record...');
-            const newUserData = {
-              id: session.user.id,
-              email: session.user.email!,
-              first_name: session.user.user_metadata?.first_name || 'Użytkownik',
-              last_name: session.user.user_metadata?.last_name || '',
-              role: session.user.user_metadata?.role || Role.EMPLOYEE,
-              status: session.user.user_metadata?.status || UserStatus.ACTIVE,
-              hired_date: new Date().toISOString()
-            };
-
-            const { data: createdUser, error: createError } = await supabase
-              .from('users')
-              .insert([newUserData])
-              .select()
-              .single();
-
-            if (!createError && createdUser) {
-              console.log('User record created successfully:', createdUser);
-              setState(prev => ({ ...prev, currentUser: createdUser }));
-            } else {
-              console.error('Failed to create user record:', createError);
-            }
           }
         }
 
-        console.log('Auth initialization complete');
+        // Load all data once
+        if (!isRefreshing) {
+          isRefreshing = true;
+          await refreshData();
+          isRefreshing = false;
+        }
+
+        console.log('initializeAuth: Complete');
       } catch (error) {
-        console.error('Error during auth initialization:', error);
+        console.error('initializeAuth: Error:', error);
+        isRefreshing = false;
       }
     };
 
     initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event);
+      console.log('onAuthStateChange:', event);
 
       try {
-        if (event === 'SIGNED_IN') {
-          console.log('Handling SIGNED_IN event...');
-          // Refresh data to get latest state
-          await refreshData();
-          console.log('SIGNED_IN event handled successfully');
+        if (event === 'SIGNED_IN' && session?.user) {
+          console.log('onAuthStateChange: Processing SIGNED_IN');
+
+          // Handle user (find or create in DB)
+          const dbUser = await handleAuthUser(session.user);
+          if (dbUser) {
+            setState(prev => ({ ...prev, currentUser: dbUser }));
+          }
+
+          // Refresh data (prevent concurrent calls)
+          if (!isRefreshing) {
+            isRefreshing = true;
+            await refreshData();
+            isRefreshing = false;
+          }
+
+          console.log('onAuthStateChange: SIGNED_IN complete');
         } else if (event === 'SIGNED_OUT') {
-          console.log('Handling SIGNED_OUT event...');
+          console.log('onAuthStateChange: Processing SIGNED_OUT');
           setState(prev => ({ ...prev, currentUser: null }));
         }
-        // Don't refresh on TOKEN_REFRESHED to avoid unnecessary requests
       } catch (error) {
-        console.error('Error handling auth state change:', error);
+        console.error('onAuthStateChange: Error:', error);
+        isRefreshing = false;
       }
     });
 
@@ -312,61 +349,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshSystemConfig]);
 
   const login = async (email: string, password: string) => {
-    console.log('Login: Attempting authentication for', email);
+    console.log('login: Starting authentication for', email);
 
-    // First check if user exists and is not blocked (before authenticating)
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle();
+    // Just authenticate - onAuthStateChange will handle everything else
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password
+    });
 
-    if (dbUser?.is_blocked) {
-      throw new Error(`Twoje konto zostało zablokowane. Powód: ${dbUser.blocked_reason || 'Skontaktuj się z administratorem.'}`);
-    }
-
-    // Authenticate - this will trigger onAuthStateChange which handles the rest
-    console.log('Login: Authenticating with Supabase...');
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) {
-      console.error('Login: Authentication failed:', authError);
+      console.error('login: Authentication failed:', authError);
       throw authError;
     }
 
-    console.log('Login: Authentication successful');
-
-    // If user doesn't exist in database yet, create the record
-    if (!dbUser && authData.user) {
-      console.log('Login: User not in database, creating record...');
-      const newUserData = {
-        id: authData.user.id,
-        email: authData.user.email!,
-        first_name: authData.user.user_metadata?.first_name || 'Użytkownik',
-        last_name: authData.user.user_metadata?.last_name || '',
-        role: authData.user.user_metadata?.role || Role.EMPLOYEE,
-        status: authData.user.user_metadata?.status || UserStatus.ACTIVE,
-        hired_date: new Date().toISOString()
-      };
-
-      const { data: createdUser, error: createError } = await supabase
-        .from('users')
-        .insert([newUserData])
-        .select()
-        .single();
-
-      if (createError) {
-        console.error('Login: Error creating user record:', createError);
-        await supabase.auth.signOut();
-        throw new Error('Nie można utworzyć profilu użytkownika. Skontaktuj się z administratorem.');
-      }
-
-      console.log('Login: User record created successfully');
-      setState(prev => ({ ...prev, currentUser: createdUser }));
-    } else if (dbUser) {
-      setState(prev => ({ ...prev, currentUser: dbUser }));
-    }
-
-    // onAuthStateChange will handle refreshData
+    console.log('login: Authentication successful, waiting for onAuthStateChange...');
+    // onAuthStateChange will:
+    // 1. Find/create user in database
+    // 2. Set currentUser
+    // 3. Call refreshData
   };
 
   const logout = () => {
