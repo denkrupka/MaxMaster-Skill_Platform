@@ -142,6 +142,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     libraryResources: []
   });
 
+  // Track if we're in the initial auth setup to prevent duplicate refreshData calls
+  const isInitializingRef = React.useRef(true);
+
   const refreshData = useCallback(async () => {
     try {
       const [
@@ -223,6 +226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const initializeAuth = async () => {
       try {
         console.log('Initializing auth...');
+        isInitializingRef.current = true;
 
         // Load all data first
         await refreshData();
@@ -271,8 +275,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         console.log('Auth initialization complete');
+        isInitializingRef.current = false;
       } catch (error) {
         console.error('Error during auth initialization:', error);
+        isInitializingRef.current = false;
       }
     };
 
@@ -284,6 +290,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         if (event === 'SIGNED_IN') {
           console.log('Handling SIGNED_IN event...');
+
+          // Skip refreshData if we're still initializing (to prevent duplicate work)
+          if (isInitializingRef.current) {
+            console.log('Skipping SIGNED_IN handler during initialization');
+            return;
+          }
+
           // Refresh data to get latest state
           await refreshData();
           console.log('SIGNED_IN event handled successfully');
