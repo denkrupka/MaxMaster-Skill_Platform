@@ -104,7 +104,16 @@ export const CandidateSimulationPage = () => {
             const skillIds = Array.isArray(test.skill_ids) ? test.skill_ids : [];
             const firstSkillId = skillIds[0];
             const skill = skills.find(s => s.id === firstSkillId);
-            const category = skill?.category || 'Inne';
+
+            // Skip tests where:
+            // 1. Skill doesn't exist
+            // 2. Skill has no category or category is 'Inne'
+            // 3. Skill has 0 or undefined hourly_bonus
+            if (!skill || !skill.category || skill.category === 'Inne' || !skill.hourly_bonus || skill.hourly_bonus === 0) {
+                return;
+            }
+
+            const category = skill.category;
 
             if (!grouped[category]) {
                 grouped[category] = [];
