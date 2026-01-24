@@ -429,12 +429,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!authId) throw new Error('Failed to create auth user');
 
     // Create user in public.users table with the auth ID
+    // Exclude password from userData - store it separately as plain_password for admin reference
+    const { password: _password, ...userDataWithoutPassword } = userData;
     const { data, error } = await supabase.from('users').insert([{
       id: authId,
-      ...userData,
+      ...userDataWithoutPassword,
       email: cleanEmail,
       status: UserStatus.ACTIVE,
-      password: undefined // Don't store password in database
+      plain_password: password // Store plain password for admin reference
     }]).select().single();
 
     if (error) throw error;

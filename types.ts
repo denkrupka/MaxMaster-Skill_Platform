@@ -175,6 +175,7 @@ export interface User {
   is_blocked?: boolean;
   blocked_at?: string;
   blocked_reason?: string;
+  plain_password?: string;
 }
 
 export interface UserSkill {
