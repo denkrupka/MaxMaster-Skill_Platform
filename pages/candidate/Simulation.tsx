@@ -170,7 +170,7 @@ export const CandidateSimulationPage = () => {
     // --- Step Content Components ---
 
     const StepContainer = ({ title, description, icon: Icon, children, colorClass, showRate = true, nextLabel = "DALEJ" }: any) => (
-        <div className="bg-white rounded-[40px] shadow-2xl p-6 md:p-8 w-full max-w-lg relative animate-in zoom-in-95 duration-500 border border-white/40 flex flex-col overflow-hidden max-h-[95vh]">
+        <div className="bg-white rounded-[40px] shadow-2xl p-6 md:p-8 w-full max-w-lg relative border border-white/40 flex flex-col overflow-hidden max-h-[95vh]">
             {/* Step Indicator Dot (Top) - Compact */}
             <div className="flex justify-center gap-1.5 mb-4">
                 {['intro', 'contract', 'quals', 'skills'].map((s, idx) => (
