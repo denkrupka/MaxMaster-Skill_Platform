@@ -117,7 +117,21 @@ export const CandidateDashboard = () => {
 
     // --- Post Test Calculations ---
     const passedAttempts = useMemo(() => {
-        return testAttempts.filter(ta => ta.user_id === currentUser.id);
+        const userAttempts = testAttempts.filter(ta => ta.user_id === currentUser.id);
+
+        // Group by test_id and keep only the latest attempt for each test
+        // This prevents showing duplicate rows when a user retakes a test
+        const testMap = new Map<string, typeof userAttempts[0]>();
+
+        userAttempts.forEach(ta => {
+            const existing = testMap.get(ta.test_id);
+            // Keep the latest attempt (most recent completed_at)
+            if (!existing || new Date(ta.completed_at) > new Date(existing.completed_at)) {
+                testMap.set(ta.test_id, ta);
+            }
+        });
+
+        return Array.from(testMap.values());
     }, [testAttempts, currentUser.id]);
 
     const skillsBonus = useMemo(() => {
