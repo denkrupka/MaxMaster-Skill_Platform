@@ -32,7 +32,18 @@ export const CandidateSimulationPage = () => {
     const [isStudent, setIsStudent] = useState(currentUser?.is_student || false);
     const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
+    // Ref to preserve scroll position
+    const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+    const scrollPositionRef = React.useRef<number>(0);
+
     if (!currentUser) return null;
+
+    // Save and restore scroll position when selection changes
+    React.useEffect(() => {
+        if (scrollContainerRef.current && scrollPositionRef.current > 0) {
+            scrollContainerRef.current.scrollTop = scrollPositionRef.current;
+        }
+    }, [selectedTestIds]);
 
     // --- Calculations ---
     // Use HR-configured base rate from system settings (no hardcoded fallback)
@@ -128,6 +139,11 @@ export const CandidateSimulationPage = () => {
         const cooldown = getCooldown(testId);
         if (cooldown.isLocked) return; // Don't allow selection if locked
 
+        // Save current scroll position before state change
+        if (scrollContainerRef.current) {
+            scrollPositionRef.current = scrollContainerRef.current.scrollTop;
+        }
+
         setSelectedTestIds(prev =>
             prev.includes(testId)
                 ? prev.filter(id => id !== testId)
@@ -169,7 +185,7 @@ export const CandidateSimulationPage = () => {
 
     // --- Step Content Components ---
 
-    const StepContainer = ({ title, description, icon: Icon, children, colorClass, showRate = true, nextLabel = "DALEJ" }: any) => (
+    const StepContainer = ({ title, description, icon: Icon, children, colorClass, showRate = true, nextLabel = "DALEJ", scrollRef }: any) => (
         <div className="bg-white rounded-[40px] shadow-2xl p-6 md:p-8 w-full max-w-lg relative border border-white/40 flex flex-col overflow-hidden max-h-[95vh]">
             {/* Step Indicator Dot (Top) - Compact */}
             <div className="flex justify-center gap-1.5 mb-4">
@@ -185,8 +201,8 @@ export const CandidateSimulationPage = () => {
                 <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-1">{title}</h2>
                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest px-4 leading-relaxed opacity-70">{description}</p>
             </div>
-            
-            <div className="space-y-2 mb-6 overflow-y-auto pr-1 scrollbar-hide">
+
+            <div ref={scrollRef} className="space-y-2 mb-6 overflow-y-auto pr-1 scrollbar-hide">
                 {children}
             </div>
 
@@ -377,6 +393,7 @@ export const CandidateSimulationPage = () => {
                     description="Wybierz to, co już potrafisz. Sprawdzimy to krótkim testem."
                     icon={Sparkles}
                     colorClass="bg-green-600"
+                    scrollRef={scrollContainerRef}
                 >
                     <div className="space-y-2">
                         {Object.entries(testsByCategory).map(([category, categoryTests]) => {
