@@ -116,6 +116,15 @@ export const ResetPasswordPage = () => {
         throw updateError;
       }
 
+      // Also save plain_password to users table for admin reference
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        await supabase
+          .from('users')
+          .update({ plain_password: password })
+          .eq('id', user.id);
+      }
+
       console.log('[ResetPassword] Password updated successfully');
       setSuccess(true);
       // Przekierowanie do logowania po 2 sekundach
