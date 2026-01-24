@@ -507,7 +507,16 @@ export const CandidateTestsPage = () => {
                                         : activeTest.questions?.length || 0
                                     } pytań</strong>.
                                 <br />
-                                Czas na cały test: ok. <strong>{activeTest.time_limit_minutes} min</strong>.
+                                Czas na cały test: ok. <strong>{(() => {
+                                    // Calculate time based on displayed questions count
+                                    if (activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length) {
+                                        // Get average time per question or default to 30s
+                                        const avgTimePerQuestion = activeTest.questions.reduce((sum, q) => sum + (q.timeLimit || 30), 0) / activeTest.questions.length;
+                                        const totalSeconds = Math.round(avgTimePerQuestion * activeTest.questions_to_display);
+                                        return Math.ceil(totalSeconds / 60);
+                                    }
+                                    return activeTest.time_limit_minutes;
+                                })()} min</strong>.
                                 <br />
                                 Pamiętaj, na każde pytanie masz ograniczony czas. {activeTest.questions && activeTest.questions_to_display && activeTest.questions_to_display < activeTest.questions.length && <strong>Pytania będą w losowej kolejności!</strong>}
                             </p>
