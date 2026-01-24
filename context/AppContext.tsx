@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
 import { EMAIL_REDIRECT_URLS, APP_URL } from '../config/app.config';
 import {
@@ -473,7 +473,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         email: userData.email,
@@ -1001,7 +1002,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         action: 'updateUser',
@@ -1038,7 +1040,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': SUPABASE_ANON_KEY
       },
       body: JSON.stringify({
         action: 'deleteUser',
