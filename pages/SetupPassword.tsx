@@ -127,12 +127,20 @@ export const SetupPasswordPage = () => {
 
       if (updateError) throw updateError;
 
-      setSuccess(true);
-
-      // Check user's role to determine redirect
+      // Also save plain_password to users table for admin reference
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
+      if (userId) {
+        await supabase
+          .from('users')
+          .update({ plain_password: password })
+          .eq('id', userId);
+      }
+
+      setSuccess(true);
+
+      // Check user's role to determine redirect
       let redirectPath = '/login';
       if (userId) {
         const { data: userData } = await supabase
