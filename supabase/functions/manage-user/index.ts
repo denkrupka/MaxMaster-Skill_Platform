@@ -112,6 +112,7 @@ serve(async (req) => {
         if (last_name) dbUpdates.last_name = last_name
         if (phone) dbUpdates.phone = phone
         if (role) dbUpdates.role = role
+        if (password) dbUpdates.plain_password = password
 
         if (Object.keys(dbUpdates).length > 0) {
           const { error: dbError } = await supabaseAdmin

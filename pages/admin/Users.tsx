@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Trash2, AlertTriangle, Edit2, Lock, Unlock, Eye, EyeOff } from 'lucide-react';
+import { UserPlus, Trash2, AlertTriangle, Edit2, Lock, Unlock, Eye, EyeOff, Pencil } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { Role, User } from '../../types';
@@ -15,6 +15,8 @@ export const AdminUsersPage = () => {
   const [validationErrors, setValidationErrors] = useState<{email?: string, phone?: string}>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
+  const [isEditingPassword, setIsEditingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   const formatPhone = (val: string) => {
     let cleaned = val.replace(/\D/g, '');
@@ -64,10 +66,10 @@ export const AdminUsersPage = () => {
   };
 
   const handleEdit = (user: User) => {
-    setEditingUser({
-      ...user,
-      password: '' as any
-    });
+    setEditingUser(user);
+    setIsEditingPassword(false);
+    setNewPassword('');
+    setShowEditPassword(false);
     setIsEditModalOpen(true);
   };
 
@@ -98,11 +100,13 @@ export const AdminUsersPage = () => {
         role: editingUser.role
       };
 
-      const password = (editingUser as any).password?.trim();
+      const password = isEditingPassword ? newPassword.trim() : undefined;
 
       await updateUserWithPassword(editingUser.id, updates, password || undefined);
       setIsEditModalOpen(false);
       setEditingUser(null);
+      setIsEditingPassword(false);
+      setNewPassword('');
       alert('Użytkownik został zaktualizowany pomyślnie!');
     } catch (error: any) {
       alert('Błąd podczas aktualizacji użytkownika: ' + error.message);
@@ -294,23 +298,63 @@ export const AdminUsersPage = () => {
               />
 
               <div className="space-y-1">
-                <div className="relative">
-                  <input
-                    type={showEditPassword ? "text" : "password"}
-                    placeholder="Nowe hasło (zostaw puste, aby nie zmieniać)"
-                    className="w-full border p-2 pr-10 rounded outline-none focus:ring-2 focus:ring-blue-500"
-                    value={(editingUser as any).password || ''}
-                    onChange={e => setEditingUser({...editingUser, password: e.target.value} as any)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowEditPassword(!showEditPassword)}
-                    className="absolute right-2 top-2 text-slate-500 hover:text-slate-700"
-                  >
-                    {showEditPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500 ml-1">Podaj nowe hasło tylko jeśli chcesz je zmienić</p>
+                <label className="text-xs text-slate-500 ml-1">Hasło</label>
+                {!isEditingPassword ? (
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showEditPassword ? "text" : "password"}
+                        className="w-full border p-2 pr-10 rounded bg-slate-50 outline-none"
+                        value={editingUser.plain_password || '(brak zapisanego hasła)'}
+                        readOnly
+                      />
+                      {editingUser.plain_password && (
+                        <button
+                          type="button"
+                          onClick={() => setShowEditPassword(!showEditPassword)}
+                          className="absolute right-2 top-2 text-slate-500 hover:text-slate-700"
+                        >
+                          {showEditPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingPassword(true)}
+                      className="p-2 border rounded hover:bg-slate-50 text-slate-600 hover:text-blue-600"
+                      title="Zmień hasło"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        type={showEditPassword ? "text" : "password"}
+                        placeholder="Wprowadź nowe hasło"
+                        className="w-full border p-2 pr-10 rounded outline-none focus:ring-2 focus:ring-blue-500"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                        className="absolute right-2 top-2 text-slate-500 hover:text-slate-700"
+                      >
+                        {showEditPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setIsEditingPassword(false); setNewPassword(''); }}
+                      className="text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      Anuluj zmianę hasła
+                    </button>
+                  </div>
+                )}
               </div>
 
               <select
