@@ -43,6 +43,7 @@ export const HRLibraryPage = () => {
 
     // Inputs Refs
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const isSavingRef = useRef(false); // Prevent double saves
 
     // Helpers
     const getYoutubeEmbedUrl = (url?: string) => {
@@ -134,6 +135,13 @@ export const HRLibraryPage = () => {
         const res = editingResource;
         if (!res || !res.title) return;
 
+        // Prevent double saves using ref (state updates may be batched/delayed)
+        if (isSavingRef.current) {
+            console.log('Save already in progress, skipping duplicate call');
+            return;
+        }
+        isSavingRef.current = true;
+
         setIsUploading(true);
         const resourceId = res.id || crypto.randomUUID();
 
@@ -157,6 +165,7 @@ export const HRLibraryPage = () => {
             } catch (uploadError) {
                 console.error('File upload error:', uploadError);
                 alert('Błąd podczas przesyłania plików. Spróbuj ponownie.');
+                isSavingRef.current = false;
                 setIsUploading(false);
                 return;
             }
@@ -203,10 +212,12 @@ export const HRLibraryPage = () => {
                 ? 'Przekroczono limit czasu. Sprawdź połączenie i spróbuj ponownie.'
                 : 'Błąd podczas zapisywania materiału. Spróbuj ponownie.';
             alert(errorMessage);
+            isSavingRef.current = false;
             setIsUploading(false);
             return;
         }
 
+        isSavingRef.current = false;
         setIsUploading(false);
         setIsEditorOpen(false);
         setEditingResource(null);
