@@ -43,12 +43,14 @@ export const supabaseAdmin = serviceKey
 // ============================================================
 
 export const uploadDocument = async (file: File, userId: string): Promise<string | null> => {
+  const UPLOAD_TIMEOUT = 30000; // 30 seconds timeout for file uploads
+
   try {
     const timestamp = Date.now();
     const fileNameParts = file.name.split('.');
     const fileExt = fileNameParts.pop()?.toLowerCase();
     const originalName = fileNameParts.join('.');
-    
+
     // Improved sanitization of filename
     const cleanName = originalName
       .normalize("NFD")
@@ -68,13 +70,23 @@ export const uploadDocument = async (file: File, userId: string): Promise<string
         else if (fileExt === 'pdf') contentType = 'application/pdf';
     }
 
-    const { data, error } = await supabase.storage
+    console.log(`Uploading file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+
+    // Create timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Upload timed out')), UPLOAD_TIMEOUT);
+    });
+
+    // Race between upload and timeout
+    const uploadPromise = supabase.storage
       .from('documents')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: false,
         contentType: contentType || 'application/octet-stream'
       });
+
+    const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as Awaited<typeof uploadPromise>;
 
     if (error) {
       console.error('Storage upload error:', error);
@@ -85,9 +97,14 @@ export const uploadDocument = async (file: File, userId: string): Promise<string
       .from('documents')
       .getPublicUrl(filePath);
 
+    console.log(`Upload completed: ${file.name}`);
     return publicUrl;
-  } catch (error) {
-    console.error('Upload error:', error);
+  } catch (error: any) {
+    if (error.message === 'Upload timed out') {
+      console.error(`Upload timed out for file: ${file.name}`);
+    } else {
+      console.error('Upload error:', error);
+    }
     return null;
   }
 };
