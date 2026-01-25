@@ -19,6 +19,12 @@ import { AdminUsersPage } from './pages/admin/Users';
 import { SuperAdminUsersPage } from './pages/superadmin/Users';
 import { SuperAdminCompaniesPage } from './pages/superadmin/Companies';
 
+// Company Admin Pages
+import { CompanyDashboard } from './pages/company/Dashboard';
+import { CompanyUsersPage } from './pages/company/Users';
+import { CompanySubscriptionPage } from './pages/company/Subscription';
+import { CompanySettingsPage } from './pages/company/Settings';
+
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
 import { HREmployeesPage } from './pages/hr/Employees';
@@ -104,6 +110,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
     if (state.currentUser.role === Role.ADMIN) {
         return <Navigate to="/admin/users" replace />;
+    }
+    if (state.currentUser.role === Role.COMPANY_ADMIN) {
+        return <Navigate to="/company/dashboard" replace />;
     }
     return <Navigate to="/dashboard" replace />;
   }
@@ -265,6 +274,12 @@ export default function App() {
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/users" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminUsersPage /></ProtectedRoute>} />
           <Route path="/superadmin/companies" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminCompaniesPage /></ProtectedRoute>} />
+
+          {/* Company Admin Routes */}
+          <Route path="/company/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyDashboard /></ProtectedRoute>} />
+          <Route path="/company/users" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyUsersPage /></ProtectedRoute>} />
+          <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
+          <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />

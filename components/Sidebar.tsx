@@ -69,6 +69,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                </>
             )}
 
+            {/* --- COMPANY ADMIN VIEW --- */}
+            {currentUser?.role === Role.COMPANY_ADMIN && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Admin Firmy</p>
+                 <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
+                 <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
+                 <NavItem to="/company/subscription" icon={Layers} label="Subskrypcja" />
+                 <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
+               </>
+            )}
+
             {/* --- ADMIN VIEW (TECHNICAL / LEGACY) --- */}
             {currentUser?.role === Role.ADMIN && (
                <>
