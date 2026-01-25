@@ -11,7 +11,7 @@ import { UserStatus, Skill, UserSkill, SkillStatus } from '../../types';
 export const DoradcaCompanyView: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const { state } = useAppContext();
-  const { companies, allUsers, skills, userSkills } = state;
+  const { companies, users, skills, userSkills } = state;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<UserStatus | 'all'>('all');
@@ -22,8 +22,8 @@ export const DoradcaCompanyView: React.FC = () => {
 
   // Get company users
   const companyUsers = useMemo(() => {
-    return allUsers.filter(u => u.company_id === companyId);
-  }, [allUsers, companyId]);
+    return (users || []).filter(u => u.company_id === companyId);
+  }, [users, companyId]);
 
   // Filter users
   const filteredUsers = useMemo(() => {

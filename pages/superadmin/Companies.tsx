@@ -200,14 +200,32 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       return;
     }
 
+    // Validate NIP checksum
+    const weights = [6, 5, 7, 2, 3, 4, 5, 6, 7];
+    let sum = 0;
+    for (let i = 0; i < 9; i++) {
+      sum += parseInt(cleanNip[i]) * weights[i];
+    }
+    const checkDigit = sum % 11;
+    if (checkDigit === 10 || checkDigit !== parseInt(cleanNip[9])) {
+      setGusError('Nieprawidłowy NIP - błędna suma kontrolna');
+      return;
+    }
+
     setIsSearchingGUS(true);
     setGusError(null);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Brak sesji');
+      if (!session?.access_token) {
+        setGusError('Brak sesji - proszę zalogować się ponownie');
+        setIsSearchingGUS(false);
+        return;
+      }
 
       const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+      console.log('Calling GUS search for NIP:', cleanNip);
+
       const response = await fetch(`${supabaseUrl}/functions/v1/search-gus`, {
         method: 'POST',
         headers: {
@@ -218,7 +236,18 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         body: JSON.stringify({ nip: cleanNip })
       });
 
+      console.log('GUS search response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('GUS search HTTP error:', response.status, errorText);
+        setGusError(`Błąd serwera (${response.status}). Spróbuj później.`);
+        setIsSearchingGUS(false);
+        return;
+      }
+
       const result = await response.json();
+      console.log('GUS search result:', result);
 
       if (result.success && result.data && result.data.found !== false) {
         const d = result.data;
@@ -237,11 +266,15 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           contact_phone: d.telefon || prev.contact_phone
         }));
       } else {
-        setGusError(result.error || 'Nie znaleziono firmy');
+        setGusError(result.error || 'Nie znaleziono firmy o podanym NIP w rejestrze GUS');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('GUS search error:', err);
-      setGusError('Błąd podczas wyszukiwania. Spróbuj później.');
+      if (err.message?.includes('Failed to fetch')) {
+        setGusError('Błąd połączenia z serwerem. Sprawdź połączenie internetowe.');
+      } else {
+        setGusError('Błąd podczas wyszukiwania. Spróbuj później.');
+      }
     } finally {
       setIsSearchingGUS(false);
     }

@@ -182,8 +182,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  </p>
                  <NavItem to="/doradca/dashboard" icon={LayoutDashboard} label="Panel Doradcy" />
                  <NavItem to="/doradca/companies" icon={Building2} label="Firmy klientów" />
-                 <NavItem to="/doradca/skills" icon={Award} label="Przegląd umiejętności" />
-                 <NavItem to="/doradca/library" icon={BookOpen} label="Biblioteka" />
                </>
             )}
 
