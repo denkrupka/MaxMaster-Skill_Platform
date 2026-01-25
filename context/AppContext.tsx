@@ -553,6 +553,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    // Get company_id from current user (HR belongs to a company)
+    const companyId = state.currentUser?.company_id || null;
+
     const response = await fetch(`${supabaseUrl}/functions/v1/create-candidate`, {
       method: 'POST',
       headers: {
@@ -567,7 +570,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         phone: userData.phone,
         target_position: userData.target_position,
         source: userData.source || 'OLX',
-        status: userData.status || UserStatus.STARTED
+        status: userData.status || UserStatus.STARTED,
+        company_id: companyId
       })
     });
 
