@@ -1315,10 +1315,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (error) throw error;
     setState(prev => ({ ...prev, companies: [...prev.companies, data] }));
+
+    // Trigger notification for assigned Doradca
+    if (data.doradca_id) {
+      const doradcaUser = state.users.find(u => u.id === data.doradca_id);
+      if (doradcaUser && state.currentUser?.id === data.doradca_id) {
+        triggerNotification(
+          'company_assigned',
+          'Nowa firma pod opieką',
+          `Firma "${data.name}" została dodana pod Twoją opiekę.`,
+          `/doradca/company/${data.id}`
+        );
+      }
+    }
+
     return data;
   };
 
   const updateCompany = async (id: string, updates: Partial<Company>) => {
+    // Check if doradca_id is being assigned/changed
+    const existingCompany = state.companies.find(c => c.id === id);
+    const isNewDoradcaAssignment = updates.doradca_id &&
+      updates.doradca_id !== existingCompany?.doradca_id;
+
     const { data, error } = await supabase.from('companies').update(updates).eq('id', id).select().single();
     if (error) throw error;
     setState(prev => ({
@@ -1326,6 +1345,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       companies: prev.companies.map(c => c.id === id ? { ...c, ...data } : c),
       currentCompany: prev.currentCompany?.id === id ? { ...prev.currentCompany, ...data } : prev.currentCompany
     }));
+
+    // Trigger notification for newly assigned Doradca
+    if (isNewDoradcaAssignment && state.currentUser?.id === updates.doradca_id) {
+      triggerNotification(
+        'company_assigned',
+        'Nowa firma pod opieką',
+        `Firma "${data.name}" została przypisana pod Twoją opiekę.`,
+        `/doradca/company/${data.id}`
+      );
+    }
   };
 
   const deleteCompany = async (id: string) => {

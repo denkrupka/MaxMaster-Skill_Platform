@@ -1,21 +1,27 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  ArrowLeft, Users, Award, Clock, Search,
+  ArrowLeft, Users, Clock, Search,
   User, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp,
-  Mail, Phone, Calendar, Building2
+  Mail, Phone, Calendar, Building2, Monitor, CreditCard, X
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { UserStatus, Skill, UserSkill, SkillStatus } from '../../types';
+import { UserStatus, User as UserType, Role } from '../../types';
+import { Button } from '../../components/Button';
 
 export const DoradcaCompanyView: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
-  const { state } = useAppContext();
-  const { companies, users, skills, userSkills } = state;
+  const { state, setSimulatedRole } = useAppContext();
+  const { companies, users } = state;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<UserStatus | 'all'>('all');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
+
+  // Modal states
+  const [showCabinetModal, setShowCabinetModal] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<UserType | null>(null);
 
   // Get current company
   const company = companies.find(c => c.id === companyId);
@@ -38,17 +44,6 @@ export const DoradcaCompanyView: React.FC = () => {
     });
   }, [companyUsers, search, statusFilter]);
 
-  // Get user skills
-  const getUserSkills = (userId: string): (UserSkill & { skill: Skill })[] => {
-    return userSkills
-      .filter(us => us.user_id === userId)
-      .map(us => ({
-        ...us,
-        skill: skills.find(s => s.id === us.skill_id)!
-      }))
-      .filter(us => us.skill);
-  };
-
   // Stats
   const stats = useMemo(() => {
     const active = companyUsers.filter(u => u.status === UserStatus.ACTIVE).length;
@@ -67,15 +62,14 @@ export const DoradcaCompanyView: React.FC = () => {
     }
   };
 
-  // Get skill status color
-  const getSkillStatusColor = (status: SkillStatus): string => {
-    switch (status) {
-      case SkillStatus.CONFIRMED: return 'bg-green-100 text-green-700';
-      case SkillStatus.PRACTICE_PENDING: return 'bg-amber-100 text-amber-700';
-      case SkillStatus.THEORY_PASSED: return 'bg-blue-100 text-blue-700';
-      case SkillStatus.PENDING: return 'bg-slate-100 text-slate-600';
-      default: return 'bg-slate-100 text-slate-600';
-    }
+  // Handle opening cabinet for selected employee
+  const handleOpenCabinet = (employee: UserType) => {
+    setSelectedEmployee(employee);
+    // Simulate as employee to view their cabinet
+    // This will redirect to employee dashboard in simulation mode
+    setSimulatedRole(Role.EMPLOYEE);
+    // Close modal and navigate to employee view
+    window.location.hash = `/dashboard`;
   };
 
   if (!company) {
@@ -109,6 +103,38 @@ export const DoradcaCompanyView: React.FC = () => {
             <p className="text-slate-500">{company.industry || 'Brak branży'}</p>
           </div>
         </div>
+      </div>
+
+      {/* Action Tile-Buttons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+        <button
+          onClick={() => setShowCabinetModal(true)}
+          className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl p-6 hover:from-blue-600 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center group-hover:bg-white/30 transition-colors">
+              <Monitor className="w-6 h-6" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-lg">Zarządzanie kabinetem</h3>
+              <p className="text-sm text-blue-100">Podgląd panelu pracownika</p>
+            </div>
+          </div>
+        </button>
+        <button
+          onClick={() => setShowSubscriptionModal(true)}
+          className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl p-6 hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg hover:shadow-xl group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center group-hover:bg-white/30 transition-colors">
+              <CreditCard className="w-6 h-6" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-bold text-lg">Podpisка</h3>
+              <p className="text-sm text-emerald-100">Zarządzanie subskrypcją firmy</p>
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* Stats */}
@@ -189,9 +215,7 @@ export const DoradcaCompanyView: React.FC = () => {
         {filteredUsers.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {filteredUsers.map(user => {
-              const userSkillsList = getUserSkills(user.id);
               const isExpanded = expandedUser === user.id;
-              const confirmedSkills = userSkillsList.filter(us => us.status === SkillStatus.CONFIRMED);
 
               return (
                 <div key={user.id} className="transition-colors">
@@ -217,10 +241,6 @@ export const DoradcaCompanyView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <div className="hidden md:flex items-center gap-2">
-                        <Award className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm text-slate-600">{confirmedSkills.length} potwierdzone</span>
-                      </div>
                       {isExpanded ? (
                         <ChevronUp className="w-5 h-5 text-slate-400" />
                       ) : (
@@ -232,7 +252,7 @@ export const DoradcaCompanyView: React.FC = () => {
                   {/* Expanded Details */}
                   {isExpanded && (
                     <div className="px-4 pb-4 bg-slate-50 border-t border-slate-100">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+                      <div className="py-4">
                         {/* Contact Info */}
                         <div>
                           <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Kontakt</h4>
@@ -249,37 +269,13 @@ export const DoradcaCompanyView: React.FC = () => {
                                 <span>{user.phone}</span>
                               </div>
                             )}
-                            {user.created_at && (
+                            {user.hired_date && (
                               <div className="flex items-center gap-2 text-sm text-slate-600">
                                 <Calendar className="w-4 h-4" />
-                                <span>Od: {new Date(user.created_at).toLocaleDateString('pl-PL')}</span>
+                                <span>Od: {new Date(user.hired_date).toLocaleDateString('pl-PL')}</span>
                               </div>
                             )}
                           </div>
-                        </div>
-
-                        {/* Skills */}
-                        <div>
-                          <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Umiejętności</h4>
-                          {userSkillsList.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {userSkillsList.slice(0, 6).map(us => (
-                                <span
-                                  key={us.id}
-                                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getSkillStatusColor(us.status)}`}
-                                >
-                                  {us.skill.name}
-                                </span>
-                              ))}
-                              {userSkillsList.length > 6 && (
-                                <span className="text-xs text-slate-500 py-1">
-                                  +{userSkillsList.length - 6} więcej
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-slate-400">Brak przypisanych umiejętności</p>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -297,6 +293,135 @@ export const DoradcaCompanyView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Cabinet Management Modal */}
+      {showCabinetModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowCabinetModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Monitor className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Zarządzanie kabinetem</h2>
+                  <p className="text-sm text-slate-500">Wybierz pracownika do podglądu</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCabinetModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {companyUsers.length > 0 ? (
+                <div className="space-y-2">
+                  {companyUsers.map(emp => (
+                    <button
+                      key={emp.id}
+                      onClick={() => handleOpenCabinet(emp)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 border border-slate-100 text-left transition-colors"
+                    >
+                      <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center">
+                        <User className="w-5 h-5 text-slate-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">{emp.first_name} {emp.last_name}</p>
+                        <p className="text-sm text-slate-500">{emp.target_position || 'Brak stanowiska'}</p>
+                      </div>
+                      {getStatusIcon(emp.status)}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-slate-500 py-8">Brak pracowników w tej firmie</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Modal */}
+      {showSubscriptionModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowSubscriptionModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <CreditCard className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Subskrypcja - {company.name}</h2>
+                  <p className="text-sm text-slate-500">Informacje o płatnościach i fakturach</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSubscriptionModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Subscription Status */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Status subskrypcji</h3>
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-slate-600">Status:</span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      company.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
+                      company.subscription_status === 'trialing' ? 'bg-amber-100 text-amber-700' :
+                      company.subscription_status === 'past_due' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {company.subscription_status === 'active' ? 'Aktywna' :
+                       company.subscription_status === 'trialing' ? 'Okres próbny' :
+                       company.subscription_status === 'past_due' ? 'Zaległa płatność' :
+                       company.subscription_status === 'cancelled' ? 'Anulowana' : 'Nieznany'}
+                    </span>
+                  </div>
+                  {company.trial_ends_at && (
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-slate-600">Koniec okresu próbnego:</span>
+                      <span className="font-medium text-slate-900">
+                        {new Date(company.trial_ends_at).toLocaleDateString('pl-PL')}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Stripe Customer ID:</span>
+                    <span className="font-mono text-sm text-slate-500">
+                      {company.stripe_customer_id || 'Brak'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment History Placeholder */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Historia płatności</h3>
+                <div className="bg-slate-50 rounded-xl p-8 border border-slate-100 text-center">
+                  <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">Historia płatności zostanie pobrana z Stripe API</p>
+                  <p className="text-sm text-slate-400 mt-1">Integracja w trakcie implementacji</p>
+                </div>
+              </div>
+
+              {/* Invoices Placeholder */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Faktury</h3>
+                <div className="bg-slate-50 rounded-xl p-8 border border-slate-100 text-center">
+                  <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">Lista faktur zostanie pobrana z Stripe API</p>
+                  <p className="text-sm text-slate-400 mt-1">Integracja w trakcie implementacji</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-100 bg-slate-50">
+              <Button onClick={() => setShowSubscriptionModal(false)} className="w-full">
+                Zamknij
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

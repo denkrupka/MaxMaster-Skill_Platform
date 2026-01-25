@@ -1,15 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Building2, Users, Award, Clock, Search,
-  ChevronRight, CheckCircle
+  Building2, Search, ChevronRight
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Company, UserStatus } from '../../types';
+import { Company } from '../../types';
 
 export const DoradcaDashboard: React.FC = () => {
   const { state } = useAppContext();
-  const { companies, users } = state;
+  const { companies } = state;
 
   const [search, setSearch] = useState('');
 
@@ -21,82 +20,30 @@ export const DoradcaDashboard: React.FC = () => {
     );
   }, [companies, search]);
 
-  // Get stats for a company
-  const getCompanyStats = (company: Company) => {
-    const companyUsers = (users || []).filter(u => u.company_id === company.id);
-    const employees = companyUsers.filter(u => u.status === UserStatus.ACTIVE);
-    const trial = companyUsers.filter(u => u.status === UserStatus.TRIAL);
-    const candidates = companyUsers.filter(u => u.status === UserStatus.PENDING);
-
-    return {
-      total: companyUsers.length,
-      employees: employees.length,
-      trial: trial.length,
-      candidates: candidates.length
-    };
-  };
-
-  // Overall stats
-  const totalStats = useMemo(() => {
-    const userList = users || [];
-    const total = userList.length;
-    const employees = userList.filter(u => u.status === UserStatus.ACTIVE).length;
-    const trial = userList.filter(u => u.status === UserStatus.TRIAL).length;
-    return { total, employees, trial, companies: (companies || []).length };
-  }, [users, companies]);
+  // Overall stats - only companies count
+  const totalCompanies = useMemo(() => {
+    return (companies || []).length;
+  }, [companies]);
 
   return (
     <div className="p-4 lg:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Panel Doradcy</h1>
         <p className="text-slate-500 mt-1">
-          Przegląd firm i pracowników pod opieką konsultacyjną
+          Przegląd firm pod opieką konsultacyjną
         </p>
       </div>
 
-      {/* Global Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
+      {/* Global Stats - Only companies count */}
+      <div className="mb-6">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 inline-flex">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <Building2 className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">{totalStats.companies}</p>
+              <p className="text-2xl font-bold text-slate-900">{totalCompanies}</p>
               <p className="text-xs text-slate-500">Firm pod opieką</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{totalStats.employees}</p>
-              <p className="text-xs text-slate-500">Pracowników</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{totalStats.trial}</p>
-              <p className="text-xs text-slate-500">Okres próbny</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Award className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{totalStats.total}</p>
-              <p className="text-xs text-slate-500">Wszystkich użytkowników</p>
             </div>
           </div>
         </div>
@@ -120,44 +67,25 @@ export const DoradcaDashboard: React.FC = () => {
 
         {filteredCompanies.length > 0 ? (
           <div className="divide-y divide-slate-100">
-            {filteredCompanies.map(company => {
-              const stats = getCompanyStats(company);
-              return (
-                <Link
-                  key={company.id}
-                  to={`/doradca/company/${company.id}`}
-                  className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
-                      {company.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900">{company.name}</h3>
-                      <p className="text-sm text-slate-500">{company.industry || 'Brak branży'}</p>
-                    </div>
+            {filteredCompanies.map(company => (
+              <Link
+                key={company.id}
+                to={`/doradca/company/${company.id}`}
+                className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">
+                    {company.name.charAt(0).toUpperCase()}
                   </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-900">{company.name}</h3>
+                    <p className="text-sm text-slate-500">{company.industry || 'Brak branży'}</p>
+                  </div>
+                </div>
 
-                  <div className="flex items-center gap-6">
-                    <div className="hidden md:flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1 text-green-600">
-                        <CheckCircle className="w-4 h-4" />
-                        <span>{stats.employees} aktywnych</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-amber-600">
-                        <Clock className="w-4 h-4" />
-                        <span>{stats.trial} próbnych</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-slate-500">
-                        <Users className="w-4 h-4" />
-                        <span>{stats.total} łącznie</span>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400" />
-                  </div>
-                </Link>
-              );
-            })}
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              </Link>
+            ))}
           </div>
         ) : (
           <div className="text-center py-12">
