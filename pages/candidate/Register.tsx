@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -18,6 +18,8 @@ export const CandidateRegisterPage = () => {
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [isCheckingEmail, setIsCheckingEmail] = useState(false);
     const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [registeredEmail, setRegisteredEmail] = useState('');
 
     const [formData, setFormData] = useState({
         firstName: '',
@@ -299,7 +301,8 @@ export const CandidateRegisterPage = () => {
 
             console.log('Registration flow SUCCESS.');
             loginAsUser(finalUser);
-            navigate('/candidate/dashboard');
+            setRegisteredEmail(cleanEmail);
+            setShowSuccessModal(true);
             
         } catch (error: any) {
             console.error('=== CANDIDATE REGISTRATION FAILED ===');
@@ -402,8 +405,47 @@ export const CandidateRegisterPage = () => {
         }
     };
 
+    const handleCloseModal = () => {
+        setShowSuccessModal(false);
+        navigate('/candidate/dashboard');
+    };
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
+            {/* Success Modal */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="bg-green-600 p-6 text-center">
+                            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle size={40} className="text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-white">
+                                Dziękujemy za rejestrację!
+                            </h2>
+                        </div>
+                        <div className="p-6 text-center">
+                            <p className="text-slate-600 mb-4">
+                                Wysłaliśmy wiadomość e-mail na adres:
+                            </p>
+                            <p className="font-semibold text-slate-800 bg-slate-100 py-2 px-4 rounded-lg mb-4">
+                                {registeredEmail}
+                            </p>
+                            <p className="text-slate-600 mb-6">
+                                Proszę sprawdź swoją skrzynkę pocztową i potwierdź adres e-mail, klikając w link w wiadomości.
+                            </p>
+                            <button
+                                onClick={handleCloseModal}
+                                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                Rozumiem, przejdź dalej
+                                <ArrowRight size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden animate-in fade-in zoom-in duration-300">
                 <div className="bg-blue-600 p-6 text-center">
                     <h1 className="text-2xl font-bold text-white mb-2">
