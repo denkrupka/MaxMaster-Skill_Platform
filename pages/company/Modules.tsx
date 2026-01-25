@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Layers, Users, UserPlus, Award, Search, Check, X,
-  ToggleLeft, ToggleRight, Info, Shield
+  ToggleLeft, ToggleRight, Info, Shield, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
@@ -20,11 +20,13 @@ const MODULE_INFO: Record<string, { name: string; description: string; icon: Rea
 };
 
 export const CompanyModulesPage: React.FC = () => {
-  const { state } = useAppContext();
+  const { state, grantModuleAccess, revokeModuleAccess } = useAppContext();
   const { currentCompany, allUsers, companyModules, moduleUserAccess } = state;
 
   const [search, setSearch] = useState('');
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
+  const [loading, setLoading] = useState<string | null>(null); // tracks which user is being toggled
+  const [error, setError] = useState<string | null>(null);
 
   // Get company's active modules
   const activeModules = useMemo(() => {
@@ -73,10 +75,22 @@ export const CompanyModulesPage: React.FC = () => {
     return filteredUsers.filter(u => !hasModuleAccess(u.id, selectedModule));
   }, [filteredUsers, selectedModule, moduleUserAccess]);
 
-  // Toggle user access (placeholder - needs API integration)
-  const toggleAccess = (userId: string, moduleCode: string, currentAccess: boolean) => {
-    console.log('Toggle access:', { userId, moduleCode, newAccess: !currentAccess });
-    // TODO: Implement API call to update module_user_access
+  // Toggle user access
+  const toggleAccess = async (userId: string, moduleCode: string, currentAccess: boolean) => {
+    setLoading(userId);
+    setError(null);
+    try {
+      if (currentAccess) {
+        await revokeModuleAccess(userId, moduleCode);
+      } else {
+        await grantModuleAccess(userId, moduleCode);
+      }
+    } catch (err) {
+      console.error('Error toggling access:', err);
+      setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas zmiany dostępu');
+    } finally {
+      setLoading(null);
+    }
   };
 
   if (!currentCompany) {
@@ -210,9 +224,14 @@ export const CompanyModulesPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => toggleAccess(user.id, selectedModule, true)}
-                      className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-100 rounded-lg transition"
+                      disabled={loading === user.id}
+                      className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
                     >
-                      <ToggleRight className="w-5 h-5" />
+                      {loading === user.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <ToggleRight className="w-5 h-5" />
+                      )}
                       <span className="text-sm hidden sm:inline">Usuń dostęp</span>
                     </button>
                   </div>
@@ -249,9 +268,14 @@ export const CompanyModulesPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => toggleAccess(user.id, selectedModule, false)}
-                      className="flex items-center gap-2 px-3 py-1.5 text-green-600 hover:bg-green-100 rounded-lg transition"
+                      disabled={loading === user.id}
+                      className="flex items-center gap-2 px-3 py-1.5 text-green-600 hover:bg-green-100 rounded-lg transition disabled:opacity-50"
                     >
-                      <ToggleLeft className="w-5 h-5" />
+                      {loading === user.id ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <ToggleLeft className="w-5 h-5" />
+                      )}
                       <span className="text-sm hidden sm:inline">Nadaj dostęp</span>
                     </button>
                   </div>
@@ -261,6 +285,15 @@ export const CompanyModulesPage: React.FC = () => {
               <p className="text-sm text-slate-500 py-2">Wszyscy użytkownicy mają dostęp</p>
             )}
           </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="p-4 border-t border-slate-100">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {error}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
