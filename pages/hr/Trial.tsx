@@ -20,7 +20,10 @@ const QUALIFICATIONS_LIST = [
 
 export const HRTrialPage = () => {
     const { state, updateUser, logCandidateAction, hireCandidate, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, resetSkillProgress, assignBrigadir, triggerNotification, payReferralBonus } = useAppContext();
-    const { systemConfig, users, skills, userSkills, monthlyBonuses, currentUser, qualityIncidents, positions } = state;
+    const { systemConfig, users: allUsers, skills, userSkills, monthlyBonuses, currentUser, qualityIncidents, positions, currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
 
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [search, setSearch] = useState('');
