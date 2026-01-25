@@ -30,6 +30,7 @@ import { SalesDashboard } from './pages/sales/Dashboard';
 import { SalesPipeline } from './pages/sales/Pipeline';
 import { SalesCompanies } from './pages/sales/Companies';
 import { SalesContacts } from './pages/sales/Contacts';
+import { SalesActivities } from './pages/sales/Activities';
 
 // Doradca (Consultant) Pages
 import { DoradcaDashboard } from './pages/doradca/Dashboard';
@@ -303,6 +304,7 @@ export default function App() {
           <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesPipeline /></ProtectedRoute>} />
           <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesCompanies /></ProtectedRoute>} />
           <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesContacts /></ProtectedRoute>} />
+          <Route path="/sales/activities" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesActivities /></ProtectedRoute>} />
 
           {/* Doradca (Consultant) Routes */}
           <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaDashboard /></ProtectedRoute>} />
