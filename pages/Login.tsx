@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, AlertCircle, ExternalLink, ChevronRight } from 'lucide-react';
+import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Button } from '../components/Button';
 import { Role, UserStatus } from '../types';
@@ -119,11 +119,6 @@ export const LoginPage = () => {
             </Link>
           </div>
           
-          <div className="pt-6 text-center border-t border-slate-100 mt-6">
-              <Link to="/candidate/welcome" className="inline-flex items-center text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
-                  <ExternalLink size={14} className="mr-2"/> Strona powitalna dla kandydatów
-              </Link>
-          </div>
         </div>
       </div>
       
