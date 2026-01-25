@@ -15,7 +15,7 @@ import { supabase } from '../../lib/supabase';
 
 export const CompanySubscriptionPage: React.FC = () => {
   const { state, refreshData } = useAppContext();
-  const { currentCompany, users, companyModules, modules, moduleUserAccess } = state;
+  const { currentCompany, users, companyModules, modules, moduleUserAccess, paymentHistory: allPaymentHistory } = state;
 
   const [activeTab, setActiveTab] = useState<'modules' | 'usage' | 'history'>('modules');
   const [loading, setLoading] = useState<string | null>(null);
@@ -65,12 +65,11 @@ export const CompanySubscriptionPage: React.FC = () => {
     };
   }, [myModules, currentCompany]);
 
-  // Mock payment history (will be replaced with real Stripe data)
-  const paymentHistory = [
-    { id: '1', date: '2024-01-01', amount: 790, status: 'paid', invoice: 'FV/2024/01/001' },
-    { id: '2', date: '2023-12-01', amount: 790, status: 'paid', invoice: 'FV/2023/12/001' },
-    { id: '3', date: '2023-11-01', amount: 632, status: 'paid', invoice: 'FV/2023/11/001' },
-  ];
+  // Get payment history for current company
+  const paymentHistory = useMemo(() => {
+    if (!currentCompany) return [];
+    return allPaymentHistory.filter(ph => ph.company_id === currentCompany.id);
+  }, [allPaymentHistory, currentCompany]);
 
   // Handle Stripe checkout for module activation
   const handleActivateModule = async (moduleCode: string, maxUsers: number = 10) => {
@@ -496,28 +495,46 @@ export const CompanySubscriptionPage: React.FC = () => {
                   {paymentHistory.map(payment => (
                     <tr key={payment.id} className="hover:bg-slate-50">
                       <td className="px-5 py-4 text-sm text-slate-900">
-                        {new Date(payment.date).toLocaleDateString('pl-PL')}
+                        {payment.paid_at
+                          ? new Date(payment.paid_at).toLocaleDateString('pl-PL')
+                          : new Date(payment.created_at).toLocaleDateString('pl-PL')}
                       </td>
                       <td className="px-5 py-4 text-sm text-slate-600 font-mono">
-                        {payment.invoice}
+                        {payment.invoice_number || '-'}
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                        {payment.amount.toFixed(2)} PLN
+                        {Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}
                       </td>
                       <td className="px-5 py-4">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           payment.status === 'paid'
                             ? 'bg-green-100 text-green-800'
+                            : payment.status === 'failed'
+                            ? 'bg-red-100 text-red-800'
+                            : payment.status === 'refunded'
+                            ? 'bg-blue-100 text-blue-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {payment.status === 'paid' ? 'Opłacona' : 'Oczekująca'}
+                          {payment.status === 'paid' ? 'Opłacona'
+                            : payment.status === 'failed' ? 'Niepowodzenie'
+                            : payment.status === 'refunded' ? 'Zwrócona'
+                            : 'Oczekująca'}
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <button className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm">
-                          <Download className="w-4 h-4" />
-                          Pobierz
-                        </button>
+                        {payment.invoice_pdf_url ? (
+                          <a
+                            href={payment.invoice_pdf_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
+                          >
+                            <Download className="w-4 h-4" />
+                            Pobierz
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 text-sm">-</span>
+                        )}
                       </td>
                     </tr>
                   ))}

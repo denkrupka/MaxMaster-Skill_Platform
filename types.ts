@@ -294,6 +294,21 @@ export interface ModuleUserAccess {
   created_at: string;
 }
 
+export interface PaymentHistory {
+  id: string;
+  company_id: string;
+  stripe_invoice_id?: string;
+  stripe_payment_intent_id?: string;
+  amount: number;
+  currency: string;
+  status: 'paid' | 'failed' | 'pending' | 'refunded';
+  invoice_number?: string;
+  invoice_pdf_url?: string;
+  description?: string;
+  paid_at?: string;
+  created_at: string;
+}
+
 export interface UserSkill {
   id: string;
   user_id: string;
