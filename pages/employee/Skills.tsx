@@ -236,30 +236,30 @@ export const EmployeeSkills = () => {
     const uploadedFiles: any[] = (newDocData.files as any[]) || [];
 
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-8 pb-24">
+        <div className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6 md:space-y-8 pb-24">
             <div>
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Umiejętności i Uprawnienia</h1>
-                <p className="text-slate-500 font-medium">Zarządzaj swoją ścieżką rozwoju i stawką godzinową.</p>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase">Umiejętności i Uprawnienia</h1>
+                <p className="text-sm sm:text-base text-slate-500 font-medium">Zarządzaj swoją ścieżką rozwoju i stawką godzinową.</p>
             </div>
 
             {/* SECTION 1: CONFIRMED SKILLS */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <button onClick={() => toggleSection('confirmed')} className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 shadow-inner">
-                            <CheckCircle size={24}/>
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <button onClick={() => toggleSection('confirmed')} className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 rounded-xl sm:rounded-2xl flex items-center justify-center text-green-600 shadow-inner">
+                            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6"/>
                         </div>
                         <div className="text-left">
-                            <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Zaliczone umiejętności</h2>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <h2 className="text-sm sm:text-base md:text-lg font-black text-slate-800 uppercase tracking-tight">Zaliczone umiejętności</h2>
+                            <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">
                                 {isCoordinator ? 'Twoje potwierdzone kompetencje' : 'Bonusy doliczone do Twojej stawki'}
                             </p>
                         </div>
                     </div>
-                    {openSections.confirmed ? <ChevronUp size={24} className="text-slate-400"/> : <ChevronDown size={24} className="text-slate-400"/>}
+                    {openSections.confirmed ? <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400"/> : <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400"/>}
                 </button>
                 {openSections.confirmed && (
-                    <div className="p-6">
+                    <div className="p-3 sm:p-4 md:p-6">
                         {confirmedSkills.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {confirmedSkills.map(item => (
@@ -293,24 +293,24 @@ export const EmployeeSkills = () => {
 
             {/* SECTION 2: PRACTICES TO VERIFY */}
             {pendingPracticeSkills.length > 0 && (
-                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                    <button onClick={() => toggleSection('verification')} className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-600 shadow-inner">
-                                <CheckSquare size={24}/>
+                <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                    <button onClick={() => toggleSection('verification')} className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 rounded-xl sm:rounded-2xl flex items-center justify-center text-orange-600 shadow-inner">
+                                <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6"/>
                             </div>
                             <div className="text-left">
-                                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Praktyki do Weryfikacji</h2>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Oczekują na potwierdzenie przez przełożonego</p>
+                                <h2 className="text-sm sm:text-base md:text-lg font-black text-slate-800 uppercase tracking-tight">Praktyki do Weryfikacji</h2>
+                                <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">Oczekują na potwierdzenie przez przełożonego</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <span className="text-[11px] bg-white border border-slate-200 text-orange-600 px-2 py-0.5 rounded-lg font-black">{pendingPracticeSkills.length}</span>
-                            {openSections.verification ? <ChevronUp size={24} className="text-slate-400"/> : <ChevronDown size={24} className="text-slate-400"/>}
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <span className="text-[10px] sm:text-[11px] bg-white border border-slate-200 text-orange-600 px-1.5 sm:px-2 py-0.5 rounded-lg font-black">{pendingPracticeSkills.length}</span>
+                            {openSections.verification ? <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400"/> : <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400"/>}
                         </div>
                     </button>
                     {openSections.verification && (
-                        <div className="p-6">
+                        <div className="p-3 sm:p-4 md:p-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {pendingPracticeSkills.map(item => (
                                     <button 
@@ -344,29 +344,29 @@ export const EmployeeSkills = () => {
             )}
 
             {/* SECTION 3: SKILLS TO ACQUIRE */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 border-b border-slate-100">
-                    <button onClick={() => toggleSection('toAcquire')} className="flex items-center gap-4 flex-1 text-left">
-                        <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-inner">
-                            <Sparkles size={24}/>
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 bg-slate-50 border-b border-slate-100">
+                    <button onClick={() => toggleSection('toAcquire')} className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 text-left">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-xl sm:rounded-2xl flex items-center justify-center text-blue-600 shadow-inner">
+                            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6"/>
                         </div>
                         <div>
-                            <h2 className="text-xl font-bold text-slate-900 tracking-tight uppercase">Umiejętności do zdobycia</h2>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Wybierz kategorię i rozwiąż test</p>
+                            <h2 className="text-sm sm:text-lg md:text-xl font-bold text-slate-900 tracking-tight uppercase">Umiejętności do zdobycia</h2>
+                            <p className="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5 hidden sm:block">Wybierz kategorię i rozwiąż test</p>
                         </div>
                     </button>
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => navigate('/dashboard/tests')} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm uppercase tracking-wider">
-                            <History size={16} className="text-blue-500" /> Historia Testów
+                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                        <button onClick={() => navigate('/dashboard/tests')} className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-white border border-slate-200 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm uppercase tracking-wider flex-1 sm:flex-none">
+                            <History className="w-3 h-3 sm:w-4 sm:h-4 text-blue-500" /> <span className="hidden xs:inline">Historia</span> Testów
                         </button>
-                        <button onClick={() => toggleSection('toAcquire')} className="p-2 text-slate-400">
-                            {openSections.toAcquire ? <ChevronUp size={24}/> : <ChevronDown size={24}/>}
+                        <button onClick={() => toggleSection('toAcquire')} className="p-1.5 sm:p-2 text-slate-400">
+                            {openSections.toAcquire ? <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6"/> : <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6"/>}
                         </button>
                     </div>
                 </div>
 
                 {openSections.toAcquire && (
-                    <div className="p-6 space-y-4">
+                    <div className="p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4">
                         {Object.keys(toAcquireSkillsByCategory).length > 0 ? (
                             Object.entries(toAcquireSkillsByCategory).map(([category, skillList]) => (
                                 <div key={category} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -427,29 +427,29 @@ export const EmployeeSkills = () => {
             </div>
 
             {/* SECTION 4: DOCUMENTS */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="w-full px-6 py-5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <button onClick={() => toggleSection('documents')} className="flex items-center gap-4 flex-1 text-left">
-                        <div className="w-10 h-10 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 shadow-inner"><FileText size={24}/></div>
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <button onClick={() => toggleSection('documents')} className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 text-left">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-xl sm:rounded-2xl flex items-center justify-center text-purple-600 shadow-inner"><FileText className="w-5 h-5 sm:w-6 sm:h-6"/></div>
                         <div className="text-left">
-                            <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Dokumenty i Uprawnienia</h2>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SEP, UDT, BHP i orzeczenia lekarskie</p>
+                            <h2 className="text-sm sm:text-base md:text-lg font-black text-slate-800 uppercase tracking-tight">Dokumenty i Uprawnienia</h2>
+                            <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:block">SEP, UDT, BHP i orzeczenia lekarskie</p>
                         </div>
                     </button>
-                    <div className="flex items-center gap-3">
-                        <button 
+                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                        <button
                             onClick={(e) => { e.stopPropagation(); handleAddDocument(); }}
-                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-purple-600/20 transition-all active:scale-95"
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl flex items-center justify-center gap-1 sm:gap-2 shadow-lg shadow-purple-600/20 transition-all active:scale-95 flex-1 sm:flex-none"
                         >
-                            <Plus size={16}/> Dodaj Dokument
+                            <Plus className="w-3 h-3 sm:w-4 sm:h-4"/> Dodaj Dokument
                         </button>
-                        <button onClick={() => toggleSection('documents')} className="p-2 text-slate-400">
-                            {openSections.documents ? <ChevronUp size={24}/> : <ChevronDown size={24}/>}
+                        <button onClick={() => toggleSection('documents')} className="p-1.5 sm:p-2 text-slate-400">
+                            {openSections.documents ? <ChevronUp className="w-5 h-5 sm:w-6 sm:h-6"/> : <ChevronDown className="w-5 h-5 sm:w-6 sm:h-6"/>}
                         </button>
                     </div>
                 </div>
                 {openSections.documents && (
-                    <div className="p-6">
+                    <div className="p-3 sm:p-4 md:p-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {myDocuments.map((doc, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl hover:border-purple-300 transition-colors shadow-sm group">
@@ -488,22 +488,22 @@ export const EmployeeSkills = () => {
 
             {/* --- REDESIGNED BEAUTIFUL COMPACT DOCUMENT MODAL --- */}
             {isDocModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[24px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-[24px] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
                         {/* Header */}
-                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
-                                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase flex items-center gap-2">
-                                    <FileText className="text-blue-600" size={20}/> Dodaj Dokument
+                                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase flex items-center gap-2">
+                                    <FileText className="text-blue-600 w-4 h-4 sm:w-5 sm:h-5"/> Dodaj Dokument
                                 </h3>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Certyfikaty, uprawnienia i orzeczenia</p>
+                                <p className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 hidden sm:block">Certyfikaty, uprawnienia i orzeczenia</p>
                             </div>
                             <button onClick={() => setIsDocModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 hover:bg-white rounded-full shadow-sm">
-                                <X size={18} />
+                                <X className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                         </div>
-                        
-                        <div className="p-6 space-y-4">
+
+                        <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                             {/* Typ dokumentu */}
                             <div className="space-y-1">
                                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
@@ -569,7 +569,7 @@ export const EmployeeSkills = () => {
                             </div>
 
                             {/* Daty Grid - Native click triggered by type="date" */}
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="space-y-1">
                                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-0.5 flex items-center gap-1.5">
                                         <Calendar size={10} className="text-blue-500"/> WYDANO
@@ -611,17 +611,17 @@ export const EmployeeSkills = () => {
                         </div>
 
                         {/* Footer - Compressed */}
-                        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                            <button onClick={() => setIsDocModalOpen(false)} className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">
+                        <div className="px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
+                            <button onClick={() => setIsDocModalOpen(false)} className="flex-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors py-2 sm:py-0">
                                 Anuluj
                             </button>
-                            <Button 
-                                onClick={handleSaveDocument} 
+                            <Button
+                                onClick={handleSaveDocument}
                                 /* Fixed: cast files to any[] for length check to resolve 'unknown' type error */
                                 disabled={!newDocData.typeId || ((uploadedFiles as any[]).length === 0 && !editingDocId) || isSaving}
-                                className="flex-[2] h-11 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 text-xs"
+                                className="flex-[2] h-10 sm:h-11 rounded-lg sm:rounded-xl font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 text-[10px] sm:text-xs"
                             >
-                                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16}/>}
+                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4"/>}
                                 {editingDocId ? 'ZAKTUALIZUJ' : 'ZAPISZ'}
                             </Button>
                         </div>

@@ -205,18 +205,19 @@ export const HRDocumentsPage = () => {
     }
 
     return (
-        <div className="p-6 max-w-7xl mx-auto" onClick={() => setStatusPopoverDocId(null)}>
-             <h1 className="text-2xl font-bold text-slate-900 mb-6">Dokumenty do sprawdzenia</h1>
+        <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto" onClick={() => setStatusPopoverDocId(null)}>
+             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">Dokumenty do sprawdzenia</h1>
              
              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[600px]">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-4">Pracownik</th>
-                            <th className="px-6 py-4">Dokument</th>
-                            <th className="px-6 py-4">Bonus</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4 text-right">Akcje</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Pracownik</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Dokument</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Bonus</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Status</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">Akcje</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -229,7 +230,7 @@ export const HRDocumentsPage = () => {
 
                             return (
                                 <tr key={doc.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleEditDocument(doc.id)}>
-                                    <td className="px-6 py-4 font-medium">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 font-medium">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">
                                                 {user ? user.first_name[0] + user.last_name[0] : '?'}
@@ -240,25 +241,25 @@ export const HRDocumentsPage = () => {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
                                         <div className="flex items-center gap-2">
-                                            <FileText size={16} className="text-slate-400"/>
-                                            <span>{displayName}</span>
+                                            <FileText size={16} className="text-slate-400 hidden sm:block"/>
+                                            <span className="truncate max-w-[120px] sm:max-w-none">{displayName}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
                                         {bonus > 0 ? (
                                             <span className="text-green-600 font-bold">+{bonus} zł/h</span>
                                         ) : (
                                             <span className="text-slate-400">0 zł/h</span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 relative" onClick={(e) => { e.stopPropagation(); setStatusPopoverDocId(doc.id); }}>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 relative" onClick={(e) => { e.stopPropagation(); setStatusPopoverDocId(doc.id); }}>
                                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase cursor-pointer hover:opacity-80 bg-blue-100 text-blue-700`}>
                                             {SKILL_STATUS_LABELS[doc.status]}
                                         </span>
                                         {statusPopoverDocId === doc.id && (
-                                            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-[9999] flex flex-col py-1">
+                                            <div className="absolute top-full left-0 sm:left-0 right-0 sm:right-auto mt-1 w-full sm:w-48 bg-white border border-slate-200 shadow-xl rounded-lg z-[9999] flex flex-col py-1">
                                                 <button className="text-left px-3 py-2 text-xs hover:bg-green-50 text-green-700 font-medium flex items-center gap-2" onClick={() => handleDocStatusChange(doc.id, SkillStatus.CONFIRMED)}>
                                                     <CheckCircle size={14}/> Zatwierdź
                                                 </button>
@@ -268,7 +269,7 @@ export const HRDocumentsPage = () => {
                                             </div>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); openFileViewer(doc); }}
@@ -298,13 +299,14 @@ export const HRDocumentsPage = () => {
                         })}
                         {pendingDocs.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                <td colSpan={5} className="px-3 sm:px-6 py-8 sm:py-12 text-center text-slate-400">
                                     Brak dokumentów oczekujących na sprawdzenie.
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
+                </div>
              </div>
 
              {renderDocumentModal()}

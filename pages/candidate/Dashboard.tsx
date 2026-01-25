@@ -503,16 +503,16 @@ export const CandidateDashboard = () => {
         }
 
         return (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={closeModal}>
-                <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50">
-                        <h3 className="text-xl font-bold text-slate-900">{title}</h3>
-                        <button onClick={closeModal} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200" onClick={closeModal}>
+                <div className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[95vh]" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100 bg-slate-50">
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900">{title}</h3>
+                        <button onClick={closeModal} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
                     </div>
-                    <div className="p-6 overflow-y-auto">
+                    <div className="p-4 sm:p-6 overflow-y-auto">
                         {content}
                     </div>
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                    <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
                         <Button onClick={closeModal}>Zamknij</Button>
                     </div>
                 </div>
@@ -523,15 +523,15 @@ export const CandidateDashboard = () => {
     const renderQualModal = () => {
         if (!isQualModalOpen) return null;
         return (
-            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4" onClick={() => setIsQualModalOpen(false)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-between items-center p-6 border-b border-slate-100">
-                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                            <Shield size={24} className="text-purple-600"/> Uprawnienia
+            <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-2 sm:p-4" onClick={() => setIsQualModalOpen(false)}>
+                <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center p-4 sm:p-6 border-b border-slate-100">
+                        <h3 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600"/> Uprawnienia
                         </h3>
-                        <button onClick={() => setIsQualModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+                        <button onClick={() => setIsQualModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5 sm:w-6 sm:h-6" /></button>
                     </div>
-                    <div className="p-6">
+                    <div className="p-4 sm:p-6">
                         <p className="text-sm text-slate-500 mb-4">Zaznacz posiadane uprawnienia, aby zwiększyć swoją stawkę.</p>
                         <div className="space-y-2">
                             {QUALIFICATIONS_LIST.map(q => {
@@ -562,7 +562,7 @@ export const CandidateDashboard = () => {
                             <span>Dokumenty potwierdzające wybrane uprawnienia będziesz musiał dostarczyć na etapie podpisywania umowy.</span>
                         </div>
                     </div>
-                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                    <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
                         <Button onClick={() => setIsQualModalOpen(false)}>Zatwierdź</Button>
                     </div>
                 </div>
@@ -573,12 +573,12 @@ export const CandidateDashboard = () => {
     // --- VIEW: POST-TEST DASHBOARD ---
     if (isPostTestStage) {
         return (
-            <div className="min-h-screen bg-slate-50 p-6 pb-24" onClick={() => setIsContractPopoverOpen(false)}>
-                <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    
+            <div className="min-h-screen bg-slate-50 p-3 sm:p-4 md:p-6 pb-24" onClick={() => setIsContractPopoverOpen(false)}>
+                <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
                     {/* Header */}
                     <div className="text-center md:text-left">
-                        <h1 className="text-2xl font-bold text-slate-900 mb-2">
+                        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
                             {currentUser.status === UserStatus.NOT_INTERESTED ? 'Dziękujemy za Twój czas' : `Cześć, ${currentUser.first_name}`}
                         </h1>
                         <p className="text-slate-500">
@@ -636,7 +636,7 @@ export const CandidateDashboard = () => {
                     )}
 
                     {/* 1. Salary Simulation Block (Reused Formula) */}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
                         {/* BAZA */}
                         <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                             <div>
@@ -836,26 +836,28 @@ export const CandidateDashboard = () => {
                                         </div>
                                     </div>
 
-                                    <table className="w-full text-left text-sm">
+                                    <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm min-w-[400px]">
                                         <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
                                             <tr>
-                                                <th className="px-6 py-4">Wariant</th>
-                                                <th className="px-6 py-4">Godziny</th>
-                                                <th className="px-6 py-4 text-right">Wypłata Netto</th>
+                                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">Wariant</th>
+                                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm">Godziny</th>
+                                                <th className="px-3 sm:px-6 py-3 sm:py-4 text-right text-xs sm:text-sm">Wypłata Netto</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
                                             {monthlySimulations.map((sim, index) => (
                                                 <tr key={index} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-4 font-medium text-slate-800">{sim.label}</td>
-                                                    <td className="px-6 py-4 text-slate-500">{sim.hours} h</td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <span className="text-xl font-bold text-green-600">{sim.amount.toLocaleString()} zł</span>
+                                                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium text-slate-800 text-xs sm:text-sm">{sim.label}</td>
+                                                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 text-xs sm:text-sm">{sim.hours} h</td>
+                                                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
+                                                        <span className="text-base sm:text-xl font-bold text-green-600">{sim.amount.toLocaleString()} zł</span>
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1027,10 +1029,11 @@ export const CandidateDashboard = () => {
 
                     {/* 3. Results Table */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                            <h3 className="font-bold text-slate-800">Twoje Wyniki</h3>
+                        <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-slate-100 bg-slate-50">
+                            <h3 className="font-bold text-slate-800 text-sm sm:text-base">Twoje Wyniki</h3>
                         </div>
-                        <table className="w-full text-left text-sm">
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm min-w-[500px]">
                             <thead className="bg-white text-slate-500 font-medium border-b border-slate-100">
                                 <tr>
                                     <th className="px-6 py-4">Umiejętność</th>
@@ -1078,6 +1081,7 @@ export const CandidateDashboard = () => {
                                 )}
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                 </div>
@@ -1088,8 +1092,8 @@ export const CandidateDashboard = () => {
 
     // --- VIEW: PRE-TEST DASHBOARD (Existing) ---
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-8" onClick={() => setIsContractPopoverOpen(false)}>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6 md:space-y-8" onClick={() => setIsContractPopoverOpen(false)}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
                 <InfoTile type="about" label="O MaxMaster" icon={Building} colorClass="bg-blue-100 text-blue-600"/>
                 <InfoTile type="conditions" label="Warunki Pracy" icon={Briefcase} colorClass="bg-green-100 text-green-600"/>
                 <InfoTile type="salary" label="System Wynagrodzeń" icon={Coins} colorClass="bg-yellow-100 text-yellow-600"/>

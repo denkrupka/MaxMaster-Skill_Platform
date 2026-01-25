@@ -379,25 +379,25 @@ export const EmployeeDashboard = () => {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto space-y-8 pb-24">
-            
+        <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6 md:space-y-8 pb-24">
+
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Panel Pracownika</h1>
-                    <p className="text-slate-500">Witaj, {currentUser.first_name}. Twoje finanse i zadania.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Panel Pracownika</h1>
+                    <p className="text-sm sm:text-base text-slate-500">Witaj, {currentUser.first_name}. Twoje finanse i zadania.</p>
                 </div>
-                
+
                 {/* Contact Buttons */}
-                <div className="flex gap-3">
+                <div className="flex gap-2 sm:gap-3 flex-wrap">
                     {/* New Coordinator Button for regular Employee */}
                     {currentUser.role === Role.EMPLOYEE && (
-                        <button 
+                        <button
                             onClick={() => setShowContactModal({type: 'coordinator', user: coordinator})}
-                            className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                            className="bg-white px-2 sm:px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2 sm:gap-3 hover:bg-slate-50 transition-colors"
                         >
-                            <div className="bg-orange-100 p-2 rounded-full text-orange-600">
-                                <HardHat size={18} />
+                            <div className="bg-orange-100 p-1.5 sm:p-2 rounded-full text-orange-600">
+                                <HardHat className="w-4 h-4 sm:w-5 sm:h-5" />
                             </div>
                             <div className="text-left hidden sm:block">
                                 <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój Koordynator</span>
@@ -406,12 +406,12 @@ export const EmployeeDashboard = () => {
                         </button>
                     )}
 
-                    <button 
+                    <button
                         onClick={() => setShowContactModal({type: 'brigadir', user: brigadir})}
-                        className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                        className="bg-white px-2 sm:px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2 sm:gap-3 hover:bg-slate-50 transition-colors"
                     >
-                        <div className="bg-blue-100 p-2 rounded-full text-blue-600">
-                            <User size={18} />
+                        <div className="bg-blue-100 p-1.5 sm:p-2 rounded-full text-blue-600">
+                            <User className="w-4 h-4 sm:w-5 sm:h-5" />
                         </div>
                         <div className="text-left hidden sm:block">
                             <span className="block text-slate-500 text-[10px] uppercase font-bold">
@@ -421,12 +421,12 @@ export const EmployeeDashboard = () => {
                         </div>
                     </button>
 
-                    <button 
+                    <button
                         onClick={() => setShowContactModal({type: 'hr', user: hrContact})}
-                        className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                        className="bg-white px-2 sm:px-4 py-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2 sm:gap-3 hover:bg-slate-50 transition-colors"
                     >
-                        <div className="bg-purple-100 p-2 rounded-full text-purple-600">
-                            <Briefcase size={18} />
+                        <div className="bg-purple-100 p-1.5 sm:p-2 rounded-full text-purple-600">
+                            <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" />
                         </div>
                         <div className="text-left hidden sm:block">
                             <span className="block text-slate-500 text-[10px] uppercase font-bold">Twój HR</span>
@@ -438,11 +438,11 @@ export const EmployeeDashboard = () => {
 
             {/* BADGES SECTION */}
             {myBadges.length > 0 && (
-                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-4 rounded-xl border border-yellow-200 shadow-sm animate-in fade-in slide-in-from-top-4">
-                    <h3 className="font-bold text-yellow-800 mb-3 flex items-center gap-2">
-                        <Star className="fill-yellow-500 text-yellow-600"/> Twoje Wyróżnienia (Ostatnie)
+                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-3 sm:p-4 rounded-xl border border-yellow-200 shadow-sm animate-in fade-in slide-in-from-top-4">
+                    <h3 className="font-bold text-yellow-800 mb-2 sm:mb-3 flex items-center gap-2 text-sm sm:text-base">
+                        <Star className="fill-yellow-500 text-yellow-600 w-4 h-4 sm:w-5 sm:h-5"/> Twoje Wyróżnienia (Ostatnie)
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                         {myBadges.map(badge => (
                             <div key={badge.id} className="bg-white p-3 rounded-lg shadow-sm border border-yellow-100">
                                 <div className="flex justify-between items-start">
@@ -460,10 +460,10 @@ export const EmployeeDashboard = () => {
             )}
 
             {/* SECTIONS A & B: RATES */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+
                 {/* SECTION A: CURRENT RATE */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between relative overflow-hidden group hover:border-blue-300 transition-colors">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden group hover:border-blue-300 transition-colors">
                     <div className="flex justify-between items-start z-10">
                         <div>
                             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wide flex items-center gap-2">
@@ -472,9 +472,9 @@ export const EmployeeDashboard = () => {
                             <span className="text-xs text-slate-400 font-medium">Bieżący miesiąc ({currentMonthName})</span>
                         </div>
                     </div>
-                    <div className="mt-4 z-10">
-                        <div className="text-4xl font-bold text-slate-900">
-                            {currentTotalRate.toFixed(2)} zł<span className="text-lg font-normal text-slate-400">/h</span>
+                    <div className="mt-3 sm:mt-4 z-10">
+                        <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">
+                            {currentTotalRate.toFixed(2)} zł<span className="text-base sm:text-lg font-normal text-slate-400">/h</span>
                         </div>
                         <button 
                             onClick={() => setBreakdownType('current')}
@@ -486,7 +486,7 @@ export const EmployeeDashboard = () => {
                 </div>
 
                 {/* SECTION B: PROJECTED RATE */}
-                <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-6 flex flex-col justify-between relative overflow-hidden text-white">
+                <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden text-white">
                     <div className="absolute top-0 right-0 p-6 opacity-10">
                         <TrendingUp size={120} />
                     </div>
@@ -498,9 +498,9 @@ export const EmployeeDashboard = () => {
                             <span className="text-xs text-slate-400 font-medium">Od 1. {nextMonthName}</span>
                         </div>
                     </div>
-                    <div className="mt-4 z-10">
-                        <div className="text-4xl font-bold">
-                            {nextMonthTotalRate.toFixed(2)} zł<span className="text-lg font-normal text-slate-400">/h</span>
+                    <div className="mt-3 sm:mt-4 z-10">
+                        <div className="text-2xl sm:text-3xl md:text-4xl font-bold">
+                            {nextMonthTotalRate.toFixed(2)} zł<span className="text-base sm:text-lg font-normal text-slate-400">/h</span>
                         </div>
                         <button 
                             onClick={() => setBreakdownType('potential')}
@@ -518,39 +518,40 @@ export const EmployeeDashboard = () => {
 
             {/* QUALITY WARNINGS SECTION (Collapsible) */}
             <div className={`bg-white rounded-xl shadow-sm border transition-all overflow-hidden ${affectedSkills.length > 0 ? 'border-red-200' : 'border-slate-200'}`}>
-                <button 
+                <button
                     onClick={() => setIsQualityOpen(!isQualityOpen)}
-                    className={`w-full px-6 py-4 flex items-center justify-between transition-colors ${affectedSkills.length > 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}
+                    className={`w-full px-3 sm:px-4 md:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors ${affectedSkills.length > 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}
                 >
-                    <h3 className={`font-bold text-sm uppercase tracking-wide flex items-center gap-2 ${affectedSkills.length > 0 ? 'text-red-800' : 'text-slate-800'}`}>
-                        <AlertTriangle size={18} className={affectedSkills.length > 0 ? 'text-red-500' : 'text-slate-400'}/> 
-                        Jakość i Błędy (Bieżący miesiąc)
+                    <h3 className={`font-bold text-xs sm:text-sm uppercase tracking-wide flex items-center gap-2 ${affectedSkills.length > 0 ? 'text-red-800' : 'text-slate-800'}`}>
+                        <AlertTriangle className={`w-4 h-4 sm:w-5 sm:h-5 ${affectedSkills.length > 0 ? 'text-red-500' : 'text-slate-400'}`}/>
+                        <span className="hidden sm:inline">Jakość i Błędy (Bieżący miesiąc)</span>
+                        <span className="sm:hidden">Jakość</span>
                     </h3>
-                    <div className="flex items-center gap-3">
-                        {affectedSkills.length > 0 && <span className="text-xs font-bold bg-white text-red-600 px-2 py-1 rounded-full border border-red-200">{affectedSkills.length} uwag</span>}
-                        {isQualityOpen ? <ChevronUp size={20} className="text-slate-400"/> : <ChevronDown size={20} className="text-slate-400"/>}
+                    <div className="flex items-center gap-2 sm:gap-3">
+                        {affectedSkills.length > 0 && <span className="text-[10px] sm:text-xs font-bold bg-white text-red-600 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full border border-red-200">{affectedSkills.length} uwag</span>}
+                        {isQualityOpen ? <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400"/> : <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400"/>}
                     </div>
                 </button>
                 
                 {isQualityOpen && (
                     <div className="divide-y divide-slate-100">
                         {affectedSkills.length > 0 ? affectedSkills.map((item, idx) => (
-                            <div 
-                                key={idx} 
-                                className="p-4 px-6 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors"
+                            <div
+                                key={idx}
+                                className="p-3 sm:p-4 px-3 sm:px-4 md:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 hover:bg-slate-50 cursor-pointer transition-colors"
                                 onClick={() => setSelectedQualitySkillId(item!.skill.id)}
                             >
                                 <div>
-                                    <span className="font-medium text-slate-800 block">{item!.skill.name_pl}</span>
-                                    <span className="text-xs text-slate-500">Ostatnie zgłoszenie: {new Date(item!.incidents[0].date).toLocaleDateString()}</span>
+                                    <span className="font-medium text-slate-800 block text-sm sm:text-base">{item!.skill.name_pl}</span>
+                                    <span className="text-[10px] sm:text-xs text-slate-500">Ostatnie zgłoszenie: {new Date(item!.incidents[0].date).toLocaleDateString()}</span>
                                 </div>
                                 {item!.isBlocked ? (
-                                    <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full border border-red-200 flex items-center gap-1">
-                                        <Lock size={12}/> Dodatek Zablokowany do końca miesiąca
+                                    <span className="bg-red-100 text-red-700 text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 rounded-full border border-red-200 flex items-center gap-1 w-fit">
+                                        <Lock className="w-3 h-3"/> <span className="hidden sm:inline">Dodatek Zablokowany do końca miesiąca</span><span className="sm:hidden">Zablokowany</span>
                                     </span>
                                 ) : (
-                                    <span className="bg-yellow-100 text-yellow-800 text-xs font-bold px-3 py-1 rounded-full border border-yellow-200 flex items-center gap-1">
-                                        <AlertTriangle size={12}/> 1. Ostrzeżenie
+                                    <span className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 rounded-full border border-yellow-200 flex items-center gap-1 w-fit">
+                                        <AlertTriangle className="w-3 h-3"/> 1. Ostrzeżenie
                                     </span>
                                 )}
                             </div>
@@ -565,12 +566,12 @@ export const EmployeeDashboard = () => {
 
             {/* SECTION D: TASKS (Filtered) */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wide">Twoje Zadania</h3>
+                <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-800 text-xs sm:text-sm uppercase tracking-wide">Twoje Zadania</h3>
                 </div>
                 <div className="divide-y divide-slate-100">
                     {tasks.length > 0 ? tasks.map((task, idx) => (
-                        <div key={idx} className={`p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition-colors ${task.isLocked ? 'bg-red-50/50' : ''}`}>
+                        <div key={idx} className={`p-3 sm:p-4 px-3 sm:px-4 md:px-6 flex items-center justify-between hover:bg-slate-50 transition-colors ${task.isLocked ? 'bg-red-50/50' : ''}`}>
                             <div className="flex items-center gap-3">
                                 {task.type === 'practice' && <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><CheckCircle size={18}/></div>}
                                 {task.type === 'test' && (

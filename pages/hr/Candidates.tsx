@@ -1105,32 +1105,32 @@ export const HRCandidatesPage = () => {
 
     const renderList = () => (
         <div className="animate-in fade-in duration-500">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 sm:mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Zarządzanie Kandydatami</h1>
-                    <p className="text-slate-500">Przegląd i procesowanie nowych aplikacji.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Zarządzanie Kandydatami</h1>
+                    <p className="text-sm text-slate-500">Przegląd i procesowanie nowych aplikacji.</p>
                 </div>
-                <div className="flex gap-2">
-                    <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm mr-2">
-                        <button 
-                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                    <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm">
+                        <button
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setViewMode('active')}
                         >
                             Aktywni
                         </button>
-                        <button 
-                            className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'archived' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                        <button
+                            className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'archived' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
                             onClick={() => setViewMode('archived')}
                         >
                             Odrzuceni
                         </button>
                     </div>
-                    <div className="flex gap-3">
-                        <Button variant="outline" onClick={generateInvitationLink}>
-                            <Link2 size={18} className="mr-2"/> Wyślij zaproszenie
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={generateInvitationLink} className="flex-1 sm:flex-none">
+                            <Link2 size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Wyślij zaproszenie</span><span className="sm:hidden">Zaproś</span>
                         </Button>
-                        <Button onClick={() => setIsSelectionModalOpen(true)}>
-                            <UserPlus size={18} className="mr-2"/> Dodaj Kandydata
+                        <Button onClick={() => setIsSelectionModalOpen(true)} className="flex-1 sm:flex-none">
+                            <UserPlus size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Dodaj Kandydata</span><span className="sm:hidden">Dodaj</span>
                         </Button>
                     </div>
                 </div>
@@ -1163,14 +1163,15 @@ export const HRCandidatesPage = () => {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[600px]">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-4">Kandydat</th>
-                            <th className="px-6 py-4">Stanowisko</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4">Źródło</th>
-                            <th className="px-6 py-4 text-right">Akcje</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Kandydat</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Stanowisko</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Status</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 hidden sm:table-cell">Źródło</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">Akcje</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1225,26 +1226,26 @@ export const HRCandidatesPage = () => {
 
                             return (
                                 <tr key={candidate.id} className="hover:bg-slate-50 cursor-pointer transition-colors group" onClick={() => setSelectedCandidate(candidate)}>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
+                                        <div className="flex items-center gap-2 sm:gap-3">
+                                            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
                                                 {candidate.first_name[0]}{candidate.last_name[0]}
                                             </div>
-                                            <div>
-                                                <div className="font-bold text-slate-900">{candidate.first_name} {candidate.last_name}</div>
-                                                <div className="text-[10px] text-slate-400 font-medium">{candidate.email}</div>
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-slate-900 truncate">{candidate.first_name} {candidate.last_name}</div>
+                                                <div className="text-[10px] text-slate-400 font-medium truncate max-w-[150px]">{candidate.email}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-slate-600 font-medium">{candidate.target_position || '-'}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm ${CANDIDATE_DISPLAY_COLORS[candidate.status] || 'bg-slate-100 text-slate-600'}`}>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-slate-600 font-medium text-xs sm:text-sm">{candidate.target_position || '-'}</td>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
+                                        <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-widest border shadow-sm ${CANDIDATE_DISPLAY_COLORS[candidate.status] || 'bg-slate-100 text-slate-600'}`}>
                                             {CANDIDATE_DISPLAY_LABELS[candidate.status] || candidate.status.toUpperCase()}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-slate-500">{candidate.source || '-'}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-3">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-slate-500 hidden sm:table-cell text-sm">{candidate.source || '-'}</td>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">
+                                        <div className="flex items-center justify-end gap-2 sm:gap-3">
                                             <span className="font-black text-slate-900 text-xs">{total} zł/h</span>
                                             <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 inline transition-all transform group-hover:translate-x-1"/>
                                         </div>
@@ -1254,11 +1255,12 @@ export const HRCandidatesPage = () => {
                         })}
                         {filteredCandidates.length === 0 && (
                             <tr>
-                                <td colSpan={5} className="p-12 text-center text-slate-400 italic font-medium">Brak kandydatów spełniających kryteria.</td>
+                                <td colSpan={5} className="p-6 sm:p-12 text-center text-slate-400 italic font-medium">Brak kandydatów spełniających kryteria.</td>
                             </tr>
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     );
@@ -1266,12 +1268,12 @@ export const HRCandidatesPage = () => {
     const renderSelectionModal = () => {
         if (!isSelectionModalOpen) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSelectionModalOpen(false)}>
-                <div className="bg-white rounded-[32px] shadow-2xl max-w-xl w-full p-10 animate-in zoom-in duration-300 text-center" onClick={e => e.stopPropagation()}>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">DODAJ KANDYDATA</h2>
-                    <p className="text-slate-500 font-medium mb-10">Wybierz sposób wprowadzenia danych do systemu.</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsSelectionModalOpen(false)}>
+                <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-xl w-full p-6 sm:p-10 animate-in zoom-in duration-300 text-center max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-2 uppercase">DODAJ KANDYDATA</h2>
+                    <p className="text-sm sm:text-base text-slate-500 font-medium mb-6 sm:mb-10">Wybierz sposób wprowadzenia danych do systemu.</p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                         <button 
                             onClick={() => { setIsSelectionModalOpen(false); setIsAddModalOpen(true); }}
                             className="flex flex-col items-center gap-4 p-8 bg-slate-50 hover:bg-blue-600 hover:text-white rounded-[32px] border border-slate-100 transition-all group shadow-sm hover:shadow-xl hover:shadow-blue-200"
@@ -1303,27 +1305,27 @@ export const HRCandidatesPage = () => {
     const renderAddModal = () => {
         if (!isAddModalOpen) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">NOWY KANDYDAT</h2>
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300 max-h-[95vh]">
+                    <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight uppercase">NOWY KANDYDAT</h2>
                         <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-white rounded-full"><X size={24}/></button>
                     </div>
-                    <form onSubmit={handleAddCandidateSubmit} className="p-8 space-y-6">
-                        <div className="grid grid-cols-2 gap-6">
+                    <form onSubmit={handleAddCandidateSubmit} className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 overflow-y-auto">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">IMIĘ</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.first_name} onChange={e => setNewCandidateData({...newCandidateData, first_name: e.target.value})}/></div>
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.last_name} onChange={e => setNewCandidateData({...newCandidateData, last_name: e.target.value})}/></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label><input type="email" required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.email} onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})}/></div>
-                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.phone} onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})}/></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label><input type="email" required className="w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.email} onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})}/></div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label><input required className="w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.phone} onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})}/></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.target_position} onChange={e => setNewCandidateData({...newCandidateData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ŹRÓDŁO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.source} onChange={e => setNewCandidateData({...newCandidateData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                         </div>
                         <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PLIK CV (PDF/DOC)</label><div className="border-2 border-dashed border-slate-200 p-4 rounded-xl flex items-center justify-center bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-400 transition-all" onClick={() => fileInputRef.current?.click()}><input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={e => setNewCandidateData({...newCandidateData, cvFile: e.target.files?.[0] || null})}/><span className="text-xs font-bold text-slate-400">{newCandidateData.cvFile ? newCandidateData.cvFile.name : 'WYBIERZ PLIK...'}</span></div></div>
-                        <div className="pt-6 flex justify-end gap-3"><button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">Anuluj</button><Button type="submit" disabled={isSubmitting} className="px-10 h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">UTWÓRZ KANDYDATA</Button></div>
+                        <div className="pt-4 sm:pt-6 flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">Anuluj</button><Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto px-6 sm:px-10 h-11 sm:h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">UTWÓRZ KANDYDATA</Button></div>
                     </form>
                 </div>
             </div>
@@ -1333,23 +1335,23 @@ export const HRCandidatesPage = () => {
     const renderEditBasicModal = () => {
         if (!isEditBasicModalOpen || !selectedCandidate) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full p-8 animate-in zoom-in duration-300">
-                    <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4"><h2 className="text-xl font-black uppercase tracking-tight">Edytuj dane kandydata</h2><button onClick={() => setIsEditBasicModalOpen(false)} className="p-1 hover:bg-slate-50 rounded-full text-slate-300"><X size={24}/></button></div>
-                    <form onSubmit={handleEditBasicSubmit} className="space-y-6">
-                        <div className="grid grid-cols-2 gap-6">
+            <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-2xl w-full p-4 sm:p-6 md:p-8 animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
+                    <div className="flex justify-between items-center mb-6 sm:mb-8 border-b border-slate-100 pb-4"><h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">Edytuj dane kandydata</h2><button onClick={() => setIsEditBasicModalOpen(false)} className="p-1 hover:bg-slate-50 rounded-full text-slate-300"><X size={24}/></button></div>
+                    <form onSubmit={handleEditBasicSubmit} className="space-y-4 sm:space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Imię</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.first_name} onChange={e => setEditBasicData({...editBasicData, first_name: e.target.value})}/></div>
                             <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Nazwisko</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.last_name} onChange={e => setEditBasicData({...editBasicData, last_name: e.target.value})}/></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label><input type="email" required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.email} onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})}/></div>
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Telefon</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.phone} onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})}/></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label><input type="email" required className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.email} onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})}/></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Telefon</label><input required className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.phone} onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})}/></div>
                         </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Stanowisko</label><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.target_position} onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Źródło</label><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.source} onChange={e => setEditBasicData({...editBasicData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Stanowisko</label><select className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.target_position} onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Źródło</label><select className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.source} onChange={e => setEditBasicData({...editBasicData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                         </div>
-                        <div className="pt-6 border-t flex justify-end gap-3"><button type="button" onClick={() => setIsEditBasicModalOpen(false)} className="px-6 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button type="submit" disabled={isSubmitting}>ZAPISZ ZMIANY</Button></div>
+                        <div className="pt-4 sm:pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsEditBasicModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">ZAPISZ ZMIANY</Button></div>
                     </form>
                 </div>
             </div>
@@ -1359,18 +1361,18 @@ export const HRCandidatesPage = () => {
     const renderTrialModal = () => {
         if (!isTrialModalOpen || !selectedCandidate) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-[32px] shadow-2xl max-md w-full p-8 animate-in zoom-in duration-300">
-                    <h3 className="text-xl font-black uppercase tracking-tight mb-2">ZATRUDNIENIE (OKRES PRÓBNY)</h3>
-                    <p className="text-sm text-slate-500 mb-8">Rozpoczęcie okresu próbnego dla kandydata <strong>{selectedCandidate.first_name} {selectedCandidate.last_name}</strong>.</p>
-                    <div className="space-y-5">
-                        <div className="grid grid-cols-2 gap-4">
+            <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-md w-full p-4 sm:p-6 md:p-8 animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
+                    <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">ZATRUDNIENIE (OKRES PRÓBNY)</h3>
+                    <p className="text-sm text-slate-500 mb-6 sm:mb-8">Rozpoczęcie okresu próbnego dla kandydata <strong>{selectedCandidate.first_name} {selectedCandidate.last_name}</strong>.</p>
+                    <div className="space-y-4 sm:space-y-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">START PRACY</label><input type="date" className="w-full border p-2 rounded-xl text-sm" value={trialDates.start} onChange={e => setTrialDates({...trialDates, start: e.target.value})}/></div>
                             <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">KONIEC PRÓBY</label><input type="date" className="w-full border p-2 rounded-xl text-sm" value={trialDates.end} onChange={e => setTrialDates({...trialDates, end: e.target.value})}/></div>
                         </div>
                         <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">BRYGADZISTA PROWADZĄCY *</label><select required className="w-full border p-2 rounded-xl text-sm appearance-none bg-slate-50" value={trialDates.brigadirId} onChange={e => setTrialDates({...trialDates, brigadirId: e.target.value})}><option value="">Wybierz brygadzistę...</option>{brigadirsList.map(b => <option key={b.id} value={b.id}>{b.first_name} {b.last_name}</option>)}</select></div>
                     </div>
-                    <div className="pt-8 flex gap-3"><button onClick={() => setIsTrialModalOpen(false)} className="flex-1 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button onClick={confirmTrialHiring} className="flex-[2] h-12 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 text-white font-black">ROZPOCZNIJ OKRES PRÓBNY</Button></div>
+                    <div className="pt-6 sm:pt-8 flex flex-col-reverse sm:flex-row gap-3"><button onClick={() => setIsTrialModalOpen(false)} className="flex-1 text-[10px] font-black uppercase text-slate-400 py-2">Anuluj</button><Button onClick={confirmTrialHiring} className="flex-[2] h-11 sm:h-12 rounded-xl shadow-lg bg-green-600 hover:bg-green-700 text-white font-black">ROZPOCZNIJ OKRES PRÓBNY</Button></div>
                 </div>
             </div>
         );
@@ -1379,8 +1381,8 @@ export const HRCandidatesPage = () => {
     const renderDocModal = () => {
         if (!isDocModalOpen) return null;
         return (
-            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="bg-white rounded-[32px] shadow-2xl max-md w-full p-8 animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-md w-full p-4 sm:p-6 md:p-8 animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                     <h3 className="text-xl font-black uppercase tracking-tight mb-6">DODAJ DOKUMENT KANDYDATA</h3>
                     <div className="space-y-4">
                         <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">TYP DOKUMENTU</label><select className="w-full border p-2 rounded-xl text-sm" value={newDocData.typeId} onChange={e => setNewDocData({...newDocData, typeId: e.target.value})}><option value="">Wybierz...</option>{BONUS_DOCUMENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}<option value="other">Inny...</option></select></div>
