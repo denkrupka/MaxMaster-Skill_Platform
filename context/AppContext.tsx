@@ -802,8 +802,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY';
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token || supabaseKey;
+    // Get current session token with timeout
+    console.log('AppContext: getting session for insert...');
+    let accessToken = supabaseKey;
+    try {
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getSession timed out')), 5000)
+      );
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as Awaited<typeof sessionPromise>;
+      accessToken = session?.access_token || supabaseKey;
+      console.log('AppContext: got session token for insert');
+    } catch (sessionErr) {
+      console.warn('AppContext: getSession failed for insert, using anon key:', sessionErr);
+    }
 
     console.log('AppContext: starting insert fetch request...');
 
@@ -880,9 +892,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY';
 
-    // Get current session token
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token || supabaseKey;
+    // Get current session token with timeout
+    console.log('AppContext: getting session...');
+    let accessToken = supabaseKey;
+    try {
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getSession timed out')), 5000)
+      );
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as Awaited<typeof sessionPromise>;
+      accessToken = session?.access_token || supabaseKey;
+      console.log('AppContext: got session token');
+    } catch (sessionErr) {
+      console.warn('AppContext: getSession failed, using anon key:', sessionErr);
+      // Continue with anon key
+    }
 
     console.log('AppContext: starting fetch request...');
 
