@@ -831,9 +831,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     console.log('AppContext: update data (transformed):', dbData);
 
-    const { error } = await supabase.from('library_resources').update(dbData).eq('id', id);
-    console.log('AppContext: update result - error:', error);
-    if (error) throw error;
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const { error } = await supabase
+        .from('library_resources')
+        .update(dbData)
+        .eq('id', id)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
+      console.log('AppContext: update result - error:', error);
+      if (error) throw error;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        console.error('AppContext: update timed out after 15s');
+        throw new Error('Update timed out');
+      }
+      throw err;
+    }
 
     // Update local state with the changes we sent
     setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? { ...r, ...res } : r) }));
