@@ -8,7 +8,7 @@ import {
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
   QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
   Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory,
-  Company, Module, CompanyModule, ModuleUserAccess,
+  Company, Module, CompanyModule, ModuleUserAccess, PaymentHistory,
   CRMCompany, CRMContact, CRMDeal, CRMActivity, DealStage
 } from '../types';
 
@@ -37,6 +37,7 @@ interface AppState {
   modules: Module[];
   companyModules: CompanyModule[];
   moduleUserAccess: ModuleUserAccess[];
+  paymentHistory: PaymentHistory[];
 
   // CRM data (Sales module)
   crmCompanies: CRMCompany[];
@@ -183,6 +184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     modules: [],
     companyModules: [],
     moduleUserAccess: [],
+    paymentHistory: [],
 
     // CRM data
     crmCompanies: [],
@@ -216,6 +218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { data: modules },
         { data: companyModules },
         { data: moduleUserAccess },
+        { data: paymentHistory },
         { data: crmCompanies },
         { data: crmContacts },
         { data: crmDeals },
@@ -237,6 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('modules').select('*').order('display_order'),
         supabase.from('company_modules').select('*'),
         supabase.from('module_user_access').select('*'),
+        supabase.from('payment_history').select('*').order('paid_at', { ascending: false }),
         supabase.from('crm_companies').select('*').order('created_at', { ascending: false }),
         supabase.from('crm_contacts').select('*').order('created_at', { ascending: false }),
         supabase.from('crm_deals').select('*').order('created_at', { ascending: false }),
@@ -264,6 +268,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         modules: modules || [],
         companyModules: companyModules || [],
         moduleUserAccess: moduleUserAccess || [],
+        paymentHistory: paymentHistory || [],
         crmCompanies: crmCompanies || [],
         crmContacts: crmContacts || [],
         crmDeals: crmDeals || [],
