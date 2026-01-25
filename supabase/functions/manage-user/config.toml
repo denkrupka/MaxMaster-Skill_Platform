@@ -1,0 +1,3 @@
+# Disable built-in JWT verification since we verify the token manually
+# inside the function to check if the requesting user is an admin
+verify_jwt = false
