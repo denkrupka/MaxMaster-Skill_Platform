@@ -17,19 +17,21 @@ export const DoradcaCompanies: React.FC = () => {
   // In multi-company setup, doradca can see companies they're assigned to
   // For SuperAdmin simulating doradca role, show all companies
   const accessibleCompanies = useMemo(() => {
+    const companyList = companies || [];
+
     if (currentUser?.role === Role.SUPERADMIN) {
       // SuperAdmin in doradca mode sees all companies
-      return companies;
+      return companyList;
     }
 
     if (currentUser?.is_global_user) {
       // Global doradca sees all companies
-      return companies;
+      return companyList;
     }
 
     // Regular doradca sees only their assigned company
     if (currentUser?.company_id) {
-      return companies.filter(c => c.id === currentUser.company_id);
+      return companyList.filter(c => c.id === currentUser.company_id);
     }
 
     return [];
@@ -54,12 +56,12 @@ export const DoradcaCompanies: React.FC = () => {
 
   // Get user count for company
   const getCompanyUserCount = (companyId: string) => {
-    return users.filter(u => u.company_id === companyId).length;
+    return (users || []).filter(u => u.company_id === companyId).length;
   };
 
   // Get employee count for company
   const getCompanyEmployeeCount = (companyId: string) => {
-    return users.filter(u =>
+    return (users || []).filter(u =>
       u.company_id === companyId &&
       (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR)
     ).length;
