@@ -990,22 +990,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateUserWithPassword = async (userId: string, updates: any, password?: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
-
-    if (!accessToken) {
-      throw new Error('No active session. Please log in.');
-    }
-
-    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
-    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': SUPABASE_ANON_KEY
-      },
-      body: JSON.stringify({
+    const { data, error } = await supabase.functions.invoke('manage-user', {
+      body: {
         action: 'updateUser',
         userId,
         email: updates.email,
@@ -1014,13 +1000,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         phone: updates.phone,
         role: updates.role,
         password
-      })
+      }
     });
 
-    const result = await response.json();
+    if (error) {
+      throw new Error(error.message || 'Failed to update user');
+    }
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || 'Failed to update user');
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to update user');
     }
 
     // Refresh local data
@@ -1028,31 +1016,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteUserCompletely = async (userId: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const accessToken = session?.access_token;
-
-    if (!accessToken) {
-      throw new Error('No active session. Please log in.');
-    }
-
-    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
-    const response = await fetch(`${supabaseUrl}/functions/v1/manage-user`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-        'apikey': SUPABASE_ANON_KEY
-      },
-      body: JSON.stringify({
+    const { data, error } = await supabase.functions.invoke('manage-user', {
+      body: {
         action: 'deleteUser',
         userId
-      })
+      }
     });
 
-    const result = await response.json();
+    if (error) {
+      throw new Error(error.message || 'Failed to delete user');
+    }
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || 'Failed to delete user');
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to delete user');
     }
 
     // Update local state
