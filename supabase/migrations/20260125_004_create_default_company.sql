@@ -23,16 +23,14 @@ INSERT INTO companies (
   NOW()
 ) ON CONFLICT (slug) DO NOTHING;
 
--- Migrate existing users to default company
+-- Migrate existing users to default company (all users for now)
 UPDATE users
 SET company_id = '00000000-0000-0000-0000-000000000001'
-WHERE company_id IS NULL AND role NOT IN ('superadmin', 'sales', 'doradca');
+WHERE company_id IS NULL;
 
--- Mark existing admin as superadmin (global user)
+-- Mark existing admin as global user (will update role separately after enum is updated)
 UPDATE users
-SET
-  is_global_user = TRUE,
-  role = 'superadmin'
+SET is_global_user = TRUE
 WHERE role = 'admin';
 
 -- Set company_id for all related tables
