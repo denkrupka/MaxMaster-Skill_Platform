@@ -31,6 +31,11 @@ import { SalesPipeline } from './pages/sales/Pipeline';
 import { SalesCompanies } from './pages/sales/Companies';
 import { SalesContacts } from './pages/sales/Contacts';
 
+// Doradca (Consultant) Pages
+import { DoradcaDashboard } from './pages/doradca/Dashboard';
+import { DoradcaCompanyView } from './pages/doradca/CompanyView';
+import { DoradcaSkills } from './pages/doradca/Skills';
+
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
 import { HREmployeesPage } from './pages/hr/Employees';
@@ -110,6 +115,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
     if (state.currentUser.role === Role.SALES) {
         return <Navigate to="/sales/dashboard" replace />;
+    }
+    if (state.currentUser.role === Role.DORADCA) {
+        return <Navigate to="/doradca/dashboard" replace />;
     }
     if (state.currentUser.role === Role.CANDIDATE) {
         return <Navigate to="/candidate/dashboard" replace />;
@@ -295,6 +303,12 @@ export default function App() {
           <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesPipeline /></ProtectedRoute>} />
           <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesCompanies /></ProtectedRoute>} />
           <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesContacts /></ProtectedRoute>} />
+
+          {/* Doradca (Consultant) Routes */}
+          <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaDashboard /></ProtectedRoute>} />
+          <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaCompanyView /></ProtectedRoute>} />
+          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaSkills /></ProtectedRoute>} />
+          <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><EmployeeLibrary /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
