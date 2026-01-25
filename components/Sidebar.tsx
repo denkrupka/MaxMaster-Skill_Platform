@@ -5,7 +5,7 @@ import {
   Users, CheckSquare, Award, DollarSign, BookOpen, X,
   LogOut, Layers, UserPlus, Settings,
   FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network,
-  Building2, Target, UserCheck
+  Building2, Target, UserCheck, Headphones
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -76,7 +76,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Admin Firmy</p>
                  <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
-                 <NavItem to="/company/subscription" icon={Layers} label="Subskrypcja" />
+                 <NavItem to="/company/modules" icon={Layers} label="Moduły" />
+                 <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
                  <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
                </>
             )}
@@ -87,9 +88,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Sales CRM</p>
                  <NavItem to="/sales/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/sales/pipeline" icon={Target} label="Pipeline" />
+                 <NavItem to="/sales/activities" icon={CheckSquare} label="Aktywności" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/sales/companies" icon={Building2} label="Firmy" />
                  <NavItem to="/sales/contacts" icon={UserCheck} label="Kontakty (LPR)" />
+               </>
+            )}
+
+            {/* --- DORADCA (CONSULTANT) VIEW --- */}
+            {currentUser?.role === Role.DORADCA && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Doradca</p>
+                 <NavItem to="/doradca/dashboard" icon={LayoutDashboard} label="Panel Doradcy" />
+                 <NavItem to="/doradca/skills" icon={Award} label="Przegląd umiejętności" />
+                 <NavItem to="/doradca/library" icon={BookOpen} label="Biblioteka" />
                </>
             )}
 

@@ -110,6 +110,10 @@ interface AppContextType {
   switchCompany: (companyId: string) => Promise<void>;
   getCompanyUsers: (companyId: string) => User[];
   isGlobalUser: () => boolean;
+
+  // Module access methods
+  grantModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
+  revokeModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1322,6 +1326,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return state.currentUser?.is_global_user === true;
   };
 
+  // Module access management
+  const grantModuleAccess = async (userId: string, moduleCode: string) => {
+    const user = state.users.find(u => u.id === userId);
+    if (!user?.company_id) throw new Error('User has no company');
+
+    // Check if access record already exists
+    const existing = state.moduleUserAccess.find(
+      mua => mua.user_id === userId && mua.module_code === moduleCode
+    );
+
+    if (existing) {
+      // Update existing record
+      const { data, error } = await supabase
+        .from('module_user_access')
+        .update({ is_enabled: true, enabled_at: new Date().toISOString(), disabled_at: null })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setState(prev => ({
+        ...prev,
+        moduleUserAccess: prev.moduleUserAccess.map(mua =>
+          mua.id === existing.id ? { ...mua, ...data } : mua
+        )
+      }));
+    } else {
+      // Create new access record
+      const { data, error } = await supabase
+        .from('module_user_access')
+        .insert([{
+          company_id: user.company_id,
+          user_id: userId,
+          module_code: moduleCode,
+          is_enabled: true,
+          enabled_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setState(prev => ({
+        ...prev,
+        moduleUserAccess: [...prev.moduleUserAccess, data]
+      }));
+    }
+
+    // Update company module user count
+    const companyModule = state.companyModules.find(
+      cm => cm.company_id === user.company_id && cm.module_code === moduleCode
+    );
+    if (companyModule) {
+      const newCount = state.moduleUserAccess.filter(
+        mua => mua.module_code === moduleCode &&
+               state.users.find(u => u.id === mua.user_id)?.company_id === user.company_id &&
+               mua.is_enabled
+      ).length + 1;
+
+      await supabase
+        .from('company_modules')
+        .update({ current_users: newCount })
+        .eq('id', companyModule.id);
+    }
+  };
+
+  const revokeModuleAccess = async (userId: string, moduleCode: string) => {
+    const existing = state.moduleUserAccess.find(
+      mua => mua.user_id === userId && mua.module_code === moduleCode
+    );
+
+    if (!existing) return;
+
+    const { data, error } = await supabase
+      .from('module_user_access')
+      .update({ is_enabled: false, disabled_at: new Date().toISOString() })
+      .eq('id', existing.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    setState(prev => ({
+      ...prev,
+      moduleUserAccess: prev.moduleUserAccess.map(mua =>
+        mua.id === existing.id ? { ...mua, ...data } : mua
+      )
+    }));
+
+    // Update company module user count
+    const user = state.users.find(u => u.id === userId);
+    if (user?.company_id) {
+      const companyModule = state.companyModules.find(
+        cm => cm.company_id === user.company_id && cm.module_code === moduleCode
+      );
+      if (companyModule) {
+        const newCount = Math.max(0, state.moduleUserAccess.filter(
+          mua => mua.module_code === moduleCode &&
+                 state.users.find(u => u.id === mua.user_id)?.company_id === user.company_id &&
+                 mua.is_enabled &&
+                 mua.id !== existing.id
+        ).length);
+
+        await supabase
+          .from('company_modules')
+          .update({ current_users: newCount })
+          .eq('id', companyModule.id);
+      }
+    }
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -1386,7 +1499,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     unblockCompany,
     switchCompany,
     getCompanyUsers,
-    isGlobalUser
+    isGlobalUser,
+
+    // Module access
+    grantModuleAccess,
+    revokeModuleAccess
   };
 
   return (

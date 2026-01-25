@@ -24,12 +24,20 @@ import { CompanyDashboard } from './pages/company/Dashboard';
 import { CompanyUsersPage } from './pages/company/Users';
 import { CompanySubscriptionPage } from './pages/company/Subscription';
 import { CompanySettingsPage } from './pages/company/Settings';
+import { CompanyModulesPage } from './pages/company/Modules';
 
 // Sales Pages
 import { SalesDashboard } from './pages/sales/Dashboard';
 import { SalesPipeline } from './pages/sales/Pipeline';
 import { SalesCompanies } from './pages/sales/Companies';
 import { SalesContacts } from './pages/sales/Contacts';
+import { SalesActivities } from './pages/sales/Activities';
+
+// Doradca (Consultant) Pages
+import { DoradcaDashboard } from './pages/doradca/Dashboard';
+import { DoradcaCompanyView } from './pages/doradca/CompanyView';
+import { DoradcaSkills } from './pages/doradca/Skills';
+import { DoradcaLibrary } from './pages/doradca/Library';
 
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
@@ -110,6 +118,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
     if (state.currentUser.role === Role.SALES) {
         return <Navigate to="/sales/dashboard" replace />;
+    }
+    if (state.currentUser.role === Role.DORADCA) {
+        return <Navigate to="/doradca/dashboard" replace />;
     }
     if (state.currentUser.role === Role.CANDIDATE) {
         return <Navigate to="/candidate/dashboard" replace />;
@@ -287,6 +298,7 @@ export default function App() {
           {/* Company Admin Routes */}
           <Route path="/company/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyDashboard /></ProtectedRoute>} />
           <Route path="/company/users" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyUsersPage /></ProtectedRoute>} />
+          <Route path="/company/modules" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyModulesPage /></ProtectedRoute>} />
           <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
           <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
 
@@ -295,6 +307,13 @@ export default function App() {
           <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesPipeline /></ProtectedRoute>} />
           <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesCompanies /></ProtectedRoute>} />
           <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesContacts /></ProtectedRoute>} />
+          <Route path="/sales/activities" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesActivities /></ProtectedRoute>} />
+
+          {/* Doradca (Consultant) Routes */}
+          <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaDashboard /></ProtectedRoute>} />
+          <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaCompanyView /></ProtectedRoute>} />
+          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaSkills /></ProtectedRoute>} />
+          <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaLibrary /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
