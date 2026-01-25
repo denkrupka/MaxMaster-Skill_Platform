@@ -11,7 +11,7 @@ export const DoradcaCompanies: React.FC = () => {
   const { companies, users, currentUser } = state;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked' | 'inactive'>('all');
 
   // Filter companies that doradca can manage
   // In multi-company setup, doradca can see companies they're assigned to
@@ -47,8 +47,9 @@ export const DoradcaCompanies: React.FC = () => {
 
       // Status filter
       const matchesStatus = statusFilter === 'all' ||
-        (statusFilter === 'active' && !company.is_blocked) ||
-        (statusFilter === 'blocked' && company.is_blocked);
+        (statusFilter === 'active' && !company.is_blocked && company.status === 'active') ||
+        (statusFilter === 'blocked' && company.is_blocked) ||
+        (statusFilter === 'inactive' && !company.is_blocked && company.status !== 'active');
 
       return matchesSearch && matchesStatus;
     });
@@ -118,6 +119,7 @@ export const DoradcaCompanies: React.FC = () => {
           >
             <option value="all">Wszystkie statusy</option>
             <option value="active">Aktywne</option>
+            <option value="inactive">Nieaktywne</option>
             <option value="blocked">Zablokowane</option>
           </select>
         </div>

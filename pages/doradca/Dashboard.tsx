@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Building2, Users, Award, TrendingUp, Clock, Search,
-  ChevronRight, AlertTriangle, CheckCircle, BookOpen
+  Building2, Users, Award, Clock, Search,
+  ChevronRight, CheckCircle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Company, UserStatus } from '../../types';
@@ -169,36 +169,6 @@ export const DoradcaDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <Link
-          to="/doradca/skills"
-          className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4"
-        >
-          <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-            <Award className="w-6 h-6 text-purple-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-slate-900">Przegląd umiejętności</h3>
-            <p className="text-sm text-slate-500">Analiza kompetencji we wszystkich firmach</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 ml-auto" />
-        </Link>
-
-        <Link
-          to="/doradca/library"
-          className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all flex items-center gap-4"
-        >
-          <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-            <BookOpen className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-slate-900">Biblioteka materiałów</h3>
-            <p className="text-sm text-slate-500">Dokumenty i materiały szkoleniowe</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-400 ml-auto" />
-        </Link>
-      </div>
     </div>
   );
 };

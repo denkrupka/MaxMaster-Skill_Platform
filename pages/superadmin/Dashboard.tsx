@@ -1,15 +1,15 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Users, Building2, Award, BookOpen, Settings, TrendingUp,
-  CheckCircle, Clock, AlertTriangle, DollarSign
+  Users, Building2, Settings,
+  CheckCircle, Clock, AlertTriangle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
 
 export const SuperAdminDashboard: React.FC = () => {
   const { state } = useAppContext();
-  const { users, companies, skills, libraryResources } = state;
+  const { users, companies } = state;
 
   // Statistics
   const totalUsers = users.length;
@@ -72,7 +72,7 @@ export const SuperAdminDashboard: React.FC = () => {
       </div>
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <StatCard
           title="Użytkownicy"
           value={totalUsers}
@@ -86,20 +86,6 @@ export const SuperAdminDashboard: React.FC = () => {
           icon={Building2}
           color="bg-purple-500"
           link="/superadmin/companies"
-        />
-        <StatCard
-          title="Umiejętności"
-          value={skills.length}
-          icon={Award}
-          color="bg-green-500"
-          link="/superadmin/skills"
-        />
-        <StatCard
-          title="Zasoby biblioteki"
-          value={libraryResources.length}
-          icon={BookOpen}
-          color="bg-amber-500"
-          link="/superadmin/library"
         />
       </div>
 
@@ -181,7 +167,7 @@ export const SuperAdminDashboard: React.FC = () => {
       {/* Quick Actions */}
       <div className="bg-white rounded-xl p-6 border border-slate-200">
         <h3 className="font-semibold text-slate-800 mb-4">Szybkie akcje</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Link
             to="/superadmin/users"
             className="flex items-center space-x-3 p-4 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
@@ -195,13 +181,6 @@ export const SuperAdminDashboard: React.FC = () => {
           >
             <Building2 size={20} className="text-purple-500" />
             <span className="text-sm font-medium text-slate-700">Dodaj firmę</span>
-          </Link>
-          <Link
-            to="/superadmin/skills"
-            className="flex items-center space-x-3 p-4 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-          >
-            <Award size={20} className="text-green-500" />
-            <span className="text-sm font-medium text-slate-700">Zarządzaj umiejętnościami</span>
           </Link>
           <Link
             to="/superadmin/settings"
