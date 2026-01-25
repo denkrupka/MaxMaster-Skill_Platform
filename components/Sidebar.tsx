@@ -67,6 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Super Admin</p>
                  <NavItem to="/superadmin/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/superadmin/companies" icon={Briefcase} label="Firmy" />
+                 <div className="my-2 border-t border-slate-100"></div>
+                 <NavItem to="/superadmin/settings" icon={Settings} label="Ustawienia" />
                </>
             )}
 
@@ -90,7 +92,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/sales/pipeline" icon={Target} label="Pipeline" />
                  <NavItem to="/sales/activities" icon={CheckSquare} label="Aktywności" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/sales/companies" icon={Building2} label="Firmy" />
+                 <NavItem to="/sales/clients" icon={Headphones} label="Klienci (Zniżki)" />
+                 <NavItem to="/sales/companies" icon={Building2} label="Firmy (CRM)" />
                  <NavItem to="/sales/contacts" icon={UserCheck} label="Kontakty (LPR)" />
                </>
             )}
