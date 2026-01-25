@@ -12,13 +12,17 @@ import { calculateSalary } from '../../services/salaryService';
 
 export const HRReportsPage = () => {
     const { state } = useAppContext();
-    const { systemConfig } = state;
+    const { systemConfig, currentCompany } = state;
     const [tab, setTab] = useState<'rates' | 'skills' | 'recruitment' | 'turnover'>('rates');
-    
+
+    // Filter users by company_id for multi-tenant isolation
+    const companyUsers = useMemo(() => state.users.filter(u => u.company_id === currentCompany?.id), [state.users, currentCompany]);
+    const companyUserIds = useMemo(() => new Set(companyUsers.map(u => u.id)), [companyUsers]);
+
     // --- DATA PROCESSING ---
 
     // 1. Rates Data (Active Employees & Trial)
-    const ratesRawData = state.users
+    const ratesRawData = companyUsers
         .filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && (u.status === UserStatus.ACTIVE || u.status === UserStatus.TRIAL))
         .map(u => {
             const defaultBonus: MonthlyBonus = { 
@@ -36,7 +40,7 @@ export const HRReportsPage = () => {
             const totalRate = salary.total + contractBonus;
 
             const skillCount = state.userSkills.filter(us => us.user_id === u.id && us.status === SkillStatus.CONFIRMED).length;
-            const brigadir = state.users.find(b => b.id === u.assigned_brigadir_id);
+            const brigadir = companyUsers.find(b => b.id === u.assigned_brigadir_id);
             return { ...u, totalRate, skillCount, brigadirName: brigadir ? `${brigadir.first_name} ${brigadir.last_name}` : '-' };
         });
 
@@ -52,12 +56,12 @@ export const HRReportsPage = () => {
             .map(rate => ({ rate: `${rate} zł`, count: counts[rate] }));
     }, [ratesRawData]);
 
-    // 2. Skills Coverage Data
+    // 2. Skills Coverage Data (filtered by company users)
     const skillsData = state.skills.map(s => {
-        // "Zaliczona Praktyka" = CONFIRMED
-        const confirmed = state.userSkills.filter(us => us.skill_id === s.id && us.status === SkillStatus.CONFIRMED).length;
-        // "Zaliczony Test" = THEORY_PASSED
-        const theory = state.userSkills.filter(us => us.skill_id === s.id && us.status === SkillStatus.THEORY_PASSED).length;
+        // "Zaliczona Praktyka" = CONFIRMED (only for company users)
+        const confirmed = state.userSkills.filter(us => companyUserIds.has(us.user_id) && us.skill_id === s.id && us.status === SkillStatus.CONFIRMED).length;
+        // "Zaliczony Test" = THEORY_PASSED (only for company users)
+        const theory = state.userSkills.filter(us => companyUserIds.has(us.user_id) && us.skill_id === s.id && us.status === SkillStatus.THEORY_PASSED).length;
         return { name: s.name_pl, confirmed, theory };
     });
 
@@ -65,17 +69,17 @@ export const HRReportsPage = () => {
     const recruitmentData = useMemo(() => {
         // Group 1: Kandydaci (New / In Progress)
         // Statuses: INVITED, STARTED, TESTS_IN_PROGRESS
-        const candidatesNew = state.users.filter(u => u.role === Role.CANDIDATE && (
-            u.status === UserStatus.INVITED || 
-            u.status === UserStatus.STARTED || 
+        const candidatesNew = companyUsers.filter(u => u.role === Role.CANDIDATE && (
+            u.status === UserStatus.INVITED ||
+            u.status === UserStatus.STARTED ||
             u.status === UserStatus.TESTS_IN_PROGRESS
         )).length;
 
         // Group 2: Kandydaci (Qualified / Advanced)
         // Statuses: TESTS_COMPLETED, INTERESTED, OFFER_SENT, DATA_REQUESTED, DATA_SUBMITTED
-        const candidatesPassed = state.users.filter(u => u.role === Role.CANDIDATE && (
-            u.status === UserStatus.TESTS_COMPLETED || 
-            u.status === UserStatus.INTERESTED || 
+        const candidatesPassed = companyUsers.filter(u => u.role === Role.CANDIDATE && (
+            u.status === UserStatus.TESTS_COMPLETED ||
+            u.status === UserStatus.INTERESTED ||
             u.status === UserStatus.OFFER_SENT ||
             u.status === UserStatus.DATA_REQUESTED ||
             u.status === UserStatus.DATA_SUBMITTED
@@ -83,37 +87,37 @@ export const HRReportsPage = () => {
 
         // Group 3: Okres Próbny
         // Statuses: TRIAL
-        const trialActive = state.users.filter(u => u.status === UserStatus.TRIAL).length;
-        
+        const trialActive = companyUsers.filter(u => u.status === UserStatus.TRIAL).length;
+
         // Trial Rejected / Candidate Rejected
-        const rejectedCount = state.users.filter(u => u.status === UserStatus.REJECTED || u.status === UserStatus.PORTAL_BLOCKED).length; 
+        const rejectedCount = companyUsers.filter(u => u.status === UserStatus.REJECTED || u.status === UserStatus.PORTAL_BLOCKED).length;
 
         // Group 4: Zatrudnieni
         // Statuses: ACTIVE
-        const employeesActive = state.users.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.ACTIVE).length;
-        
+        const employeesActive = companyUsers.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.ACTIVE).length;
+
         // Group 5: Zwolnieni
         // Statuses: INACTIVE
-        const employeesFired = state.users.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.INACTIVE).length;
+        const employeesFired = companyUsers.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.INACTIVE).length;
 
         return [
-            { 
-                category: 'Kandydaci', 
+            {
+                category: 'Kandydaci',
                 val1: candidatesNew, label1: 'W procesie', fill1: '#60a5fa', // Blue
                 val2: candidatesPassed, label2: 'Zakwalifikowani', fill2: '#34d399' // Green
             },
-            { 
-                category: 'Okres Próbny', 
+            {
+                category: 'Okres Próbny',
                 val1: trialActive, label1: 'W trakcie', fill1: '#fbbf24', // Amber
                 val2: rejectedCount, label2: 'Odrzuceni', fill2: '#f87171' // Red
             },
-            { 
-                category: 'Zatrudnienie', 
+            {
+                category: 'Zatrudnienie',
                 val1: employeesActive, label1: 'Obecni', fill1: '#3b82f6', // Dark Blue
                 val2: employeesFired, label2: 'Byli pracownicy', fill2: '#94a3b8' // Slate
             }
         ];
-    }, [state.users]);
+    }, [companyUsers]);
 
     // 4. Turnover Data (REAL DATA)
     
@@ -121,47 +125,47 @@ export const HRReportsPage = () => {
     const turnoverRateData = useMemo(() => {
         const last6Months = [];
         const today = new Date();
-        
+
         for (let i = 5; i >= 0; i--) {
             const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
             const monthLabel = d.toLocaleString('pl-PL', { month: 'short' });
-            
+
             // Start and end of that month
             const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
             const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0);
 
             // Active users at the start of that month (approximate based on hired_date and termination_date)
             // A user was active if hired before endOfMonth AND (not terminated OR terminated after startOfMonth)
-            const activeCount = state.users.filter(u => {
+            const activeCount = companyUsers.filter(u => {
                 const hired = new Date(u.hired_date);
                 const terminated = u.termination_date ? new Date(u.termination_date) : null;
-                
+
                 const hiredBeforeEndOfMonth = hired <= endOfMonth;
                 const notTerminatedYet = !terminated || terminated >= startOfMonth;
-                
+
                 return (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && hiredBeforeEndOfMonth && notTerminatedYet;
             }).length;
 
             // Terminated during this month
-            const terminatedCount = state.users.filter(u => {
+            const terminatedCount = companyUsers.filter(u => {
                 if (!u.termination_date) return false;
                 const termDate = new Date(u.termination_date);
-                return (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && 
+                return (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) &&
                        termDate >= startOfMonth && termDate <= endOfMonth;
             }).length;
 
             // Simplified Turnover Rate: (Terminated / Active) * 100
             // Guard against division by zero
             const rate = activeCount > 0 ? (terminatedCount / activeCount) * 100 : 0;
-            
+
             last6Months.push({ month: monthLabel, rate: Number(rate.toFixed(1)) });
         }
         return last6Months;
-    }, [state.users]);
-    
+    }, [companyUsers]);
+
     // Voluntary vs Involuntary (Real Data)
     const voluntaryData = useMemo(() => {
-        const terminatedUsers = state.users.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.INACTIVE);
+        const terminatedUsers = companyUsers.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.INACTIVE);
         
         const voluntaryCount = terminatedUsers.filter(u => u.termination_initiator === 'employee').length;
         const involuntaryCount = terminatedUsers.filter(u => u.termination_initiator === 'company').length;

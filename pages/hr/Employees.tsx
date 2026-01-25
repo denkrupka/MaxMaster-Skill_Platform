@@ -12,7 +12,10 @@ import { uploadDocument } from '../../lib/supabase';
 
 export const HREmployeesPage = () => {
     const { state, updateUser, logCandidateAction, addCandidateDocument, updateCandidateDocumentDetails, archiveCandidateDocument, restoreCandidateDocument, updateUserSkillStatus, resetSkillProgress, assignBrigadir, triggerNotification, addEmployeeNote, deleteEmployeeNote, payReferralBonus } = useAppContext();
-    const { systemConfig, currentUser, users, skills, userSkills, monthlyBonuses, qualityIncidents, employeeNotes, employeeBadges, positions } = state;
+    const { systemConfig, currentUser, users: allUsers, skills, userSkills, monthlyBonuses, qualityIncidents, employeeNotes, employeeBadges, positions, currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
     const navigate = useNavigate();
 
     const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);

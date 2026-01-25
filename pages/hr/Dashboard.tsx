@@ -10,50 +10,58 @@ export const HRDashboard = () => {
     const { state } = useAppContext();
     const navigate = useNavigate();
     const [selectedItem, setSelectedItem] = useState<any | null>(null);
-    
+    const { currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const companyUsers = state.users.filter(u => u.company_id === currentCompany?.id);
+
     // 1. Kandydaci (Active candidates, not rejected)
-    const candidatesCount = state.users.filter(u => u.role === Role.CANDIDATE && u.status !== UserStatus.REJECTED && u.status !== UserStatus.PORTAL_BLOCKED).length;
-    
+    const candidatesCount = companyUsers.filter(u => u.role === Role.CANDIDATE && u.status !== UserStatus.REJECTED && u.status !== UserStatus.PORTAL_BLOCKED).length;
+
     // 2. Okres Próbny (Trial status)
-    const trialCount = state.users.filter(u => u.status === UserStatus.TRIAL).length;
-    
+    const trialCount = companyUsers.filter(u => u.status === UserStatus.TRIAL).length;
+
     // 3. Pracownicy (Employees + Brigadirs, Active ONLY)
-    const employeesCount = state.users.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.ACTIVE).length;
-    
-    // 4. Dokumenty (Pending)
+    const employeesCount = companyUsers.filter(u => (u.role === Role.EMPLOYEE || u.role === Role.BRIGADIR) && u.status === UserStatus.ACTIVE).length;
+
+    // 4. Dokumenty (Pending) - filter by company users
+    const companyUserIds = new Set(companyUsers.map(u => u.id));
     const pendingDocs = state.userSkills.filter(us => {
+        if (!companyUserIds.has(us.user_id)) return false;
         const skill = state.skills.find(s => s.id === us.skill_id);
         // Robust document identification
-        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || 
-                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || 
-                      !!us.custom_type || 
+        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) ||
+                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) ||
+                      !!us.custom_type ||
                       !us.skill_id;
         return isDoc && us.status === SkillStatus.PENDING && !us.is_archived;
     }).length;
 
     // --- MERGED FEED: History + Notifications ---
-    
-    // 1. Map History Items
-    const historyItems = state.candidateHistory.map(h => {
-        const user = state.users.find(u => u.id === h.candidate_id);
-        const userName = user ? `${user.first_name} ${user.last_name}` : 'Użytkownik';
-        
-        let performedByLabel = userName;
-        if (h.performed_by === 'System') performedByLabel = 'System';
-        else if (h.performed_by === 'HR') performedByLabel = 'HR Manager';
-        else if (h.performed_by === 'Kandydat') performedByLabel = userName;
 
-        return {
-            id: h.id,
-            type: 'history',
-            title: h.action,
-            subtitle: `Wykonał: ${performedByLabel}`,
-            message: h.action, // For modal
-            date: h.created_at,
-            icon: Activity,
-            colorClass: 'text-slate-400'
-        };
-    });
+    // 1. Map History Items (filtered by company users)
+    const historyItems = state.candidateHistory
+        .filter(h => companyUserIds.has(h.candidate_id))
+        .map(h => {
+            const user = companyUsers.find(u => u.id === h.candidate_id);
+            const userName = user ? `${user.first_name} ${user.last_name}` : 'Użytkownik';
+
+            let performedByLabel = userName;
+            if (h.performed_by === 'System') performedByLabel = 'System';
+            else if (h.performed_by === 'HR') performedByLabel = 'HR Manager';
+            else if (h.performed_by === 'Kandydat') performedByLabel = userName;
+
+            return {
+                id: h.id,
+                type: 'history',
+                title: h.action,
+                subtitle: `Wykonał: ${performedByLabel}`,
+                message: h.action, // For modal
+                date: h.created_at,
+                icon: Activity,
+                colorClass: 'text-slate-400'
+            };
+        });
 
     // 2. Map Notification Items
     const notificationItems = state.appNotifications.map(n => ({

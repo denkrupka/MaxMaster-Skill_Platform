@@ -40,7 +40,10 @@ const CANDIDATE_DISPLAY_COLORS: Record<string, string> = {
 
 export const HRCandidatesPage = () => {
     const { state, updateUser, addCandidate, logCandidateAction, triggerNotification, archiveCandidateDocument, restoreCandidateDocument, addCandidateDocument, updateCandidateDocumentDetails, updateUserSkillStatus, resetTestAttempt, moveCandidateToTrial } = useAppContext();
-    const { systemConfig, skills, userSkills, testAttempts, users, tests, positions } = state;
+    const { systemConfig, skills, userSkills, testAttempts, users: allUsers, tests, positions, currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
     const location = useLocation();
     const navigate = useNavigate();
     

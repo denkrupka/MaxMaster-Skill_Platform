@@ -9,8 +9,11 @@ import { UserStatus, Role, SkillStatus, VerificationType } from '../../types';
 
 export const CoordinatorDashboard = () => {
     const { state } = useAppContext();
-    const { users, userSkills, skills, qualityIncidents } = state;
+    const { users: allUsers, userSkills, skills, qualityIncidents, currentCompany } = state;
     const navigate = useNavigate();
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
 
     // --- DATA CALCULATIONS ---
 

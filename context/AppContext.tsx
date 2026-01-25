@@ -8,7 +8,8 @@ import {
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
   QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
   Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory,
-  Company, Module, CompanyModule, ModuleUserAccess
+  Company, Module, CompanyModule, ModuleUserAccess,
+  CRMCompany, CRMContact, CRMDeal, CRMActivity, DealStage
 } from '../types';
 
 interface AppState {
@@ -36,6 +37,12 @@ interface AppState {
   modules: Module[];
   companyModules: CompanyModule[];
   moduleUserAccess: ModuleUserAccess[];
+
+  // CRM data (Sales module)
+  crmCompanies: CRMCompany[];
+  crmContacts: CRMContact[];
+  crmDeals: CRMDeal[];
+  crmActivities: CRMActivity[];
 }
 
 interface AppContextType {
@@ -164,7 +171,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     companies: [],
     modules: [],
     companyModules: [],
-    moduleUserAccess: []
+    moduleUserAccess: [],
+
+    // CRM data
+    crmCompanies: [],
+    crmContacts: [],
+    crmDeals: [],
+    crmActivities: []
   });
 
   // Track if we're in the initial auth setup to prevent duplicate refreshData calls
@@ -188,7 +201,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { data: companies },
         { data: modules },
         { data: companyModules },
-        { data: moduleUserAccess }
+        { data: moduleUserAccess },
+        { data: crmCompanies },
+        { data: crmContacts },
+        { data: crmDeals },
+        { data: crmActivities }
       ] = await Promise.all([
         supabase.from('users').select('*'),
         supabase.from('positions').select('*').order('order'),
@@ -205,7 +222,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('companies').select('*'),
         supabase.from('modules').select('*').order('display_order'),
         supabase.from('company_modules').select('*'),
-        supabase.from('module_user_access').select('*')
+        supabase.from('module_user_access').select('*'),
+        supabase.from('crm_companies').select('*').order('created_at', { ascending: false }),
+        supabase.from('crm_contacts').select('*').order('created_at', { ascending: false }),
+        supabase.from('crm_deals').select('*').order('created_at', { ascending: false }),
+        supabase.from('crm_activities').select('*').order('scheduled_at', { ascending: true })
       ]);
 
       setState(prev => ({
@@ -228,7 +249,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         companies: companies || [],
         modules: modules || [],
         companyModules: companyModules || [],
-        moduleUserAccess: moduleUserAccess || []
+        moduleUserAccess: moduleUserAccess || [],
+        crmCompanies: crmCompanies || [],
+        crmContacts: crmContacts || [],
+        crmDeals: crmDeals || [],
+        crmActivities: crmActivities || []
       }));
     } catch (err) {
       console.error('Error refreshing data from Supabase:', err);

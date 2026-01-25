@@ -35,7 +35,10 @@ export const CoordinatorEmployees = () => {
     const { state, addEmployeeNote, addQualityIncident, deleteEmployeeNote, addEmployeeBadge, deleteEmployeeBadge } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
-    const { users, userSkills, skills, qualityIncidents, employeeNotes, systemConfig, monthlyBonuses, employeeBadges, currentUser } = state;
+    const { users: allUsers, userSkills, skills, qualityIncidents, employeeNotes, systemConfig, monthlyBonuses, employeeBadges, currentUser, currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
     
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'trial' | 'employee'>('all');
@@ -551,9 +554,12 @@ export const CoordinatorEmployees = () => {
 // --- COORDINATOR VERIFICATIONS PAGE (1:1 LIKE BRIGADIR VIEW) ---
 export const CoordinatorVerifications = () => {
     const { state, confirmSkillPractice, saveSkillChecklistProgress, updateUserSkillStatus, triggerNotification } = useAppContext();
-    const { userSkills, users, skills, libraryResources, currentUser } = state;
+    const { userSkills, users: allUsers, skills, libraryResources, currentUser, currentCompany } = state;
     const location = useLocation();
-    
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
+
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'rejected'>('pending');
     const [periodFilter, setPeriodFilter] = useState<'all' | 'trial' | 'regular'>('all');
@@ -855,10 +861,13 @@ export const CoordinatorVerifications = () => {
 // --- COORDINATOR QUALITY PAGE ---
 export const CoordinatorQuality = () => {
     const { state } = useAppContext();
-    const { qualityIncidents, users, skills } = state;
+    const { qualityIncidents, users: allUsers, skills, currentCompany } = state;
     const [search, setSearch] = useState('');
     const [fileViewer, setFileViewer] = useState<{isOpen: boolean, urls: string[], title: string, index: number}>({ isOpen: false, urls: [], title: '', index: 0 });
     const location = useLocation();
+
+    // Filter users by company_id for multi-tenant isolation
+    const users = useMemo(() => allUsers.filter(u => u.company_id === currentCompany?.id), [allUsers, currentCompany]);
 
     // Read/Unread tracking
     const [readIncidents, setReadIncidents] = useState<Set<string>>(() => {

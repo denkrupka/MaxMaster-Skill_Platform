@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Upload, X, Archive, Search, Eye, CheckCircle, XCircle, AlertTriangle, FileText } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -9,6 +9,12 @@ import { uploadDocument } from '../../lib/supabase';
 
 export const HRDocumentsPage = () => {
     const { state, updateUserSkillStatus, updateCandidateDocumentDetails, archiveCandidateDocument } = useAppContext();
+    const { currentCompany } = state;
+
+    // Filter users by company_id for multi-tenant isolation
+    const companyUserIds = useMemo(() => {
+        return new Set(state.users.filter(u => u.company_id === currentCompany?.id).map(u => u.id));
+    }, [state.users, currentCompany]);
     
     // Status Popover State
     const [statusPopoverDocId, setStatusPopoverDocId] = useState<string | null>(null);
@@ -29,13 +35,16 @@ export const HRDocumentsPage = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // 1. FILTERING: Only show PENDING documents
+    // 1. FILTERING: Only show PENDING documents for company users
     const pendingDocs = state.userSkills.filter(us => {
+        // Filter by company users
+        if (!companyUserIds.has(us.user_id)) return false;
+
         const skill = state.skills.find(s => s.id === us.skill_id);
         // Robust identification of what is a document record
-        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) || 
-                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) || 
-                      !!us.custom_type || 
+        const isDoc = (skill?.verification_type === VerificationType.DOCUMENT) ||
+                      (us.skill_id && typeof us.skill_id === 'string' && us.skill_id.startsWith('doc_')) ||
+                      !!us.custom_type ||
                       !us.skill_id;
 
         return isDoc && us.status === SkillStatus.PENDING && !us.is_archived;
