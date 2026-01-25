@@ -6,7 +6,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { User, Role, UserStatus, ContractType, SkillStatus, VerificationType, NoteCategory, EmployeeNote, UserSkill } from '../../types';
 import { calculateSalary } from '../../services/salaryService';
-import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, TERMINATION_REASONS, REFERRAL_BONUSES, REFERRAL_STATUS_LABELS } from '../../constants';
+import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, TERMINATION_REASONS, REFERRAL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
 
@@ -681,7 +681,7 @@ export const HREmployeesPage = () => {
                                                 <td className="px-6 py-4 font-medium text-slate-900">{ref.first_name} {ref.last_name}</td>
                                                 <td className="px-6 py-4"><span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter border bg-blue-50 text-blue-700 border-blue-200`}>{ref.status}</span></td>
                                                 <td className="px-6 py-4 font-bold text-slate-900">
-                                                    {REFERRAL_BONUSES[ref.target_position || 'Pomocnik'] || 200} zł
+                                                    {positions.find(p => p.name === ref.target_position)?.referral_bonus || 0} zł
                                                 </td>
                                                 <td className="px-6 py-4 text-right"></td>
                                             </tr>
@@ -723,7 +723,7 @@ export const HREmployeesPage = () => {
 
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center">
                 <div className="relative flex-1 w-full"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Szukaj pracownika..." className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={search} onChange={e => setSearch(e.target.value)}/></div>
-                <div className="relative min-w-[200px] w-full md:w-auto"><select className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-10 rounded-lg text-sm font-medium cursor-pointer" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)}><option value="all">Wszystkie stanowiska</option>{systemConfig.positions.map(pos => (<option key={pos} value={pos}>{pos}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/></div>
+                <div className="relative min-w-[200px] w-full md:w-auto"><select className="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 py-2 pl-3 pr-10 rounded-lg text-sm font-medium cursor-pointer" value={positionFilter} onChange={(e) => setPositionFilter(e.target.value)}><option value="all">Wszystkie stanowiska</option>{positions.map(pos => (<option key={pos.id} value={pos.name}>{pos.name}</option>))}</select><ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/></div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -804,7 +804,7 @@ export const HREmployeesPage = () => {
                         <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Stanowisko</label>
                         <select className="w-full border p-2 rounded" value={editFormData.target_position || ''} onChange={e => setEditFormData({...editFormData, target_position: e.target.value})}>
                             <option value="">Wybierz...</option>
-                            {systemConfig.positions.map(p => <option key={p} value={p}>{p}</option>)}
+                            {positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                         </select>
                     </div>
                     <div>
