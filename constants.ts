@@ -269,3 +269,79 @@ export const CHECKLIST_TEMPLATES: PracticalCheckTemplate[] = [
     ]
   }
 ];
+
+// =============================================
+// CRM Constants for Sales Module
+// =============================================
+
+import { DealStage, DealPriority, ActivityType } from './types';
+
+export const DEAL_STAGE_LABELS: Record<DealStage, string> = {
+  [DealStage.LEAD]: 'Nowy Lead',
+  [DealStage.QUALIFIED]: 'Zakwalifikowany',
+  [DealStage.PROPOSAL]: 'Propozycja',
+  [DealStage.NEGOTIATION]: 'Negocjacje',
+  [DealStage.WON]: 'Wygrana',
+  [DealStage.LOST]: 'Przegrana'
+};
+
+export const DEAL_STAGE_COLORS: Record<DealStage, string> = {
+  [DealStage.LEAD]: 'bg-slate-100 text-slate-700',
+  [DealStage.QUALIFIED]: 'bg-blue-100 text-blue-700',
+  [DealStage.PROPOSAL]: 'bg-purple-100 text-purple-700',
+  [DealStage.NEGOTIATION]: 'bg-orange-100 text-orange-700',
+  [DealStage.WON]: 'bg-green-100 text-green-700',
+  [DealStage.LOST]: 'bg-red-100 text-red-700'
+};
+
+export const DEAL_PRIORITY_LABELS: Record<DealPriority, string> = {
+  [DealPriority.LOW]: 'Niski',
+  [DealPriority.MEDIUM]: 'Średni',
+  [DealPriority.HIGH]: 'Wysoki',
+  [DealPriority.URGENT]: 'Pilny'
+};
+
+export const DEAL_PRIORITY_COLORS: Record<DealPriority, string> = {
+  [DealPriority.LOW]: 'bg-slate-100 text-slate-600',
+  [DealPriority.MEDIUM]: 'bg-blue-100 text-blue-600',
+  [DealPriority.HIGH]: 'bg-orange-100 text-orange-600',
+  [DealPriority.URGENT]: 'bg-red-100 text-red-600'
+};
+
+export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
+  [ActivityType.CALL]: 'Telefon',
+  [ActivityType.EMAIL]: 'Email',
+  [ActivityType.MEETING]: 'Spotkanie',
+  [ActivityType.NOTE]: 'Notatka',
+  [ActivityType.TASK]: 'Zadanie'
+};
+
+export const ACTIVITY_TYPE_ICONS: Record<ActivityType, string> = {
+  [ActivityType.CALL]: 'Phone',
+  [ActivityType.EMAIL]: 'Mail',
+  [ActivityType.MEETING]: 'Calendar',
+  [ActivityType.NOTE]: 'FileText',
+  [ActivityType.TASK]: 'CheckSquare'
+};
+
+export const INDUSTRY_OPTIONS = [
+  'Budownictwo',
+  'IT / Technologia',
+  'Produkcja',
+  'Logistyka',
+  'Handel',
+  'Usługi',
+  'Finanse',
+  'Zdrowie',
+  'Edukacja',
+  'Inne'
+];
+
+export const DEAL_STAGES_ORDER: DealStage[] = [
+  DealStage.LEAD,
+  DealStage.QUALIFIED,
+  DealStage.PROPOSAL,
+  DealStage.NEGOTIATION,
+  DealStage.WON,
+  DealStage.LOST
+];

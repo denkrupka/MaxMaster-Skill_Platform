@@ -1,10 +1,11 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { 
-  Users, CheckSquare, Award, DollarSign, BookOpen, X, 
+import {
+  Users, CheckSquare, Award, DollarSign, BookOpen, X,
   LogOut, Layers, UserPlus, Settings,
-  FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network
+  FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network,
+  Building2, Target, UserCheck
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -77,6 +78,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/company/subscription" icon={Layers} label="Subskrypcja" />
                  <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
+               </>
+            )}
+
+            {/* --- SALES VIEW --- */}
+            {currentUser?.role === Role.SALES && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Sales CRM</p>
+                 <NavItem to="/sales/dashboard" icon={LayoutDashboard} label="Dashboard" />
+                 <NavItem to="/sales/pipeline" icon={Target} label="Pipeline" />
+                 <div className="my-2 border-t border-slate-100"></div>
+                 <NavItem to="/sales/companies" icon={Building2} label="Firmy" />
+                 <NavItem to="/sales/contacts" icon={UserCheck} label="Kontakty (LPR)" />
                </>
             )}
 

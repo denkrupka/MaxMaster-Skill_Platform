@@ -535,3 +535,108 @@ export interface SalaryHistoryEntry {
   rate: number;
   change_reason: string;
 }
+
+// =============================================
+// CRM Types for Sales Module
+// =============================================
+
+export enum DealStage {
+  LEAD = 'lead',
+  QUALIFIED = 'qualified',
+  PROPOSAL = 'proposal',
+  NEGOTIATION = 'negotiation',
+  WON = 'won',
+  LOST = 'lost'
+}
+
+export enum DealPriority {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  URGENT = 'urgent'
+}
+
+export enum ActivityType {
+  CALL = 'call',
+  EMAIL = 'email',
+  MEETING = 'meeting',
+  NOTE = 'note',
+  TASK = 'task'
+}
+
+export interface CRMCompany {
+  id: string;
+  name: string;
+  legal_name?: string;
+  tax_id?: string;
+  regon?: string;
+  industry?: string;
+  website?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+  employee_count?: number;
+  annual_revenue?: number;
+  notes?: string;
+  status: string;
+  source?: string;
+  assigned_sales_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMContact {
+  id: string;
+  crm_company_id?: string;
+  first_name: string;
+  last_name: string;
+  email?: string;
+  phone?: string;
+  position?: string;
+  department?: string;
+  is_decision_maker: boolean;
+  linkedin_url?: string;
+  notes?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMDeal {
+  id: string;
+  title: string;
+  crm_company_id?: string;
+  contact_id?: string;
+  stage: DealStage;
+  priority: DealPriority;
+  value?: number;
+  probability: number;
+  expected_close_date?: string;
+  actual_close_date?: string;
+  lost_reason?: string;
+  modules_interested?: string[];
+  employee_count_estimate?: number;
+  notes?: string;
+  assigned_sales_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMActivity {
+  id: string;
+  activity_type: ActivityType;
+  subject: string;
+  description?: string;
+  crm_company_id?: string;
+  contact_id?: string;
+  deal_id?: string;
+  scheduled_at?: string;
+  completed_at?: string;
+  is_completed: boolean;
+  duration_minutes?: number;
+  outcome?: string;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+}
