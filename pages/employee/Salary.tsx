@@ -66,81 +66,81 @@ export const EmployeeSalaryPage = () => {
     const nextMonthTotalRate = (salaryInfo?.nextMonthTotal || 0) + totalContractBonus;
 
     return (
-        <div className="p-6 max-w-5xl mx-auto space-y-8 pb-24">
-            
+        <div className="p-3 sm:p-4 md:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6 md:space-y-8 pb-24">
+
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Moje Wynagrodzenie</h1>
-                    <p className="text-slate-500">Szczegóły stawki i prognozy finansowe.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Moje Wynagrodzenie</h1>
+                    <p className="text-sm sm:text-base text-slate-500">Szczegóły stawki i prognozy finansowe.</p>
                 </div>
-                <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                    <Calendar size={18}/>
-                    <span>Okres rozliczeniowy: {currentMonthName.toUpperCase()} {now.getFullYear()}</span>
+                <div className="bg-blue-50 text-blue-700 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-sm font-medium flex items-center gap-1.5 sm:gap-2">
+                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5"/>
+                    <span>Okres: {currentMonthName.toUpperCase()} {now.getFullYear()}</span>
                 </div>
             </div>
 
             {/* Main Totals */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                            <Wallet size={20} className="text-green-600"/> STAWKA OBECNA
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-3 sm:mb-4">
+                        <h3 className="font-bold text-slate-700 flex items-center gap-2 text-sm sm:text-base">
+                            <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-green-600"/> STAWKA OBECNA
                         </h3>
-                        <span className="text-xs font-bold uppercase bg-green-100 text-green-700 px-2 py-1 rounded">{currentMonthName}</span>
+                        <span className="text-[10px] sm:text-xs font-bold uppercase bg-green-100 text-green-700 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">{currentMonthName}</span>
                     </div>
-                    <div className="text-4xl font-black text-slate-900 mb-2">{currentTotalRate.toFixed(2)} zł<span className="text-lg font-normal text-slate-400">/h</span></div>
-                    <p className="text-sm text-slate-500">Obowiązuje do ostatniego dnia miesiąca.</p>
+                    <div className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 mb-2">{currentTotalRate.toFixed(2)} zł<span className="text-base sm:text-lg font-normal text-slate-400">/h</span></div>
+                    <p className="text-xs sm:text-sm text-slate-500">Obowiązuje do ostatniego dnia miesiąca.</p>
                 </div>
 
-                <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-6 relative overflow-hidden text-white">
-                    <div className="absolute top-0 right-0 p-6 opacity-10"><TrendingUp size={100} /></div>
+                <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-4 sm:p-6 relative overflow-hidden text-white">
+                    <div className="absolute top-0 right-0 p-4 sm:p-6 opacity-10"><TrendingUp className="w-16 h-16 sm:w-24 sm:h-24" /></div>
                     <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-bold text-blue-300 flex items-center gap-2"><TrendingUp size={20}/> PROGNOZA</h3>
-                            <span className="text-xs font-bold uppercase bg-white/10 text-white px-2 py-1 rounded">OD 1. {nextMonthName.toUpperCase()}</span>
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                            <h3 className="font-bold text-blue-300 flex items-center gap-2 text-sm sm:text-base"><TrendingUp className="w-4 h-4 sm:w-5 sm:h-5"/> PROGNOZA</h3>
+                            <span className="text-[10px] sm:text-xs font-bold uppercase bg-white/10 text-white px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">OD 1. {nextMonthName.toUpperCase()}</span>
                         </div>
-                        <div className="text-4xl font-black mb-2">{nextMonthTotalRate.toFixed(2)} zł<span className="text-lg font-normal text-slate-400">/h</span></div>
-                        <p className="text-sm text-slate-400">Uwzględnia wszystkie potwierdzone umiejętności.</p>
+                        <div className="text-2xl sm:text-3xl md:text-4xl font-black mb-2">{nextMonthTotalRate.toFixed(2)} zł<span className="text-base sm:text-lg font-normal text-slate-400">/h</span></div>
+                        <p className="text-xs sm:text-sm text-slate-400">Uwzględnia wszystkie potwierdzone umiejętności.</p>
                     </div>
                 </div>
             </div>
 
             {/* Quick Breakdown Tiles */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-center">
-                    <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Baza</div>
-                    <div className="text-xl font-black text-slate-800">{(salaryInfo?.breakdown?.base || 0)} zł</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+                <div className="bg-white p-2 sm:p-4 rounded-xl border border-slate-200 shadow-sm text-center">
+                    <div className="text-[8px] sm:text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Baza</div>
+                    <div className="text-base sm:text-xl font-black text-slate-800">{(salaryInfo?.breakdown?.base || 0)} zł</div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-green-100 shadow-sm text-center">
-                    <div className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">Matryca</div>
-                    <div className="text-xl font-black text-green-600">+{matrycaBonus.toFixed(2)} zł</div>
+                <div className="bg-white p-2 sm:p-4 rounded-xl border border-green-100 shadow-sm text-center">
+                    <div className="text-[8px] sm:text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">Matryca</div>
+                    <div className="text-base sm:text-xl font-black text-green-600">+{matrycaBonus.toFixed(2)} zł</div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm text-center">
-                    <div className="text-[10px] text-purple-600 font-black uppercase tracking-widest mb-1">Uprawnienia</div>
-                    <div className="text-xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div>
+                <div className="bg-white p-2 sm:p-4 rounded-xl border border-purple-100 shadow-sm text-center">
+                    <div className="text-[8px] sm:text-[10px] text-purple-600 font-black uppercase tracking-widest mb-1">Uprawnienia</div>
+                    <div className="text-base sm:text-xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div>
                 </div>
-                <div className="bg-white p-4 rounded-xl border border-blue-100 shadow-sm text-center">
-                    <div className="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-1">Umowa</div>
-                    <div className="text-xl font-black text-blue-600">+{totalContractBonus.toFixed(2)} zł</div>
+                <div className="bg-white p-2 sm:p-4 rounded-xl border border-blue-100 shadow-sm text-center">
+                    <div className="text-[8px] sm:text-[10px] text-blue-600 font-black uppercase tracking-widest mb-1">Umowa</div>
+                    <div className="text-base sm:text-xl font-black text-blue-600">+{totalContractBonus.toFixed(2)} zł</div>
                 </div>
             </div>
 
             {/* List */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-100">
-                    <h3 className="font-bold text-slate-800">Szczegóły składników Twojej stawki</h3>
+                <div className="px-3 sm:px-4 md:px-6 py-3 sm:py-4 bg-slate-50 border-b border-slate-100">
+                    <h3 className="font-bold text-slate-800 text-sm sm:text-base">Szczegóły składników Twojej stawki</h3>
                 </div>
                 <div className="divide-y divide-slate-100">
-                    <div className="p-4 px-6 flex justify-between items-center bg-slate-50/50 font-medium">
+                    <div className="p-3 sm:p-4 px-3 sm:px-4 md:px-6 flex justify-between items-center bg-slate-50/50 font-medium">
                         <div>
-                            <span className="text-slate-700">Stawka Bazowa + Umowa</span>
-                            <div className="text-[10px] text-slate-400 font-bold uppercase">{CONTRACT_TYPE_LABELS[contractType]} {studentBonus > 0 ? ' (Student < 26)' : ''}</div>
+                            <span className="text-slate-700 text-sm sm:text-base">Stawka Bazowa + Umowa</span>
+                            <div className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase">{CONTRACT_TYPE_LABELS[contractType]} {studentBonus > 0 ? ' (Student < 26)' : ''}</div>
                         </div>
-                        <div className="font-black text-slate-900">{((salaryInfo?.breakdown?.base || 0) + totalContractBonus).toFixed(2)} zł</div>
+                        <div className="font-black text-slate-900 text-sm sm:text-base">{((salaryInfo?.breakdown?.base || 0) + totalContractBonus).toFixed(2)} zł</div>
                     </div>
                     {(salaryInfo?.breakdown?.details?.activeSkills || []).map((skill, idx) => (
-                        <div key={`active-${idx}`} className="p-4 px-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                        <div key={`active-${idx}`} className="p-3 sm:p-4 px-3 sm:px-4 md:px-6 flex justify-between items-center hover:bg-slate-50 transition-colors">
                             <div className="flex items-center gap-3">
                                 {skill.isBlocked ? <div className="text-red-500 bg-red-50 p-1.5 rounded" title="Zablokowane jakościowo"><Lock size={16}/></div> : <div className="text-green-600 bg-green-50 p-1.5 rounded" title="Aktywne"><CheckCircle size={16}/></div>}
                                 <div>
@@ -152,12 +152,12 @@ export const EmployeeSalaryPage = () => {
                         </div>
                     ))}
                     {(salaryInfo?.breakdown?.details?.pendingSkills || []).map((skill, idx) => (
-                        <div key={`pending-${idx}`} className="p-4 px-6 flex justify-between items-center bg-blue-50/30 border-l-4 border-blue-200">
-                            <div className="flex items-center gap-3">
-                                <div className="text-blue-500 bg-white p-1.5 rounded shadow-sm"><Clock size={16}/></div>
-                                <div><span className="font-bold text-slate-700">{skill.name}</span><span className="block text-[10px] text-blue-600 font-black uppercase tracking-tighter">Wchodzi od: {new Date(skill.effectiveFrom).toLocaleDateString()}</span></div>
+                        <div key={`pending-${idx}`} className="p-3 sm:p-4 px-3 sm:px-4 md:px-6 flex flex-col sm:flex-row justify-between sm:items-center gap-2 sm:gap-0 bg-blue-50/30 border-l-4 border-blue-200">
+                            <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="text-blue-500 bg-white p-1 sm:p-1.5 rounded shadow-sm"><Clock className="w-3 h-3 sm:w-4 sm:h-4"/></div>
+                                <div><span className="font-bold text-slate-700 text-sm sm:text-base">{skill.name}</span><span className="block text-[9px] sm:text-[10px] text-blue-600 font-black uppercase tracking-tighter">Wchodzi od: {new Date(skill.effectiveFrom).toLocaleDateString()}</span></div>
                             </div>
-                            <div className="text-right"><div className="font-bold text-slate-300 line-through text-xs">+0.00 zł</div><div className="font-black text-blue-600 text-sm">+{skill.amount.toFixed(2)} zł (Prognoza)</div></div>
+                            <div className="text-right ml-auto"><div className="font-bold text-slate-300 line-through text-[10px] sm:text-xs">+0.00 zł</div><div className="font-black text-blue-600 text-xs sm:text-sm">+{skill.amount.toFixed(2)} zł (Prognoza)</div></div>
                         </div>
                     ))}
                 </div>

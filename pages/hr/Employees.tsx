@@ -654,14 +654,14 @@ export const HREmployeesPage = () => {
                         )}
 
                         {activeTab === 'rate' && (
-                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                                <h3 className="font-bold text-slate-900 mb-6">Stawka Pracownika</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
-                                    <div className="bg-white p-4 rounded-lg shadow-sm"><div className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Baza</div><div className="text-2xl font-black text-slate-900">{systemConfig.baseRate.toFixed(2)} zł</div></div>
-                                    <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100"><div className="text-[10px] text-green-600 uppercase font-black tracking-widest mb-1">Umiejętności</div><div className="text-2xl font-black text-green-600">+{matrycaBonus.toFixed(2)} zł</div></div>
-                                    <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100"><div className="text-[10px] text-purple-600 uppercase font-black tracking-widest mb-1">Uprawnienia</div><div className="text-2xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div></div>
+                            <div className="bg-slate-50 p-3 sm:p-4 md:p-6 rounded-xl border border-slate-200">
+                                <h3 className="font-bold text-slate-900 mb-4 sm:mb-6">Stawka Pracownika</h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4 text-center">
+                                    <div className="bg-white p-2 sm:p-3 md:p-4 rounded-lg shadow-sm"><div className="text-[9px] sm:text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Baza</div><div className="text-lg sm:text-xl md:text-2xl font-black text-slate-900">{systemConfig.baseRate.toFixed(2)} zł</div></div>
+                                    <div className="bg-white p-2 sm:p-3 md:p-4 rounded-lg shadow-sm border border-green-100"><div className="text-[9px] sm:text-[10px] text-green-600 uppercase font-black tracking-widest mb-1">Umiejętności</div><div className="text-lg sm:text-xl md:text-2xl font-black text-green-600">+{matrycaBonus.toFixed(2)} zł</div></div>
+                                    <div className="bg-white p-2 sm:p-3 md:p-4 rounded-lg shadow-sm border border-purple-100"><div className="text-[9px] sm:text-[10px] text-purple-600 uppercase font-black tracking-widest mb-1">Uprawnienia</div><div className="text-lg sm:text-xl md:text-2xl font-black text-purple-600">+{uprawnieniaBonus.toFixed(2)} zł</div></div>
                                     <div className="relative z-[200]"><div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100 cursor-pointer hover:bg-blue-50 transition-colors h-full flex flex-col justify-center" onClick={(e) => { e.stopPropagation(); setIsContractPopoverOpen(!isContractPopoverOpen); }}><div className="text-[10px] text-blue-600 uppercase font-black tracking-widest mb-1">Forma Zatrudnienia</div><div className="text-lg font-black text-blue-600 flex items-center justify-center gap-1 uppercase">{formatContractType(selectedEmployee.contract_type)}<ChevronDown size={14} /></div><div className="text-[10px] text-blue-400 font-bold mt-1">{contractBonus + studentBonus > 0 ? `+${(contractBonus + studentBonus).toFixed(2)} zł/h` : 'Bez dodatku'}</div></div>{isContractPopoverOpen && (<div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-lg z-[300] flex flex-col py-1 animate-in zoom-in-95 duration-150">{Object.keys(systemConfig.contractBonuses).map((type) => (<button key={type} className="px-4 py-2 text-sm text-left hover:bg-slate-50 text-slate-700 font-medium uppercase" onClick={() => updateContractType(type)}>{CONTRACT_TYPE_LABELS[type as ContractType] || type}</button>))}<div className="border-t border-slate-100 my-1"></div><div className="px-4 py-2 flex items-center justify-between"><span className="text-[10px] font-black text-slate-500 uppercase">Student &lt; 26 lat</span><input type="checkbox" checked={selectedEmployee.is_student} onChange={(e) => toggleStudentStatus(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" /></div></div>)}</div>
-                                    <div className="bg-slate-900 p-4 rounded-lg shadow-sm text-white flex flex-col justify-center"><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Stawka Total</div><div className="text-2xl font-black leading-tight">{totalRate.toFixed(2)} zł<span className="text-xs font-medium ml-1">/h netto</span></div></div>
+                                    <div className="bg-slate-900 p-2 sm:p-3 md:p-4 rounded-lg shadow-sm text-white flex flex-col justify-center col-span-2 sm:col-span-1"><div className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Stawka Total</div><div className="text-lg sm:text-xl md:text-2xl font-black leading-tight">{totalRate.toFixed(2)} zł<span className="text-[10px] sm:text-xs font-medium ml-1">/h netto</span></div></div>
                                 </div>
                             </div>
                         )}
@@ -700,20 +700,20 @@ export const HREmployeesPage = () => {
 
     const renderList = () => (
         <div className="animate-in fade-in duration-500">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Zarządzanie Pracownikami</h1>
-                    <p className="text-slate-500">Baza aktywnych i byłych pracowników.</p>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Zarządzanie Pracownikami</h1>
+                    <p className="text-sm text-slate-500">Baza aktywnych i byłych pracowników.</p>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm">
-                    <button 
-                        className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                <div className="bg-white border border-slate-200 rounded-lg flex p-1 shadow-sm w-full sm:w-auto">
+                    <button
+                        className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'active' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setViewMode('active')}
                     >
                         Aktywni
                     </button>
-                    <button 
-                        className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'archived' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                    <button
+                        className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-sm font-bold transition-all ${viewMode === 'archived' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
                         onClick={() => setViewMode('archived')}
                     >
                         Zwolnieni
@@ -727,15 +727,16 @@ export const HREmployeesPage = () => {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm min-w-[800px]">
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
-                            <th className="px-6 py-4">Pracownik</th>
-                            <th className="px-6 py-4">Dane Kontaktowe</th>
-                            <th className="px-6 py-4">Stanowisko</th>
-                            <th className="px-6 py-4">Stawka</th>
-                            <th className="px-6 py-4">Okres Umowy</th>
-                            <th className="px-6 py-4 text-right">Akcje</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Pracownik</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 hidden sm:table-cell">Dane Kontaktowe</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Stanowisko</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4">Stawka</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 hidden md:table-cell">Okres Umowy</th>
+                            <th className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">Akcje</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -755,47 +756,49 @@ export const HREmployeesPage = () => {
 
                             return (
                                 <tr key={employee.id} className="hover:bg-slate-50 cursor-pointer transition-colors group" onClick={() => handleOpenDetail(employee)}>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors">{employee.first_name[0]}{employee.last_name[0]}</div>
-                                            <div>
-                                                <div className="font-bold text-slate-900">{employee.first_name} {employee.last_name}</div>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
+                                        <div className="flex items-center gap-2 sm:gap-3">
+                                            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">{employee.first_name[0]}{employee.last_name[0]}</div>
+                                            <div className="min-w-0">
+                                                <div className="font-bold text-slate-900 truncate">{employee.first_name} {employee.last_name}</div>
+                                                <div className="text-[10px] text-slate-500 sm:hidden truncate">{employee.email}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-xs text-slate-700 font-medium">{employee.email}</div>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 hidden sm:table-cell">
+                                        <div className="text-xs text-slate-700 font-medium truncate max-w-[180px]">{employee.email}</div>
                                         <div className="text-[10px] text-slate-400 font-bold">{employee.phone || 'Brak telefonu'}</div>
                                     </td>
-                                    <td className="px-6 py-4 text-slate-600 font-medium">{employee.target_position || '-'}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="font-black text-slate-900">{totalRate.toFixed(2)} zł/h</div>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-slate-600 font-medium text-xs sm:text-sm">{employee.target_position || '-'}</td>
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4">
+                                        <div className="font-black text-slate-900 text-sm">{totalRate.toFixed(2)} zł/h</div>
                                     </td>
-                                    <td className="px-6 py-4 text-slate-600">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-slate-600 hidden md:table-cell">
                                         <div className="text-xs font-bold text-slate-900">{employee.hired_date?.split('T')[0] || '-'}</div>
                                         <div className="text-[10px] text-slate-400 font-medium">do: {employee.contract_end_date?.split('T')[0] || 'nieustalony'}</div>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-3 sm:px-4 md:px-6 py-3 md:py-4 text-right">
                                         <ChevronRight size={18} className="text-slate-300 group-hover:text-blue-500 inline transition-all transform group-hover:translate-x-1"/>
                                     </td>
                                 </tr>
                             );
                         })}
-                        {filteredEmployees.length === 0 && <tr><td colSpan={6} className="p-12 text-center text-slate-400 italic font-medium">Brak pracowników spełniających kryteria.</td></tr>}
+                        {filteredEmployees.length === 0 && <tr><td colSpan={6} className="p-6 sm:p-12 text-center text-slate-400 italic font-medium">Brak pracowników spełniających kryteria.</td></tr>}
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     );
 
     const renderEditModal = () => (
-        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-8 overflow-y-auto max-h-[90vh]">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold uppercase">Edytuj Pracownika</h2>
+        <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-4 sm:p-6 md:p-8 overflow-y-auto max-h-[90vh]">
+                <div className="flex justify-between items-center mb-4 sm:mb-6">
+                    <h2 className="text-lg sm:text-xl font-bold uppercase">Edytuj Pracownika</h2>
                     <button onClick={() => setIsEditModalOpen(false)}><X size={24} className="text-slate-400"/></button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Imię</label><input className="w-full border p-2 rounded" value={editFormData.first_name || ''} onChange={e => setEditFormData({...editFormData, first_name: e.target.value})}/></div>
                     <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Nazwisko</label><input className="w-full border p-2 rounded" value={editFormData.last_name || ''} onChange={e => setEditFormData({...editFormData, last_name: e.target.value})}/></div>
                     <div><label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Email</label><input className="w-full border p-2 rounded" value={editFormData.email || ''} onChange={e => setEditFormData({...editFormData, email: e.target.value})}/></div>
@@ -827,14 +830,14 @@ export const HREmployeesPage = () => {
                         )}
                     </select>
                 </div>
-                <div className="flex justify-end gap-2 mt-8"><Button variant="ghost" onClick={() => setIsEditModalOpen(false)}>Anuluj</Button><Button onClick={saveEditEmployee}>Zapisz</Button></div>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6 sm:mt-8"><Button variant="ghost" onClick={() => setIsEditModalOpen(false)} className="w-full sm:w-auto">Anuluj</Button><Button onClick={saveEditEmployee} className="w-full sm:w-auto">Zapisz</Button></div>
             </div>
         </div>
     );
 
     const renderDocModal = () => (
-        <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl max-md w-full p-6">
+        <div className="fixed inset-0 bg-black/60 z-[210] flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-4 sm:p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold uppercase">{editingDocId ? 'Edytuj Dokument' : 'Dodaj Dokument'}</h2>
                     <button onClick={() => setIsDocModalOpen(false)}><X size={24} className="text-slate-400"/></button>
@@ -865,7 +868,7 @@ export const HREmployeesPage = () => {
                             ))}
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Wydano</label><input type="date" className="w-full border p-2 rounded text-sm" value={newDocData.issue_date} onChange={e => setNewDocData({...newDocData, issue_date: e.target.value})}/></div>
                         {!newDocData.indefinite && <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ważny do</label><input type="date" className="w-full border p-2 rounded text-sm" value={newDocData.expires_at} onChange={e => setNewDocData({...newDocData, expires_at: e.target.value})}/></div>}
                     </div>
@@ -874,14 +877,14 @@ export const HREmployeesPage = () => {
                         <label htmlFor="indef_emp" className="text-sm">Bezterminowy</label>
                     </div>
                 </div>
-                <div className="flex justify-end gap-2 mt-8"><Button variant="ghost" onClick={() => setIsDocModalOpen(false)}>Anuluj</Button><Button onClick={handleSaveDocument}>Zapisz</Button></div>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6 sm:mt-8"><Button variant="ghost" onClick={() => setIsDocModalOpen(false)} className="w-full sm:w-auto">Anuluj</Button><Button onClick={handleSaveDocument} className="w-full sm:w-auto">Zapisz</Button></div>
             </div>
         </div>
     );
 
     const renderConfirmModal = () => (
-        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl max-md w-full p-6">
+        <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-4 sm:p-6">
                 <h2 className="text-xl font-bold mb-4">{confirmModal.type === 'fire' ? 'Rozwiązanie Umowy' : confirmModal.type === 'restore' ? 'Przywracanie' : 'Wypłata Bonusu'}</h2>
                 <p className="text-sm text-slate-500 mb-6">Czy na pewno chcesz wykonać akcję dla {confirmModal.user?.first_name} {confirmModal.user?.last_name}?</p>
                 {confirmModal.type === 'fire' && (
@@ -931,7 +934,7 @@ export const HREmployeesPage = () => {
     );
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
             {selectedEmployee ? renderDetail() : renderList()}
             {isEditModalOpen && renderEditModal()}
             {isDocModalOpen && renderDocModal()}

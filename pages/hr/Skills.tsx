@@ -242,29 +242,29 @@ export const HRSkillsPage = () => {
     );
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
                         {viewMode === 'active' ? 'Matryca Umiejętności' : 'Archiwum Umiejętności'}
                     </h1>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-xs sm:text-sm text-slate-500">
                         Zarządzaj definicjami umiejętności, stawkami i kryteriami.
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     {viewMode === 'active' ? (
                         <>
-                            <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)} className="rounded-xl h-11 px-5 border-slate-200 text-slate-600 hover:bg-slate-50">
-                                <Folder size={18} className="mr-2 text-blue-500"/> Kategorie
+                            <Button variant="secondary" onClick={() => setIsCategoryModalOpen(true)} className="rounded-xl h-10 sm:h-11 px-3 sm:px-5 border-slate-200 text-slate-600 hover:bg-slate-50 flex-1 sm:flex-none">
+                                <Folder size={18} className="mr-1 sm:mr-2 text-blue-500"/> <span className="hidden sm:inline">Kategorie</span><span className="sm:hidden">Kat.</span>
                             </Button>
-                            <Button variant="secondary" onClick={() => setViewMode('archived')} className="rounded-xl h-11 px-5 border-slate-200 text-slate-600">
-                                <Archive size={18} className="mr-2"/> Archiwum
+                            <Button variant="secondary" onClick={() => setViewMode('archived')} className="rounded-xl h-10 sm:h-11 px-3 sm:px-5 border-slate-200 text-slate-600 flex-1 sm:flex-none">
+                                <Archive size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Archiwum</span><span className="sm:hidden">Arch.</span>
                             </Button>
-                            <Button onClick={() => handleOpenModal()} className="rounded-xl h-11 px-6 font-black shadow-lg shadow-blue-600/20"><Plus size={18} className="mr-2"/> Dodaj Umiejętność</Button>
+                            <Button onClick={() => handleOpenModal()} className="rounded-xl h-10 sm:h-11 px-3 sm:px-6 font-black shadow-lg shadow-blue-600/20 w-full sm:w-auto"><Plus size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Dodaj Umiejętność</span><span className="sm:hidden">Dodaj</span></Button>
                         </>
                     ) : (
-                        <Button variant="secondary" onClick={() => setViewMode('active')} className="rounded-xl h-11 px-6">
+                        <Button variant="secondary" onClick={() => setViewMode('active')} className="rounded-xl h-10 sm:h-11 px-4 sm:px-6 w-full sm:w-auto">
                             <RotateCcw size={18} className="mr-2"/> Wróć do Aktywnych
                         </Button>
                     )}
@@ -358,8 +358,8 @@ export const HRSkillsPage = () => {
 
             {/* Skill Edit Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto scrollbar-hide animate-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-black/50 z-[80] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-[32px] shadow-2xl max-w-2xl w-full p-4 sm:p-6 md:p-8 max-h-[95vh] sm:max-h-[90vh] overflow-y-auto scrollbar-hide animate-in zoom-in duration-300">
                         <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-5">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
@@ -394,7 +394,7 @@ export const HRSkillsPage = () => {
                                 <textarea className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-medium text-slate-700 text-sm focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none min-h-[80px] shadow-inner" value={selectedSkill.description_pl || ''} onChange={e => setSelectedSkill({...selectedSkill, description_pl: e.target.value})} />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                                 <div>
                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1.5">BONUS PLN/H</label>
                                    <div className="relative">

@@ -118,43 +118,44 @@ export const AdminUsersPage = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Zarządzanie Użytkownikami</h1>
-          <p className="text-slate-500">Panel techniczny administratora</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Zarządzanie Użytkownikami</h1>
+          <p className="text-sm sm:text-base text-slate-500">Panel techniczny administratora</p>
         </div>
-        <Button onClick={() => setIsAddModalOpen(true)}><UserPlus size={18} className="mr-2"/> Dodaj Użytkownika</Button>
+        <Button onClick={() => setIsAddModalOpen(true)} className="w-full sm:w-auto"><UserPlus size={18} className="mr-2"/> Dodaj Użytkownika</Button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm min-w-[700px]">
           <thead className="bg-slate-50 text-slate-500 font-medium">
             <tr>
-              <th className="p-4">Imię i Nazwisko</th>
-              <th className="p-4">Email</th>
-              <th className="p-4">Telefon</th>
-              <th className="p-4">Rola</th>
-              <th className="p-4">Status</th>
-              <th className="p-4 text-right">Akcje</th>
+              <th className="p-2 sm:p-3 md:p-4">Imię i Nazwisko</th>
+              <th className="p-2 sm:p-3 md:p-4">Email</th>
+              <th className="p-2 sm:p-3 md:p-4 hidden sm:table-cell">Telefon</th>
+              <th className="p-2 sm:p-3 md:p-4">Rola</th>
+              <th className="p-2 sm:p-3 md:p-4">Status</th>
+              <th className="p-2 sm:p-3 md:p-4 text-right">Akcje</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {state.users.map(user => (
               <tr key={user.id} className={`hover:bg-slate-50 ${user.is_blocked ? 'bg-red-50' : ''}`}>
-                <td className="p-4 font-medium">{user.first_name} {user.last_name}</td>
-                <td className="p-4 text-slate-500">{user.email}</td>
-                <td className="p-4 text-slate-500">{user.phone || '-'}</td>
-                <td className="p-4"><span className="bg-slate-100 px-2 py-1 rounded text-xs uppercase font-semibold">{ROLE_LABELS[user.role]}</span></td>
-                <td className="p-4">
+                <td className="p-2 sm:p-3 md:p-4 font-medium">{user.first_name} {user.last_name}</td>
+                <td className="p-2 sm:p-3 md:p-4 text-slate-500 truncate max-w-[150px]">{user.email}</td>
+                <td className="p-2 sm:p-3 md:p-4 text-slate-500 hidden sm:table-cell">{user.phone || '-'}</td>
+                <td className="p-2 sm:p-3 md:p-4"><span className="bg-slate-100 px-2 py-1 rounded text-xs uppercase font-semibold">{ROLE_LABELS[user.role]}</span></td>
+                <td className="p-2 sm:p-3 md:p-4">
                   {user.is_blocked ? (
                     <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">ZABLOKOWANY</span>
                   ) : (
                     <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">AKTYWNY</span>
                   )}
                 </td>
-                <td className="p-4 text-right">
-                  <div className="flex justify-end gap-2">
+                <td className="p-2 sm:p-3 md:p-4 text-right">
+                  <div className="flex justify-end gap-1 sm:gap-2">
                     <button
                       onClick={() => handleEdit(user)}
                       className="text-blue-500 hover:bg-blue-50 p-2 rounded"
@@ -184,15 +185,16 @@ export const AdminUsersPage = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Add User Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full animate-in zoom-in duration-200">
-            <h2 className="text-xl font-bold mb-6">Dodaj Użytkownika</h2>
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-md w-full animate-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">Dodaj Użytkownika</h2>
+            <form onSubmit={handleAddUser} className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <input placeholder="Imię" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" required value={newUser.first_name} onChange={e => setNewUser({...newUser, first_name: e.target.value})} />
                 <input placeholder="Nazwisko" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" required value={newUser.last_name} onChange={e => setNewUser({...newUser, last_name: e.target.value})} />
               </div>
@@ -252,9 +254,9 @@ export const AdminUsersPage = () => {
                 <option value={Role.EMPLOYEE}>Pracownik</option>
               </select>
 
-              <div className="flex justify-end space-x-2 pt-6 border-t mt-4">
-                <Button variant="ghost" onClick={() => setIsAddModalOpen(false)}>Anuluj</Button>
-                <Button type="submit" disabled={Object.keys(validationErrors).length > 0}>Utwórz konto</Button>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:space-x-2 pt-4 sm:pt-6 border-t mt-4">
+                <Button variant="ghost" onClick={() => setIsAddModalOpen(false)} className="w-full sm:w-auto">Anuluj</Button>
+                <Button type="submit" disabled={Object.keys(validationErrors).length > 0} className="w-full sm:w-auto">Utwórz konto</Button>
               </div>
             </form>
           </div>
@@ -263,11 +265,11 @@ export const AdminUsersPage = () => {
 
       {/* Edit User Modal */}
       {isEditModalOpen && editingUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full animate-in zoom-in duration-200">
-            <h2 className="text-xl font-bold mb-6">Edytuj Użytkownika</h2>
-            <form onSubmit={handleUpdateUser} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-md w-full animate-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">Edytuj Użytkownika</h2>
+            <form onSubmit={handleUpdateUser} className="space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <input
                   placeholder="Imię"
                   className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
@@ -373,9 +375,9 @@ export const AdminUsersPage = () => {
                 <option value={Role.CANDIDATE}>Kandydat</option>
               </select>
 
-              <div className="flex justify-end space-x-2 pt-6 border-t mt-4">
-                <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setEditingUser(null); }}>Anuluj</Button>
-                <Button type="submit">Zapisz zmiany</Button>
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:space-x-2 pt-4 sm:pt-6 border-t mt-4">
+                <Button variant="ghost" onClick={() => { setIsEditModalOpen(false); setEditingUser(null); }} className="w-full sm:w-auto">Anuluj</Button>
+                <Button type="submit" className="w-full sm:w-auto">Zapisz zmiany</Button>
               </div>
             </form>
           </div>

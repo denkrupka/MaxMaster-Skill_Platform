@@ -416,28 +416,28 @@ export const HRTestsPage = () => {
     };
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
+        <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
                         {viewMode === 'active' ? 'Testy Kwalifikacyjne' : 'Archiwum Testów'}
                     </h1>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-xs sm:text-sm text-slate-500">
                         {viewMode === 'active' ? 'Zarządzaj aktywnymi testami' : 'Przeglądaj usunięte testy'}
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                     {viewMode === 'active' ? (
                         <>
-                            <Button variant="secondary" onClick={() => setViewMode('archived')}>
-                                <Archive size={18} className="mr-2"/> Archiwum
+                            <Button variant="secondary" onClick={() => setViewMode('archived')} className="flex-1 sm:flex-none">
+                                <Archive size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Archiwum</span><span className="sm:hidden">Arch.</span>
                             </Button>
-                            <Button onClick={handleOpenCreateModal}>
-                                <Plus size={18} className="mr-2"/> Dodaj Nowy Test
+                            <Button onClick={handleOpenCreateModal} className="flex-1 sm:flex-none">
+                                <Plus size={18} className="mr-1 sm:mr-2"/> <span className="hidden sm:inline">Dodaj Nowy Test</span><span className="sm:hidden">Dodaj</span>
                             </Button>
                         </>
                     ) : (
-                        <Button variant="secondary" onClick={() => setViewMode('active')}>
+                        <Button variant="secondary" onClick={() => setViewMode('active')} className="w-full sm:w-auto">
                             <RotateCcw size={18} className="mr-2"/> Wróć do Testów
                         </Button>
                     )}
@@ -518,8 +518,8 @@ export const HRTestsPage = () => {
 
             {/* REDESIGNED COMPACT Test Detail Modal */}
             {isTestDetailOpen && selectedTest && viewMode === 'active' && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
                         {/* Modal Header - Dark & Professional */}
                         <div className="bg-[#1A1C1E] px-6 py-4 flex justify-between items-center text-white">
                             <div>
@@ -658,8 +658,8 @@ export const HRTestsPage = () => {
 
             {/* COMPACT CREATE MODAL - Styled like Detail Modal */}
             {isCreateModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
                         {/* Header - Dark & Professional */}
                         <div className="bg-[#1A1C1E] px-6 py-4 flex justify-between items-center text-white">
                             <div>
@@ -829,8 +829,8 @@ export const HRTestsPage = () => {
 
             {/* Import Modal */}
             {isImportModalOpen && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300 max-h-[95vh] overflow-y-auto">
                         {/* Header */}
                         <div className="bg-[#1A1C1E] px-6 py-4 flex justify-between items-center text-white">
                             <div>
