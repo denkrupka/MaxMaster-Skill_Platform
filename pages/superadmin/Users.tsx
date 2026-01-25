@@ -1,9 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, Users, Building2, UserPlus, Edit2, Trash2, Lock, Unlock, Eye, X, ChevronDown } from 'lucide-react';
+import { Search, Filter, Users, Building2, UserPlus, Edit2, Trash2, Lock, Unlock, Eye, X, ChevronDown, Save, Loader2, EyeOff, Plus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { User, Role, UserStatus, Company } from '../../types';
 import { ROLE_LABELS, COMPANY_STATUS_COLORS } from '../../constants';
+import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
+import { Button } from '../../components/Button';
 
 const STATUS_LABELS: Record<string, string> = {
   [UserStatus.ACTIVE]: 'Aktywny',
@@ -32,8 +34,46 @@ const STATUS_COLORS: Record<string, string> = {
   [UserStatus.TESTS_COMPLETED]: 'bg-teal-100 text-teal-800',
 };
 
+// Available roles for selection
+const AVAILABLE_ROLES = [
+  { value: Role.SUPERADMIN, label: 'Super Admin' },
+  { value: Role.COMPANY_ADMIN, label: 'Admin Firmy' },
+  { value: Role.SALES, label: 'Sprzedawca' },
+  { value: Role.DORADCA, label: 'Doradca' },
+  { value: Role.HR, label: 'HR' },
+  { value: Role.COORDINATOR, label: 'Koordynator' },
+  { value: Role.BRIGADIR, label: 'Brygadzista' },
+  { value: Role.EMPLOYEE, label: 'Pracownik' },
+  { value: Role.CANDIDATE, label: 'Kandydat' },
+  { value: Role.ADMIN, label: 'Admin (Tech)' },
+];
+
+interface UserFormData {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  phone: string;
+  role: Role;
+  company_id: string;
+  is_global_user: boolean;
+  status: UserStatus;
+}
+
+const INITIAL_FORM_DATA: UserFormData = {
+  first_name: '',
+  last_name: '',
+  email: '',
+  password: '',
+  phone: '',
+  role: Role.EMPLOYEE,
+  company_id: '',
+  is_global_user: false,
+  status: UserStatus.ACTIVE
+};
+
 export const SuperAdminUsersPage: React.FC = () => {
-  const { state, blockUser, unblockUser, deleteUserCompletely, updateUserWithPassword } = useAppContext();
+  const { state, blockUser, unblockUser, deleteUserCompletely, updateUserWithPassword, refreshData } = useAppContext();
   const { users, companies } = state;
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +86,16 @@ export const SuperAdminUsersPage: React.FC = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+
+  // Add/Edit User Modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [formData, setFormData] = useState<UserFormData>(INITIAL_FORM_DATA);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [showNewCompanyInput, setShowNewCompanyInput] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState('');
 
   // Get company name by id
   const getCompanyName = (companyId?: string): string => {
@@ -114,6 +164,191 @@ export const SuperAdminUsersPage: React.FC = () => {
     }
   };
 
+  // Open Add User Modal
+  const openAddModal = () => {
+    setFormData(INITIAL_FORM_DATA);
+    setShowPassword(false);
+    setFormError(null);
+    setShowNewCompanyInput(false);
+    setNewCompanyName('');
+    setShowAddModal(true);
+  };
+
+  // Open Edit User Modal
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      email: user.email || '',
+      password: '', // Don't show existing password
+      phone: user.phone || '',
+      role: user.role,
+      company_id: user.company_id || '',
+      is_global_user: user.is_global_user || false,
+      status: user.status
+    });
+    setShowPassword(false);
+    setFormError(null);
+    setShowNewCompanyInput(false);
+    setNewCompanyName('');
+    setShowEditModal(true);
+  };
+
+  // Handle Add User Submit
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      // Validate
+      if (!formData.first_name || !formData.last_name || !formData.email) {
+        throw new Error('Imię, nazwisko i email są wymagane');
+      }
+      if (!formData.password || formData.password.length < 6) {
+        throw new Error('Hasło musi mieć co najmniej 6 znaków');
+      }
+
+      let companyId = formData.company_id;
+
+      // Create new company if needed
+      if (showNewCompanyInput && newCompanyName) {
+        const { data: newCompany, error: companyError } = await supabase
+          .from('companies')
+          .insert([{
+            name: newCompanyName,
+            status: 'trial',
+            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+          }])
+          .select()
+          .single();
+
+        if (companyError) throw companyError;
+        companyId = newCompany.id;
+      }
+
+      // Get session for Edge Function call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Brak aktywnej sesji');
+      }
+
+      // Call Edge Function to create user with auth
+      const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-user-admin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          phone: formData.phone || null,
+          role: formData.role,
+          status: formData.status,
+          company_id: companyId || null,
+          is_global_user: formData.is_global_user
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Błąd podczas tworzenia użytkownika');
+      }
+
+      await refreshData();
+      setShowAddModal(false);
+    } catch (err) {
+      console.error('Error adding user:', err);
+      setFormError(err instanceof Error ? err.message : 'Błąd podczas dodawania użytkownika');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle Edit User Submit
+  const handleEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    setIsSubmitting(true);
+    setFormError(null);
+
+    try {
+      // Validate
+      if (!formData.first_name || !formData.last_name || !formData.email) {
+        throw new Error('Imię, nazwisko i email są wymagane');
+      }
+
+      let companyId = formData.company_id;
+
+      // Create new company if needed
+      if (showNewCompanyInput && newCompanyName) {
+        const { data: newCompany, error: companyError } = await supabase
+          .from('companies')
+          .insert([{
+            name: newCompanyName,
+            status: 'trial',
+            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+          }])
+          .select()
+          .single();
+
+        if (companyError) throw companyError;
+        companyId = newCompany.id;
+      }
+
+      // Update user in database
+      const updateData: any = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        phone: formData.phone || null,
+        role: formData.role,
+        status: formData.status,
+        company_id: companyId || null,
+        is_global_user: formData.is_global_user
+      };
+
+      // If password is provided, update it too
+      if (formData.password && formData.password.length >= 6) {
+        await updateUserWithPassword(selectedUser.id, updateData, formData.password);
+      } else {
+        const { error } = await supabase
+          .from('users')
+          .update(updateData)
+          .eq('id', selectedUser.id);
+
+        if (error) throw error;
+      }
+
+      await refreshData();
+      setShowEditModal(false);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error('Error editing user:', err);
+      setFormError(err instanceof Error ? err.message : 'Błąd podczas edycji użytkownika');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Generate random password
+  const generatePassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setFormData(prev => ({ ...prev, password }));
+    setShowPassword(true);
+  };
+
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
@@ -122,6 +357,10 @@ export const SuperAdminUsersPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-slate-900">Zarządzanie Użytkownikami</h1>
           <p className="text-slate-500 mt-1">Wszyscy użytkownicy platformy</p>
         </div>
+        <Button onClick={openAddModal} className="flex items-center gap-2">
+          <UserPlus className="w-4 h-4" />
+          Dodaj użytkownika
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -316,6 +555,13 @@ export const SuperAdminUsersPage: React.FC = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="Edytuj"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
                       {user.is_blocked ? (
                         <button
                           onClick={() => handleUnblock(user)}
@@ -463,6 +709,428 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-blue-600" />
+                Dodaj nowego użytkownika
+              </h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddUser} className="p-6 space-y-4">
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  {formError}
+                </div>
+              )}
+
+              {/* Name fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.first_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.last_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value.toLowerCase() }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Hasło *</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={formData.password}
+                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      placeholder="Min. 6 znaków"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    className="px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 whitespace-nowrap"
+                  >
+                    Generuj
+                  </button>
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="+48 XXX XXX XXX"
+                />
+              </div>
+
+              {/* Role & Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Rola *</label>
+                  <select
+                    required
+                    value={formData.role}
+                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as Role }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {AVAILABLE_ROLES.map(role => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as UserStatus }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value={UserStatus.ACTIVE}>Aktywny</option>
+                    <option value={UserStatus.INACTIVE}>Nieaktywny</option>
+                    <option value={UserStatus.TRIAL}>Okres próbny</option>
+                    <option value={UserStatus.INVITED}>Zaproszony</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Company */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
+                {!showNewCompanyInput ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.company_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="">-- Użytkownik globalny --</option>
+                      {companies.map(company => (
+                        <option key={company.id} value={company.id}>{company.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCompanyInput(true)}
+                      className="px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Nowa
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="Nazwa nowej firmy"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCompanyInput(false); setNewCompanyName(''); }}
+                      className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                    >
+                      Anuluj
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Global user checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_global_user"
+                  checked={formData.is_global_user}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_global_user: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="is_global_user" className="text-sm text-slate-700">
+                  Użytkownik globalny (dostęp do wszystkich firm)
+                </label>
+              </div>
+
+              {/* Submit buttons */}
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                >
+                  Anuluj
+                </button>
+                <Button type="submit" disabled={isSubmitting} className="flex-1">
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Utwórz użytkownika
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-green-600" />
+                Edytuj użytkownika
+              </h3>
+              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditUser} className="p-6 space-y-4">
+              {formError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  {formError}
+                </div>
+              )}
+
+              {/* Name fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.first_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.last_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value.toLowerCase() }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Password (optional for edit) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Nowe hasło <span className="text-slate-400 font-normal">(opcjonalnie)</span>
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      minLength={6}
+                      value={formData.password}
+                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                      className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      placeholder="Pozostaw puste, aby nie zmieniać"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    className="px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 whitespace-nowrap"
+                  >
+                    Generuj
+                  </button>
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="+48 XXX XXX XXX"
+                />
+              </div>
+
+              {/* Role & Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Rola *</label>
+                  <select
+                    required
+                    value={formData.role}
+                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as Role }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {AVAILABLE_ROLES.map(role => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as UserStatus }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Company */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
+                {!showNewCompanyInput ? (
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.company_id}
+                      onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value }))}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="">-- Użytkownik globalny --</option>
+                      {companies.map(company => (
+                        <option key={company.id} value={company.id}>{company.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCompanyInput(true)}
+                      className="px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Nowa
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="Nazwa nowej firmy"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewCompanyInput(false); setNewCompanyName(''); }}
+                      className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                    >
+                      Anuluj
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Global user checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_global_user_edit"
+                  checked={formData.is_global_user}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_global_user: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="is_global_user_edit" className="text-sm text-slate-700">
+                  Użytkownik globalny (dostęp do wszystkich firm)
+                </label>
+              </div>
+
+              {/* Submit buttons */}
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setSelectedUser(null); }}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                >
+                  Anuluj
+                </button>
+                <Button type="submit" disabled={isSubmitting} className="flex-1">
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Zapisz zmiany
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

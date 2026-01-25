@@ -12,9 +12,9 @@ serve(async (req) => {
   }
 
   try {
-    const { email, first_name, last_name, phone, target_position, source, status } = await req.json()
+    const { email, first_name, last_name, phone, target_position, source, status, company_id } = await req.json()
 
-    console.log('Creating candidate:', email)
+    console.log('Creating candidate:', email, 'for company:', company_id)
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -69,7 +69,8 @@ serve(async (req) => {
         source: source || 'Aplikacja',
         role: 'candidate',
         status: status || 'started',
-        hired_date: new Date().toISOString()
+        hired_date: new Date().toISOString(),
+        company_id: company_id || null
       }])
       .select()
       .single()

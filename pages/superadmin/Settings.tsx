@@ -68,16 +68,19 @@ export const SuperAdminSettingsPage: React.FC = () => {
     setError(null);
 
     try {
+      const updatedConfig = {
+        ...systemConfig,
+        salesMaxDiscountPercent: salesLimits.maxDiscountPercent,
+        salesMaxFreeExtensionDays: salesLimits.maxFreeExtensionDays
+      };
+
       const { error: updateError } = await supabase
         .from('system_config')
-        .update({
-          config: {
-            ...systemConfig,
-            salesMaxDiscountPercent: salesLimits.maxDiscountPercent,
-            salesMaxFreeExtensionDays: salesLimits.maxFreeExtensionDays
-          }
-        })
-        .eq('id', 'main');
+        .upsert({
+          config_key: 'main',
+          config_data: updatedConfig,
+          config_value: updatedConfig
+        }, { onConflict: 'config_key' });
 
       if (updateError) throw updateError;
 
