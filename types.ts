@@ -25,12 +25,22 @@ export interface NotificationSettingUpdate extends Partial<NotificationSetting> 
 }
 
 export enum Role {
-  ADMIN = 'admin',
+  // Global roles (is_global_user = true)
+  SUPERADMIN = 'superadmin',
+  SALES = 'sales',
+  DORADCA = 'doradca',
+
+  // Company roles (is_global_user = false)
+  COMPANY_ADMIN = 'company_admin',
   HR = 'hr',
+  COORDINATOR = 'coordinator',
   BRIGADIR = 'brigadir',
   EMPLOYEE = 'employee',
   CANDIDATE = 'candidate',
-  COORDINATOR = 'coordinator'
+  TRIAL = 'trial',
+
+  // Legacy (for backward compatibility during migration)
+  ADMIN = 'admin'
 }
 
 export enum UserStatus {
@@ -176,6 +186,110 @@ export interface User {
   blocked_at?: string;
   blocked_reason?: string;
   plain_password?: string;
+
+  // Multi-company fields
+  company_id?: string;
+  is_global_user?: boolean;
+  invitation_token?: string;
+  invitation_expires_at?: string;
+  invited_by?: string;
+  available_modules?: string[];
+}
+
+// =====================================================
+// MULTI-COMPANY TYPES
+// =====================================================
+
+export type CompanyStatus = 'active' | 'suspended' | 'cancelled' | 'trial';
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled';
+
+export interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+
+  // Legal data (for invoices)
+  legal_name?: string;
+  tax_id?: string; // NIP
+  regon?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+
+  // Contact data
+  contact_email?: string;
+  contact_phone?: string;
+  billing_email?: string;
+
+  // Status
+  status: CompanyStatus;
+  is_blocked: boolean;
+  blocked_at?: string;
+  blocked_reason?: string;
+
+  // Subscription
+  trial_ends_at?: string;
+  subscription_status: SubscriptionStatus;
+
+  // Stripe
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+
+  // Bonus balance
+  bonus_balance: number;
+
+  // Settings
+  settings?: Record<string, any>;
+
+  // Metadata
+  created_at: string;
+  updated_at?: string;
+  created_by?: string;
+  sales_owner_id?: string;
+  doradca_id?: string;
+}
+
+export interface Module {
+  code: string;
+  name_pl: string;
+  name_en?: string;
+  description_pl?: string;
+  description_en?: string;
+  available_roles: string[];
+  base_price_per_user: number;
+  is_active: boolean;
+  display_order: number;
+  icon?: string;
+  created_at: string;
+}
+
+export interface CompanyModule {
+  id: string;
+  company_id: string;
+  module_code: string;
+  max_users: number;
+  current_users: number;
+  price_per_user: number;
+  billing_cycle: 'monthly' | 'yearly';
+  is_active: boolean;
+  activated_at: string;
+  deactivated_at?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface ModuleUserAccess {
+  id: string;
+  company_id: string;
+  user_id: string;
+  module_code: string;
+  is_enabled: boolean;
+  enabled_at: string;
+  disabled_at?: string;
+  days_used: number;
+  created_at: string;
 }
 
 export interface UserSkill {

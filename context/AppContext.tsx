@@ -7,11 +7,13 @@ import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
   QualityIncident, EmployeeNote, EmployeeBadge, MonthlyBonus, LibraryResource,
-  Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory
+  Role, UserStatus, SkillStatus, ContractType, VerificationType, NoteCategory, BadgeType, SkillCategory,
+  Company, Module, CompanyModule, ModuleUserAccess
 } from '../types';
 
 interface AppState {
   currentUser: User | null;
+  currentCompany: Company | null;
   users: User[];
   userSkills: UserSkill[];
   skills: Skill[];
@@ -28,6 +30,12 @@ interface AppState {
   employeeBadges: EmployeeBadge[];
   toast: { title: string, message: string } | null;
   libraryResources: LibraryResource[];
+
+  // Multi-company data
+  companies: Company[];
+  modules: Module[];
+  companyModules: CompanyModule[];
+  moduleUserAccess: ModuleUserAccess[];
 }
 
 interface AppContextType {
@@ -85,6 +93,16 @@ interface AppContextType {
   unblockUser: (userId: string) => Promise<void>;
   updateUserWithPassword: (userId: string, updates: any, password?: string) => Promise<void>;
   deleteUserCompletely: (userId: string) => Promise<void>;
+
+  // Multi-company methods
+  addCompany: (company: Partial<Company>) => Promise<Company>;
+  updateCompany: (id: string, updates: Partial<Company>) => Promise<void>;
+  deleteCompany: (id: string) => Promise<void>;
+  blockCompany: (id: string, reason?: string) => Promise<void>;
+  unblockCompany: (id: string) => Promise<void>;
+  switchCompany: (companyId: string) => Promise<void>;
+  getCompanyUsers: (companyId: string) => User[];
+  isGlobalUser: () => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -124,6 +142,7 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>({
     currentUser: null,
+    currentCompany: null,
     users: [],
     userSkills: [],
     skills: [],
@@ -139,7 +158,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     employeeNotes: [],
     employeeBadges: [],
     toast: null,
-    libraryResources: []
+    libraryResources: [],
+
+    // Multi-company data
+    companies: [],
+    modules: [],
+    companyModules: [],
+    moduleUserAccess: []
   });
 
   // Track if we're in the initial auth setup to prevent duplicate refreshData calls
@@ -159,7 +184,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { data: notes },
         { data: badges },
         { data: resources },
-        { data: configData }
+        { data: configData },
+        { data: companies },
+        { data: modules },
+        { data: companyModules },
+        { data: moduleUserAccess }
       ] = await Promise.all([
         supabase.from('users').select('*'),
         supabase.from('positions').select('*').order('order'),
@@ -172,7 +201,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('employee_notes').select('*'),
         supabase.from('employee_badges').select('*'),
         supabase.from('library_resources').select('*'),
-        supabase.from('system_config').select('config_data').eq('config_key', CONFIG_KEY).maybeSingle()
+        supabase.from('system_config').select('config_data').eq('config_key', CONFIG_KEY).maybeSingle(),
+        supabase.from('companies').select('*'),
+        supabase.from('modules').select('*').order('display_order'),
+        supabase.from('company_modules').select('*'),
+        supabase.from('module_user_access').select('*')
       ]);
 
       setState(prev => ({
@@ -191,7 +224,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         systemConfig: {
             ...DEFAULT_SYSTEM_CONFIG,
             ...(configData?.config_data || {})
-        }
+        },
+        companies: companies || [],
+        modules: modules || [],
+        companyModules: companyModules || [],
+        moduleUserAccess: moduleUserAccess || []
       }));
     } catch (err) {
       console.error('Error refreshing data from Supabase:', err);
@@ -245,7 +282,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (dbUser) {
             console.log('User found in database:', dbUser);
-            setState(prev => ({ ...prev, currentUser: dbUser }));
+            // Find user's company
+            const { data: companies } = await supabase.from('companies').select('*');
+            const userCompany = dbUser.company_id
+              ? (companies || []).find((c: Company) => c.id === dbUser.company_id)
+              : null;
+            setState(prev => ({
+              ...prev,
+              currentUser: dbUser,
+              currentCompany: userCompany || null,
+              companies: companies || prev.companies
+            }));
           } else {
             // User authenticated but not in database - create record
             console.log('User authenticated but missing from database, creating record...');
@@ -376,7 +423,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Login: User record created successfully');
       setState(prev => ({ ...prev, currentUser: createdUser }));
     } else if (dbUser) {
-      setState(prev => ({ ...prev, currentUser: dbUser }));
+      // Find user's company
+      const userCompany = dbUser.company_id
+        ? state.companies.find(c => c.id === dbUser.company_id)
+        : null;
+      setState(prev => ({
+        ...prev,
+        currentUser: dbUser,
+        currentCompany: userCompany || null
+      }));
     }
 
     // onAuthStateChange will handle refreshData
@@ -1041,6 +1096,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await refreshData();
   };
 
+  // =====================================================
+  // MULTI-COMPANY METHODS
+  // =====================================================
+
+  const addCompany = async (companyData: Partial<Company>): Promise<Company> => {
+    const { data, error } = await supabase.from('companies').insert([{
+      ...companyData,
+      created_by: state.currentUser?.id
+    }]).select().single();
+
+    if (error) throw error;
+    setState(prev => ({ ...prev, companies: [...prev.companies, data] }));
+    return data;
+  };
+
+  const updateCompany = async (id: string, updates: Partial<Company>) => {
+    const { data, error } = await supabase.from('companies').update(updates).eq('id', id).select().single();
+    if (error) throw error;
+    setState(prev => ({
+      ...prev,
+      companies: prev.companies.map(c => c.id === id ? { ...c, ...data } : c),
+      currentCompany: prev.currentCompany?.id === id ? { ...prev.currentCompany, ...data } : prev.currentCompany
+    }));
+  };
+
+  const deleteCompany = async (id: string) => {
+    const { error } = await supabase.from('companies').delete().eq('id', id);
+    if (error) throw error;
+    setState(prev => ({
+      ...prev,
+      companies: prev.companies.filter(c => c.id !== id),
+      currentCompany: prev.currentCompany?.id === id ? null : prev.currentCompany
+    }));
+  };
+
+  const blockCompany = async (id: string, reason?: string) => {
+    await updateCompany(id, {
+      is_blocked: true,
+      blocked_at: new Date().toISOString(),
+      blocked_reason: reason || 'Zablokowana przez administratora'
+    });
+  };
+
+  const unblockCompany = async (id: string) => {
+    await updateCompany(id, {
+      is_blocked: false,
+      blocked_at: undefined,
+      blocked_reason: undefined
+    });
+  };
+
+  const switchCompany = async (companyId: string) => {
+    const company = state.companies.find(c => c.id === companyId);
+    if (company) {
+      setState(prev => ({ ...prev, currentCompany: company }));
+    }
+  };
+
+  const getCompanyUsers = (companyId: string): User[] => {
+    return state.users.filter(u => u.company_id === companyId);
+  };
+
+  const isGlobalUser = (): boolean => {
+    return state.currentUser?.is_global_user === true;
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -1095,7 +1216,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     blockUser,
     unblockUser,
     updateUserWithPassword,
-    deleteUserCompletely
+    deleteUserCompletely,
+
+    // Multi-company methods
+    addCompany,
+    updateCompany,
+    deleteCompany,
+    blockCompany,
+    unblockCompany,
+    switchCompany,
+    getCompanyUsers,
+    isGlobalUser
   };
 
   return (
