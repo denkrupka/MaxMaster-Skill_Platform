@@ -28,7 +28,7 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
            
            {/* Right side of header (Bell + Profile hint) */}
            <div className="flex items-center gap-4 ml-auto">
-                {state.currentUser?.role === Role.HR && (
+                {(state.currentUser?.role === Role.HR || state.currentUser?.role === Role.DORADCA) && (
                     <NotificationBell />
                 )}
                 {/* Desktop Profile Hint (Optional, kept minimal) */}

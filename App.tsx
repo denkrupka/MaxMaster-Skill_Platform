@@ -41,7 +41,6 @@ import { SalesClients } from './pages/sales/Clients';
 import { DoradcaDashboard } from './pages/doradca/Dashboard';
 import { DoradcaCompanyView } from './pages/doradca/CompanyView';
 import { DoradcaCompanies } from './pages/doradca/Companies';
-import { DoradcaSkills } from './pages/doradca/Skills';
 import { DoradcaLibrary } from './pages/doradca/Library';
 
 import { HRDashboard } from './pages/hr/Dashboard';
@@ -324,7 +323,6 @@ export default function App() {
           <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaDashboard /></ProtectedRoute>} />
           <Route path="/doradca/companies" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanies /></ProtectedRoute>} />
           <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanyView /></ProtectedRoute>} />
-          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaSkills /></ProtectedRoute>} />
           <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaLibrary /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
