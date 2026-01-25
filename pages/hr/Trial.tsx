@@ -8,7 +8,7 @@ import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { User, Role, UserStatus, ContractType, SkillStatus, VerificationType } from '../../types';
 import { calculateSalary } from '../../services/salaryService';
-import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, REFERRAL_BONUSES, REFERRAL_STATUS_LABELS } from '../../constants';
+import { USER_STATUS_LABELS, SKILL_STATUS_LABELS, CONTRACT_TYPE_LABELS, BONUS_DOCUMENT_TYPES, REFERRAL_STATUS_LABELS } from '../../constants';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument } from '../../lib/supabase';
 
@@ -378,7 +378,7 @@ export const HRTrialPage = () => {
                 else if (u.status === UserStatus.TESTS_COMPLETED || u.status === UserStatus.OFFER_SENT || u.status === UserStatus.DATA_REQUESTED) refStatus = 'offered';
                 else if (u.status === UserStatus.ACTIVE || u.status === UserStatus.TRIAL) refStatus = 'working';
                 else if (u.status === UserStatus.INACTIVE || u.status === UserStatus.REJECTED) refStatus = 'dismissed';
-                const bonusAmount = REFERRAL_BONUSES[u.target_position || 'Pomocnik'] || 200;
+                const bonusAmount = positions.find(p => p.name === u.target_position)?.referral_bonus || 0;
                 const progress = Math.min(100, Math.round((daysWorking / 90) * 100));
                 const isReadyToPay = refStatus === 'working' && daysWorking >= 90 && !u.referral_bonus_paid;
                 return { ...u, refStatus, bonusAmount, daysWorking, progress, isReadyToPay };
