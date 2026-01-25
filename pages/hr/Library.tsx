@@ -173,11 +173,15 @@ export const HRLibraryPage = () => {
         } as LibraryResource;
 
         try {
+            console.log('Saving resource:', resourceToSave);
             if (res.id) {
+                console.log('Updating existing resource...');
                 await updateLibraryResource(res.id, resourceToSave);
             } else {
+                console.log('Adding new resource...');
                 await addLibraryResource(resourceToSave);
             }
+            console.log('Resource saved successfully');
         } catch (error) {
             console.error('Error saving resource:', error);
             setIsUploading(false);

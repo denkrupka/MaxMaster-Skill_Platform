@@ -697,13 +697,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addLibraryResource = async (res: LibraryResource) => {
+    console.log('AppContext: inserting library resource...', res.title);
     const { data, error } = await supabase.from('library_resources').insert([res]).select().single();
+    console.log('AppContext: insert result - data:', data, 'error:', error);
     if (error) throw error;
     setState(prev => ({ ...prev, libraryResources: [...prev.libraryResources, data] }));
   };
 
   const updateLibraryResource = async (id: string, res: Partial<LibraryResource>) => {
+    console.log('AppContext: updating library resource...', id);
     const { data, error } = await supabase.from('library_resources').update(res).eq('id', id).select().single();
+    console.log('AppContext: update result - data:', data, 'error:', error);
     if (error) throw error;
     setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? { ...r, ...data } : r) }));
   };
