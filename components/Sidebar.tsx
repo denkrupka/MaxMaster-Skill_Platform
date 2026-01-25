@@ -60,7 +60,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
         <div className="p-4 overflow-y-auto h-[calc(100vh-4rem)] flex flex-col">
           <div className="mb-6">
             
-            {/* --- ADMIN VIEW (TECHNICAL) --- */}
+            {/* --- SUPERADMIN VIEW --- */}
+            {currentUser?.role === Role.SUPERADMIN && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Super Admin</p>
+                 <NavItem to="/superadmin/users" icon={Users} label="Użytkownicy" />
+                 <NavItem to="/superadmin/companies" icon={Briefcase} label="Firmy" />
+               </>
+            )}
+
+            {/* --- ADMIN VIEW (TECHNICAL / LEGACY) --- */}
             {currentUser?.role === Role.ADMIN && (
                <>
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Panel Techniczny</p>

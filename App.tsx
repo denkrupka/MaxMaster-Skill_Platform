@@ -14,6 +14,11 @@ import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { ResetPasswordPage } from './pages/ResetPassword';
 import { TerminatedPage } from './pages/Terminated';
 import { AdminUsersPage } from './pages/admin/Users';
+
+// SuperAdmin Pages
+import { SuperAdminUsersPage } from './pages/superadmin/Users';
+import { SuperAdminCompaniesPage } from './pages/superadmin/Companies';
+
 import { HRDashboard } from './pages/hr/Dashboard';
 import { HRCandidatesPage } from './pages/hr/Candidates';
 import { HREmployeesPage } from './pages/hr/Employees';
@@ -87,8 +92,18 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   }
 
   if (allowedRoles && !allowedRoles.includes(state.currentUser.role)) {
+    // Redirect based on role
+    if (state.currentUser.role === Role.SUPERADMIN) {
+        return <Navigate to="/superadmin/users" replace />;
+    }
     if (state.currentUser.role === Role.CANDIDATE) {
         return <Navigate to="/candidate/dashboard" replace />;
+    }
+    if (state.currentUser.role === Role.HR) {
+        return <Navigate to="/hr/dashboard" replace />;
+    }
+    if (state.currentUser.role === Role.ADMIN) {
+        return <Navigate to="/admin/users" replace />;
     }
     return <Navigate to="/dashboard" replace />;
   }
@@ -247,7 +262,12 @@ export default function App() {
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           
-          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN]}><AdminUsersPage /></ProtectedRoute>} />
+          {/* SuperAdmin Routes */}
+          <Route path="/superadmin/users" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminUsersPage /></ProtectedRoute>} />
+          <Route path="/superadmin/companies" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminCompaniesPage /></ProtectedRoute>} />
+
+          {/* Legacy Admin Route */}
+          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
           <Route path="/hr/dashboard" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRDashboard /></ProtectedRoute>} />
           <Route path="/hr/candidates" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRCandidatesPage /></ProtectedRoute>} />
           <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={[Role.HR]}><HREmployeesPage /></ProtectedRoute>} />
