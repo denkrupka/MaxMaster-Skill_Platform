@@ -251,7 +251,7 @@ export const SuperAdminUsersPage: React.FC = () => {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       email: user.email || '',
-      password: '',
+      password: (user as any).plain_password || '',
       phone: user.phone || '',
       role: user.role,
       company_id: user.company_id || '',
@@ -1138,7 +1138,7 @@ export const SuperAdminUsersPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nowe hasło <span className="text-slate-400 font-normal">(opcjonalnie)</span>
+                  Hasło
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -1148,7 +1148,7 @@ export const SuperAdminUsersPage: React.FC = () => {
                       value={formData.password}
                       onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                       className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      placeholder="Pozostaw puste, aby nie zmieniać"
+                      placeholder="Min. 6 znaków"
                     />
                     <button
                       type="button"
@@ -1166,6 +1166,9 @@ export const SuperAdminUsersPage: React.FC = () => {
                     Generuj
                   </button>
                 </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {(selectedUser as any)?.plain_password ? 'Obecne hasło jest wyświetlane. Zmień lub pozostaw bez zmian.' : 'Wprowadź hasło lub kliknij "Generuj" aby utworzyć losowe.'}
+                </p>
               </div>
 
               <div>

@@ -47,7 +47,7 @@ serve(async (req) => {
       .eq('id', requestingUser.id)
       .single()
 
-    if (!adminData || adminData.role !== 'admin') {
+    if (!adminData || (adminData.role !== 'admin' && adminData.role !== 'superadmin')) {
       throw new Error('Only admins can manage users')
     }
 

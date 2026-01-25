@@ -93,7 +93,8 @@ serve(async (req) => {
         status: status || 'active',
         company_id: company_id || null,
         is_global_user: is_global_user || false,
-        hired_date: new Date().toISOString()
+        hired_date: new Date().toISOString(),
+        plain_password: password
       }])
       .select()
       .single()
