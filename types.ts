@@ -276,6 +276,8 @@ export interface CompanyModule {
   is_active: boolean;
   activated_at: string;
   deactivated_at?: string;
+  stripe_subscription_id?: string;
+  stripe_subscription_item_id?: string;
   created_at: string;
   updated_at?: string;
 }

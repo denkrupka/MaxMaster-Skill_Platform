@@ -1,15 +1,29 @@
-
 import React, { useState, useMemo } from 'react';
-import { Package, CreditCard, FileText, Users, Plus, Minus, Check, AlertCircle, Download, Clock } from 'lucide-react';
+import {
+  Package, CreditCard, FileText, Users, Plus, Minus, Check, AlertCircle,
+  Download, Clock, ExternalLink, Loader2, Settings, Zap
+} from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { UserStatus } from '../../types';
 import { MODULE_LABELS, MODULE_DESCRIPTIONS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS } from '../../constants';
+import {
+  isStripeConfigured,
+  getCardBrandName,
+  formatCurrency
+} from '../../lib/stripeService';
+import { supabase } from '../../lib/supabase';
 
 export const CompanySubscriptionPage: React.FC = () => {
-  const { state } = useAppContext();
+  const { state, refreshData } = useAppContext();
   const { currentCompany, users, companyModules, modules, moduleUserAccess } = state;
 
   const [activeTab, setActiveTab] = useState<'modules' | 'usage' | 'history'>('modules');
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Stripe configuration state
+  const stripeEnabled = isStripeConfigured();
 
   // Get company users
   const companyUsers = useMemo(() => {
@@ -51,12 +65,132 @@ export const CompanySubscriptionPage: React.FC = () => {
     };
   }, [myModules, currentCompany]);
 
-  // Mock payment history
+  // Mock payment history (will be replaced with real Stripe data)
   const paymentHistory = [
     { id: '1', date: '2024-01-01', amount: 790, status: 'paid', invoice: 'FV/2024/01/001' },
     { id: '2', date: '2023-12-01', amount: 790, status: 'paid', invoice: 'FV/2023/12/001' },
     { id: '3', date: '2023-11-01', amount: 632, status: 'paid', invoice: 'FV/2023/11/001' },
   ];
+
+  // Handle Stripe checkout for module activation
+  const handleActivateModule = async (moduleCode: string, maxUsers: number = 10) => {
+    if (!currentCompany) return;
+
+    setLoading(moduleCode);
+    setError(null);
+
+    try {
+      // Call Edge Function to create Stripe Checkout session
+      const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+        body: {
+          action: 'create-checkout-session',
+          companyId: currentCompany.id,
+          moduleCode,
+          quantity: maxUsers,
+          successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${moduleCode}`,
+          cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
+        }
+      });
+
+      if (fnError) throw fnError;
+
+      if (data?.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
+    } catch (err) {
+      console.error('Checkout error:', err);
+      setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas tworzenia sesji płatności');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle opening Stripe Customer Portal
+  const handleOpenPortal = async () => {
+    if (!currentCompany?.stripe_customer_id) {
+      setError('Brak konta Stripe. Najpierw aktywuj moduł.');
+      return;
+    }
+
+    setLoading('portal');
+    setError(null);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+        body: {
+          action: 'create-portal-session',
+          customerId: currentCompany.stripe_customer_id,
+          returnUrl: `${window.location.origin}/#/company/subscription`
+        }
+      });
+
+      if (fnError) throw fnError;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Portal error:', err);
+      setError(err instanceof Error ? err.message : 'Nie udało się otworzyć panelu zarządzania');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle changing user count for a module
+  const handleChangeSeats = async (moduleCode: string, delta: number) => {
+    const companyMod = myModules.find(cm => cm.module_code === moduleCode);
+    if (!companyMod || !currentCompany) return;
+
+    const newCount = Math.max(1, companyMod.max_users + delta);
+    if (newCount === companyMod.max_users) return;
+
+    setLoading(moduleCode);
+    setError(null);
+
+    try {
+      // Update via Edge Function (which handles Stripe subscription update)
+      const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+        body: {
+          action: 'update-subscription',
+          companyId: currentCompany.id,
+          moduleCode,
+          quantity: newCount
+        }
+      });
+
+      if (fnError) throw fnError;
+
+      setSuccess(`Liczba miejsc zmieniona na ${newCount}`);
+      await refreshData();
+
+      // Clear success after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Update seats error:', err);
+      setError(err instanceof Error ? err.message : 'Nie udało się zmienić liczby miejsc');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Check URL params for success/cancel
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    if (urlParams.get('success') === 'true') {
+      setSuccess('Płatność zakończona pomyślnie! Moduł został aktywowany.');
+      refreshData();
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname + '#/company/subscription');
+    }
+    if (urlParams.get('canceled') === 'true') {
+      setError('Płatność została anulowana.');
+      window.history.replaceState({}, '', window.location.pathname + '#/company/subscription');
+    }
+  }, []);
 
   if (!currentCompany) {
     return (
@@ -76,6 +210,27 @@ export const CompanySubscriptionPage: React.FC = () => {
         <h1 className="text-2xl font-bold text-slate-900">Subskrypcja</h1>
         <p className="text-slate-500 mt-1">Zarządzaj modułami i płatnościami</p>
       </div>
+
+      {/* Success/Error Messages */}
+      {success && (
+        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+          <Check className="w-5 h-5 text-green-600" />
+          <p className="text-green-800">{success}</p>
+          <button onClick={() => setSuccess(null)} className="ml-auto text-green-600 hover:text-green-800">
+            &times;
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <p className="text-red-800">{error}</p>
+          <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-800">
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Status Card */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
@@ -156,6 +311,7 @@ export const CompanySubscriptionPage: React.FC = () => {
               {modules.filter(m => m.is_active).map(mod => {
                 const companyMod = myModules.find(cm => cm.module_code === mod.code);
                 const isActive = companyMod?.is_active;
+                const isLoading = loading === mod.code;
 
                 return (
                   <div key={mod.code} className="p-5">
@@ -189,12 +345,22 @@ export const CompanySubscriptionPage: React.FC = () => {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50" disabled>
-                              <Minus className="w-4 h-4 text-slate-400" />
+                            <button
+                              className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                              disabled={isLoading || companyMod.max_users <= 1}
+                              onClick={() => handleChangeSeats(mod.code, -1)}
+                            >
+                              <Minus className="w-4 h-4 text-slate-600" />
                             </button>
-                            <span className="w-12 text-center font-medium">{companyMod.max_users}</span>
-                            <button className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50" disabled>
-                              <Plus className="w-4 h-4 text-slate-400" />
+                            <span className="w-12 text-center font-medium">
+                              {isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : companyMod.max_users}
+                            </span>
+                            <button
+                              className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                              disabled={isLoading}
+                              onClick={() => handleChangeSeats(mod.code, 1)}
+                            >
+                              <Plus className="w-4 h-4 text-slate-600" />
                             </button>
                           </div>
                         </div>
@@ -202,9 +368,19 @@ export const CompanySubscriptionPage: React.FC = () => {
 
                       {!isActive && (
                         <button
-                          disabled
-                          className="px-4 py-2 bg-slate-100 text-slate-500 rounded-lg cursor-not-allowed"
+                          onClick={() => handleActivateModule(mod.code)}
+                          disabled={isLoading || !stripeEnabled}
+                          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${
+                            stripeEnabled
+                              ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                              : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                          }`}
                         >
+                          {isLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Zap className="w-4 h-4" />
+                          )}
                           Aktywuj moduł
                         </button>
                       )}
@@ -216,16 +392,29 @@ export const CompanySubscriptionPage: React.FC = () => {
           </div>
 
           {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-blue-800">Zmiana planu</p>
-              <p className="text-sm text-blue-600 mt-1">
-                Aby zmienić liczbę użytkowników lub aktywować nowe moduły, skontaktuj się z działem sprzedaży
-                lub poczekaj na integrację Stripe.
-              </p>
+          {!stripeEnabled && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-800">Stripe nie jest skonfigurowany</p>
+                <p className="text-sm text-amber-600 mt-1">
+                  Ustaw zmienną środowiskową <code className="bg-amber-100 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> aby aktywować płatności online.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
+
+          {stripeEnabled && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+              <Check className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-blue-800">Płatności online aktywne</p>
+                <p className="text-sm text-blue-600 mt-1">
+                  Możesz aktywować moduły i zmieniać liczbę użytkowników. Płatności obsługiwane przez Stripe.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -260,12 +449,17 @@ export const CompanySubscriptionPage: React.FC = () => {
                   {/* Progress bar */}
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-green-500 rounded-full transition-all"
+                      className={`h-full rounded-full transition-all ${
+                        cm.activeUsers / cm.max_users > 0.9 ? 'bg-amber-500' : 'bg-green-500'
+                      }`}
                       style={{ width: `${Math.min((cm.activeUsers / cm.max_users) * 100, 100)}%` }}
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-2">
                     {cm.max_users - cm.activeUsers} wolnych miejsc
+                    {cm.activeUsers / cm.max_users > 0.9 && (
+                      <span className="text-amber-600 ml-2">- Rozważ dodanie miejsc</span>
+                    )}
                   </p>
                 </div>
               ))}
@@ -320,10 +514,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <button
-                          className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
-                          disabled
-                        >
+                        <button className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm">
                           <Download className="w-4 h-4" />
                           Pobierz
                         </button>
@@ -344,25 +535,63 @@ export const CompanySubscriptionPage: React.FC = () => {
 
       {/* Payment Method Section */}
       <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5">
-        <h3 className="font-semibold text-slate-900 mb-4">Metoda płatności</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-900">Zarządzanie płatnościami</h3>
+          {currentCompany.stripe_customer_id && (
+            <button
+              onClick={handleOpenPortal}
+              disabled={loading === 'portal'}
+              className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+            >
+              {loading === 'portal' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Settings className="w-4 h-4" />
+              )}
+              Panel Stripe
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
         <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
           <div className="w-12 h-8 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center">
             <CreditCard className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1">
-            <p className="font-medium text-slate-900">Karta nie została dodana</p>
-            <p className="text-sm text-slate-500">Dodaj kartę, aby aktywować automatyczne płatności</p>
+            {currentCompany.stripe_customer_id ? (
+              <>
+                <p className="font-medium text-slate-900">Konto Stripe aktywne</p>
+                <p className="text-sm text-slate-500">Zarządzaj metodami płatności i subskrypcjami w panelu Stripe</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-slate-900">Karta nie została dodana</p>
+                <p className="text-sm text-slate-500">Aktywuj moduł, aby utworzyć konto płatności</p>
+              </>
+            )}
           </div>
-          <button
-            disabled
-            className="px-4 py-2 bg-slate-200 text-slate-500 rounded-lg cursor-not-allowed"
-          >
-            Dodaj kartę
-          </button>
+          {!currentCompany.stripe_customer_id && stripeEnabled && (
+            <button
+              onClick={() => {
+                const firstInactiveModule = modules.find(m => m.is_active && !myModules.find(cm => cm.module_code === m.code && cm.is_active));
+                if (firstInactiveModule) {
+                  handleActivateModule(firstInactiveModule.code);
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              Rozpocznij
+            </button>
+          )}
         </div>
-        <p className="text-xs text-slate-500 mt-3">
-          Integracja ze Stripe zostanie dodana w kolejnej wersji.
-        </p>
+
+        {stripeEnabled && (
+          <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
+            <Check className="w-3 h-3 text-green-500" />
+            Bezpieczne płatności obsługiwane przez Stripe
+          </p>
+        )}
       </div>
     </div>
   );
