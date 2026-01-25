@@ -707,9 +707,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateLibraryResource = async (id: string, res: Partial<LibraryResource>) => {
     console.log('AppContext: updating library resource...', id);
-    const { error } = await supabase.from('library_resources').update(res).eq('id', id);
-    console.log('AppContext: update result - error:', error);
-    if (error) throw error;
+    console.log('AppContext: update data:', JSON.stringify(res, null, 2));
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Update timeout after 10s')), 10000)
+    );
+
+    try {
+      const updatePromise = supabase.from('library_resources').update(res).eq('id', id);
+      const { error } = await Promise.race([updatePromise, timeoutPromise]) as { error: any };
+      console.log('AppContext: update result - error:', error);
+      if (error) throw error;
+    } catch (err) {
+      console.error('AppContext: update failed:', err);
+      throw err;
+    }
+
     // Update local state with the changes we sent
     setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? { ...r, ...res } : r) }));
   };
