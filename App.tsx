@@ -24,6 +24,7 @@ import { CompanyDashboard } from './pages/company/Dashboard';
 import { CompanyUsersPage } from './pages/company/Users';
 import { CompanySubscriptionPage } from './pages/company/Subscription';
 import { CompanySettingsPage } from './pages/company/Settings';
+import { CompanyModulesPage } from './pages/company/Modules';
 
 // Sales Pages
 import { SalesDashboard } from './pages/sales/Dashboard';
@@ -296,6 +297,7 @@ export default function App() {
           {/* Company Admin Routes */}
           <Route path="/company/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyDashboard /></ProtectedRoute>} />
           <Route path="/company/users" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyUsersPage /></ProtectedRoute>} />
+          <Route path="/company/modules" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyModulesPage /></ProtectedRoute>} />
           <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
           <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
 
