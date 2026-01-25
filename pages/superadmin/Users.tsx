@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
-import { Search, Filter, Users, Building2, UserPlus, Edit2, Trash2, Lock, Unlock, Eye, X, ChevronDown, Save, Loader2, EyeOff, Plus } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Search, Filter, Users, Building2, UserPlus, Edit2, Trash2, Lock, Unlock, Eye, X, ChevronDown, Save, Loader2, EyeOff, Plus, Globe, SearchIcon } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { User, Role, UserStatus, Company } from '../../types';
 import { ROLE_LABELS, COMPANY_STATUS_COLORS } from '../../constants';
@@ -60,6 +60,16 @@ interface UserFormData {
   status: UserStatus;
 }
 
+interface NewCompanyData {
+  name: string;
+  legal_name: string;
+  tax_id: string;
+  regon: string;
+  address_street: string;
+  address_city: string;
+  address_postal: string;
+}
+
 const INITIAL_FORM_DATA: UserFormData = {
   first_name: '',
   last_name: '',
@@ -70,6 +80,43 @@ const INITIAL_FORM_DATA: UserFormData = {
   company_id: '',
   is_global_user: false,
   status: UserStatus.ACTIVE
+};
+
+const INITIAL_COMPANY_DATA: NewCompanyData = {
+  name: '',
+  legal_name: '',
+  tax_id: '',
+  regon: '',
+  address_street: '',
+  address_city: '',
+  address_postal: ''
+};
+
+// Phone formatting function
+const formatPhoneNumber = (value: string): string => {
+  // Remove all non-digits
+  const digits = value.replace(/\D/g, '');
+
+  // Handle Polish format
+  if (digits.startsWith('48')) {
+    const rest = digits.slice(2);
+    if (rest.length <= 3) return `+48 ${rest}`;
+    if (rest.length <= 6) return `+48 ${rest.slice(0, 3)} ${rest.slice(3)}`;
+    return `+48 ${rest.slice(0, 3)} ${rest.slice(3, 6)} ${rest.slice(6, 9)}`;
+  }
+
+  // If starts with +
+  if (value.startsWith('+')) {
+    if (digits.length <= 2) return `+${digits}`;
+    if (digits.length <= 5) return `+${digits.slice(0, 2)} ${digits.slice(2)}`;
+    if (digits.length <= 8) return `+${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5)}`;
+    return `+${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 11)}`;
+  }
+
+  // Default Polish format without country code
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  return `+48 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
 };
 
 export const SuperAdminUsersPage: React.FC = () => {
@@ -94,8 +141,37 @@ export const SuperAdminUsersPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [showNewCompanyInput, setShowNewCompanyInput] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState('');
+
+  // Company selection with search
+  const [companySearchTerm, setCompanySearchTerm] = useState('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const companyDropdownRef = useRef<HTMLDivElement>(null);
+
+  // New Company Modal
+  const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
+  const [newCompanyData, setNewCompanyData] = useState<NewCompanyData>(INITIAL_COMPANY_DATA);
+  const [isSearchingGUS, setIsSearchingGUS] = useState(false);
+  const [gusError, setGusError] = useState<string | null>(null);
+
+  // Close company dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (companyDropdownRef.current && !companyDropdownRef.current.contains(event.target as Node)) {
+        setShowCompanyDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filter companies for dropdown
+  const filteredCompanies = useMemo(() => {
+    if (!companySearchTerm) return companies;
+    return companies.filter(c =>
+      c.name.toLowerCase().includes(companySearchTerm.toLowerCase()) ||
+      c.legal_name?.toLowerCase().includes(companySearchTerm.toLowerCase())
+    );
+  }, [companies, companySearchTerm]);
 
   // Get company name by id
   const getCompanyName = (companyId?: string): string => {
@@ -107,21 +183,16 @@ export const SuperAdminUsersPage: React.FC = () => {
   // Filter users
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
-      // Search filter
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm ||
         user.first_name?.toLowerCase().includes(searchLower) ||
         user.last_name?.toLowerCase().includes(searchLower) ||
         user.email?.toLowerCase().includes(searchLower);
 
-      // Company filter
       const matchesCompany = selectedCompany === 'all' ||
         (selectedCompany === 'global' ? !user.company_id : user.company_id === selectedCompany);
 
-      // Role filter
       const matchesRole = selectedRole === 'all' || user.role === selectedRole;
-
-      // Status filter
       const matchesStatus = selectedStatus === 'all' || user.status === selectedStatus;
 
       return matchesSearch && matchesCompany && matchesRole && matchesStatus;
@@ -169,8 +240,7 @@ export const SuperAdminUsersPage: React.FC = () => {
     setFormData(INITIAL_FORM_DATA);
     setShowPassword(false);
     setFormError(null);
-    setShowNewCompanyInput(false);
-    setNewCompanyName('');
+    setCompanySearchTerm('');
     setShowAddModal(true);
   };
 
@@ -181,7 +251,7 @@ export const SuperAdminUsersPage: React.FC = () => {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       email: user.email || '',
-      password: '', // Don't show existing password
+      password: '',
       phone: user.phone || '',
       role: user.role,
       company_id: user.company_id || '',
@@ -190,9 +260,113 @@ export const SuperAdminUsersPage: React.FC = () => {
     });
     setShowPassword(false);
     setFormError(null);
-    setShowNewCompanyInput(false);
-    setNewCompanyName('');
+    setCompanySearchTerm('');
     setShowEditModal(true);
+  };
+
+  // Handle phone input with mask
+  const handlePhoneChange = (value: string) => {
+    const formatted = formatPhoneNumber(value);
+    setFormData(prev => ({ ...prev, phone: formatted }));
+  };
+
+  // Handle global user toggle - disable company when global
+  const handleGlobalUserChange = (checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      is_global_user: checked,
+      company_id: checked ? '' : prev.company_id
+    }));
+  };
+
+  // Search GUS by NIP
+  const searchGUS = async () => {
+    if (!newCompanyData.tax_id || newCompanyData.tax_id.length !== 10) {
+      setGusError('NIP musi mieć 10 cyfr');
+      return;
+    }
+
+    setIsSearchingGUS(true);
+    setGusError(null);
+
+    try {
+      // GUS API call through Edge Function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Brak sesji');
+
+      const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+      const response = await fetch(`${supabaseUrl}/functions/v1/search-gus`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ nip: newCompanyData.tax_id })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setNewCompanyData(prev => ({
+          ...prev,
+          name: result.data.nazwa || prev.name,
+          legal_name: result.data.nazwa || prev.legal_name,
+          regon: result.data.regon || prev.regon,
+          address_street: result.data.ulica ? `${result.data.ulica} ${result.data.nrNieruchomosci || ''}${result.data.nrLokalu ? '/' + result.data.nrLokalu : ''}`.trim() : prev.address_street,
+          address_city: result.data.miejscowosc || prev.address_city,
+          address_postal: result.data.kodPocztowy || prev.address_postal
+        }));
+      } else {
+        setGusError(result.error || 'Nie znaleziono firmy w GUS');
+      }
+    } catch (err) {
+      console.error('GUS search error:', err);
+      setGusError('Błąd podczas wyszukiwania w GUS. Spróbuj później.');
+    } finally {
+      setIsSearchingGUS(false);
+    }
+  };
+
+  // Create new company
+  const handleCreateCompany = async () => {
+    if (!newCompanyData.name) {
+      setGusError('Nazwa firmy jest wymagana');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setGusError(null);
+
+    try {
+      const { data: newCompany, error: companyError } = await supabase
+        .from('companies')
+        .insert([{
+          name: newCompanyData.name,
+          legal_name: newCompanyData.legal_name || newCompanyData.name,
+          tax_id: newCompanyData.tax_id || null,
+          regon: newCompanyData.regon || null,
+          address_street: newCompanyData.address_street || null,
+          address_city: newCompanyData.address_city || null,
+          address_postal: newCompanyData.address_postal || null,
+          status: 'trial',
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        }])
+        .select()
+        .single();
+
+      if (companyError) throw companyError;
+
+      await refreshData();
+      setFormData(prev => ({ ...prev, company_id: newCompany.id }));
+      setShowNewCompanyModal(false);
+      setNewCompanyData(INITIAL_COMPANY_DATA);
+    } catch (err) {
+      console.error('Error creating company:', err);
+      setGusError(err instanceof Error ? err.message : 'Błąd podczas tworzenia firmy');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Handle Add User Submit
@@ -202,7 +376,6 @@ export const SuperAdminUsersPage: React.FC = () => {
     setFormError(null);
 
     try {
-      // Validate
       if (!formData.first_name || !formData.last_name || !formData.email) {
         throw new Error('Imię, nazwisko i email są wymagane');
       }
@@ -210,31 +383,11 @@ export const SuperAdminUsersPage: React.FC = () => {
         throw new Error('Hasło musi mieć co najmniej 6 znaków');
       }
 
-      let companyId = formData.company_id;
-
-      // Create new company if needed
-      if (showNewCompanyInput && newCompanyName) {
-        const { data: newCompany, error: companyError } = await supabase
-          .from('companies')
-          .insert([{
-            name: newCompanyName,
-            status: 'trial',
-            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-          }])
-          .select()
-          .single();
-
-        if (companyError) throw companyError;
-        companyId = newCompany.id;
-      }
-
-      // Get session for Edge Function call
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         throw new Error('Brak aktywnej sesji');
       }
 
-      // Call Edge Function to create user with auth
       const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
       const response = await fetch(`${supabaseUrl}/functions/v1/create-user-admin`, {
         method: 'POST',
@@ -251,7 +404,7 @@ export const SuperAdminUsersPage: React.FC = () => {
           phone: formData.phone || null,
           role: formData.role,
           status: formData.status,
-          company_id: companyId || null,
+          company_id: formData.is_global_user ? null : (formData.company_id || null),
           is_global_user: formData.is_global_user
         })
       });
@@ -280,30 +433,10 @@ export const SuperAdminUsersPage: React.FC = () => {
     setFormError(null);
 
     try {
-      // Validate
       if (!formData.first_name || !formData.last_name || !formData.email) {
         throw new Error('Imię, nazwisko i email są wymagane');
       }
 
-      let companyId = formData.company_id;
-
-      // Create new company if needed
-      if (showNewCompanyInput && newCompanyName) {
-        const { data: newCompany, error: companyError } = await supabase
-          .from('companies')
-          .insert([{
-            name: newCompanyName,
-            status: 'trial',
-            trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-          }])
-          .select()
-          .single();
-
-        if (companyError) throw companyError;
-        companyId = newCompany.id;
-      }
-
-      // Update user in database
       const updateData: any = {
         first_name: formData.first_name,
         last_name: formData.last_name,
@@ -311,11 +444,10 @@ export const SuperAdminUsersPage: React.FC = () => {
         phone: formData.phone || null,
         role: formData.role,
         status: formData.status,
-        company_id: companyId || null,
+        company_id: formData.is_global_user ? null : (formData.company_id || null),
         is_global_user: formData.is_global_user
       };
 
-      // If password is provided, update it too
       if (formData.password && formData.password.length >= 6) {
         await updateUserWithPassword(selectedUser.id, updateData, formData.password);
       } else {
@@ -348,6 +480,87 @@ export const SuperAdminUsersPage: React.FC = () => {
     setFormData(prev => ({ ...prev, password }));
     setShowPassword(true);
   };
+
+  // Company select with search component
+  const renderCompanySelect = () => (
+    <div className="relative" ref={companyDropdownRef}>
+      <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={formData.company_id ? getCompanyName(formData.company_id) : companySearchTerm}
+            onChange={(e) => {
+              setCompanySearchTerm(e.target.value);
+              setFormData(prev => ({ ...prev, company_id: '' }));
+              setShowCompanyDropdown(true);
+            }}
+            onFocus={() => setShowCompanyDropdown(true)}
+            disabled={formData.is_global_user}
+            placeholder={formData.is_global_user ? "Użytkownik globalny" : "Wyszukaj firmę..."}
+            className={`w-full px-3 py-2 pl-9 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+              formData.is_global_user ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+            }`}
+          />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          {formData.company_id && !formData.is_global_user && (
+            <button
+              type="button"
+              onClick={() => {
+                setFormData(prev => ({ ...prev, company_id: '' }));
+                setCompanySearchTerm('');
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Dropdown */}
+          {showCompanyDropdown && !formData.is_global_user && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {filteredCompanies.length > 0 ? (
+                filteredCompanies.map(company => (
+                  <button
+                    key={company.id}
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, company_id: company.id }));
+                      setCompanySearchTerm('');
+                      setShowCompanyDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between"
+                  >
+                    <span className="font-medium text-slate-900">{company.name}</span>
+                    {company.legal_name && company.legal_name !== company.name && (
+                      <span className="text-xs text-slate-500">{company.legal_name}</span>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-2 text-slate-500 text-sm">Nie znaleziono firm</div>
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setNewCompanyData(INITIAL_COMPANY_DATA);
+            setGusError(null);
+            setShowNewCompanyModal(true);
+          }}
+          disabled={formData.is_global_user}
+          className={`px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1 whitespace-nowrap ${
+            formData.is_global_user ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          <Plus className="w-4 h-4" />
+          Nowa
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-4 lg:p-6">
@@ -401,7 +614,7 @@ export const SuperAdminUsersPage: React.FC = () => {
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-purple-600" />
+              <Globe className="w-5 h-5 text-purple-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-slate-900">{stats.global}</p>
@@ -414,7 +627,6 @@ export const SuperAdminUsersPage: React.FC = () => {
       {/* Search and Filters */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -425,8 +637,6 @@ export const SuperAdminUsersPage: React.FC = () => {
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
-
-          {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition ${
@@ -439,10 +649,8 @@ export const SuperAdminUsersPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Expanded Filters */}
         {showFilters && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-100">
-            {/* Company Filter */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
               <select
@@ -457,8 +665,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            {/* Role Filter */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Rola</label>
               <select
@@ -472,8 +678,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 ))}
               </select>
             </div>
-
-            {/* Status Filter */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
               <select
@@ -717,7 +921,7 @@ export const SuperAdminUsersPage: React.FC = () => {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-blue-600" />
                 Dodaj nowego użytkownika
@@ -733,7 +937,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Name fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
@@ -757,7 +960,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
                 <input
@@ -769,7 +971,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 />
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Hasło *</label>
                 <div className="flex gap-2">
@@ -801,19 +1002,17 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
                 <input
                   type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   placeholder="+48 XXX XXX XXX"
                 />
               </div>
 
-              {/* Role & Status */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Rola *</label>
@@ -843,65 +1042,24 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Company */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
-                {!showNewCompanyInput ? (
-                  <div className="flex gap-2">
-                    <select
-                      value={formData.company_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value }))}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      <option value="">-- Użytkownik globalny --</option>
-                      {companies.map(company => (
-                        <option key={company.id} value={company.id}>{company.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewCompanyInput(true)}
-                      className="px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Nowa
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newCompanyName}
-                      onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder="Nazwa nowej firmy"
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewCompanyInput(false); setNewCompanyName(''); }}
-                      className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                    >
-                      Anuluj
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* Global user checkbox */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
                 <input
                   type="checkbox"
                   id="is_global_user"
                   checked={formData.is_global_user}
-                  onChange={(e) => setFormData(prev => ({ ...prev, is_global_user: e.target.checked }))}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  onChange={(e) => handleGlobalUserChange(e.target.checked)}
+                  className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500"
                 />
-                <label htmlFor="is_global_user" className="text-sm text-slate-700">
+                <label htmlFor="is_global_user" className="text-sm text-slate-700 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-purple-600" />
                   Użytkownik globalny (dostęp do wszystkich firm)
                 </label>
               </div>
 
-              {/* Submit buttons */}
+              {/* Company select with search */}
+              {renderCompanySelect()}
+
               <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
@@ -928,7 +1086,7 @@ export const SuperAdminUsersPage: React.FC = () => {
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between z-10">
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Edit2 className="w-5 h-5 text-green-600" />
                 Edytuj użytkownika
@@ -944,7 +1102,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Name fields */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
@@ -968,7 +1125,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
                 <input
@@ -980,7 +1136,6 @@ export const SuperAdminUsersPage: React.FC = () => {
                 />
               </div>
 
-              {/* Password (optional for edit) */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Nowe hasło <span className="text-slate-400 font-normal">(opcjonalnie)</span>
@@ -1013,19 +1168,17 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
                 <input
                   type="tel"
                   value={formData.phone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  onChange={(e) => handlePhoneChange(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   placeholder="+48 XXX XXX XXX"
                 />
               </div>
 
-              {/* Role & Status */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Rola *</label>
@@ -1054,65 +1207,24 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Company */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Firma</label>
-                {!showNewCompanyInput ? (
-                  <div className="flex gap-2">
-                    <select
-                      value={formData.company_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, company_id: e.target.value }))}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      <option value="">-- Użytkownik globalny --</option>
-                      {companies.map(company => (
-                        <option key={company.id} value={company.id}>{company.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowNewCompanyInput(true)}
-                      className="px-3 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Nowa
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newCompanyName}
-                      onChange={(e) => setNewCompanyName(e.target.value)}
-                      placeholder="Nazwa nowej firmy"
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewCompanyInput(false); setNewCompanyName(''); }}
-                      className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                    >
-                      Anuluj
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* Global user checkbox */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg">
                 <input
                   type="checkbox"
                   id="is_global_user_edit"
                   checked={formData.is_global_user}
-                  onChange={(e) => setFormData(prev => ({ ...prev, is_global_user: e.target.checked }))}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  onChange={(e) => handleGlobalUserChange(e.target.checked)}
+                  className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500"
                 />
-                <label htmlFor="is_global_user_edit" className="text-sm text-slate-700">
+                <label htmlFor="is_global_user_edit" className="text-sm text-slate-700 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-purple-600" />
                   Użytkownik globalny (dostęp do wszystkich firm)
                 </label>
               </div>
 
-              {/* Submit buttons */}
+              {/* Company select with search */}
+              {renderCompanySelect()}
+
               <div className="flex gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
@@ -1131,6 +1243,149 @@ export const SuperAdminUsersPage: React.FC = () => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Company Modal with GUS */}
+      {showNewCompanyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-green-600" />
+                Dodaj nową firmę
+              </h3>
+              <button onClick={() => setShowNewCompanyModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {gusError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  {gusError}
+                </div>
+              )}
+
+              {/* NIP with GUS search */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">NIP</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCompanyData.tax_id}
+                    onChange={(e) => setNewCompanyData(prev => ({ ...prev, tax_id: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="0000000000"
+                    maxLength={10}
+                  />
+                  <button
+                    type="button"
+                    onClick={searchGUS}
+                    disabled={isSearchingGUS || newCompanyData.tax_id.length !== 10}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isSearchingGUS ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                    Szukaj w GUS
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">Wpisz NIP i kliknij "Szukaj w GUS" aby automatycznie wypełnić dane</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
+                <input
+                  type="text"
+                  value={newCompanyData.name}
+                  onChange={(e) => setNewCompanyData(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="Nazwa skrócona"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Pełna nazwa (opcjonalnie)</label>
+                <input
+                  type="text"
+                  value={newCompanyData.legal_name}
+                  onChange={(e) => setNewCompanyData(prev => ({ ...prev, legal_name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="Pełna nazwa prawna"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">REGON</label>
+                <input
+                  type="text"
+                  value={newCompanyData.regon}
+                  onChange={(e) => setNewCompanyData(prev => ({ ...prev, regon: e.target.value.replace(/\D/g, '').slice(0, 14) }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="000000000"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Adres</label>
+                <input
+                  type="text"
+                  value={newCompanyData.address_street}
+                  onChange={(e) => setNewCompanyData(prev => ({ ...prev, address_street: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  placeholder="Ulica i numer"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Kod pocztowy</label>
+                  <input
+                    type="text"
+                    value={newCompanyData.address_postal}
+                    onChange={(e) => setNewCompanyData(prev => ({ ...prev, address_postal: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="00-000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Miasto</label>
+                  <input
+                    type="text"
+                    value={newCompanyData.address_city}
+                    onChange={(e) => setNewCompanyData(prev => ({ ...prev, address_city: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    placeholder="Miasto"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewCompanyModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                >
+                  Anuluj
+                </button>
+                <Button
+                  type="button"
+                  onClick={handleCreateCompany}
+                  disabled={isSubmitting || !newCompanyData.name}
+                  className="flex-1"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Utwórz firmę
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

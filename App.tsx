@@ -19,6 +19,8 @@ import { AdminUsersPage } from './pages/admin/Users';
 import { SuperAdminUsersPage } from './pages/superadmin/Users';
 import { SuperAdminCompaniesPage } from './pages/superadmin/Companies';
 import { SuperAdminSettingsPage } from './pages/superadmin/Settings';
+import { SuperAdminDashboard } from './pages/superadmin/Dashboard';
+import { SuperAdminClients } from './pages/superadmin/Clients';
 
 // Company Admin Pages
 import { CompanyDashboard } from './pages/company/Dashboard';
@@ -38,6 +40,7 @@ import { SalesClients } from './pages/sales/Clients';
 // Doradca (Consultant) Pages
 import { DoradcaDashboard } from './pages/doradca/Dashboard';
 import { DoradcaCompanyView } from './pages/doradca/CompanyView';
+import { DoradcaCompanies } from './pages/doradca/Companies';
 import { DoradcaSkills } from './pages/doradca/Skills';
 import { DoradcaLibrary } from './pages/doradca/Library';
 
@@ -116,7 +119,7 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   if (allowedRoles && !allowedRoles.includes(state.currentUser.role)) {
     // Redirect based on role
     if (state.currentUser.role === Role.SUPERADMIN) {
-        return <Navigate to="/superadmin/users" replace />;
+        return <Navigate to="/superadmin/dashboard" replace />;
     }
     if (state.currentUser.role === Role.SALES) {
         return <Navigate to="/sales/dashboard" replace />;
@@ -294,8 +297,12 @@ export default function App() {
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           
           {/* SuperAdmin Routes */}
+          <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/superadmin/users" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminUsersPage /></ProtectedRoute>} />
           <Route path="/superadmin/companies" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminCompaniesPage /></ProtectedRoute>} />
+          <Route path="/superadmin/clients" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminClients /></ProtectedRoute>} />
+          <Route path="/superadmin/skills" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><HRSkillsPage /></ProtectedRoute>} />
+          <Route path="/superadmin/library" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><HRLibraryPage /></ProtectedRoute>} />
           <Route path="/superadmin/settings" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminSettingsPage /></ProtectedRoute>} />
 
           {/* Company Admin Routes */}
@@ -305,32 +312,34 @@ export default function App() {
           <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
           <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
 
-          {/* Sales CRM Routes */}
-          <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesDashboard /></ProtectedRoute>} />
-          <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesPipeline /></ProtectedRoute>} />
-          <Route path="/sales/clients" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesClients /></ProtectedRoute>} />
-          <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesCompanies /></ProtectedRoute>} />
-          <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesContacts /></ProtectedRoute>} />
-          <Route path="/sales/activities" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesActivities /></ProtectedRoute>} />
+          {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
+          <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />
+          <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesPipeline /></ProtectedRoute>} />
+          <Route path="/sales/clients" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesClients /></ProtectedRoute>} />
+          <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesCompanies /></ProtectedRoute>} />
+          <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesContacts /></ProtectedRoute>} />
+          <Route path="/sales/activities" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesActivities /></ProtectedRoute>} />
 
-          {/* Doradca (Consultant) Routes */}
-          <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaDashboard /></ProtectedRoute>} />
-          <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaCompanyView /></ProtectedRoute>} />
-          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaSkills /></ProtectedRoute>} />
-          <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA]}><DoradcaLibrary /></ProtectedRoute>} />
+          {/* Doradca (Consultant) Routes - also accessible by SuperAdmin in simulation mode */}
+          <Route path="/doradca/dashboard" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaDashboard /></ProtectedRoute>} />
+          <Route path="/doradca/companies" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanies /></ProtectedRoute>} />
+          <Route path="/doradca/company/:companyId" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaCompanyView /></ProtectedRoute>} />
+          <Route path="/doradca/skills" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaSkills /></ProtectedRoute>} />
+          <Route path="/doradca/library" element={<ProtectedRoute allowedRoles={[Role.DORADCA, Role.SUPERADMIN]}><DoradcaLibrary /></ProtectedRoute>} />
 
           {/* Legacy Admin Route */}
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
-          <Route path="/hr/dashboard" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRDashboard /></ProtectedRoute>} />
-          <Route path="/hr/candidates" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRCandidatesPage /></ProtectedRoute>} />
-          <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={[Role.HR]}><HREmployeesPage /></ProtectedRoute>} />
-          <Route path="/hr/trial" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRTrialPage /></ProtectedRoute>} />
-          <Route path="/hr/documents" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRDocumentsPage /></ProtectedRoute>} />
-          <Route path="/hr/reports" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRReportsPage /></ProtectedRoute>} />
-          <Route path="/hr/library" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRLibraryPage /></ProtectedRoute>} />
-          <Route path="/hr/skills" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRSkillsPage /></ProtectedRoute>} />
-          <Route path="/hr/tests" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRTestsPage /></ProtectedRoute>} />
-          <Route path="/hr/settings" element={<ProtectedRoute allowedRoles={[Role.HR]}><HRSettingsPage /></ProtectedRoute>} />
+          {/* HR Routes - also accessible by SuperAdmin in simulation mode */}
+          <Route path="/hr/dashboard" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRDashboard /></ProtectedRoute>} />
+          <Route path="/hr/candidates" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRCandidatesPage /></ProtectedRoute>} />
+          <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HREmployeesPage /></ProtectedRoute>} />
+          <Route path="/hr/trial" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRTrialPage /></ProtectedRoute>} />
+          <Route path="/hr/documents" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRDocumentsPage /></ProtectedRoute>} />
+          <Route path="/hr/reports" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRReportsPage /></ProtectedRoute>} />
+          <Route path="/hr/library" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRLibraryPage /></ProtectedRoute>} />
+          <Route path="/hr/skills" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRSkillsPage /></ProtectedRoute>} />
+          <Route path="/hr/tests" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRTestsPage /></ProtectedRoute>} />
+          <Route path="/hr/settings" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRSettingsPage /></ProtectedRoute>} />
 
           <Route path="/coordinator/dashboard" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorDashboard /></ProtectedRoute>} />
           <Route path="/coordinator/employees" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorEmployees /></ProtectedRoute>} />

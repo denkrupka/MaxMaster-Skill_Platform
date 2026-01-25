@@ -43,6 +43,9 @@ interface AppState {
   crmContacts: CRMContact[];
   crmDeals: CRMDeal[];
   crmActivities: CRMActivity[];
+
+  // SuperAdmin role simulation
+  simulatedRole: Role | null;
 }
 
 interface AppContextType {
@@ -114,6 +117,10 @@ interface AppContextType {
   // Module access methods
   grantModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
   revokeModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
+
+  // SuperAdmin role simulation
+  setSimulatedRole: (role: Role | null) => void;
+  getEffectiveRole: () => Role | null;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -181,7 +188,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     crmCompanies: [],
     crmContacts: [],
     crmDeals: [],
-    crmActivities: []
+    crmActivities: [],
+
+    // SuperAdmin role simulation
+    simulatedRole: null
   });
 
   // Track if we're in the initial auth setup to prevent duplicate refreshData calls
@@ -1463,6 +1473,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // SuperAdmin role simulation methods
+  const setSimulatedRole = (role: Role | null) => {
+    // Only superadmin can simulate roles
+    if (state.currentUser?.role !== Role.SUPERADMIN) return;
+    setState(prev => ({ ...prev, simulatedRole: role }));
+  };
+
+  const getEffectiveRole = (): Role | null => {
+    // If superadmin is simulating a role, return that role
+    if (state.currentUser?.role === Role.SUPERADMIN && state.simulatedRole) {
+      return state.simulatedRole;
+    }
+    return state.currentUser?.role || null;
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -1531,7 +1556,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Module access
     grantModuleAccess,
-    revokeModuleAccess
+    revokeModuleAccess,
+
+    // SuperAdmin role simulation
+    setSimulatedRole,
+    getEffectiveRole
   };
 
   return (
