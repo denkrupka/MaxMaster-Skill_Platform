@@ -751,24 +751,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     console.log('AppContext: update data (transformed):', dbData);
 
-    // Use Promise.race for timeout (abortSignal may not be supported)
+    // Use Promise.race for timeout
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Update timed out after 15s')), 15000)
     );
 
-    const updatePromise = supabase
-      .from('library_resources')
-      .update(dbData)
-      .eq('id', id)
-      .select('id')
-      .then(result => {
-        console.log('AppContext: update result - error:', result.error);
-        return result;
-      });
+    // Don't use .select() - just update and check for errors
+    const updatePromise = (async () => {
+      console.log('AppContext: starting update request...');
+      const result = await supabase
+        .from('library_resources')
+        .update(dbData)
+        .eq('id', id);
+      console.log('AppContext: update completed - error:', result.error);
+      return result;
+    })();
 
     try {
       const { error } = await Promise.race([updatePromise, timeoutPromise]);
       if (error) throw error;
+      console.log('AppContext: update success');
     } catch (err: any) {
       console.error('AppContext: update failed:', err);
       throw err;
