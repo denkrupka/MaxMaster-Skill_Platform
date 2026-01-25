@@ -133,17 +133,32 @@ export const HRLibraryPage = () => {
     const handleSaveResource = async () => {
         const res = editingResource;
         if (!res || !res.title) return;
-        
+
         setIsUploading(true);
         const resourceId = res.id || crypto.randomUUID();
 
-        // 1. Upload new local files
-        const newlyUploadedUrls: string[] = [];
+        // 1. Upload new local files in parallel (not sequentially)
+        let newlyUploadedUrls: string[] = [];
         const filesToUpload: File[] = localFiles || [];
         if (filesToUpload.length > 0) {
-            for (const file of filesToUpload) {
-                const url = await uploadDocument(file, 'library/' + resourceId);
-                if (url) newlyUploadedUrls.push(url);
+            console.log(`Uploading ${filesToUpload.length} files in parallel...`);
+            try {
+                const uploadPromises = filesToUpload.map(file =>
+                    uploadDocument(file, 'library/' + resourceId)
+                );
+                const results = await Promise.all(uploadPromises);
+                newlyUploadedUrls = results.filter((url): url is string => url !== null);
+
+                if (newlyUploadedUrls.length < filesToUpload.length) {
+                    const failedCount = filesToUpload.length - newlyUploadedUrls.length;
+                    console.warn(`${failedCount} file(s) failed to upload`);
+                    alert(`Uwaga: ${failedCount} plik(ów) nie udało się przesłać. Pozostałe dane zostaną zapisane.`);
+                }
+            } catch (uploadError) {
+                console.error('File upload error:', uploadError);
+                alert('Błąd podczas przesyłania plików. Spróbuj ponownie.');
+                setIsUploading(false);
+                return;
             }
         }
 
@@ -169,7 +184,7 @@ export const HRLibraryPage = () => {
             category: cats[0],
             file_urls: finalFileUrls,
             imageUrl: finalFileUrls.find(u => u && u.match(/\.(jpeg|jpg|gif|png)$/i)) || res.imageUrl || '',
-            url: res.url || '' 
+            url: res.url || ''
         } as LibraryResource;
 
         try {
@@ -182,12 +197,16 @@ export const HRLibraryPage = () => {
                 await addLibraryResource(resourceToSave);
             }
             console.log('Resource saved successfully');
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving resource:', error);
+            const errorMessage = error.message?.includes('timed out')
+                ? 'Przekroczono limit czasu. Sprawdź połączenie i spróbuj ponownie.'
+                : 'Błąd podczas zapisywania materiału. Spróbuj ponownie.';
+            alert(errorMessage);
             setIsUploading(false);
             return;
         }
-        
+
         setIsUploading(false);
         setIsEditorOpen(false);
         setEditingResource(null);

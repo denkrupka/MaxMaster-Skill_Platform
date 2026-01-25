@@ -798,9 +798,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     console.log('AppContext: insert data (transformed):', dbData);
 
-    const { error } = await supabase.from('library_resources').insert([dbData]);
-    console.log('AppContext: insert result - error:', error);
-    if (error) throw error;
+    // Use fetch directly with timeout to prevent hanging
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY';
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token || supabaseKey;
+
+    console.log('AppContext: starting insert fetch request...');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/library_resources`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${accessToken}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(dbData),
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+      console.log('AppContext: insert fetch completed - status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('AppContext: insert error:', errorText);
+        throw new Error(`Insert failed: ${response.status} ${errorText}`);
+      }
+
+      console.log('AppContext: insert success');
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        console.error('AppContext: insert timed out after 15s');
+        throw new Error('Insert timed out');
+      }
+      console.error('AppContext: insert failed:', err);
+      throw err;
+    }
+
     // Use the resource we sent since ID is already generated client-side
     setState(prev => ({ ...prev, libraryResources: [...prev.libraryResources, res] }));
   };
