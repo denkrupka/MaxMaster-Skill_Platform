@@ -1,11 +1,11 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Users, CheckSquare, Award, DollarSign, BookOpen, X,
   LogOut, Layers, UserPlus, Settings,
   FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network,
-  Building2, Target, UserCheck, Headphones
+  Building2, Target, UserCheck, Headphones, ChevronDown, RefreshCw, ShieldCheck
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -17,15 +17,20 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
-  const { state, logout } = useAppContext();
-  const { currentUser } = state;
+  const { state, logout, setSimulatedRole, getEffectiveRole } = useAppContext();
+  const { currentUser, simulatedRole } = state;
   const location = useLocation();
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
-  
+
+  // Get effective role for displaying the correct menu
+  const effectiveRole = getEffectiveRole();
+  const isSuperAdminSimulating = currentUser?.role === Role.SUPERADMIN && simulatedRole !== null;
+
   const NavItem = ({ to, icon: Icon, label }: { to: string, icon: any, label: string }) => (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       onClick={() => setIsOpen(false)}
       className={`flex items-center space-x-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
         isActive(to) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-600 hover:bg-slate-100'
@@ -36,16 +41,86 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
     </Link>
   );
 
+  // Role switcher for SuperAdmin
+  const RoleSwitcher = () => {
+    const availableRoles = [
+      { role: Role.SALES, label: 'Sales', icon: Target },
+      { role: Role.DORADCA, label: 'Doradca', icon: GraduationCap },
+      { role: Role.HR, label: 'HR', icon: Users },
+    ];
+
+    return (
+      <div className="px-4 py-2 mb-2">
+        <div className="relative">
+          <button
+            onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border ${
+              simulatedRole
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-slate-50 border-slate-200 text-slate-600'
+            } hover:bg-slate-100 transition-colors`}
+          >
+            <div className="flex items-center space-x-2">
+              <RefreshCw size={16} className={simulatedRole ? 'text-amber-600' : 'text-slate-400'} />
+              <span className="text-sm font-medium">
+                {simulatedRole ? `Tryb: ${ROLE_LABELS[simulatedRole]}` : 'Przełącz rolę'}
+              </span>
+            </div>
+            <ChevronDown size={16} className={`transform transition-transform ${showRoleSwitcher ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showRoleSwitcher && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+              {simulatedRole && (
+                <button
+                  onClick={() => {
+                    setSimulatedRole(null);
+                    setShowRoleSwitcher(false);
+                  }}
+                  className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 border-b border-slate-100"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Powrót do SuperAdmin</span>
+                </button>
+              )}
+              {availableRoles.map(({ role, label, icon: Icon }) => (
+                <button
+                  key={role}
+                  onClick={() => {
+                    setSimulatedRole(role);
+                    setShowRoleSwitcher(false);
+                  }}
+                  className={`w-full flex items-center space-x-2 px-3 py-2 text-sm hover:bg-slate-50 ${
+                    simulatedRole === role ? 'bg-amber-50 text-amber-700' : 'text-slate-600'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span>Pracuj jako {label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {simulatedRole && (
+          <p className="text-xs text-amber-600 mt-1 px-1">
+            Aktywny tryb symulacji roli
+          </p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
-      
+
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-slate-200 z-50 transform transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-16 flex items-center px-6 border-b border-slate-100">
@@ -60,34 +135,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
         <div className="p-4 overflow-y-auto h-[calc(100vh-4rem)] flex flex-col">
           <div className="mb-6">
-            
+
             {/* --- SUPERADMIN VIEW --- */}
-            {currentUser?.role === Role.SUPERADMIN && (
+            {currentUser?.role === Role.SUPERADMIN && !simulatedRole && (
                <>
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Super Admin</p>
+                 <NavItem to="/superadmin/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/superadmin/users" icon={Users} label="Użytkownicy" />
-                 <NavItem to="/superadmin/companies" icon={Briefcase} label="Firmy" />
+                 <NavItem to="/superadmin/companies" icon={Building2} label="Firmy" />
+                 <div className="my-2 border-t border-slate-100"></div>
+                 <NavItem to="/superadmin/clients" icon={Briefcase} label="Klienci (wszystkie)" />
+                 <NavItem to="/superadmin/skills" icon={Award} label="Umiejętności" />
+                 <NavItem to="/superadmin/library" icon={BookOpen} label="Biblioteka" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/superadmin/settings" icon={Settings} label="Ustawienia" />
                </>
             )}
 
-            {/* --- COMPANY ADMIN VIEW --- */}
-            {currentUser?.role === Role.COMPANY_ADMIN && (
-               <>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Admin Firmy</p>
-                 <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
-                 <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
-                 <NavItem to="/company/modules" icon={Layers} label="Moduły" />
-                 <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
-                 <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
-               </>
+            {/* --- SUPERADMIN ROLE SWITCHER --- */}
+            {currentUser?.role === Role.SUPERADMIN && (
+              <>
+                <div className="my-3 border-t border-slate-100"></div>
+                <RoleSwitcher />
+                <div className="my-2 border-t border-slate-100"></div>
+              </>
             )}
 
-            {/* --- SALES VIEW --- */}
-            {currentUser?.role === Role.SALES && (
+            {/* Show simulated role menu or actual role menu */}
+
+            {/* --- SALES VIEW (or SuperAdmin simulating Sales) --- */}
+            {(effectiveRole === Role.SALES || (isSuperAdminSimulating && simulatedRole === Role.SALES)) && (
                <>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Sales CRM</p>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                   Sales CRM {isSuperAdminSimulating && <span className="text-amber-500">(tryb)</span>}
+                 </p>
                  <NavItem to="/sales/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/sales/pipeline" icon={Target} label="Pipeline" />
                  <NavItem to="/sales/activities" icon={CheckSquare} label="Aktywności" />
@@ -98,28 +179,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                </>
             )}
 
-            {/* --- DORADCA (CONSULTANT) VIEW --- */}
-            {currentUser?.role === Role.DORADCA && (
+            {/* --- DORADCA (CONSULTANT) VIEW (or SuperAdmin simulating Doradca) --- */}
+            {(effectiveRole === Role.DORADCA || (isSuperAdminSimulating && simulatedRole === Role.DORADCA)) && (
                <>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Doradca</p>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                   Doradca {isSuperAdminSimulating && <span className="text-amber-500">(tryb)</span>}
+                 </p>
                  <NavItem to="/doradca/dashboard" icon={LayoutDashboard} label="Panel Doradcy" />
+                 <NavItem to="/doradca/companies" icon={Building2} label="Firmy klientów" />
                  <NavItem to="/doradca/skills" icon={Award} label="Przegląd umiejętności" />
                  <NavItem to="/doradca/library" icon={BookOpen} label="Biblioteka" />
                </>
             )}
 
-            {/* --- ADMIN VIEW (TECHNICAL / LEGACY) --- */}
-            {currentUser?.role === Role.ADMIN && (
+            {/* --- HR VIEW (or SuperAdmin simulating HR) --- */}
+            {(effectiveRole === Role.HR || (isSuperAdminSimulating && simulatedRole === Role.HR)) && (
                <>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Panel Techniczny</p>
-                 <NavItem to="/admin/users" icon={Users} label="Zarządzanie Kontami" />
-               </>
-            )}
-
-            {/* --- HR VIEW (OPERATIONAL) --- */}
-            {currentUser?.role === Role.HR && (
-               <>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Panel HR</p>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                   Panel HR {isSuperAdminSimulating && <span className="text-amber-500">(tryb)</span>}
+                 </p>
                  <NavItem to="/hr/dashboard" icon={Layers} label="Dashboard" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/candidates" icon={UserPlus} label="Kandydaci" />
@@ -135,6 +213,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/settings" icon={Settings} label="Ustawienia" />
+               </>
+            )}
+
+            {/* --- COMPANY ADMIN VIEW --- */}
+            {currentUser?.role === Role.COMPANY_ADMIN && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Admin Firmy</p>
+                 <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
+                 <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
+                 <NavItem to="/company/modules" icon={Layers} label="Moduły" />
+                 <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
+                 <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
+               </>
+            )}
+
+            {/* --- ADMIN VIEW (TECHNICAL / LEGACY) --- */}
+            {currentUser?.role === Role.ADMIN && (
+               <>
+                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Panel Techniczny</p>
+                 <NavItem to="/admin/users" icon={Users} label="Zarządzanie Kontami" />
                </>
             )}
 
@@ -202,14 +300,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 <NavItem to="/dashboard/profile" icon={User} label="Mój Profil" />
               </>
             )}
-            
+
           </div>
 
           <div className="mt-auto pt-4 border-t border-slate-100">
-             <div className="px-4 py-3 bg-slate-50 rounded-lg mb-4">
+             <div className={`px-4 py-3 rounded-lg mb-4 ${isSuperAdminSimulating ? 'bg-amber-50' : 'bg-slate-50'}`}>
                 <p className="text-sm font-medium text-slate-900">{currentUser?.first_name} {currentUser?.last_name}</p>
                 <p className="text-xs text-slate-500 capitalize">
-                    {currentUser?.target_position || ROLE_LABELS[currentUser?.role || Role.EMPLOYEE]}
+                    {isSuperAdminSimulating
+                      ? <span className="text-amber-600">SuperAdmin → {ROLE_LABELS[simulatedRole!]}</span>
+                      : (currentUser?.target_position || ROLE_LABELS[currentUser?.role || Role.EMPLOYEE])
+                    }
                 </p>
              </div>
             <button onClick={logout} className="flex w-full items-center space-x-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
