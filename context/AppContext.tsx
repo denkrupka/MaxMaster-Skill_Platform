@@ -1031,8 +1031,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error(data?.error || 'Failed to delete user');
     }
 
-    // Update local state
-    setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
+    // Refresh data from server to ensure state is in sync
+    await refreshData();
   };
 
   const contextValue: AppContextType = {

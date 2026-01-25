@@ -46,9 +46,13 @@ export const AdminUsersPage = () => {
     setValidationErrors(newErrors);
   }, [newUser.email, newUser.phone, state.users, isAddModalOpen]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Czy na pewno chcesz całkowicie usunąć tego użytkownika? Wszystkie dane zostaną bezpowrotnie utracone!')) {
-      deleteUserCompletely(id);
+      try {
+        await deleteUserCompletely(id);
+      } catch (error: any) {
+        alert('Błąd podczas usuwania użytkownika: ' + error.message);
+      }
     }
   };
 
