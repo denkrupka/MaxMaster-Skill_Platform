@@ -18,6 +18,7 @@ import { AdminUsersPage } from './pages/admin/Users';
 // SuperAdmin Pages
 import { SuperAdminUsersPage } from './pages/superadmin/Users';
 import { SuperAdminCompaniesPage } from './pages/superadmin/Companies';
+import { SuperAdminSettingsPage } from './pages/superadmin/Settings';
 
 // Company Admin Pages
 import { CompanyDashboard } from './pages/company/Dashboard';
@@ -32,6 +33,7 @@ import { SalesPipeline } from './pages/sales/Pipeline';
 import { SalesCompanies } from './pages/sales/Companies';
 import { SalesContacts } from './pages/sales/Contacts';
 import { SalesActivities } from './pages/sales/Activities';
+import { SalesClients } from './pages/sales/Clients';
 
 // Doradca (Consultant) Pages
 import { DoradcaDashboard } from './pages/doradca/Dashboard';
@@ -294,6 +296,7 @@ export default function App() {
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/users" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminUsersPage /></ProtectedRoute>} />
           <Route path="/superadmin/companies" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminCompaniesPage /></ProtectedRoute>} />
+          <Route path="/superadmin/settings" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminSettingsPage /></ProtectedRoute>} />
 
           {/* Company Admin Routes */}
           <Route path="/company/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyDashboard /></ProtectedRoute>} />
@@ -305,6 +308,7 @@ export default function App() {
           {/* Sales CRM Routes */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesDashboard /></ProtectedRoute>} />
           <Route path="/sales/pipeline" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesPipeline /></ProtectedRoute>} />
+          <Route path="/sales/clients" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesClients /></ProtectedRoute>} />
           <Route path="/sales/companies" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesCompanies /></ProtectedRoute>} />
           <Route path="/sales/contacts" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesContacts /></ProtectedRoute>} />
           <Route path="/sales/activities" element={<ProtectedRoute allowedRoles={[Role.SALES]}><SalesActivities /></ProtectedRoute>} />

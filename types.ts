@@ -369,6 +369,10 @@ export interface SystemConfig {
     noteCategories: string[];
     badgeTypes: string[];
     skillCategories: string[]; // Added
+
+    // Sales limits (set by SuperAdmin)
+    salesMaxDiscountPercent: number;      // Max discount % a salesperson can give
+    salesMaxFreeExtensionDays: number;    // Max free extension days a salesperson can give
 }
 
 export interface CandidateHistoryEntry {
