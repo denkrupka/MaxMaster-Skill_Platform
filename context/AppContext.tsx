@@ -753,7 +753,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addLibraryResource = async (res: LibraryResource) => {
     console.log('AppContext: inserting library resource...', res.title);
-    const { error } = await supabase.from('library_resources').insert([res]);
+
+    // Transform camelCase to snake_case for Supabase
+    const dbData = {
+      id: res.id,
+      title: res.title,
+      description: res.description ?? '',
+      type: res.type,
+      category: res.category,
+      categories: res.categories,
+      skill_ids: res.skill_ids,
+      url: res.url ?? '',
+      video_url: res.videoUrl ?? '',
+      image_url: res.imageUrl ?? '',
+      text_content: res.textContent ?? '',
+      file_urls: res.file_urls ?? [],
+      is_archived: res.is_archived ?? false,
+    };
+
+    console.log('AppContext: insert data (transformed):', dbData);
+
+    const { error } = await supabase.from('library_resources').insert([dbData]);
     console.log('AppContext: insert result - error:', error);
     if (error) throw error;
     // Use the resource we sent since ID is already generated client-side
@@ -762,22 +782,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateLibraryResource = async (id: string, res: Partial<LibraryResource>) => {
     console.log('AppContext: updating library resource...', id);
-    console.log('AppContext: update data:', JSON.stringify(res, null, 2));
 
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Update timeout after 10s')), 10000)
-    );
+    // Transform camelCase to snake_case for Supabase and remove undefined/extra fields
+    const dbData: Record<string, any> = {
+      title: res.title,
+      description: res.description ?? '',
+      type: res.type,
+      category: res.category,
+      categories: res.categories,
+      skill_ids: res.skill_ids,
+      url: res.url ?? '',
+      video_url: res.videoUrl ?? '',
+      image_url: res.imageUrl ?? '',
+      text_content: res.textContent ?? '',
+      file_urls: res.file_urls ?? [],
+      is_archived: res.is_archived,
+    };
 
-    try {
-      const updatePromise = supabase.from('library_resources').update(res).eq('id', id);
-      const { error } = await Promise.race([updatePromise, timeoutPromise]) as { error: any };
-      console.log('AppContext: update result - error:', error);
-      if (error) throw error;
-    } catch (err) {
-      console.error('AppContext: update failed:', err);
-      throw err;
-    }
+    // Remove undefined values
+    Object.keys(dbData).forEach(key => {
+      if (dbData[key] === undefined) delete dbData[key];
+    });
+
+    console.log('AppContext: update data (transformed):', dbData);
+
+    const { error } = await supabase.from('library_resources').update(dbData).eq('id', id);
+    console.log('AppContext: update result - error:', error);
+    if (error) throw error;
 
     // Update local state with the changes we sent
     setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? { ...r, ...res } : r) }));
