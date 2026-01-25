@@ -63,12 +63,87 @@ export const SKILL_STATUS_LABELS: Record<string, string> = {
 };
 
 export const ROLE_LABELS: Record<string, string> = {
-  [Role.ADMIN]: 'Administrator',
+  // Global roles
+  [Role.SUPERADMIN]: 'Super Administrator',
+  [Role.SALES]: 'Sprzedawca',
+  [Role.DORADCA]: 'Doradca',
+
+  // Company roles
+  [Role.COMPANY_ADMIN]: 'Administrator Firmy',
   [Role.HR]: 'HR Manager',
+  [Role.COORDINATOR]: 'Koordynator Robót',
   [Role.BRIGADIR]: 'Brygadzista',
   [Role.EMPLOYEE]: 'Pracownik',
   [Role.CANDIDATE]: 'Kandydat',
-  [Role.COORDINATOR]: 'Koordynator Robót'
+  [Role.TRIAL]: 'Okres Próbny',
+
+  // Legacy
+  [Role.ADMIN]: 'Administrator'
+};
+
+// Company status labels
+export const COMPANY_STATUS_LABELS: Record<string, string> = {
+  'active': 'Aktywna',
+  'suspended': 'Zawieszona',
+  'cancelled': 'Anulowana',
+  'trial': 'Okres próbny'
+};
+
+export const COMPANY_STATUS_COLORS: Record<string, string> = {
+  'active': 'bg-green-100 text-green-800 border-green-200',
+  'suspended': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'cancelled': 'bg-red-100 text-red-800 border-red-200',
+  'trial': 'bg-blue-100 text-blue-800 border-blue-200'
+};
+
+// Subscription status labels
+export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
+  'trialing': 'Okres próbny',
+  'active': 'Aktywna',
+  'past_due': 'Zaległa płatność',
+  'cancelled': 'Anulowana'
+};
+
+export const SUBSCRIPTION_STATUS_COLORS: Record<string, string> = {
+  'trialing': 'bg-blue-100 text-blue-800 border-blue-200',
+  'active': 'bg-green-100 text-green-800 border-green-200',
+  'past_due': 'bg-red-100 text-red-800 border-red-200',
+  'cancelled': 'bg-gray-100 text-gray-800 border-gray-200'
+};
+
+// Module labels
+export const MODULE_LABELS: Record<string, string> = {
+  'recruitment': 'Rekrutacja',
+  'skills': 'Umiejętności'
+};
+
+export const MODULE_DESCRIPTIONS: Record<string, string> = {
+  'recruitment': 'Moduł rekrutacji kandydatów i zarządzania okresem próbnym',
+  'skills': 'Moduł zarządzania umiejętnościami i rozwojem pracowników'
+};
+
+// Global roles (users with is_global_user = true)
+export const GLOBAL_ROLES: Role[] = [
+  Role.SUPERADMIN,
+  Role.SALES,
+  Role.DORADCA
+];
+
+// Company roles (users with is_global_user = false)
+export const COMPANY_ROLES: Role[] = [
+  Role.COMPANY_ADMIN,
+  Role.HR,
+  Role.COORDINATOR,
+  Role.BRIGADIR,
+  Role.EMPLOYEE,
+  Role.CANDIDATE,
+  Role.TRIAL
+];
+
+// Roles available per module
+export const MODULE_ROLES: Record<string, Role[]> = {
+  'recruitment': [Role.CANDIDATE, Role.TRIAL],
+  'skills': [Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]
 };
 
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
