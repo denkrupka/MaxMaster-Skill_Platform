@@ -172,10 +172,16 @@ export const HRLibraryPage = () => {
             url: res.url || '' 
         } as LibraryResource;
 
-        if (res.id) {
-            updateLibraryResource(res.id, resourceToSave);
-        } else {
-            addLibraryResource(resourceToSave);
+        try {
+            if (res.id) {
+                await updateLibraryResource(res.id, resourceToSave);
+            } else {
+                await addLibraryResource(resourceToSave);
+            }
+        } catch (error) {
+            console.error('Error saving resource:', error);
+            setIsUploading(false);
+            return;
         }
         
         setIsUploading(false);
@@ -217,10 +223,14 @@ export const HRLibraryPage = () => {
             title: "Archiwizacja Materiału",
             message: "Czy na pewno chcesz usunąć ten materiał? Zostanie on przeniesiony do archiwum.",
             actionLabel: "Usuń (Archiwizuj)",
-            onConfirm: () => {
-                updateLibraryResource(res.id, { is_archived: true });
-                setIsDetailOpen(false);
-                setSelectedResource(null);
+            onConfirm: async () => {
+                try {
+                    await updateLibraryResource(res.id, { is_archived: true });
+                    setIsDetailOpen(false);
+                    setSelectedResource(null);
+                } catch (error) {
+                    console.error('Error archiving resource:', error);
+                }
             }
         });
     };
