@@ -808,7 +808,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateLibraryResource = async (id: string, res: Partial<LibraryResource>) => {
     console.log('AppContext: updating library resource...', id);
 
-    // Transform camelCase to snake_case for Supabase and remove undefined/extra fields
+    // Transform camelCase to snake_case for Supabase
     const dbData: Record<string, any> = {
       title: res.title,
       description: res.description ?? '',
@@ -831,30 +831,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     console.log('AppContext: update data (transformed):', dbData);
 
-    // Use Promise.race for timeout (abortSignal may not be supported)
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Update timed out after 15s')), 15000)
-    );
+    // Use fetch directly to bypass Supabase client issues
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpeXR2dWN6cGNpaWt6ZGhsZG55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwMTcwOTMsImV4cCI6MjA4MjU5MzA5M30.8dd75VEY_6VbHWmpbDv4nyzlpyMU0XGAtq6cxBfSbQY';
 
-    const updatePromise = supabase
-      .from('library_resources')
-      .update(dbData)
-      .eq('id', id)
-      .select('id')
-      .then(result => {
-        console.log('AppContext: update result - error:', result.error);
-        return result;
-      });
+    // Get current session token
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token || supabaseKey;
+
+    console.log('AppContext: starting fetch request...');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
-      const { error } = await Promise.race([updatePromise, timeoutPromise]);
-      if (error) throw error;
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/library_resources?id=eq.${id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${accessToken}`,
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify(dbData),
+          signal: controller.signal
+        }
+      );
+
+      clearTimeout(timeoutId);
+      console.log('AppContext: fetch completed - status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('AppContext: update error:', errorText);
+        throw new Error(`Update failed: ${response.status} ${errorText}`);
+      }
+
+      console.log('AppContext: update success');
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        console.error('AppContext: update timed out after 15s');
+        throw new Error('Update timed out');
+      }
       console.error('AppContext: update failed:', err);
       throw err;
     }
 
-    // Update local state with the changes we sent
+    // Update local state
     setState(prev => ({ ...prev, libraryResources: prev.libraryResources.map(r => r.id === id ? { ...r, ...res } : r) }));
   };
 
