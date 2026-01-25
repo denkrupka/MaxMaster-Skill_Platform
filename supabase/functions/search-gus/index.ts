@@ -84,22 +84,22 @@ serve(async (req) => {
     const data = await response.json()
     console.log('DataPort.pl data received:', JSON.stringify(data).substring(0, 500))
 
-    // Map DataPort.pl response to our format
-    // DataPort returns fields like: nazwa, nip, regon, ulica, nrNieruchomosci, nrLokalu, kodPocztowy, miejscowosc, etc.
+    // Map DataPort.pl response to our format with Polish field names for frontend compatibility
     const companyData = {
-      name: data.nazwa || data.nazwa_pelna || '',
-      street: data.ulica || '',
-      building_number: data.nrNieruchomosci || data.nr_nieruchomosci || '',
-      apartment_number: data.nrLokalu || data.nr_lokalu || '',
-      postal_code: data.kodPocztowy || data.kod_pocztowy || '',
-      city: data.miejscowosc || '',
+      // Polish field names for frontend
+      nazwa: data.nazwa || data.nazwa_pelna || '',
+      ulica: data.ulica || '',
+      nrNieruchomosci: data.nrNieruchomosci || data.nr_nieruchomosci || '',
+      nrLokalu: data.nrLokalu || data.nr_lokalu || '',
+      kodPocztowy: data.kodPocztowy || data.kod_pocztowy || '',
+      miejscowosc: data.miejscowosc || '',
       regon: data.regon || '',
-      tax_id: cleanNip,
-      // Additional data from full format
+      nip: cleanNip,
+      // Additional data
       krs: data.krs || '',
-      forma_prawna: data.formaPrawna || data.forma_prawna || '',
-      data_rozpoczecia: data.dataRozpoczeciaDzialalnosci || data.data_rozpoczecia || '',
-      pkd: data.pkdGlowny || data.pkd_glowny || '',
+      formaPrawna: data.formaPrawna || data.forma_prawna || '',
+      dataRozpoczeciaDzialalnosci: data.dataRozpoczeciaDzialalnosci || data.data_rozpoczecia || '',
+      pkdGlowny: data.pkdGlowny || data.pkd_glowny || '',
       email: data.email || '',
       telefon: data.telefon || '',
       www: data.www || '',

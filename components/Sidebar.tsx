@@ -46,7 +46,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
     const availableRoles = [
       { role: Role.SALES, label: 'Sales', icon: Target },
       { role: Role.DORADCA, label: 'Doradca', icon: GraduationCap },
-      { role: Role.HR, label: 'HR', icon: Users },
     ];
 
     return (
@@ -143,10 +142,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/superadmin/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/superadmin/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/superadmin/companies" icon={Building2} label="Firmy" />
-                 <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/superadmin/clients" icon={Briefcase} label="Klienci (wszystkie)" />
-                 <NavItem to="/superadmin/skills" icon={Award} label="Umiejętności" />
-                 <NavItem to="/superadmin/library" icon={BookOpen} label="Biblioteka" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/superadmin/settings" icon={Settings} label="Ustawienia" />
                </>

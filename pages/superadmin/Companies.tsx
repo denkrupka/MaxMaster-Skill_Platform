@@ -2,11 +2,12 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search, Plus, Building2, Users, CreditCard, Lock, Unlock,
-  Edit2, Trash2, Eye, X, MoreVertical, Check, AlertCircle
+  Edit2, Trash2, Eye, X, MoreVertical, Check, AlertCircle, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Company, CompanyStatus, SubscriptionStatus } from '../../types';
 import { COMPANY_STATUS_LABELS, COMPANY_STATUS_COLORS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS } from '../../constants';
+import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
 export const SuperAdminCompaniesPage: React.FC = () => {
   const { state, addCompany, updateCompany, deleteCompany, blockCompany, unblockCompany } = useAppContext();
@@ -19,6 +20,10 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+
+  // GUS search state
+  const [isSearchingGUS, setIsSearchingGUS] = useState(false);
+  const [gusError, setGusError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -184,6 +189,62 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       contact_phone: '',
       billing_email: ''
     });
+    setGusError(null);
+  };
+
+  // Search GUS/DataPort by NIP
+  const searchGUS = async () => {
+    const cleanNip = formData.tax_id.replace(/[\s-]/g, '');
+    if (!cleanNip || cleanNip.length !== 10) {
+      setGusError('NIP musi mieć 10 cyfr');
+      return;
+    }
+
+    setIsSearchingGUS(true);
+    setGusError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Brak sesji');
+
+      const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+      const response = await fetch(`${supabaseUrl}/functions/v1/search-gus`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ nip: cleanNip })
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data && result.data.found !== false) {
+        const d = result.data;
+        const street = d.ulica ? `${d.ulica} ${d.nrNieruchomosci || ''}${d.nrLokalu ? '/' + d.nrLokalu : ''}`.trim() : '';
+
+        setFormData(prev => ({
+          ...prev,
+          name: prev.name || d.nazwa || '',
+          slug: prev.slug || generateSlug(d.nazwa || ''),
+          legal_name: d.nazwa || prev.legal_name,
+          regon: d.regon || prev.regon,
+          address_street: street || prev.address_street,
+          address_city: d.miejscowosc || prev.address_city,
+          address_postal_code: d.kodPocztowy || prev.address_postal_code,
+          contact_email: d.email || prev.contact_email,
+          contact_phone: d.telefon || prev.contact_phone
+        }));
+      } else {
+        setGusError(result.error || 'Nie znaleziono firmy');
+      }
+    } catch (err) {
+      console.error('GUS search error:', err);
+      setGusError('Błąd podczas wyszukiwania. Spróbuj później.');
+    } finally {
+      setIsSearchingGUS(false);
+    }
   };
 
   return (
@@ -395,6 +456,44 @@ export const SuperAdminCompaniesPage: React.FC = () => {
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* NIP with GUS Search - at the top */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">NIP</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      name="tax_id"
+                      value={formData.tax_id}
+                      onChange={handleFormChange}
+                      placeholder="0000000000"
+                      maxLength={10}
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchGUS}
+                      disabled={isSearchingGUS || formData.tax_id.replace(/[\s-]/g, '').length !== 10}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                    >
+                      {isSearchingGUS ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Szukam...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4" />
+                          Szukaj w GUS
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Wpisz NIP i kliknij "Szukaj w GUS" aby automatycznie wypełnić dane</p>
+                  {gusError && (
+                    <p className="text-xs text-red-600 mt-1">{gusError}</p>
+                  )}
+                </div>
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
                   <input
@@ -423,22 +522,12 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 <div className="md:col-span-2 mt-4">
                   <p className="text-sm font-semibold text-slate-700 mb-3">Dane do faktury</p>
                 </div>
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa prawna</label>
                   <input
                     type="text"
                     name="legal_name"
                     value={formData.legal_name}
-                    onChange={handleFormChange}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">NIP</label>
-                  <input
-                    type="text"
-                    name="tax_id"
-                    value={formData.tax_id}
                     onChange={handleFormChange}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
