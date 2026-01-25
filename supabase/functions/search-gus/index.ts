@@ -84,25 +84,17 @@ serve(async (req) => {
     const data = await response.json()
     console.log('DataPort.pl data received:', JSON.stringify(data).substring(0, 500))
 
-    // Map DataPort.pl response to our format with Polish field names for frontend compatibility
+    // Map DataPort.pl response to our format
+    // DataPort API (format=full) returns: nazwa, ulica, numer_budynku, numer_lokalu, kod_pocztowy, miasto, regon
     const companyData = {
-      // Polish field names for frontend
-      nazwa: data.nazwa || data.nazwa_pelna || '',
+      nazwa: data.nazwa || '',
       ulica: data.ulica || '',
-      nrNieruchomosci: data.nrNieruchomosci || data.nr_nieruchomosci || '',
-      nrLokalu: data.nrLokalu || data.nr_lokalu || '',
-      kodPocztowy: data.kodPocztowy || data.kod_pocztowy || '',
-      miejscowosc: data.miejscowosc || '',
+      nrNieruchomosci: data.numer_budynku || '',
+      nrLokalu: data.numer_lokalu || '',
+      kodPocztowy: data.kod_pocztowy || '',
+      miejscowosc: data.miasto || '',
       regon: data.regon || '',
       nip: cleanNip,
-      // Additional data
-      krs: data.krs || '',
-      formaPrawna: data.formaPrawna || data.forma_prawna || '',
-      dataRozpoczeciaDzialalnosci: data.dataRozpoczeciaDzialalnosci || data.data_rozpoczecia || '',
-      pkdGlowny: data.pkdGlowny || data.pkd_glowny || '',
-      email: data.email || '',
-      telefon: data.telefon || '',
-      www: data.www || '',
       found: true
     }
 
