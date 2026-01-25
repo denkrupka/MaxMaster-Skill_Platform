@@ -9,13 +9,13 @@ import { Company, UserStatus } from '../../types';
 
 export const DoradcaDashboard: React.FC = () => {
   const { state } = useAppContext();
-  const { companies, allUsers } = state;
+  const { companies, users } = state;
 
   const [search, setSearch] = useState('');
 
   // Filter companies by search
   const filteredCompanies = useMemo(() => {
-    return companies.filter(c =>
+    return (companies || []).filter(c =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.industry?.toLowerCase().includes(search.toLowerCase())
     );
@@ -23,7 +23,7 @@ export const DoradcaDashboard: React.FC = () => {
 
   // Get stats for a company
   const getCompanyStats = (company: Company) => {
-    const companyUsers = allUsers.filter(u => u.company_id === company.id);
+    const companyUsers = (users || []).filter(u => u.company_id === company.id);
     const employees = companyUsers.filter(u => u.status === UserStatus.ACTIVE);
     const trial = companyUsers.filter(u => u.status === UserStatus.TRIAL);
     const candidates = companyUsers.filter(u => u.status === UserStatus.PENDING);
@@ -38,11 +38,12 @@ export const DoradcaDashboard: React.FC = () => {
 
   // Overall stats
   const totalStats = useMemo(() => {
-    const total = allUsers.length;
-    const employees = allUsers.filter(u => u.status === UserStatus.ACTIVE).length;
-    const trial = allUsers.filter(u => u.status === UserStatus.TRIAL).length;
-    return { total, employees, trial, companies: companies.length };
-  }, [allUsers, companies]);
+    const userList = users || [];
+    const total = userList.length;
+    const employees = userList.filter(u => u.status === UserStatus.ACTIVE).length;
+    const trial = userList.filter(u => u.status === UserStatus.TRIAL).length;
+    return { total, employees, trial, companies: (companies || []).length };
+  }, [users, companies]);
 
   return (
     <div className="p-4 lg:p-6">
@@ -162,7 +163,7 @@ export const DoradcaDashboard: React.FC = () => {
           <div className="text-center py-12">
             <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500">
-              {companies.length === 0 ? 'Brak firm pod opieką' : 'Brak firm spełniających kryteria'}
+              {(companies || []).length === 0 ? 'Brak firm pod opieką' : 'Brak firm spełniających kryteria'}
             </p>
           </div>
         )}
