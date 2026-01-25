@@ -5,8 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// GUS API integration for Polish company lookup by NIP
-// API documentation: https://api.stat.gov.pl/
+// DataPort.pl API for Polish company lookup by NIP
+// API documentation: https://dataport.pl/api
+const DATAPORT_API_KEY = Deno.env.get('DATAPORT_API_KEY') || 'ADrz3Fp537DmDwNAANiX72KJmHlqMX8JdGxojXtsgBHRy4zAzmYZeCqMQiF0Ur7d'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -38,163 +39,80 @@ serve(async (req) => {
       throw new Error('Nieprawidłowy NIP - błędna suma kontrolna')
     }
 
-    console.log('Searching GUS for NIP:', cleanNip)
+    console.log('Searching DataPort.pl for NIP:', cleanNip)
 
-    // GUS BIR1 API request
-    // Using the production API endpoint
-    const gusApiKey = Deno.env.get('GUS_API_KEY') || ''
-
-    // Try to get session ID first
-    let sessionId = ''
-
-    if (gusApiKey) {
-      // Production GUS API with key
-      const loginResponse = await fetch('https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc/ajaxEndpoint/Zaloguj', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ pKluczUzytkownika: gusApiKey })
-      })
-
-      if (loginResponse.ok) {
-        const loginData = await loginResponse.json()
-        sessionId = loginData.d
+    // Call DataPort.pl API
+    const response = await fetch(`https://dataport.pl/api/v1/company/${cleanNip}?format=full`, {
+      method: 'GET',
+      headers: {
+        'X-API-Key': DATAPORT_API_KEY,
+        'Accept': 'application/json'
       }
-    }
+    })
 
-    // If we have a session, use GUS API
-    if (sessionId) {
-      const searchResponse = await fetch('https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc/ajaxEndpoint/DaneSzukajPodmioty', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'sid': sessionId
-        },
-        body: JSON.stringify({
-          pParametryWyszukiwania: {
-            Nip: cleanNip
-          }
-        })
-      })
+    console.log('DataPort.pl response status:', response.status)
 
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json()
-
-        if (searchData.d) {
-          // Parse XML response from GUS
-          const xmlData = searchData.d
-
-          // Extract data from XML (simplified parsing)
-          const getName = (xml: string, tag: string) => {
-            const match = xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`))
-            return match ? match[1] : ''
-          }
-
-          const companyData = {
-            name: getName(xmlData, 'Nazwa'),
-            street: getName(xmlData, 'Ulica'),
-            building_number: getName(xmlData, 'NrNieruchomosci'),
-            apartment_number: getName(xmlData, 'NrLokalu'),
-            postal_code: getName(xmlData, 'KodPocztowy'),
-            city: getName(xmlData, 'Miejscowosc'),
-            regon: getName(xmlData, 'Regon'),
-            tax_id: cleanNip,
-            found: true
-          }
-
-          return new Response(
-            JSON.stringify({
-              success: true,
-              data: companyData
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200
-            }
-          )
+    if (response.status === 404) {
+      // Company not found in GUS
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Firma o podanym NIP nie została znaleziona w rejestrze GUS',
+          data: { found: false }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
         }
-      }
+      )
     }
 
-    // Fallback: Try regon.io API (alternative service)
-    try {
-      const regonResponse = await fetch(`https://api.regon.io/api/nip/${cleanNip}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-
-      if (regonResponse.ok) {
-        const regonData = await regonResponse.json()
-
-        if (regonData && regonData.name) {
-          const companyData = {
-            name: regonData.name || '',
-            street: regonData.street || '',
-            building_number: regonData.houseNo || '',
-            apartment_number: regonData.flatNo || '',
-            postal_code: regonData.zipCode || '',
-            city: regonData.city || '',
-            regon: regonData.regon || '',
-            tax_id: cleanNip,
-            found: true
-          }
-
-          return new Response(
-            JSON.stringify({
-              success: true,
-              data: companyData
-            }),
-            {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 200
-            }
-          )
-        }
-      }
-    } catch (regonError) {
-      console.log('Regon.io API not available, using demo mode')
+    if (response.status === 401) {
+      throw new Error('Błąd autoryzacji API DataPort.pl - nieprawidłowy klucz API')
     }
 
-    // Demo mode fallback - simulate GUS response for testing
-    // In production, this should return "not found" or throw an error
-    const demoData: Record<string, any> = {
-      '5252344078': {
-        name: 'PRZYKŁADOWA FIRMA SP. Z O.O.',
-        street: 'ul. Marszałkowska',
-        building_number: '126',
-        apartment_number: '12',
-        postal_code: '00-008',
-        city: 'Warszawa',
-        regon: '142827030',
-        tax_id: '5252344078',
-        found: true
-      }
+    if (response.status === 429) {
+      throw new Error('Przekroczono dzienny limit zapytań API. Spróbuj ponownie jutro.')
     }
 
-    // For demo purposes, generate mock data based on NIP
-    const mockCompanyData = demoData[cleanNip] || {
-      name: `Firma NIP ${cleanNip}`,
-      street: 'ul. Przykładowa',
-      building_number: String(parseInt(cleanNip.slice(-2))),
-      apartment_number: '',
-      postal_code: `${cleanNip.slice(0, 2)}-${cleanNip.slice(2, 5)}`,
-      city: 'Warszawa',
-      regon: `${cleanNip.slice(0, 9)}`,
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('DataPort.pl error:', errorText)
+      throw new Error(`Błąd API DataPort.pl: ${response.status}`)
+    }
+
+    const data = await response.json()
+    console.log('DataPort.pl data received:', JSON.stringify(data).substring(0, 500))
+
+    // Map DataPort.pl response to our format
+    // DataPort returns fields like: nazwa, nip, regon, ulica, nrNieruchomosci, nrLokalu, kodPocztowy, miejscowosc, etc.
+    const companyData = {
+      name: data.nazwa || data.nazwa_pelna || '',
+      street: data.ulica || '',
+      building_number: data.nrNieruchomosci || data.nr_nieruchomosci || '',
+      apartment_number: data.nrLokalu || data.nr_lokalu || '',
+      postal_code: data.kodPocztowy || data.kod_pocztowy || '',
+      city: data.miejscowosc || '',
+      regon: data.regon || '',
       tax_id: cleanNip,
-      found: true,
-      demo: true // Flag indicating this is demo data
+      // Additional data from full format
+      krs: data.krs || '',
+      forma_prawna: data.formaPrawna || data.forma_prawna || '',
+      data_rozpoczecia: data.dataRozpoczeciaDzialalnosci || data.data_rozpoczecia || '',
+      pkd: data.pkdGlowny || data.pkd_glowny || '',
+      email: data.email || '',
+      telefon: data.telefon || '',
+      www: data.www || '',
+      found: true
     }
 
-    console.log('Returning company data:', mockCompanyData)
+    console.log('Returning company data:', companyData)
 
     return new Response(
       JSON.stringify({
         success: true,
-        data: mockCompanyData,
-        message: !gusApiKey ? 'Tryb demo - dane przykładowe. Dodaj GUS_API_KEY do produkcji.' : undefined
+        data: companyData,
+        source: 'DataPort.pl'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -202,7 +120,7 @@ serve(async (req) => {
       }
     )
   } catch (error) {
-    console.error('GUS search error:', error)
+    console.error('DataPort search error:', error)
     return new Response(
       JSON.stringify({
         success: false,
