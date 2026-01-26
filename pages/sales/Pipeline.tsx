@@ -178,9 +178,6 @@ export const SalesPipeline: React.FC = () => {
     stages.forEach(stage => {
       grouped[stage.id] = [];
     });
-    // Also add WON and LOST for summary
-    grouped[DealStage.WON] = [];
-    grouped[DealStage.LOST] = [];
 
     filteredDeals.forEach(deal => {
       if (grouped[deal.stage]) {
@@ -735,21 +732,6 @@ export const SalesPipeline: React.FC = () => {
             <Plus className="w-8 h-8" />
             <span className="font-medium">Dodaj status</span>
           </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div><h3 className="font-semibold text-green-800">Wygrane</h3><p className="text-2xl font-bold text-green-700 mt-1">{formatCurrency((dealsByStage[DealStage.WON] || []).reduce((sum, d) => sum + (d.value || 0), 0))}</p></div>
-            <span className="text-green-600 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">{(dealsByStage[DealStage.WON] || []).length} deali</span>
-          </div>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div><h3 className="font-semibold text-red-800">Przegrane</h3><p className="text-2xl font-bold text-red-700 mt-1">{formatCurrency((dealsByStage[DealStage.LOST] || []).reduce((sum, d) => sum + (d.value || 0), 0))}</p></div>
-            <span className="text-red-600 bg-red-100 px-3 py-1 rounded-full text-sm font-medium">{(dealsByStage[DealStage.LOST] || []).length} deali</span>
-          </div>
         </div>
       </div>
 
