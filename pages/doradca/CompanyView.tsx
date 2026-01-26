@@ -46,6 +46,13 @@ export const DoradcaCompanyView: React.FC = () => {
   }>>([]);
   const [loadingSubscriptionData, setLoadingSubscriptionData] = useState(false);
 
+  // Module settings modal state
+  const [showModuleSettingsModal, setShowModuleSettingsModal] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<any>(null);
+  const [moduleMaxUsers, setModuleMaxUsers] = useState(10);
+  const [moduleDemoEndDate, setModuleDemoEndDate] = useState('');
+  const [loadingModule, setLoadingModule] = useState(false);
+
   // Get current company
   const company = companies.find(c => c.id === companyId);
 
@@ -180,6 +187,188 @@ export const DoradcaCompanyView: React.FC = () => {
 
     loadSubscriptionData();
   }, [showSubscriptionModal, company]);
+
+  // Log subscription change
+  const logSubscriptionChange = async (companyId: string, action: string, moduleCode?: string, details?: string) => {
+    const newEntry = {
+      id: Date.now().toString(),
+      action,
+      module_code: moduleCode,
+      details: details || '',
+      created_at: new Date().toISOString()
+    };
+
+    // Add to local state for immediate display
+    setSubscriptionHistory(prev => [newEntry, ...prev]);
+
+    // Try to persist to database
+    const { error } = await supabase.from('subscription_history').insert({
+      company_id: companyId,
+      action,
+      module_code: moduleCode,
+      details: details || '',
+      created_by: state.currentUser?.id
+    });
+
+    if (error) {
+      console.log('Could not log subscription change (table may not exist):', error);
+    }
+  };
+
+  // Open module settings modal
+  const openModuleSettings = (mod: any) => {
+    if (!company) return;
+
+    const companyMod = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === mod.code);
+    setSelectedModule(mod);
+    setModuleMaxUsers(companyMod?.max_users || 10);
+    // Pre-populate demo date if set
+    if (companyMod?.demo_end_date) {
+      setModuleDemoEndDate(companyMod.demo_end_date.split('T')[0]);
+    } else {
+      setModuleDemoEndDate('');
+    }
+    setShowModuleSettingsModal(true);
+  };
+
+  // Handle save module settings
+  const handleSaveModuleSettings = async () => {
+    if (!company || !selectedModule) return;
+
+    setLoadingModule(true);
+    try {
+      const existingModule = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === selectedModule.code);
+      const oldMaxUsers = existingModule?.max_users || 0;
+      const oldDemoEndDate = existingModule?.demo_end_date;
+
+      if (existingModule) {
+        // Update existing module - include demo_end_date
+        const updateData: any = { max_users: moduleMaxUsers };
+        if (moduleDemoEndDate) {
+          updateData.demo_end_date = moduleDemoEndDate;
+          updateData.is_active = true; // Activate module when setting demo
+        }
+
+        const { error } = await supabase
+          .from('company_modules')
+          .update(updateData)
+          .eq('id', existingModule.id);
+        if (error) throw error;
+
+        if (oldMaxUsers !== moduleMaxUsers) {
+          await logSubscriptionChange(
+            company.id,
+            'USERS_CHANGED',
+            selectedModule.code,
+            `Zmieniono liczbę użytkowników w module ${selectedModule.name_pl}: ${oldMaxUsers} → ${moduleMaxUsers}`
+          );
+        }
+
+        // Log demo change if date was set or changed
+        if (moduleDemoEndDate && moduleDemoEndDate !== oldDemoEndDate) {
+          await logSubscriptionChange(
+            company.id,
+            'DEMO_STARTED',
+            selectedModule.code,
+            `Ustawiono okres DEMO dla modułu ${selectedModule.name_pl} do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
+          );
+        }
+      } else {
+        // Create new module with settings (including demo if set)
+        const insertData: any = {
+          company_id: company.id,
+          module_code: selectedModule.code,
+          max_users: moduleMaxUsers,
+          current_users: 0,
+          price_per_user: selectedModule.base_price_per_user,
+          billing_cycle: 'monthly',
+          is_active: true,
+          activated_at: new Date().toISOString()
+        };
+
+        if (moduleDemoEndDate) {
+          insertData.demo_end_date = moduleDemoEndDate;
+        }
+
+        const { error } = await supabase.from('company_modules').insert(insertData);
+        if (error) throw error;
+
+        if (moduleDemoEndDate) {
+          await logSubscriptionChange(
+            company.id,
+            'DEMO_STARTED',
+            selectedModule.code,
+            `Ustawiono okres DEMO dla modułu ${selectedModule.name_pl} do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
+          );
+        } else {
+          await logSubscriptionChange(
+            company.id,
+            'MODULE_ACTIVATED',
+            selectedModule.code,
+            `Aktywowano moduł ${selectedModule.name_pl} (${moduleMaxUsers} użytkowników, ${selectedModule.base_price_per_user} PLN/os)`
+          );
+        }
+      }
+
+      // Also update company subscription status if demo was set
+      if (moduleDemoEndDate) {
+        await supabase
+          .from('companies')
+          .update({
+            subscription_status: 'trialing',
+            status: 'active'
+          })
+          .eq('id', company.id);
+      }
+
+      setShowModuleSettingsModal(false);
+      // Reload page to refresh data
+      window.location.reload();
+    } catch (error) {
+      console.error('Error saving module settings:', error);
+      alert('Błąd podczas zapisywania ustawień modułu');
+    } finally {
+      setLoadingModule(false);
+    }
+  };
+
+  // Handle end demo for a module
+  const handleEndDemo = async () => {
+    if (!company || !selectedModule) return;
+
+    setLoadingModule(true);
+    try {
+      const existingModule = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === selectedModule.code);
+      if (!existingModule) return;
+
+      const { error } = await supabase
+        .from('company_modules')
+        .update({
+          demo_end_date: null,
+          is_active: false,
+          deactivated_at: new Date().toISOString()
+        })
+        .eq('id', existingModule.id);
+
+      if (error) throw error;
+
+      await logSubscriptionChange(
+        company.id,
+        'DEMO_ENDED',
+        selectedModule.code,
+        `Zakończono DEMO dla modułu ${selectedModule.name_pl}`
+      );
+
+      setShowModuleSettingsModal(false);
+      // Reload page to refresh data
+      window.location.reload();
+    } catch (error) {
+      console.error('Error ending demo:', error);
+      alert('Błąd podczas kończenia DEMO');
+    } finally {
+      setLoadingModule(false);
+    }
+  };
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -721,7 +910,11 @@ export const DoradcaCompanyView: React.FC = () => {
                       {modules.filter(m => m.is_active).map(mod => {
                         const moduleStatus = getModuleStatus(mod.code);
                         return (
-                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
+                          <button
+                            key={mod.code}
+                            onClick={() => openModuleSettings(mod)}
+                            className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left"
+                          >
                             <div>
                               <p className="font-medium text-slate-900">{mod.name_pl}</p>
                               <p className="text-sm text-slate-500">{mod.description_pl}</p>
@@ -729,7 +922,7 @@ export const DoradcaCompanyView: React.FC = () => {
                             <span className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${moduleStatus.color}`}>
                               {moduleStatus.text}
                             </span>
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
@@ -923,6 +1116,128 @@ export const DoradcaCompanyView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Module Settings Modal */}
+      {showModuleSettingsModal && company && selectedModule && (() => {
+        const moduleStatus = getModuleStatus(selectedModule.code);
+        const companyMod = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === selectedModule.code);
+        const hasPaidSubscription = moduleStatus.status === 'active' && companyMod?.stripe_subscription_id;
+        const hasActiveDemo = moduleStatus.status === 'demo' && companyMod?.is_active && (companyMod?.demo_end_date || moduleStatus.demoEndDate);
+        return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Ustawienia modułu</h3>
+              <button onClick={() => setShowModuleSettingsModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-semibold text-slate-900">{selectedModule.name_pl}</p>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${moduleStatus.color}`}>
+                  {moduleStatus.text}
+                </span>
+              </div>
+              <p className="text-sm text-slate-500">{selectedModule.description_pl}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Liczba użytkowników</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setModuleMaxUsers(Math.max(1, moduleMaxUsers - 1))}
+                    className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    value={moduleMaxUsers}
+                    onChange={(e) => setModuleMaxUsers(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 text-center px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => setModuleMaxUsers(moduleMaxUsers + 1)}
+                    className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {!hasPaidSubscription && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Okres DEMO do</label>
+                  <input
+                    type="date"
+                    value={moduleDemoEndDate}
+                    onChange={(e) => setModuleDemoEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              {hasPaidSubscription && (
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800">
+                    Subskrypcja opłacona. Nie można dodać okresu DEMO.
+                  </p>
+                </div>
+              )}
+
+              {/* End DEMO button when demo is active */}
+              {hasActiveDemo && (
+                <button
+                  onClick={handleEndDemo}
+                  disabled={loadingModule}
+                  className="w-full px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-red-200"
+                >
+                  {loadingModule ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Kończę...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      Zakończ DEMO
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowModuleSettingsModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveModuleSettings}
+                disabled={loadingModule}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingModule ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Zapisuję...
+                  </>
+                ) : (
+                  'Zapisz'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </div>
   );
 };
