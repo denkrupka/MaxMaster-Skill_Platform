@@ -147,13 +147,13 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           pricePerUser: companyMod.price_per_user
         };
       }
-      // Demo module
+      // Demo module - always show user count, and date if available
       const company = companies.find(c => c.id === companyId);
       if (company?.trial_ends_at) {
         const endDate = new Date(company.trial_ends_at).toLocaleDateString('pl-PL');
         return {
           status: 'demo',
-          text: `DEMO do ${endDate}`,
+          text: `DEMO do ${endDate} (${companyMod.max_users} os.)`,
           color: 'bg-blue-100 text-blue-800 border-blue-200',
           maxUsers: companyMod.max_users,
           demoEndDate: company.trial_ends_at
@@ -339,25 +339,29 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
   // Log subscription change
   const logSubscriptionChange = async (companyId: string, action: string, moduleCode?: string, details?: string) => {
-    try {
-      await supabase.from('subscription_history').insert({
-        company_id: companyId,
-        action,
-        module_code: moduleCode,
-        details: details || '',
-        created_by: state.currentUser?.id
-      });
-    } catch (e) {
-      console.log('Could not log subscription change (table may not exist):', e);
-    }
-    // Add to local state for immediate display
-    setSubscriptionHistory(prev => [{
+    const newEntry = {
       id: Date.now().toString(),
       action,
       module_code: moduleCode,
       details: details || '',
       created_at: new Date().toISOString()
-    }, ...prev]);
+    };
+
+    // Add to local state for immediate display
+    setSubscriptionHistory(prev => [newEntry, ...prev]);
+
+    // Try to persist to database
+    const { error } = await supabase.from('subscription_history').insert({
+      company_id: companyId,
+      action,
+      module_code: moduleCode,
+      details: details || '',
+      created_by: state.currentUser?.id
+    });
+
+    if (error) {
+      console.log('Could not log subscription change (table may not exist):', error);
+    }
   };
 
   // Handle toggle module
@@ -511,22 +515,33 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       await updateCompany(selectedCompany.id, { bonus_balance: newBalance });
 
       // Try to save bonus transaction (table may not exist)
-      try {
-        await supabase.from('bonus_transactions').insert({
-          company_id: selectedCompany.id,
-          amount: Math.abs(amount),
-          type: amount > 0 ? 'credit' : 'debit',
-          description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
-          created_by: state.currentUser?.id
-        });
-      } catch (e) {
-        console.log('Could not save bonus transaction (table may not exist):', e);
+      const newBonusEntry = {
+        id: Date.now().toString(),
+        amount: Math.abs(amount),
+        type: amount > 0 ? 'credit' as const : 'debit' as const,
+        description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
+        created_at: new Date().toISOString()
+      };
+
+      // Add to local state for immediate display
+      setBonusHistory(prev => [newBonusEntry, ...prev]);
+
+      // Try to persist to database
+      const { error } = await supabase.from('bonus_transactions').insert({
+        company_id: selectedCompany.id,
+        amount: Math.abs(amount),
+        type: amount > 0 ? 'credit' : 'debit',
+        description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
+        created_by: state.currentUser?.id
+      });
+
+      if (error) {
+        console.log('Could not save bonus transaction (table may not exist):', error);
       }
 
       setSelectedCompany({ ...selectedCompany, bonus_balance: newBalance });
       setBonusAmount('');
       setBonusDescription('');
-      await loadBonusHistory(selectedCompany.id);
     } catch (error) {
       console.error('Error adding bonus:', error);
       alert('Błąd podczas dodawania bonusu');
@@ -2007,6 +2022,29 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               )}
             </div>
 
+            {/* Buttons */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowModuleSettingsModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveModuleSettings}
+                disabled={loadingModule}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingModule ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Zapisuję...
+                  </>
+                ) : (
+                  'Zapisz'
+                )}
+              </button>
+            </div>
           </div>
         </div>
         );
