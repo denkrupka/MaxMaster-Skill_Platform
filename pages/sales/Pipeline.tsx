@@ -6,12 +6,6 @@ import { DealStage, DealPriority, CRMDeal, CRMActivity, ActivityType, CRMCompany
 import { DEAL_STAGE_LABELS, DEAL_STAGE_COLORS, DEAL_PRIORITY_LABELS, DEAL_PRIORITY_COLORS, MODULE_LABELS, ACTIVITY_TYPE_LABELS, INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS } from '../../constants';
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
-// Module prices for automatic calculation
-const MODULE_PRICES: Record<string, number> = {
-  recruitment: 50, // 50 PLN per user per month
-  skills: 30 // 30 PLN per user per month
-};
-
 // Custom stage type for dynamic stages
 interface CustomStage {
   id: string;
@@ -35,7 +29,13 @@ const STAGE_COLORS = [
 
 export const SalesPipeline: React.FC = () => {
   const { state, setState, addCrmDeal, updateCrmDeal, deleteCrmDeal } = useAppContext();
-  const { crmDeals, crmCompanies, crmActivities, crmContacts } = state;
+  const { crmDeals, crmCompanies, crmActivities, crmContacts, modules } = state;
+
+  // Get module price from database (base_price_per_user)
+  const getModulePrice = (moduleCode: string): number => {
+    const mod = modules.find(m => m.code === moduleCode);
+    return mod?.base_price_per_user || 0;
+  };
 
   const [search, setSearch] = useState('');
   const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
@@ -123,11 +123,11 @@ export const SalesPipeline: React.FC = () => {
     value: ''
   });
 
-  // Calculate value automatically based on modules and users
-  const calculateDealValue = (modules: string[], userCount: number): number => {
-    if (!modules.length || !userCount) return 0;
-    const monthlyPrice = modules.reduce((sum, mod) => sum + (MODULE_PRICES[mod] || 0), 0);
-    return monthlyPrice * userCount * 12; // Annual value
+  // Calculate value automatically based on modules and users (monthly value)
+  const calculateDealValue = (selectedModules: string[], userCount: number): number => {
+    if (!selectedModules.length || !userCount) return 0;
+    const monthlyPricePerUser = selectedModules.reduce((sum, mod) => sum + getModulePrice(mod), 0);
+    return monthlyPricePerUser * userCount; // Monthly value
   };
 
   // Get calculated value for new deal
@@ -850,7 +850,7 @@ export const SalesPipeline: React.FC = () => {
                         }}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm text-slate-700">{label} ({MODULE_PRICES[code]} PLN/użytk./mies.)</span>
+                      <span className="text-sm text-slate-700">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
                     </label>
                   ))}
                 </div>
@@ -859,7 +859,7 @@ export const SalesPipeline: React.FC = () => {
               {/* Calculated Value Display */}
               <div className="bg-slate-50 p-4 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-slate-700">Szacowana wartość roczna</label>
+                  <label className="block text-sm font-medium text-slate-700">Szacowana wartość miesięczna</label>
                   <label className="flex items-center gap-2 cursor-pointer text-sm">
                     <input
                       type="checkbox"
@@ -883,7 +883,7 @@ export const SalesPipeline: React.FC = () => {
                     {formatCurrency(calculatedNewDealValue)}
                     {calculatedNewDealValue > 0 && (
                       <span className="text-xs font-normal text-slate-500 ml-2">
-                        ({newDeal.modules_interested.length} moduł(y) × {newDeal.employee_count_estimate || 0} użytk. × 12 mies.)
+                        ({newDeal.modules_interested.length} moduł(y) × {newDeal.employee_count_estimate || 0} użytk.)
                       </span>
                     )}
                   </div>
@@ -1223,7 +1223,7 @@ export const SalesPipeline: React.FC = () => {
                         }}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm text-slate-700">{label} ({MODULE_PRICES[code]} PLN/użytk./mies.)</span>
+                      <span className="text-sm text-slate-700">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
                     </label>
                   ))}
                 </div>
@@ -1232,7 +1232,7 @@ export const SalesPipeline: React.FC = () => {
               {/* Calculated Value Display */}
               <div className="bg-slate-50 p-4 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-slate-700">Szacowana wartość roczna</label>
+                  <label className="block text-sm font-medium text-slate-700">Szacowana wartość miesięczna</label>
                   <label className="flex items-center gap-2 cursor-pointer text-sm">
                     <input
                       type="checkbox"
@@ -1256,7 +1256,7 @@ export const SalesPipeline: React.FC = () => {
                     {formatCurrency(calculatedEditDealValue)}
                     {calculatedEditDealValue > 0 && (
                       <span className="text-xs font-normal text-slate-500 ml-2">
-                        ({editDealForm.modules_interested.length} moduł(y) × {editDealForm.employee_count_estimate || 0} użytk. × 12 mies.)
+                        ({editDealForm.modules_interested.length} moduł(y) × {editDealForm.employee_count_estimate || 0} użytk.)
                       </span>
                     )}
                   </div>
