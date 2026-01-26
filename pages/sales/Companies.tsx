@@ -35,7 +35,6 @@ export const SalesCompanies: React.FC = () => {
     email: '',
     phone: '',
     position: '',
-    department: '',
     is_decision_maker: false
   });
 
@@ -48,6 +47,15 @@ export const SalesCompanies: React.FC = () => {
   const [showDealChoiceModal, setShowDealChoiceModal] = useState(false);
   const [showSelectDealModal, setShowSelectDealModal] = useState(false);
   const [dealSearchTerm, setDealSearchTerm] = useState('');
+  const [showDealDetailModal, setShowDealDetailModal] = useState(false);
+  const [showAddDealModal, setShowAddDealModal] = useState(false);
+  const [selectedDeal, setSelectedDeal] = useState<CRMDeal | null>(null);
+  const [dealForm, setDealForm] = useState({
+    title: '',
+    value: '',
+    stage: 'lead',
+    expected_close_date: ''
+  });
 
   // Task modal state
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -608,7 +616,6 @@ export const SalesCompanies: React.FC = () => {
       email: contact.email || '',
       phone: contact.phone || '',
       position: contact.position || '',
-      department: contact.department || '',
       is_decision_maker: contact.is_decision_maker
     });
     setIsEditingContact(false);
@@ -628,7 +635,6 @@ export const SalesCompanies: React.FC = () => {
           email: contactForm.email || null,
           phone: contactForm.phone || null,
           position: contactForm.position || null,
-          department: contactForm.department || null,
           is_decision_maker: contactForm.is_decision_maker
         })
         .eq('id', selectedContact.id)
@@ -695,6 +701,58 @@ export const SalesCompanies: React.FC = () => {
     } catch (error) {
       console.error('Error unlinking deal:', error);
       alert('Błąd podczas usuwania powiązania');
+    }
+  };
+
+  // Open deal detail modal
+  const openDealDetailModal = (deal: CRMDeal) => {
+    setSelectedDeal(deal);
+    setShowDealDetailModal(true);
+  };
+
+  // Open add deal modal
+  const openAddDealModal = () => {
+    setDealForm({
+      title: '',
+      value: '',
+      stage: 'lead',
+      expected_close_date: ''
+    });
+    setShowDealChoiceModal(false);
+    setShowAddDealModal(true);
+  };
+
+  // Create new deal
+  const handleCreateDeal = async () => {
+    if (!selectedContact || !selectedCompany) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('crm_deals')
+        .insert([{
+          title: dealForm.title,
+          value: dealForm.value ? parseFloat(dealForm.value) : null,
+          stage: dealForm.stage,
+          expected_close_date: dealForm.expected_close_date || null,
+          contact_id: selectedContact.id,
+          crm_company_id: selectedCompany.id,
+          assigned_sales_id: state.currentUser?.id
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setState(prev => ({
+        ...prev,
+        crmDeals: [data, ...prev.crmDeals]
+      }));
+
+      setShowAddDealModal(false);
+      await logCompanyActivity('deal_created', `Utworzono deal: ${dealForm.title}`);
+    } catch (error) {
+      console.error('Error creating deal:', error);
+      alert('Błąd podczas tworzenia deala');
     }
   };
 
@@ -1101,8 +1159,15 @@ export const SalesCompanies: React.FC = () => {
                     {isEditingStatus ? (
                       <select
                         value={selectedCompany.status}
-                        onChange={(e) => handleUpdateStatus(e.target.value)}
-                        onBlur={() => setIsEditingStatus(false)}
+                        onChange={(e) => {
+                          const newStatus = e.target.value;
+                          if (newStatus !== selectedCompany.status) {
+                            handleUpdateStatus(newStatus);
+                          } else {
+                            setIsEditingStatus(false);
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setIsEditingStatus(false), 150)}
                         autoFocus
                         className="px-2 py-1 text-xs font-medium border border-blue-300 rounded-full focus:ring-2 focus:ring-blue-500 outline-none"
                       >
@@ -1545,13 +1610,6 @@ export const SalesCompanies: React.FC = () => {
                               <History className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => openEditContactModal(contact)}
-                              className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg transition"
-                              title="Edytuj"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
                               onClick={() => handleDeleteContact(contact.id)}
                               className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
                               title="Usuń"
@@ -1899,6 +1957,7 @@ export const SalesCompanies: React.FC = () => {
                 <div className="space-y-2">
                   {getAvailableContacts().map(contact => (
                     <button
+                      type="button"
                       key={contact.id}
                       onClick={() => handleLinkContact(contact)}
                       className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition text-left"
@@ -1999,15 +2058,6 @@ export const SalesCompanies: React.FC = () => {
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Dział</label>
-                    <input
-                      type="text"
-                      value={contactForm.department}
-                      onChange={(e) => setContactForm(prev => ({ ...prev, department: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -2022,12 +2072,14 @@ export const SalesCompanies: React.FC = () => {
                   </div>
                   <div className="flex gap-3 pt-4">
                     <button
+                      type="button"
                       onClick={() => setIsEditingContact(false)}
                       className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
                     >
                       Anuluj
                     </button>
                     <button
+                      type="button"
                       onClick={handleUpdateContactProfile}
                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                     >
@@ -2049,16 +2101,11 @@ export const SalesCompanies: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Position & Department */}
-                  {(selectedContact.position || selectedContact.department) && (
+                  {/* Position */}
+                  {selectedContact.position && (
                     <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                       <Briefcase className="w-5 h-5 text-slate-400" />
-                      <div>
-                        <p className="font-medium text-slate-900">{selectedContact.position || '-'}</p>
-                        {selectedContact.department && (
-                          <p className="text-sm text-slate-500">{selectedContact.department}</p>
-                        )}
-                      </div>
+                      <p className="font-medium text-slate-900">{selectedContact.position}</p>
                     </div>
                   )}
 
@@ -2106,13 +2153,15 @@ export const SalesCompanies: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => window.open(`/sales/pipeline?deal=${deal.id}`, '_blank')}
+                                type="button"
+                                onClick={() => openDealDetailModal(deal)}
                                 className="p-2 text-slate-500 hover:bg-blue-100 rounded-lg transition"
                                 title="Przejdź do deala"
                               >
                                 <ExternalLink className="w-4 h-4" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleUnlinkDeal(deal.id)}
                                 className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
                                 title="Usuń powiązanie"
@@ -2162,11 +2211,7 @@ export const SalesCompanies: React.FC = () => {
             </div>
             <div className="p-6 space-y-3">
               <button
-                onClick={() => {
-                  setShowDealChoiceModal(false);
-                  // Navigate to pipeline with new deal for this contact
-                  window.open(`/sales/pipeline?newDeal=true&contactId=${selectedContact?.id}`, '_blank');
-                }}
+                onClick={openAddDealModal}
                 className="w-full flex items-center gap-3 p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition"
               >
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -2225,6 +2270,7 @@ export const SalesCompanies: React.FC = () => {
                 <div className="space-y-2">
                   {getAvailableDeals().map(deal => (
                     <button
+                      type="button"
                       key={deal.id}
                       onClick={() => handleLinkDeal(deal)}
                       className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition text-left"
@@ -2243,6 +2289,158 @@ export const SalesCompanies: React.FC = () => {
                   <p className="text-slate-500">Brak dostępnych deali</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Deal Detail Modal */}
+      {showDealDetailModal && selectedDeal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{selectedDeal.title}</h3>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
+                  selectedDeal.stage === 'won' ? 'bg-green-100 text-green-700' :
+                  selectedDeal.stage === 'lost' ? 'bg-red-100 text-red-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {selectedDeal.stage}
+                </span>
+              </div>
+              <button onClick={() => { setShowDealDetailModal(false); setSelectedDeal(null); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 rounded-lg p-4 text-center">
+                <p className="text-xs text-slate-500 mb-1">Wartość</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {selectedDeal.value?.toLocaleString('pl-PL')} zł
+                </p>
+              </div>
+
+              {selectedDeal.expected_close_date && (
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                  <CheckSquare className="w-5 h-5 text-slate-400" />
+                  <div>
+                    <p className="text-xs text-slate-500">Przewidywane zamknięcie</p>
+                    <p className="font-medium text-slate-900">
+                      {new Date(selectedDeal.expected_close_date).toLocaleDateString('pl-PL')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {selectedCompany && (
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                  <Building2 className="w-5 h-5 text-slate-400" />
+                  <div>
+                    <p className="text-xs text-slate-500">Firma</p>
+                    <p className="font-medium text-slate-900">{selectedCompany.name}</p>
+                  </div>
+                </div>
+              )}
+
+              {selectedContact && (
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                  <User className="w-5 h-5 text-slate-400" />
+                  <div>
+                    <p className="text-xs text-slate-500">Kontakt</p>
+                    <p className="font-medium text-slate-900">{selectedContact.first_name} {selectedContact.last_name}</p>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => { setShowDealDetailModal(false); setSelectedDeal(null); }}
+                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Zamknij
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Deal Modal */}
+      {showAddDealModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Dodaj nowy deal</h3>
+              <button onClick={() => setShowAddDealModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              {selectedContact && (
+                <p className="text-sm text-slate-500 mb-4">
+                  Deal dla: <span className="font-medium text-slate-700">{selectedContact.first_name} {selectedContact.last_name}</span>
+                </p>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tytuł *</label>
+                  <input
+                    type="text"
+                    value={dealForm.title}
+                    onChange={(e) => setDealForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="np. Wdrożenie systemu CRM"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Wartość (PLN)</label>
+                  <input
+                    type="number"
+                    value={dealForm.value}
+                    onChange={(e) => setDealForm(prev => ({ ...prev, value: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Etap</label>
+                  <select
+                    value={dealForm.stage}
+                    onChange={(e) => setDealForm(prev => ({ ...prev, stage: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="lead">Lead</option>
+                    <option value="qualified">Zakwalifikowany</option>
+                    <option value="proposal">Propozycja</option>
+                    <option value="negotiation">Negocjacje</option>
+                    <option value="won">Wygrany</option>
+                    <option value="lost">Przegrany</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Przewidywana data zamknięcia</label>
+                  <input
+                    type="date"
+                    value={dealForm.expected_close_date}
+                    onChange={(e) => setDealForm(prev => ({ ...prev, expected_close_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowAddDealModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleCreateDeal}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={!dealForm.title}
+                >
+                  Dodaj deal
+                </button>
+              </div>
             </div>
           </div>
         </div>
