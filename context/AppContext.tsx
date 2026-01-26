@@ -122,6 +122,11 @@ interface AppContextType {
   // SuperAdmin role simulation
   setSimulatedRole: (role: Role | null) => void;
   getEffectiveRole: () => Role | null;
+
+  // CRM Deal methods
+  addCrmDeal: (deal: Omit<CRMDeal, 'id' | 'created_at' | 'updated_at'>) => Promise<CRMDeal>;
+  updateCrmDeal: (id: string, updates: Partial<CRMDeal>) => Promise<void>;
+  deleteCrmDeal: (id: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1522,6 +1527,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return state.currentUser?.role || null;
   };
 
+  // =====================================================
+  // CRM DEAL METHODS
+  // =====================================================
+
+  const addCrmDeal = async (deal: Omit<CRMDeal, 'id' | 'created_at' | 'updated_at'>): Promise<CRMDeal> => {
+    const { data, error } = await supabase.from('crm_deals').insert([{
+      ...deal,
+      assigned_sales_id: deal.assigned_sales_id || state.currentUser?.id
+    }]).select().single();
+
+    if (error) throw error;
+    setState(prev => ({ ...prev, crmDeals: [data, ...prev.crmDeals] }));
+    return data;
+  };
+
+  const updateCrmDeal = async (id: string, updates: Partial<CRMDeal>) => {
+    const { data, error } = await supabase.from('crm_deals').update({
+      ...updates,
+      updated_at: new Date().toISOString()
+    }).eq('id', id).select().single();
+
+    if (error) throw error;
+    setState(prev => ({
+      ...prev,
+      crmDeals: prev.crmDeals.map(d => d.id === id ? { ...d, ...data } : d)
+    }));
+  };
+
+  const deleteCrmDeal = async (id: string) => {
+    const { error } = await supabase.from('crm_deals').delete().eq('id', id);
+    if (error) throw error;
+    setState(prev => ({
+      ...prev,
+      crmDeals: prev.crmDeals.filter(d => d.id !== id)
+    }));
+  };
+
   const contextValue: AppContextType = {
     state,
     setState,
@@ -1594,7 +1636,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // SuperAdmin role simulation
     setSimulatedRole,
-    getEffectiveRole
+    getEffectiveRole,
+
+    // CRM Deal methods
+    addCrmDeal,
+    updateCrmDeal,
+    deleteCrmDeal
   };
 
   return (
