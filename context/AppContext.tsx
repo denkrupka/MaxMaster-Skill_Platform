@@ -317,6 +317,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Load all data first
         await refreshData();
 
+        // Check if Doradca is viewing as another user (from new window)
+        const viewAsUserData = localStorage.getItem('doradca_view_as_user');
+        if (viewAsUserData) {
+          try {
+            const viewAsUser = JSON.parse(viewAsUserData);
+            console.log('Doradca viewing as user:', viewAsUser.email);
+            // Clear the storage immediately to prevent loops
+            localStorage.removeItem('doradca_view_as_user');
+            // Find user's company
+            const { data: companies } = await supabase.from('companies').select('*');
+            const userCompany = viewAsUser.company_id
+              ? (companies || []).find((c: Company) => c.id === viewAsUser.company_id)
+              : null;
+            setState(prev => ({
+              ...prev,
+              currentUser: viewAsUser,
+              currentCompany: userCompany || null,
+              companies: companies || prev.companies
+            }));
+            console.log('Auth initialization complete (view as user mode)');
+            isInitializingRef.current = false;
+            return; // Skip normal auth flow
+          } catch (parseError) {
+            console.error('Error parsing view as user data:', parseError);
+            localStorage.removeItem('doradca_view_as_user');
+          }
+        }
+
         // Check for existing auth session on mount
         const { data: { session } } = await supabase.auth.getSession();
 
