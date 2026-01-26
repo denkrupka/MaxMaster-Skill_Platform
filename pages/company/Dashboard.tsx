@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Package, CreditCard, Settings, ArrowRight, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { Users, Package, CreditCard, Settings, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { UserStatus } from '../../types';
 import { MODULE_LABELS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS } from '../../constants';
@@ -75,23 +75,9 @@ export const CompanyDashboard: React.FC = () => {
         </div>
       )}
 
-      {currentCompany.subscription_status === 'trialing' && currentCompany.trial_ends_at && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center gap-3">
-          <Clock className="w-6 h-6 text-blue-500 flex-shrink-0" />
-          <div>
-            <p className="font-medium text-blue-800">Okres próbny</p>
-            <p className="text-sm text-blue-600">
-              Twój okres próbny kończy się {new Date(currentCompany.trial_ends_at).toLocaleDateString('pl-PL')}.
-            </p>
-          </div>
-          <Link to="/company/subscription" className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-            Wybierz plan
-          </Link>
-        </div>
-      )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -119,24 +105,10 @@ export const CompanyDashboard: React.FC = () => {
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <CreditCard className="w-5 h-5 text-purple-600" />
             </div>
-            <span className="text-sm text-slate-500">Balans</span>
+            <span className="text-sm text-slate-500">Balans bonusów</span>
           </div>
           <p className="text-3xl font-bold text-slate-900">{currentCompany.bonus_balance?.toFixed(0) || 0}</p>
-          <p className="text-xs text-slate-500 mt-1">PLN bonusu</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-slate-200">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-orange-600" />
-            </div>
-            <span className="text-sm text-slate-500">Status</span>
-          </div>
-          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium border ${
-            SUBSCRIPTION_STATUS_COLORS[currentCompany.subscription_status] || 'bg-slate-100 text-slate-800'
-          }`}>
-            {SUBSCRIPTION_STATUS_LABELS[currentCompany.subscription_status] || currentCompany.subscription_status}
-          </span>
+          <p className="text-xs text-slate-500 mt-1">PLN</p>
         </div>
       </div>
 
@@ -207,10 +179,7 @@ export const CompanyDashboard: React.FC = () => {
                   }`}>
                     <Package className={`w-5 h-5 ${cm.is_active ? 'text-green-600' : 'text-slate-400'}`} />
                   </div>
-                  <div>
-                    <p className="font-medium text-slate-900">{cm.module?.name_pl || MODULE_LABELS[cm.module_code] || cm.module_code}</p>
-                    <p className="text-sm text-slate-500">{cm.price_per_user} PLN / użytkownik / miesiąc</p>
-                  </div>
+                  <p className="font-medium text-slate-900">{cm.module?.name_pl || MODULE_LABELS[cm.module_code] || cm.module_code}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-semibold text-slate-900">{cm.current_users} / {cm.max_users}</p>

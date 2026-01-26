@@ -215,6 +215,28 @@ serve(async (req) => {
         )
       }
 
+      case 'list-invoices': {
+        const { customerId } = body
+
+        if (!customerId) {
+          throw new Error('customerId is required')
+        }
+
+        // Fetch invoices from Stripe
+        const invoices = await stripe.invoices.list({
+          customer: customerId,
+          limit: 100,
+        })
+
+        return new Response(
+          JSON.stringify({ invoices: invoices.data }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`)
     }
