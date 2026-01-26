@@ -1073,11 +1073,11 @@ export const SalesCompanies: React.FC = () => {
         if (company.subscription_end_date) {
           const endDate = new Date(company.subscription_end_date);
           return {
-            text: `Trial do ${endDate.toLocaleDateString('pl-PL')}`,
-            color: 'bg-blue-100 text-blue-700'
+            text: `DEMO do ${endDate.toLocaleDateString('pl-PL')}`,
+            color: 'bg-purple-100 text-purple-700'
           };
         }
-        return { text: 'Okres próbny', color: 'bg-blue-100 text-blue-700' };
+        return { text: 'DEMO', color: 'bg-purple-100 text-purple-700' };
       case 'past_due':
         return { text: 'Zaległa płatność', color: 'bg-orange-100 text-orange-700' };
       case 'cancelled':
@@ -1190,19 +1190,9 @@ export const SalesCompanies: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {company.subscription_end_date ? (
-                      new Date(company.subscription_end_date) >= new Date() ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
-                          ważna do {new Date(company.subscription_end_date).toLocaleDateString('pl-PL')}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
-                          zakończona
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-slate-400">brak</span>
-                    )}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSubscriptionLabel(company).color}`}>
+                      {getSubscriptionLabel(company).text}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <ChevronRight className="w-5 h-5 text-slate-400 inline" />
