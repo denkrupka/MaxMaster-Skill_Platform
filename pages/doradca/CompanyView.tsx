@@ -4,7 +4,7 @@ import {
   ArrowLeft, Users, Clock, Search,
   User, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp,
   Mail, Phone, Calendar, Building2, Monitor, CreditCard, X, Package,
-  FileText, Receipt, ArrowRight
+  FileText, Receipt, ArrowRight, History, Download
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { UserStatus, User as UserType, Role } from '../../types';
@@ -25,6 +25,7 @@ export const DoradcaCompanyView: React.FC = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<UserType | null>(null);
   const [showUserCabinet, setShowUserCabinet] = useState(false);
+  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'payments' | 'history' | 'invoices'>('subscriptions');
 
   // Get current company
   const company = companies.find(c => c.id === companyId);
@@ -43,6 +44,87 @@ export const DoradcaCompanyView: React.FC = () => {
         return { ...cm, module };
       });
   }, [companyModules, modules, companyId]);
+
+  // Get all company modules (active and inactive)
+  const getCompanyModules = (cmpId: string) => {
+    return (companyModules || []).filter(cm => cm.company_id === cmpId);
+  };
+
+  // Format subscription status display
+  // Logic:
+  // - If at least one paid subscription (has stripe_subscription_id) -> AKTYWNA
+  // - If only demo (is_active but no stripe_subscription_id) -> DEMO
+  // - Otherwise -> BRAK
+  const formatSubscriptionDisplay = (): { text: string; color: string } => {
+    if (!company) return { text: 'BRAK', color: 'bg-gray-100 text-gray-800' };
+
+    const activeModules = getCompanyModules(company.id).filter(m => m.is_active);
+
+    // Check for any paid subscription (has stripe_subscription_id)
+    const hasPaidSubscription = activeModules.some(m => m.stripe_subscription_id);
+
+    if (hasPaidSubscription) {
+      return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800' };
+    }
+
+    // Check for DEMO (active modules without stripe subscription)
+    const hasDemoModules = activeModules.some(m => !m.stripe_subscription_id);
+    if (hasDemoModules) {
+      return { text: 'DEMO', color: 'bg-blue-100 text-blue-800' };
+    }
+
+    // No subscriptions
+    return { text: 'BRAK', color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Get module subscription status for display
+  const getModuleStatus = (moduleCode: string) => {
+    if (!company) return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+
+    const companyMod = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === moduleCode);
+    if (!companyMod) {
+      return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+    }
+    if (companyMod.is_active) {
+      // Check if it's a paid subscription (has Stripe ID) or demo
+      if (companyMod.stripe_subscription_id) {
+        return {
+          status: 'active',
+          text: `Aktywna (${companyMod.max_users} os.)`,
+          color: 'bg-green-100 text-green-800',
+          maxUsers: companyMod.max_users,
+          pricePerUser: companyMod.price_per_user
+        };
+      }
+      // Demo module - check per-module demo_end_date first, then fallback to company's trial_ends_at
+      const demoEndDate = companyMod.demo_end_date;
+      const effectiveDemoDate = demoEndDate || company.trial_ends_at;
+
+      if (effectiveDemoDate) {
+        const endDateStr = new Date(effectiveDemoDate).toLocaleDateString('pl-PL');
+        return {
+          status: 'demo',
+          text: `DEMO do ${endDateStr} (${companyMod.max_users} os.)`,
+          color: 'bg-blue-100 text-blue-800',
+          maxUsers: companyMod.max_users,
+          demoEndDate: effectiveDemoDate
+        };
+      }
+      return {
+        status: 'demo',
+        text: `DEMO (${companyMod.max_users} os.)`,
+        color: 'bg-blue-100 text-blue-800',
+        maxUsers: companyMod.max_users
+      };
+    }
+    return { status: 'inactive', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+  };
+
+  // Get payment history for company
+  const paymentHistory = useMemo(() => {
+    if (!company) return [];
+    return (state.paymentHistory || []).filter(ph => ph.company_id === company.id);
+  }, [state.paymentHistory, company]);
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -494,138 +576,218 @@ export const DoradcaCompanyView: React.FC = () => {
       )}
 
       {/* Subscription Modal */}
-      {showSubscriptionModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowSubscriptionModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <CreditCard className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">Subskrypcja</h2>
-                  <p className="text-sm text-slate-500">Informacje o płatnościach i fakturach</p>
-                </div>
-              </div>
+      {showSubscriptionModal && company && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Subskrypcja - {company.name}</h3>
               <button onClick={() => setShowSubscriptionModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              {/* Subscription Status */}
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Status subskrypcji</h3>
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-slate-600">Status:</span>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      company.subscription_status === 'active' ? 'bg-green-100 text-green-700' :
-                      company.subscription_status === 'trialing' ? 'bg-amber-100 text-amber-700' :
-                      company.subscription_status === 'past_due' ? 'bg-red-100 text-red-700' :
-                      'bg-slate-100 text-slate-600'
-                    }`}>
-                      {company.subscription_status === 'active' ? 'Aktywna' :
-                       company.subscription_status === 'trialing' ? 'Okres próbny' :
-                       company.subscription_status === 'past_due' ? 'Zaległa płatność' :
-                       company.subscription_status === 'cancelled' ? 'Anulowana' : 'Brak subskrypcji'}
-                    </span>
-                  </div>
-                  {company.trial_ends_at && (
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-slate-600">Koniec okresu próbnego:</span>
-                      <span className="font-medium text-slate-900">
-                        {new Date(company.trial_ends_at).toLocaleDateString('pl-PL')}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">Liczba aktywnych produktów:</span>
-                    <span className="font-bold text-slate-900">{companySubscriptions.length}</span>
-                  </div>
+
+            {/* Subscription Status Card */}
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <CreditCard className="w-7 h-7 text-white" />
                 </div>
-              </div>
-
-              {/* Subscription Products */}
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Produkty subskrypcji</h3>
-                {companySubscriptions.length > 0 ? (
-                  <div className="space-y-3">
-                    {companySubscriptions.map(sub => (
-                      <div key={sub.id} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                              <Package className="w-5 h-5 text-blue-600" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-slate-900">{sub.module?.name_pl || sub.module_code}</h4>
-                              <p className="text-sm text-slate-500">{sub.module?.description_pl || 'Moduł platformy'}</p>
-                            </div>
-                          </div>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            sub.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {sub.is_active ? 'Aktywny' : 'Nieaktywny'}
-                          </span>
-                        </div>
-                        <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-slate-500">Użytkownicy:</span>
-                            <span className="ml-2 font-medium text-slate-900">{sub.current_users} / {sub.max_users}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500">Cena/użytkownik:</span>
-                            <span className="ml-2 font-medium text-slate-900">{sub.price_per_user} PLN/{sub.billing_cycle === 'monthly' ? 'mies.' : 'rok'}</span>
-                          </div>
-                          {sub.activated_at && (
-                            <div>
-                              <span className="text-slate-500">Aktywowany:</span>
-                              <span className="ml-2 font-medium text-slate-900">{new Date(sub.activated_at).toLocaleDateString('pl-PL')}</span>
-                            </div>
-                          )}
-                          {sub.stripe_subscription_id && (
-                            <div>
-                              <span className="text-slate-500">Stripe ID:</span>
-                              <span className="ml-2 font-mono text-xs text-slate-500">{sub.stripe_subscription_id.slice(0, 12)}...</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-slate-50 rounded-xl p-8 border border-slate-100 text-center">
-                    <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500">Brak aktywnych produktów subskrypcji</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Payment History */}
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Historia płatności</h3>
-                <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-center">
-                  <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500 text-sm">Historia płatności zostanie pobrana z Stripe API</p>
-                  {company.stripe_customer_id && (
-                    <p className="text-xs text-slate-400 mt-1">Customer ID: {company.stripe_customer_id}</p>
-                  )}
+                <div className="flex-1">
+                  <p className="text-sm text-slate-500">Status subskrypcji</p>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mt-1 ${
+                    formatSubscriptionDisplay().color
+                  }`}>
+                    {formatSubscriptionDisplay().text}
+                  </span>
                 </div>
-              </div>
-
-              {/* Invoices */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Faktury</h3>
-                <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-center">
-                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500 text-sm">Lista faktur zostanie pobrana z Stripe API</p>
+                <div className="text-right">
+                  <p className="text-sm text-slate-500">Balans bonusowy</p>
+                  <p className="text-xl font-bold text-green-600">{company.bonus_balance?.toFixed(2) || '0.00'} PLN</p>
                 </div>
               </div>
             </div>
-            <div className="p-6 border-t border-slate-100 bg-slate-50">
-              <Button onClick={() => setShowSubscriptionModal(false)} className="w-full">
-                Zamknij
-              </Button>
+
+            {/* Tabs */}
+            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200 overflow-x-auto">
+              <button
+                onClick={() => setSubscriptionTab('subscriptions')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'subscriptions'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <Calendar className="w-4 h-4 inline mr-2" />
+                Subskrypcje
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('payments')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'payments'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 inline mr-2" />
+                Płatności
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('history')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'history'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <History className="w-4 h-4 inline mr-2" />
+                Historia
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('invoices')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'invoices'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <FileText className="w-4 h-4 inline mr-2" />
+                Faktury
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Subscriptions Tab */}
+              {subscriptionTab === 'subscriptions' && (
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-3">Moduły</h4>
+                    <div className="space-y-2">
+                      {modules.filter(m => m.is_active).map(mod => {
+                        const moduleStatus = getModuleStatus(mod.code);
+                        return (
+                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                            <div>
+                              <p className="font-medium text-slate-900">{mod.name_pl}</p>
+                              <p className="text-sm text-slate-500">{mod.description_pl}</p>
+                            </div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${moduleStatus.color}`}>
+                              {moduleStatus.text}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Payments Tab */}
+              {subscriptionTab === 'payments' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Wszystkie transakcje</h4>
+                  {paymentHistory.length > 0 ? (
+                    <div className="space-y-2">
+                      {paymentHistory.map(payment => (
+                        <div key={payment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-100">
+                              <CreditCard className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900">{payment.description || `Płatność ${payment.invoice_number || ''}`}</p>
+                              <p className="text-xs text-slate-500">{new Date(payment.paid_at || payment.created_at).toLocaleString('pl-PL')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="font-bold text-slate-900">{Number(payment.amount).toFixed(2)} PLN</p>
+                            {payment.invoice_pdf_url && (
+                              <a
+                                href={payment.invoice_pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                <Download className="w-4 h-4" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak transakcji</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* History Tab */}
+              {subscriptionTab === 'history' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Historia zmian subskrypcji</h4>
+                  <div className="text-center py-8 text-slate-500">
+                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Brak historii zmian subskrypcji</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Invoices Tab */}
+              {subscriptionTab === 'invoices' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Faktury i płatności</h4>
+                  {paymentHistory.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nr faktury</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {paymentHistory.map(payment => (
+                            <tr key={payment.id} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-sm text-slate-900">
+                                {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pl-PL') : new Date(payment.created_at).toLocaleDateString('pl-PL')}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600 font-mono">{payment.invoice_number || '-'}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-slate-900">{Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  payment.status === 'paid' ? 'bg-green-100 text-green-800' :
+                                  payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                  payment.status === 'refunded' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {payment.status === 'paid' ? 'Opłacona' : payment.status === 'failed' ? 'Niepowodzenie' : payment.status === 'refunded' ? 'Zwrócona' : 'Oczekująca'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {payment.invoice_pdf_url && (
+                                  <a href={payment.invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm">
+                                    <Download className="w-4 h-4" /> Pobierz
+                                  </a>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak historii płatności</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
