@@ -102,7 +102,7 @@ export const SalesCompanies: React.FC = () => {
 
   // Subscription modal state
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'history' | 'invoices'>('subscriptions');
+  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'payments' | 'history' | 'invoices'>('subscriptions');
   const [subscriptionHistory, setSubscriptionHistory] = useState<Array<{
     id: string;
     action: string;
@@ -266,6 +266,48 @@ export const SalesCompanies: React.FC = () => {
   // Get payment history for linked company
   const getLinkedCompanyPaymentHistory = (linkedCompanyId: string): PaymentHistory[] => {
     return (state.paymentHistory || []).filter(ph => ph.company_id === linkedCompanyId);
+  };
+
+  // Get module subscription status for display (matching SuperAdmin style)
+  const getModuleStatus = (linkedCompanyId: string, moduleCode: string) => {
+    const companyMod = state.companyModules.find(cm => cm.company_id === linkedCompanyId && cm.module_code === moduleCode);
+    if (!companyMod) {
+      return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+    }
+    if (companyMod.is_active) {
+      // Check if it's a paid subscription (has Stripe ID) or demo
+      if (companyMod.stripe_subscription_id) {
+        return {
+          status: 'active',
+          text: `Aktywna (${companyMod.max_users} os.)`,
+          color: 'bg-green-100 text-green-800',
+          maxUsers: companyMod.max_users,
+          pricePerUser: companyMod.price_per_user
+        };
+      }
+      // Demo module - check per-module demo_end_date first, then fallback to company's trial_ends_at
+      const demoEndDate = companyMod.demo_end_date;
+      const linkedCompany = state.companies.find(c => c.id === linkedCompanyId);
+      const effectiveDemoDate = demoEndDate || linkedCompany?.trial_ends_at;
+
+      if (effectiveDemoDate) {
+        const endDateStr = new Date(effectiveDemoDate).toLocaleDateString('pl-PL');
+        return {
+          status: 'demo',
+          text: `DEMO do ${endDateStr} (${companyMod.max_users} os.)`,
+          color: 'bg-blue-100 text-blue-800',
+          maxUsers: companyMod.max_users,
+          demoEndDate: effectiveDemoDate
+        };
+      }
+      return {
+        status: 'demo',
+        text: `DEMO (${companyMod.max_users} os.)`,
+        color: 'bg-blue-100 text-blue-800',
+        maxUsers: companyMod.max_users
+      };
+    }
+    return { status: 'inactive', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
   };
 
   // Generate slug from name
@@ -1128,37 +1170,33 @@ export const SalesCompanies: React.FC = () => {
   };
 
   // Get subscription status label
+  // Logic:
+  // - If at least one paid subscription (has stripe_subscription_id) -> AKTYWNA
+  // - If only demo (is_active but no stripe_subscription_id) -> DEMO
+  // - Otherwise -> BRAK
   const getSubscriptionLabel = (company: CRMCompany): { text: string; color: string } => {
     if (!company.linked_company_id) {
-      return { text: 'Brak', color: 'bg-slate-100 text-slate-600' };
+      return { text: 'BRAK', color: 'bg-gray-100 text-gray-700' };
     }
 
-    switch (company.subscription_status) {
-      case 'active':
-        if (company.subscription_end_date) {
-          const endDate = new Date(company.subscription_end_date);
-          return {
-            text: `Ważna do ${endDate.toLocaleDateString('pl-PL')}`,
-            color: 'bg-green-100 text-green-700'
-          };
-        }
-        return { text: 'Aktywna', color: 'bg-green-100 text-green-700' };
-      case 'trialing':
-        if (company.subscription_end_date) {
-          const endDate = new Date(company.subscription_end_date);
-          return {
-            text: `DEMO do ${endDate.toLocaleDateString('pl-PL')}`,
-            color: 'bg-purple-100 text-purple-700'
-          };
-        }
-        return { text: 'DEMO', color: 'bg-purple-100 text-purple-700' };
-      case 'past_due':
-        return { text: 'Zaległa płatność', color: 'bg-orange-100 text-orange-700' };
-      case 'cancelled':
-        return { text: 'Zakończona', color: 'bg-red-100 text-red-700' };
-      default:
-        return { text: 'Brak', color: 'bg-slate-100 text-slate-600' };
+    const companyModules = getLinkedCompanyModules(company.linked_company_id);
+    const activeModules = companyModules.filter(m => m.is_active);
+
+    // Check for any paid subscription (has stripe_subscription_id)
+    const hasPaidSubscription = activeModules.some(m => m.stripe_subscription_id);
+
+    if (hasPaidSubscription) {
+      return { text: 'AKTYWNA', color: 'bg-green-100 text-green-700' };
     }
+
+    // Check for DEMO (active modules without stripe subscription)
+    const hasDemoModules = activeModules.some(m => !m.stripe_subscription_id);
+    if (hasDemoModules) {
+      return { text: 'DEMO', color: 'bg-blue-100 text-blue-700' };
+    }
+
+    // No subscriptions
+    return { text: 'BRAK', color: 'bg-gray-100 text-gray-700' };
   };
 
   // Open discount modal
@@ -3583,10 +3621,10 @@ export const SalesCompanies: React.FC = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200">
+            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200 overflow-x-auto">
               <button
                 onClick={() => setSubscriptionTab('subscriptions')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'subscriptions'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -3596,8 +3634,19 @@ export const SalesCompanies: React.FC = () => {
                 Subskrypcje
               </button>
               <button
+                onClick={() => setSubscriptionTab('payments')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'payments'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 inline mr-2" />
+                Płatności
+              </button>
+              <button
                 onClick={() => setSubscriptionTab('history')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'history'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -3608,7 +3657,7 @@ export const SalesCompanies: React.FC = () => {
               </button>
               <button
                 onClick={() => setSubscriptionTab('invoices')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'invoices'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -3628,6 +3677,9 @@ export const SalesCompanies: React.FC = () => {
                     <div className="space-y-2">
                       {state.modules.filter(m => m.is_active).map(mod => {
                         const linkedCompany = getLinkedCompany(selectedCompany);
+                        const moduleStatus = linkedCompany
+                          ? getModuleStatus(linkedCompany.id, mod.code)
+                          : { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
                         const companyMod = linkedCompany
                           ? getLinkedCompanyModules(linkedCompany.id).find(cm => cm.module_code === mod.code)
                           : null;
@@ -3636,17 +3688,12 @@ export const SalesCompanies: React.FC = () => {
                           <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
                             <div className="flex-1">
                               <p className="font-medium text-slate-900">{mod.name_pl}</p>
-                              <p className="text-sm text-slate-500">
-                                {isActive && companyMod
-                                  ? `${companyMod.max_users} użytkowników, ${companyMod.price_per_user} PLN/os/mies.`
-                                  : `${mod.base_price_per_user} PLN/os/mies.`
-                                }
-                              </p>
+                              <p className="text-sm text-slate-500">{mod.description_pl}</p>
                             </div>
                             <div className="flex items-center gap-4">
-                              {isActive && companyMod && (
-                                <p className="font-bold text-slate-900">{(companyMod.max_users * companyMod.price_per_user).toFixed(2)} PLN/mies.</p>
-                              )}
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${moduleStatus.color}`}>
+                                {moduleStatus.text}
+                              </span>
                               <button
                                 onClick={() => handleToggleModule(mod, !isActive)}
                                 disabled={loadingSubscription}
@@ -3664,6 +3711,87 @@ export const SalesCompanies: React.FC = () => {
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Payments Tab */}
+              {subscriptionTab === 'payments' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Wszystkie transakcje</h4>
+                  {(() => {
+                    const linkedCompany = getLinkedCompany(selectedCompany);
+                    const paymentHistory = linkedCompany ? getLinkedCompanyPaymentHistory(linkedCompany.id) : [];
+                    const allTransactions = [
+                      ...paymentHistory.map(p => ({
+                        id: p.id,
+                        type: 'payment' as const,
+                        amount: Number(p.amount),
+                        description: p.description || `Płatność ${p.invoice_number || ''}`,
+                        status: p.status,
+                        date: p.paid_at || p.created_at,
+                        invoice_url: p.invoice_pdf_url
+                      })),
+                      ...bonusHistory.map(b => ({
+                        id: b.id,
+                        type: 'bonus' as const,
+                        amount: b.type === 'credit' ? b.amount : -b.amount,
+                        description: b.description,
+                        status: 'completed' as const,
+                        date: b.created_at,
+                        invoice_url: undefined
+                      }))
+                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                    return allTransactions.length > 0 ? (
+                      <div className="space-y-2">
+                        {allTransactions.map(tx => (
+                          <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                tx.type === 'payment' ? 'bg-blue-100' :
+                                tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+                              }`}>
+                                {tx.type === 'payment' ? (
+                                  <CreditCard className="w-4 h-4 text-blue-600" />
+                                ) : tx.amount > 0 ? (
+                                  <Plus className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <Minus className="w-4 h-4 text-red-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-medium text-slate-900">{tx.description}</p>
+                                <p className="text-xs text-slate-500">{new Date(tx.date).toLocaleString('pl-PL')}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <p className={`font-bold ${
+                                tx.type === 'payment' ? 'text-slate-900' :
+                                tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {tx.type === 'bonus' && tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} PLN
+                              </p>
+                              {tx.invoice_url && (
+                                <a
+                                  href={tx.invoice_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-700"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p>Brak transakcji</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

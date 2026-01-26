@@ -116,17 +116,27 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   };
 
   // Format subscription status display
+  // Logic:
+  // - If at least one paid subscription (has stripe_subscription_id) -> AKTYWNA
+  // - If only demo (is_active but no stripe_subscription_id) -> DEMO
+  // - Otherwise -> BRAK
   const formatSubscriptionDisplay = (company: Company): { text: string; color: string } => {
     const activeModules = getCompanyModules(company.id).filter(m => m.is_active);
-    if (activeModules.length > 0) {
+
+    // Check for any paid subscription (has stripe_subscription_id)
+    const hasPaidSubscription = activeModules.some(m => m.stripe_subscription_id);
+
+    if (hasPaidSubscription) {
       return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
     }
-    if (company.subscription_status === 'trialing') {
+
+    // Check for DEMO (active modules without stripe subscription)
+    const hasDemoModules = activeModules.some(m => !m.stripe_subscription_id);
+    if (hasDemoModules) {
       return { text: 'DEMO', color: 'bg-blue-100 text-blue-800 border-blue-200' };
     }
-    if (company.subscription_status === 'past_due') {
-      return { text: 'ZALEGŁA PŁATNOŚĆ', color: 'bg-red-100 text-red-800 border-red-200' };
-    }
+
+    // No subscriptions
     return { text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
   };
 
