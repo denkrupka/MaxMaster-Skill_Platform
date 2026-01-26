@@ -1095,8 +1095,8 @@ export const SalesPipeline: React.FC = () => {
                     getDealActivities(selectedDeal.id).map(activity => (
                       <div
                         key={activity.id}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg"
+                        onClick={() => navigate('/sales/activities')}
+                        className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition"
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${getActivityColor(activity.activity_type)}`}>
                           {getActivityIcon(activity.activity_type)}
