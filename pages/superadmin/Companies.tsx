@@ -28,7 +28,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showBonusModal, setShowBonusModal] = useState(false);
-  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'history' | 'invoices'>('subscriptions');
+  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'payments' | 'history' | 'invoices'>('subscriptions');
 
   // Subscription history state
   const [subscriptionHistory, setSubscriptionHistory] = useState<Array<{
@@ -117,25 +117,56 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
   // Format subscription status display
   const formatSubscriptionDisplay = (company: Company): { text: string; color: string } => {
-    if (!company.subscription_status || company.subscription_status === 'cancelled') {
-      return { text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
+    const activeModules = getCompanyModules(company.id).filter(m => m.is_active);
+    if (activeModules.length > 0) {
+      return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
     }
     if (company.subscription_status === 'trialing') {
-      const endDate = company.trial_ends_at ? new Date(company.trial_ends_at).toLocaleDateString('pl-PL') : '?';
-      return { text: `DEMO do ${endDate}`, color: 'bg-blue-100 text-blue-800 border-blue-200' };
-    }
-    if (company.subscription_status === 'active') {
-      // Check if there's an end date from modules
-      const activeModules = getCompanyModules(company.id).filter(m => m.is_active);
-      if (activeModules.length > 0) {
-        return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
-      }
-      return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
+      return { text: 'DEMO', color: 'bg-blue-100 text-blue-800 border-blue-200' };
     }
     if (company.subscription_status === 'past_due') {
       return { text: 'ZALEGŁA PŁATNOŚĆ', color: 'bg-red-100 text-red-800 border-red-200' };
     }
-    return { text: SUBSCRIPTION_STATUS_LABELS[company.subscription_status] || company.subscription_status, color: SUBSCRIPTION_STATUS_COLORS[company.subscription_status] || 'bg-slate-100 text-slate-800 border-slate-200' };
+    return { text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
+  };
+
+  // Get module subscription status for display
+  const getModuleStatus = (companyId: string, moduleCode: string) => {
+    const companyMod = companyModules.find(cm => cm.company_id === companyId && cm.module_code === moduleCode);
+    if (!companyMod) {
+      return { status: 'none', text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
+    }
+    if (companyMod.is_active) {
+      // Check if it's a paid subscription (has Stripe ID) or demo
+      if (companyMod.stripe_subscription_id) {
+        return {
+          status: 'active',
+          text: `Aktywna (${companyMod.max_users} os.)`,
+          color: 'bg-green-100 text-green-800 border-green-200',
+          maxUsers: companyMod.max_users,
+          pricePerUser: companyMod.price_per_user
+        };
+      }
+      // Demo module
+      const company = companies.find(c => c.id === companyId);
+      if (company?.trial_ends_at) {
+        const endDate = new Date(company.trial_ends_at).toLocaleDateString('pl-PL');
+        return {
+          status: 'demo',
+          text: `DEMO do ${endDate}`,
+          color: 'bg-blue-100 text-blue-800 border-blue-200',
+          maxUsers: companyMod.max_users,
+          demoEndDate: company.trial_ends_at
+        };
+      }
+      return {
+        status: 'demo',
+        text: `DEMO (${companyMod.max_users} os.)`,
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
+        maxUsers: companyMod.max_users
+      };
+    }
+    return { status: 'inactive', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800 border-gray-200' };
   };
 
   // Filter companies
@@ -1179,7 +1210,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
                 {/* Clickable Subscription */}
                 <button
-                  onClick={() => { loadSubscriptionHistory(selectedCompany.id); setShowSubscriptionModal(true); }}
+                  onClick={() => { loadSubscriptionHistory(selectedCompany.id); loadBonusHistory(selectedCompany.id); setShowSubscriptionModal(true); }}
                   className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
                 >
                   <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
@@ -1371,10 +1402,10 @@ export const SuperAdminCompaniesPage: React.FC = () => {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200">
+            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200 overflow-x-auto">
               <button
                 onClick={() => setSubscriptionTab('subscriptions')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'subscriptions'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -1384,8 +1415,19 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 Subskrypcje
               </button>
               <button
+                onClick={() => setSubscriptionTab('payments')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
+                  subscriptionTab === 'payments'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 inline mr-2" />
+                Płatności
+              </button>
+              <button
                 onClick={() => setSubscriptionTab('history')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'history'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -1396,7 +1438,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setSubscriptionTab('invoices')}
-                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
                   subscriptionTab === 'invoices'
                     ? 'text-blue-600 border-blue-600'
                     : 'text-slate-500 border-transparent hover:text-slate-700'
@@ -1416,47 +1458,105 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                     <h4 className="font-semibold text-slate-900 mb-3">Moduły</h4>
                     <div className="space-y-2">
                       {modules.filter(m => m.is_active).map(mod => {
-                        const companyMod = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === mod.code);
-                        const isActive = companyMod?.is_active;
-                        const hasNegotiatedPrice = isActive && companyMod && companyMod.price_per_user !== mod.base_price_per_user;
+                        const moduleStatus = getModuleStatus(selectedCompany.id, mod.code);
                         return (
-                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
-                            <button
-                              onClick={() => openModuleSettings(mod)}
-                              className="flex-1 text-left"
-                            >
+                          <button
+                            key={mod.code}
+                            onClick={() => openModuleSettings(mod)}
+                            className="w-full flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left"
+                          >
+                            <div>
                               <p className="font-medium text-slate-900">{mod.name_pl}</p>
-                              <p className="text-sm text-slate-500">
-                                {isActive && companyMod
-                                  ? `${companyMod.max_users} użytkowników, ${companyMod.price_per_user} PLN/os/mies.`
-                                  : `${mod.base_price_per_user} PLN/os/mies.`
-                                }
-                                {hasNegotiatedPrice && (
-                                  <span className="ml-2 text-xs text-orange-600">(cena specjalna, standardowa: {mod.base_price_per_user} PLN)</span>
-                                )}
-                              </p>
-                            </button>
-                            <div className="flex items-center gap-4">
-                              {isActive && companyMod && (
-                                <p className="font-bold text-slate-900">{(companyMod.max_users * companyMod.price_per_user).toFixed(2)} PLN/mies.</p>
-                              )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleToggleModule(mod, !isActive); }}
-                                disabled={loadingModule}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                                  isActive ? 'bg-green-500' : 'bg-slate-300'
-                                } ${loadingModule ? 'opacity-50' : ''}`}
-                              >
-                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                                  isActive ? 'translate-x-6' : 'translate-x-1'
-                                }`} />
-                              </button>
+                              <p className="text-sm text-slate-500">{mod.description_pl}</p>
                             </div>
-                          </div>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${moduleStatus.color}`}>
+                              {moduleStatus.text}
+                            </span>
+                          </button>
                         );
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Payments Tab */}
+              {subscriptionTab === 'payments' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Wszystkie transakcje</h4>
+                  {(() => {
+                    const paymentHistory = getCompanyPaymentHistory(selectedCompany.id);
+                    const allTransactions = [
+                      ...paymentHistory.map(p => ({
+                        id: p.id,
+                        type: 'payment' as const,
+                        amount: Number(p.amount),
+                        description: p.description || `Płatność ${p.invoice_number || ''}`,
+                        status: p.status,
+                        date: p.paid_at || p.created_at,
+                        invoice_url: p.invoice_pdf_url
+                      })),
+                      ...bonusHistory.map(b => ({
+                        id: b.id,
+                        type: 'bonus' as const,
+                        amount: b.type === 'credit' ? b.amount : -b.amount,
+                        description: b.description,
+                        status: 'completed' as const,
+                        date: b.created_at,
+                        invoice_url: undefined
+                      }))
+                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                    return allTransactions.length > 0 ? (
+                      <div className="space-y-2">
+                        {allTransactions.map(tx => (
+                          <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                tx.type === 'payment' ? 'bg-blue-100' :
+                                tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+                              }`}>
+                                {tx.type === 'payment' ? (
+                                  <CreditCard className="w-4 h-4 text-blue-600" />
+                                ) : tx.amount > 0 ? (
+                                  <Plus className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <Minus className="w-4 h-4 text-red-600" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-medium text-slate-900">{tx.description}</p>
+                                <p className="text-xs text-slate-500">{new Date(tx.date).toLocaleString('pl-PL')}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <p className={`font-bold ${
+                                tx.type === 'payment' ? 'text-slate-900' :
+                                tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {tx.type === 'bonus' && tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} PLN
+                              </p>
+                              {tx.invoice_url && (
+                                <a
+                                  href={tx.invoice_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-700"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p>Brak transakcji</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1837,7 +1937,10 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       )}
 
       {/* Module Settings Modal */}
-      {showModuleSettingsModal && selectedCompany && selectedModule && (
+      {showModuleSettingsModal && selectedCompany && selectedModule && (() => {
+        const moduleStatus = getModuleStatus(selectedCompany.id, selectedModule.code);
+        const hasPaidSubscription = moduleStatus.status === 'active' && getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code)?.stripe_subscription_id;
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1848,9 +1951,13 @@ export const SuperAdminCompaniesPage: React.FC = () => {
             </div>
 
             <div className="p-4 bg-slate-50 rounded-lg mb-4">
-              <p className="font-semibold text-slate-900">{selectedModule.name_pl}</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-semibold text-slate-900">{selectedModule.name_pl}</p>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${moduleStatus.color}`}>
+                  {moduleStatus.text}
+                </span>
+              </div>
               <p className="text-sm text-slate-500">{selectedModule.description_pl}</p>
-              <p className="text-sm font-medium text-blue-600 mt-2">{selectedModule.base_price_per_user} PLN / użytkownik / miesiąc</p>
             </div>
 
             <div className="space-y-4">
@@ -1879,43 +1986,31 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Okres DEMO do (opcjonalnie)</label>
-                <input
-                  type="date"
-                  value={moduleDemoEndDate}
-                  onChange={(e) => setModuleDemoEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-slate-500 mt-1">Ustaw datę aby włączyć tryb DEMO</p>
-              </div>
+              {!hasPaidSubscription && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Okres DEMO do</label>
+                  <input
+                    type="date"
+                    value={moduleDemoEndDate}
+                    onChange={(e) => setModuleDemoEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
 
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Koszt miesięczny:</strong> {(moduleMaxUsers * selectedModule.base_price_per_user).toFixed(2)} PLN
-                </p>
-              </div>
+              {hasPaidSubscription && (
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <p className="text-sm text-green-800">
+                    Subskrypcja opłacona. Nie można dodać okresu DEMO.
+                  </p>
+                </div>
+              )}
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowModuleSettingsModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleSaveModuleSettings}
-                disabled={loadingModule}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loadingModule && <Loader2 className="w-4 h-4 animate-spin" />}
-                Zapisz
-              </button>
-            </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
