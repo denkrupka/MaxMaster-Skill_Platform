@@ -223,6 +223,9 @@ export interface Company {
   contact_phone?: string;
   billing_email?: string;
 
+  // Additional info
+  industry?: string;
+
   // Status
   status: CompanyStatus;
   is_blocked: boolean;
@@ -646,6 +649,7 @@ export interface CRMDeal {
   lost_reason?: string;
   modules_interested?: string[];
   employee_count_estimate?: number;
+  module_user_counts?: Record<string, number>;
   notes?: string;
   assigned_sales_id?: string;
   created_at: string;

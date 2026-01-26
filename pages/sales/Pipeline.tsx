@@ -50,7 +50,6 @@ export const SalesPipeline: React.FC = () => {
   // Deal detail modal states
   const [dealDetailTab, setDealDetailTab] = useState<'details' | 'history'>('details');
   const [isEditingDeal, setIsEditingDeal] = useState(false);
-  const [editingModules, setEditingModules] = useState(false);
   const [editingPriority, setEditingPriority] = useState(false);
 
   // Edit deal form state
@@ -58,8 +57,7 @@ export const SalesPipeline: React.FC = () => {
     title: '',
     crm_company_id: '',
     expected_close_date: '',
-    employee_count_estimate: '',
-    modules_interested: [] as string[],
+    module_user_counts: {} as Record<string, number>,
     priority: DealPriority.MEDIUM,
     value: '',
     manualValue: false
@@ -117,26 +115,38 @@ export const SalesPipeline: React.FC = () => {
     title: '',
     crm_company_id: '',
     expected_close_date: '',
-    employee_count_estimate: '',
-    modules_interested: [] as string[],
+    module_user_counts: {} as Record<string, number>,
     notes: '',
     priority: DealPriority.MEDIUM,
     manualValue: false,
     value: ''
   });
 
-  // Calculate value automatically based on modules and users (monthly value)
-  const calculateDealValue = (selectedModules: string[], userCount: number): number => {
-    if (!selectedModules.length || !userCount) return 0;
-    const monthlyPricePerUser = selectedModules.reduce((sum, mod) => sum + getModulePrice(mod), 0);
-    return monthlyPricePerUser * userCount; // Monthly value
+  // Calculate value automatically based on modules and per-module user counts (monthly value)
+  const calculateDealValueFromModuleCounts = (moduleUserCounts: Record<string, number>): number => {
+    const moduleCodes = Object.keys(moduleUserCounts).filter(code => moduleUserCounts[code] > 0);
+    if (!moduleCodes.length) return 0;
+    return moduleCodes.reduce((sum, mod) => {
+      const price = getModulePrice(mod);
+      const userCount = moduleUserCounts[mod] || 0;
+      return sum + (price * userCount);
+    }, 0);
+  };
+
+  // Get total user count from module user counts
+  const getTotalUserCount = (moduleUserCounts: Record<string, number>): number => {
+    return Math.max(...Object.values(moduleUserCounts), 0);
+  };
+
+  // Get selected modules from user counts
+  const getSelectedModulesFromCounts = (moduleUserCounts: Record<string, number>): string[] => {
+    return Object.keys(moduleUserCounts).filter(code => moduleUserCounts[code] > 0);
   };
 
   // Get calculated value for new deal
   const calculatedNewDealValue = useMemo(() => {
-    const userCount = parseInt(newDeal.employee_count_estimate) || 0;
-    return calculateDealValue(newDeal.modules_interested, userCount);
-  }, [newDeal.modules_interested, newDeal.employee_count_estimate]);
+    return calculateDealValueFromModuleCounts(newDeal.module_user_counts);
+  }, [newDeal.module_user_counts]);
 
   // Get activities for a deal
   const getDealActivities = (dealId: string) => {
@@ -211,6 +221,10 @@ export const SalesPipeline: React.FC = () => {
   const handleCreateDeal = async () => {
     if (!newDeal.title.trim()) return;
 
+    // Get selected modules and calculate values
+    const selectedModules = getSelectedModulesFromCounts(newDeal.module_user_counts);
+    const totalUserCount = getTotalUserCount(newDeal.module_user_counts);
+
     // Calculate final value
     const finalValue = newDeal.manualValue && newDeal.value
       ? parseFloat(newDeal.value)
@@ -223,8 +237,9 @@ export const SalesPipeline: React.FC = () => {
         value: finalValue,
         probability: 50, // Default probability
         expected_close_date: newDeal.expected_close_date || undefined,
-        employee_count_estimate: newDeal.employee_count_estimate ? parseInt(newDeal.employee_count_estimate) : undefined,
-        modules_interested: newDeal.modules_interested.length > 0 ? newDeal.modules_interested : undefined,
+        employee_count_estimate: totalUserCount || undefined,
+        modules_interested: selectedModules.length > 0 ? selectedModules : undefined,
+        module_user_counts: Object.keys(newDeal.module_user_counts).length > 0 ? newDeal.module_user_counts : undefined,
         notes: newDeal.notes || undefined,
         priority: newDeal.priority,
         stage: newDealStage as DealStage
@@ -235,8 +250,7 @@ export const SalesPipeline: React.FC = () => {
         title: '',
         crm_company_id: '',
         expected_close_date: '',
-        employee_count_estimate: '',
-        modules_interested: [],
+        module_user_counts: {},
         notes: '',
         priority: DealPriority.MEDIUM,
         manualValue: false,
@@ -251,12 +265,21 @@ export const SalesPipeline: React.FC = () => {
   // Handle edit deal
   const openEditDealModal = () => {
     if (!selectedDeal) return;
+    // Build module_user_counts from existing data
+    const existingCounts = selectedDeal.module_user_counts || {};
+    // If no module_user_counts but has modules_interested and employee_count_estimate, create from those
+    const moduleUserCounts = Object.keys(existingCounts).length > 0
+      ? existingCounts
+      : (selectedDeal.modules_interested || []).reduce((acc, mod) => {
+          acc[mod] = selectedDeal.employee_count_estimate || 0;
+          return acc;
+        }, {} as Record<string, number>);
+
     setEditDealForm({
       title: selectedDeal.title,
       crm_company_id: selectedDeal.crm_company_id || '',
       expected_close_date: selectedDeal.expected_close_date || '',
-      employee_count_estimate: selectedDeal.employee_count_estimate?.toString() || '',
-      modules_interested: selectedDeal.modules_interested || [],
+      module_user_counts: moduleUserCounts,
       priority: selectedDeal.priority,
       value: selectedDeal.value?.toString() || '',
       manualValue: false
@@ -266,13 +289,16 @@ export const SalesPipeline: React.FC = () => {
 
   // Calculate value for edit form
   const calculatedEditDealValue = useMemo(() => {
-    const userCount = parseInt(editDealForm.employee_count_estimate) || 0;
-    return calculateDealValue(editDealForm.modules_interested, userCount);
-  }, [editDealForm.modules_interested, editDealForm.employee_count_estimate]);
+    return calculateDealValueFromModuleCounts(editDealForm.module_user_counts);
+  }, [editDealForm.module_user_counts]);
 
   // Save edited deal
   const handleSaveEditDeal = async () => {
     if (!selectedDeal) return;
+
+    // Get selected modules and calculate values
+    const selectedModules = getSelectedModulesFromCounts(editDealForm.module_user_counts);
+    const totalUserCount = getTotalUserCount(editDealForm.module_user_counts);
 
     const finalValue = editDealForm.manualValue && editDealForm.value
       ? parseFloat(editDealForm.value)
@@ -283,8 +309,9 @@ export const SalesPipeline: React.FC = () => {
         title: editDealForm.title,
         crm_company_id: editDealForm.crm_company_id || undefined,
         expected_close_date: editDealForm.expected_close_date || undefined,
-        employee_count_estimate: editDealForm.employee_count_estimate ? parseInt(editDealForm.employee_count_estimate) : undefined,
-        modules_interested: editDealForm.modules_interested.length > 0 ? editDealForm.modules_interested : undefined,
+        employee_count_estimate: totalUserCount || undefined,
+        modules_interested: selectedModules.length > 0 ? selectedModules : undefined,
+        module_user_counts: Object.keys(editDealForm.module_user_counts).length > 0 ? editDealForm.module_user_counts : undefined,
         priority: editDealForm.priority,
         value: finalValue
       });
@@ -295,8 +322,9 @@ export const SalesPipeline: React.FC = () => {
         title: editDealForm.title,
         crm_company_id: editDealForm.crm_company_id || undefined,
         expected_close_date: editDealForm.expected_close_date || undefined,
-        employee_count_estimate: editDealForm.employee_count_estimate ? parseInt(editDealForm.employee_count_estimate) : undefined,
-        modules_interested: editDealForm.modules_interested.length > 0 ? editDealForm.modules_interested : undefined,
+        employee_count_estimate: totalUserCount || undefined,
+        modules_interested: selectedModules.length > 0 ? selectedModules : undefined,
+        module_user_counts: Object.keys(editDealForm.module_user_counts).length > 0 ? editDealForm.module_user_counts : undefined,
         priority: editDealForm.priority,
         value: finalValue
       } : null);
@@ -305,24 +333,6 @@ export const SalesPipeline: React.FC = () => {
     } catch (error) {
       console.error('Failed to update deal:', error);
     }
-  };
-
-  // Update deal modules directly
-  const handleUpdateDealModules = async (modules: string[]) => {
-    if (!selectedDeal) return;
-    const userCount = selectedDeal.employee_count_estimate || 0;
-    const newValue = calculateDealValue(modules, userCount);
-
-    try {
-      await updateCrmDeal(selectedDeal.id, {
-        modules_interested: modules.length > 0 ? modules : undefined,
-        value: newValue || undefined
-      });
-      setSelectedDeal(prev => prev ? { ...prev, modules_interested: modules, value: newValue || prev.value } : null);
-    } catch (error) {
-      console.error('Failed to update deal modules:', error);
-    }
-    setEditingModules(false);
   };
 
   // Update deal priority directly
@@ -785,26 +795,14 @@ export const SalesPipeline: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Data zamknięcia</label>
-                  <input
-                    type="date"
-                    value={newDeal.expected_close_date}
-                    onChange={(e) => setNewDeal(prev => ({ ...prev, expected_close_date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Liczba użytkowników</label>
-                  <input
-                    type="number"
-                    value={newDeal.employee_count_estimate}
-                    onChange={(e) => setNewDeal(prev => ({ ...prev, employee_count_estimate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="np. 50"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data zamknięcia</label>
+                <input
+                  type="date"
+                  value={newDeal.expected_close_date}
+                  onChange={(e) => setNewDeal(prev => ({ ...prev, expected_close_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
 
               <div>
@@ -821,24 +819,47 @@ export const SalesPipeline: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Zainteresowane moduły</label>
-                <div className="flex flex-wrap gap-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Zainteresowane moduły</label>
+                <div className="space-y-3">
                   {Object.entries(MODULE_LABELS).map(([code, label]) => (
-                    <label key={code} className="flex items-center gap-2 cursor-pointer">
+                    <div key={code} className="flex items-center gap-3">
                       <input
                         type="checkbox"
-                        checked={newDeal.modules_interested.includes(code)}
+                        checked={(newDeal.module_user_counts[code] || 0) > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setNewDeal(prev => ({ ...prev, modules_interested: [...prev.modules_interested, code] }));
+                            setNewDeal(prev => ({
+                              ...prev,
+                              module_user_counts: { ...prev.module_user_counts, [code]: prev.module_user_counts[code] || 1 }
+                            }));
                           } else {
-                            setNewDeal(prev => ({ ...prev, modules_interested: prev.modules_interested.filter(m => m !== code) }));
+                            setNewDeal(prev => {
+                              const newCounts = { ...prev.module_user_counts };
+                              delete newCounts[code];
+                              return { ...prev, module_user_counts: newCounts };
+                            });
                           }
                         }}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm text-slate-700">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
-                    </label>
+                      <span className="text-sm text-slate-700 min-w-[140px]">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
+                      {(newDeal.module_user_counts[code] || 0) > 0 && (
+                        <input
+                          type="number"
+                          min="1"
+                          value={newDeal.module_user_counts[code] || ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setNewDeal(prev => ({
+                              ...prev,
+                              module_user_counts: { ...prev.module_user_counts, [code]: val }
+                            }));
+                          }}
+                          className="w-24 px-2 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Użytk."
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -866,12 +887,20 @@ export const SalesPipeline: React.FC = () => {
                     placeholder="Wpisz wartość..."
                   />
                 ) : (
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(calculatedNewDealValue)}
-                    {calculatedNewDealValue > 0 && (
-                      <span className="text-xs font-normal text-slate-500 ml-2">
-                        ({newDeal.modules_interested.length} moduł(y) × {newDeal.employee_count_estimate || 0} użytk.)
-                      </span>
+                  <div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(calculatedNewDealValue)}
+                    </div>
+                    {Object.keys(newDeal.module_user_counts).filter(code => newDeal.module_user_counts[code] > 0).length > 0 && (
+                      <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                        {Object.entries(newDeal.module_user_counts)
+                          .filter(([_, count]) => count > 0)
+                          .map(([code, count]) => (
+                            <div key={code}>
+                              {MODULE_LABELS[code]}: {count} użytk. × {getModulePrice(code)} PLN = {formatCurrency(count * getModulePrice(code))}
+                            </div>
+                          ))}
+                      </div>
                     )}
                   </div>
                 )}
@@ -914,7 +943,7 @@ export const SalesPipeline: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-900">{selectedDeal.title}</h3>
-              <button onClick={() => { setSelectedDeal(null); setDealDetailTab('details'); setEditingModules(false); setEditingPriority(false); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setSelectedDeal(null); setDealDetailTab('details'); setEditingPriority(false); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
             </div>
 
             {/* Tags - Stage and Priority (clickable) */}
@@ -970,15 +999,9 @@ export const SalesPipeline: React.FC = () => {
             {/* Details Tab */}
             {dealDetailTab === 'details' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <p className="text-xs text-slate-500 mb-1">Wartość</p>
-                    <p className="text-lg font-bold text-green-600">{formatCurrency(selectedDeal.value || 0)}</p>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg">
-                    <p className="text-xs text-slate-500 mb-1">Liczba użytkowników</p>
-                    <p className="text-lg font-bold text-slate-900">{selectedDeal.employee_count_estimate || '—'}</p>
-                  </div>
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">Wartość</p>
+                  <p className="text-lg font-bold text-green-600">{formatCurrency(selectedDeal.value || 0)}</p>
                 </div>
 
                 {selectedDeal.expected_close_date && (
@@ -988,52 +1011,24 @@ export const SalesPipeline: React.FC = () => {
                   </div>
                 )}
 
-                {/* Editable Modules */}
+                {/* Modules with user counts */}
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-slate-500">Zainteresowane moduły:</p>
-                    <button
-                      onClick={() => setEditingModules(!editingModules)}
-                      className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
-                    >
-                      <Edit3 className="w-3 h-3" />
-                      {editingModules ? 'Anuluj' : 'Edytuj'}
-                    </button>
-                  </div>
-                  {editingModules ? (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(MODULE_LABELS).map(([code, label]) => (
-                          <label key={code} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedDeal.modules_interested?.includes(code) || false}
-                              onChange={(e) => {
-                                const newModules = e.target.checked
-                                  ? [...(selectedDeal.modules_interested || []), code]
-                                  : (selectedDeal.modules_interested || []).filter(m => m !== code);
-                                handleUpdateDealModules(newModules);
-                              }}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-slate-700">{label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedDeal.modules_interested && selectedDeal.modules_interested.length > 0 ? (
-                        selectedDeal.modules_interested.map(mod => (
-                          <span key={mod} className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full cursor-pointer hover:bg-blue-200" onClick={() => setEditingModules(true)}>
+                  <p className="text-sm text-slate-500 mb-2">Zainteresowane moduły:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedDeal.modules_interested && selectedDeal.modules_interested.length > 0 ? (
+                      selectedDeal.modules_interested.map(mod => {
+                        const userCount = selectedDeal.module_user_counts?.[mod] || selectedDeal.employee_count_estimate || 0;
+                        return (
+                          <span key={mod} className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
                             {MODULE_LABELS[mod] || mod}
+                            {userCount > 0 && <span className="ml-1 text-blue-500">({userCount} użytk.)</span>}
                           </span>
-                        ))
-                      ) : (
-                        <span className="text-slate-400 text-sm">Brak wybranych modułów</span>
-                      )}
-                    </div>
-                  )}
+                        );
+                      })
+                    ) : (
+                      <span className="text-slate-400 text-sm">Brak wybranych modułów</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Subscription info */}
@@ -1188,25 +1183,14 @@ export const SalesPipeline: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Data zamknięcia</label>
-                  <input
-                    type="date"
-                    value={editDealForm.expected_close_date}
-                    onChange={(e) => setEditDealForm(prev => ({ ...prev, expected_close_date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Liczba użytkowników</label>
-                  <input
-                    type="number"
-                    value={editDealForm.employee_count_estimate}
-                    onChange={(e) => setEditDealForm(prev => ({ ...prev, employee_count_estimate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data zamknięcia</label>
+                <input
+                  type="date"
+                  value={editDealForm.expected_close_date}
+                  onChange={(e) => setEditDealForm(prev => ({ ...prev, expected_close_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
 
               <div>
@@ -1223,24 +1207,47 @@ export const SalesPipeline: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Zainteresowane moduły</label>
-                <div className="flex flex-wrap gap-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Zainteresowane moduły</label>
+                <div className="space-y-3">
                   {Object.entries(MODULE_LABELS).map(([code, label]) => (
-                    <label key={code} className="flex items-center gap-2 cursor-pointer">
+                    <div key={code} className="flex items-center gap-3">
                       <input
                         type="checkbox"
-                        checked={editDealForm.modules_interested.includes(code)}
+                        checked={(editDealForm.module_user_counts[code] || 0) > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setEditDealForm(prev => ({ ...prev, modules_interested: [...prev.modules_interested, code] }));
+                            setEditDealForm(prev => ({
+                              ...prev,
+                              module_user_counts: { ...prev.module_user_counts, [code]: prev.module_user_counts[code] || 1 }
+                            }));
                           } else {
-                            setEditDealForm(prev => ({ ...prev, modules_interested: prev.modules_interested.filter(m => m !== code) }));
+                            setEditDealForm(prev => {
+                              const newCounts = { ...prev.module_user_counts };
+                              delete newCounts[code];
+                              return { ...prev, module_user_counts: newCounts };
+                            });
                           }
                         }}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span className="text-sm text-slate-700">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
-                    </label>
+                      <span className="text-sm text-slate-700 min-w-[140px]">{label} ({getModulePrice(code)} PLN/użytk./mies.)</span>
+                      {(editDealForm.module_user_counts[code] || 0) > 0 && (
+                        <input
+                          type="number"
+                          min="1"
+                          value={editDealForm.module_user_counts[code] || ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setEditDealForm(prev => ({
+                              ...prev,
+                              module_user_counts: { ...prev.module_user_counts, [code]: val }
+                            }));
+                          }}
+                          className="w-24 px-2 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Użytk."
+                        />
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
@@ -1268,12 +1275,20 @@ export const SalesPipeline: React.FC = () => {
                     placeholder="Wpisz wartość..."
                   />
                 ) : (
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(calculatedEditDealValue)}
-                    {calculatedEditDealValue > 0 && (
-                      <span className="text-xs font-normal text-slate-500 ml-2">
-                        ({editDealForm.modules_interested.length} moduł(y) × {editDealForm.employee_count_estimate || 0} użytk.)
-                      </span>
+                  <div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(calculatedEditDealValue)}
+                    </div>
+                    {Object.keys(editDealForm.module_user_counts).filter(code => editDealForm.module_user_counts[code] > 0).length > 0 && (
+                      <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+                        {Object.entries(editDealForm.module_user_counts)
+                          .filter(([_, count]) => count > 0)
+                          .map(([code, count]) => (
+                            <div key={code}>
+                              {MODULE_LABELS[code]}: {count} użytk. × {getModulePrice(code)} PLN = {formatCurrency(count * getModulePrice(code))}
+                            </div>
+                          ))}
+                      </div>
                     )}
                   </div>
                 )}
