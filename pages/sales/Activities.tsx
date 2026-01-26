@@ -1,20 +1,52 @@
 import React, { useState, useMemo } from 'react';
 import {
   Plus, Search, Phone, Mail, Calendar, FileText, CheckSquare,
-  Clock, CheckCircle, Building2, User, X, Filter
+  Clock, CheckCircle, Building2, User, X, Filter, XCircle
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CRMActivity, ActivityType } from '../../types';
 import { ACTIVITY_TYPE_LABELS } from '../../constants';
+import { supabase } from '../../lib/supabase';
+
+interface TaskFormData {
+  activity_type: ActivityType;
+  subject: string;
+  description: string;
+  scheduled_date: string;
+  scheduled_time: string;
+  duration_minutes: number | '';
+  crm_company_id: string;
+  contact_id: string;
+  deal_id: string;
+}
+
+const initialTaskForm: TaskFormData = {
+  activity_type: ActivityType.TASK,
+  subject: '',
+  description: '',
+  scheduled_date: '',
+  scheduled_time: '',
+  duration_minutes: '',
+  crm_company_id: '',
+  contact_id: '',
+  deal_id: ''
+};
 
 export const SalesActivities: React.FC = () => {
-  const { state } = useAppContext();
+  const { state, setState, refreshData } = useAppContext();
   const { crmActivities, crmCompanies, crmContacts, crmDeals } = state;
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<ActivityType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'upcoming' | 'completed'>('all');
   const [selectedActivity, setSelectedActivity] = useState<CRMActivity | null>(null);
+
+  // Task creation/edit modal states
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [taskForm, setTaskForm] = useState<TaskFormData>(initialTaskForm);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filter activities
   const filteredActivities = useMemo(() => {
@@ -113,6 +145,185 @@ export const SalesActivities: React.FC = () => {
     return { upcoming, overdue, todayActivities, total: crmActivities.length };
   }, [crmActivities]);
 
+  // Get filtered contacts based on selected company
+  const filteredContacts = useMemo(() => {
+    if (!taskForm.crm_company_id) return crmContacts;
+    return crmContacts.filter(c => c.crm_company_id === taskForm.crm_company_id);
+  }, [crmContacts, taskForm.crm_company_id]);
+
+  // Get filtered deals based on selected company
+  const filteredDeals = useMemo(() => {
+    if (!taskForm.crm_company_id) return crmDeals;
+    return crmDeals.filter(d => d.crm_company_id === taskForm.crm_company_id);
+  }, [crmDeals, taskForm.crm_company_id]);
+
+  // Open task creation modal
+  const openCreateModal = () => {
+    setTaskForm(initialTaskForm);
+    setIsEditing(false);
+    setEditingActivityId(null);
+    setShowTaskModal(true);
+  };
+
+  // Open task edit modal
+  const openEditModal = (activity: CRMActivity) => {
+    const scheduledDate = activity.scheduled_at
+      ? new Date(activity.scheduled_at).toISOString().split('T')[0]
+      : '';
+    const scheduledTime = activity.scheduled_at
+      ? new Date(activity.scheduled_at).toTimeString().slice(0, 5)
+      : '';
+
+    setTaskForm({
+      activity_type: activity.activity_type,
+      subject: activity.subject,
+      description: activity.description || '',
+      scheduled_date: scheduledDate,
+      scheduled_time: scheduledTime,
+      duration_minutes: activity.duration_minutes || '',
+      crm_company_id: activity.crm_company_id || '',
+      contact_id: activity.contact_id || '',
+      deal_id: activity.deal_id || ''
+    });
+    setIsEditing(true);
+    setEditingActivityId(activity.id);
+    setSelectedActivity(null);
+    setShowTaskModal(true);
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setShowTaskModal(false);
+    setTaskForm(initialTaskForm);
+    setIsEditing(false);
+    setEditingActivityId(null);
+  };
+
+  // Handle form submission
+  const handleSubmitTask = async () => {
+    if (!taskForm.subject.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const scheduledAt = taskForm.scheduled_date && taskForm.scheduled_time
+        ? new Date(`${taskForm.scheduled_date}T${taskForm.scheduled_time}`).toISOString()
+        : taskForm.scheduled_date
+        ? new Date(`${taskForm.scheduled_date}T00:00`).toISOString()
+        : null;
+
+      const activityData = {
+        activity_type: taskForm.activity_type,
+        subject: taskForm.subject.trim(),
+        description: taskForm.description.trim() || null,
+        scheduled_at: scheduledAt,
+        duration_minutes: taskForm.duration_minutes ? Number(taskForm.duration_minutes) : null,
+        crm_company_id: taskForm.crm_company_id || null,
+        contact_id: taskForm.contact_id || null,
+        deal_id: taskForm.deal_id || null,
+        is_completed: false,
+        created_by: state.currentUser?.id
+      };
+
+      if (isEditing && editingActivityId) {
+        // Update existing activity
+        const { data, error } = await supabase
+          .from('crm_activities')
+          .update({
+            ...activityData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingActivityId)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setState(prev => ({
+          ...prev,
+          crmActivities: prev.crmActivities.map(a =>
+            a.id === editingActivityId ? data : a
+          )
+        }));
+      } else {
+        // Create new activity
+        const { data, error } = await supabase
+          .from('crm_activities')
+          .insert([activityData])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setState(prev => ({
+          ...prev,
+          crmActivities: [...prev.crmActivities, data]
+        }));
+      }
+
+      closeModal();
+    } catch (error) {
+      console.error('Error saving task:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Mark activity as completed
+  const markAsCompleted = async (activity: CRMActivity) => {
+    try {
+      const { data, error } = await supabase
+        .from('crm_activities')
+        .update({
+          is_completed: true,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', activity.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setState(prev => ({
+        ...prev,
+        crmActivities: prev.crmActivities.map(a =>
+          a.id === activity.id ? data : a
+        )
+      }));
+      setSelectedActivity(data);
+    } catch (error) {
+      console.error('Error marking activity as completed:', error);
+    }
+  };
+
+  // Mark activity as not completed
+  const markAsNotCompleted = async (activity: CRMActivity) => {
+    try {
+      const { data, error } = await supabase
+        .from('crm_activities')
+        .update({
+          is_completed: false,
+          completed_at: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', activity.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setState(prev => ({
+        ...prev,
+        crmActivities: prev.crmActivities.map(a =>
+          a.id === activity.id ? data : a
+        )
+      }));
+      setSelectedActivity(data);
+    } catch (error) {
+      console.error('Error marking activity as not completed:', error);
+    }
+  };
+
   return (
     <div className="p-4 lg:p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -122,9 +333,12 @@ export const SalesActivities: React.FC = () => {
             Zarządzanie zadaniami, spotkaniami i kontaktami
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+        <button
+          onClick={openCreateModal}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
           <Plus className="w-4 h-4" />
-          Nowa aktywność
+          Nowe zadanie
         </button>
       </div>
 
@@ -346,7 +560,7 @@ export const SalesActivities: React.FC = () => {
               {selectedActivity.duration_minutes && (
                 <div className="flex items-center gap-3 text-sm">
                   <Clock className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700">Czas trwania: {selectedActivity.duration_minutes} min</span>
+                  <span className="text-slate-700">Przewidziany czas: {selectedActivity.duration_minutes} min</span>
                 </div>
               )}
 
@@ -382,13 +596,27 @@ export const SalesActivities: React.FC = () => {
             </div>
 
             <div className="flex gap-2 pt-4 border-t border-slate-100">
-              {!selectedActivity.is_completed && (
-                <button className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2">
+              {selectedActivity.is_completed ? (
+                <button
+                  onClick={() => markAsNotCompleted(selectedActivity)}
+                  className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition flex items-center justify-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Oznacz jako nieukończone
+                </button>
+              ) : (
+                <button
+                  onClick={() => markAsCompleted(selectedActivity)}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
+                >
                   <CheckCircle className="w-4 h-4" />
                   Oznacz jako ukończone
                 </button>
               )}
-              <button className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+              <button
+                onClick={() => openEditModal(selectedActivity)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
                 Edytuj
               </button>
               <button
@@ -396,6 +624,191 @@ export const SalesActivities: React.FC = () => {
                 className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition"
               >
                 Zamknij
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Creation/Edit Modal */}
+      {showTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-slate-900">
+                {isEditing ? 'Edytuj zadanie' : 'Nowe zadanie'}
+              </h2>
+              <button
+                onClick={closeModal}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Task Type */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Typ zadania *
+                </label>
+                <select
+                  value={taskForm.activity_type}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, activity_type: e.target.value as ActivityType }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value={ActivityType.TASK}>Zadanie</option>
+                  <option value={ActivityType.CALL}>Rozmowa telefoniczna</option>
+                  <option value={ActivityType.EMAIL}>E-mail</option>
+                  <option value={ActivityType.MEETING}>Spotkanie</option>
+                  <option value={ActivityType.NOTE}>Notatka</option>
+                </select>
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Nazwa *
+                </label>
+                <input
+                  type="text"
+                  value={taskForm.subject}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, subject: e.target.value }))}
+                  placeholder="Nazwa zadania"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Zadanie
+                </label>
+                <textarea
+                  value={taskForm.description}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Opis zadania..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Date and Time */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Data wykonania
+                  </label>
+                  <input
+                    type="date"
+                    value={taskForm.scheduled_date}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Godzina wykonania
+                  </label>
+                  <input
+                    type="time"
+                    value={taskForm.scheduled_time}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, scheduled_time: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Przewidziany czas na wykonanie (minuty)
+                </label>
+                <input
+                  type="number"
+                  value={taskForm.duration_minutes}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, duration_minutes: e.target.value ? parseInt(e.target.value) : '' }))}
+                  placeholder="np. 30"
+                  min="1"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Company */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Powiązana firma
+                </label>
+                <select
+                  value={taskForm.crm_company_id}
+                  onChange={(e) => setTaskForm(prev => ({
+                    ...prev,
+                    crm_company_id: e.target.value,
+                    contact_id: '', // Reset contact when company changes
+                    deal_id: '' // Reset deal when company changes
+                  }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Wybierz firmę...</option>
+                  {crmCompanies.map(company => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Contact */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Powiązany kontakt
+                </label>
+                <select
+                  value={taskForm.contact_id}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, contact_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!taskForm.crm_company_id && filteredContacts.length === 0}
+                >
+                  <option value="">Wybierz kontakt...</option>
+                  {filteredContacts.map(contact => (
+                    <option key={contact.id} value={contact.id}>
+                      {contact.first_name} {contact.last_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Deal */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Powiązany deal
+                </label>
+                <select
+                  value={taskForm.deal_id}
+                  onChange={(e) => setTaskForm(prev => ({ ...prev, deal_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={!taskForm.crm_company_id && filteredDeals.length === 0}
+                >
+                  <option value="">Wybierz deal...</option>
+                  {filteredDeals.map(deal => (
+                    <option key={deal.id} value={deal.id}>{deal.title}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
+              <button
+                onClick={handleSubmitTask}
+                disabled={!taskForm.subject.trim() || isSaving}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? 'Zapisywanie...' : (isEditing ? 'Zapisz zmiany' : 'Dodaj zadanie')}
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition"
+              >
+                Anuluj
               </button>
             </div>
           </div>
