@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority } from '../../types';
@@ -7,6 +8,7 @@ import { INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS, CRM_STATUS_COL
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
 export const SalesCompanies: React.FC = () => {
+  const navigate = useNavigate();
   const { state, setState } = useAppContext();
   const { crmCompanies, crmContacts, crmActivities, crmDeals } = state;
 
@@ -2192,7 +2194,7 @@ export const SalesCompanies: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => openDealDetailModal(deal)}
+                                onClick={() => navigate('/sales/pipeline')}
                                 className="p-2 text-slate-500 hover:bg-blue-100 rounded-lg transition"
                                 title="Przejdź do deala"
                               >
