@@ -1,15 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, Users, Clock, Search,
   User, CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronUp,
   Mail, Phone, Calendar, Building2, Monitor, CreditCard, X, Package,
-  FileText, Receipt, ArrowRight, History, Download
+  FileText, Receipt, ArrowRight, History, Download, Plus, Minus, Check, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { UserStatus, User as UserType, Role } from '../../types';
 import { Button } from '../../components/Button';
 import { ROLE_LABELS } from '../../constants';
+import { supabase } from '../../lib/supabase';
 
 export const DoradcaCompanyView: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -26,6 +27,24 @@ export const DoradcaCompanyView: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState<UserType | null>(null);
   const [showUserCabinet, setShowUserCabinet] = useState(false);
   const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'payments' | 'history' | 'invoices'>('subscriptions');
+
+  // Subscription data states
+  const [bonusHistory, setBonusHistory] = useState<Array<{
+    id: string;
+    amount: number;
+    type: 'credit' | 'debit';
+    description: string;
+    created_at: string;
+    created_by?: string;
+  }>>([]);
+  const [subscriptionHistory, setSubscriptionHistory] = useState<Array<{
+    id: string;
+    action: string;
+    module_code?: string;
+    details: string;
+    created_at: string;
+  }>>([]);
+  const [loadingSubscriptionData, setLoadingSubscriptionData] = useState(false);
 
   // Get current company
   const company = companies.find(c => c.id === companyId);
@@ -79,11 +98,11 @@ export const DoradcaCompanyView: React.FC = () => {
 
   // Get module subscription status for display
   const getModuleStatus = (moduleCode: string) => {
-    if (!company) return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+    if (!company) return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800 border-gray-200' };
 
     const companyMod = (companyModules || []).find(cm => cm.company_id === company.id && cm.module_code === moduleCode);
     if (!companyMod) {
-      return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+      return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800 border-gray-200' };
     }
     if (companyMod.is_active) {
       // Check if it's a paid subscription (has Stripe ID) or demo
@@ -91,7 +110,7 @@ export const DoradcaCompanyView: React.FC = () => {
         return {
           status: 'active',
           text: `Aktywna (${companyMod.max_users} os.)`,
-          color: 'bg-green-100 text-green-800',
+          color: 'bg-green-100 text-green-800 border-green-200',
           maxUsers: companyMod.max_users,
           pricePerUser: companyMod.price_per_user
         };
@@ -105,7 +124,7 @@ export const DoradcaCompanyView: React.FC = () => {
         return {
           status: 'demo',
           text: `DEMO do ${endDateStr} (${companyMod.max_users} os.)`,
-          color: 'bg-blue-100 text-blue-800',
+          color: 'bg-blue-100 text-blue-800 border-blue-200',
           maxUsers: companyMod.max_users,
           demoEndDate: effectiveDemoDate
         };
@@ -113,11 +132,11 @@ export const DoradcaCompanyView: React.FC = () => {
       return {
         status: 'demo',
         text: `DEMO (${companyMod.max_users} os.)`,
-        color: 'bg-blue-100 text-blue-800',
+        color: 'bg-blue-100 text-blue-800 border-blue-200',
         maxUsers: companyMod.max_users
       };
     }
-    return { status: 'inactive', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800' };
+    return { status: 'inactive', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800 border-gray-200' };
   };
 
   // Get payment history for company
@@ -125,6 +144,42 @@ export const DoradcaCompanyView: React.FC = () => {
     if (!company) return [];
     return (state.paymentHistory || []).filter(ph => ph.company_id === company.id);
   }, [state.paymentHistory, company]);
+
+  // Load bonus and subscription history when modal opens
+  useEffect(() => {
+    const loadSubscriptionData = async () => {
+      if (!showSubscriptionModal || !company) return;
+
+      setLoadingSubscriptionData(true);
+      try {
+        // Load bonus history
+        const { data: bonusData } = await supabase
+          .from('bonus_transactions')
+          .select('*')
+          .eq('company_id', company.id)
+          .order('created_at', { ascending: false });
+
+        setBonusHistory(bonusData || []);
+
+        // Load subscription history
+        const { data: historyData } = await supabase
+          .from('subscription_history')
+          .select('*')
+          .eq('company_id', company.id)
+          .order('created_at', { ascending: false });
+
+        setSubscriptionHistory(historyData || []);
+      } catch (error) {
+        console.error('Error loading subscription data:', error);
+        setBonusHistory([]);
+        setSubscriptionHistory([]);
+      } finally {
+        setLoadingSubscriptionData(false);
+      }
+    };
+
+    loadSubscriptionData();
+  }, [showSubscriptionModal, company]);
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -659,18 +714,19 @@ export const DoradcaCompanyView: React.FC = () => {
               {/* Subscriptions Tab */}
               {subscriptionTab === 'subscriptions' && (
                 <div className="space-y-6">
+                  {/* All Modules */}
                   <div>
                     <h4 className="font-semibold text-slate-900 mb-3">Moduły</h4>
                     <div className="space-y-2">
                       {modules.filter(m => m.is_active).map(mod => {
                         const moduleStatus = getModuleStatus(mod.code);
                         return (
-                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
                             <div>
                               <p className="font-medium text-slate-900">{mod.name_pl}</p>
                               <p className="text-sm text-slate-500">{mod.description_pl}</p>
                             </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${moduleStatus.color}`}>
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${moduleStatus.color}`}>
                               {moduleStatus.text}
                             </span>
                           </div>
@@ -685,41 +741,85 @@ export const DoradcaCompanyView: React.FC = () => {
               {subscriptionTab === 'payments' && (
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">Wszystkie transakcje</h4>
-                  {paymentHistory.length > 0 ? (
-                    <div className="space-y-2">
-                      {paymentHistory.map(payment => (
-                        <div key={payment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-100">
-                              <CreditCard className="w-4 h-4 text-blue-600" />
+                  {(() => {
+                    const allTransactions = [
+                      ...paymentHistory.map(p => ({
+                        id: p.id,
+                        type: 'payment' as const,
+                        amount: Number(p.amount),
+                        description: p.description || `Płatność ${p.invoice_number || ''}`,
+                        status: p.status,
+                        date: p.paid_at || p.created_at,
+                        invoice_url: p.invoice_pdf_url
+                      })),
+                      ...bonusHistory.map(b => ({
+                        id: b.id,
+                        type: 'bonus' as const,
+                        amount: b.type === 'credit' ? b.amount : -b.amount,
+                        description: b.description,
+                        status: 'completed' as const,
+                        date: b.created_at,
+                        invoice_url: undefined
+                      }))
+                    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                    return allTransactions.length > 0 ? (
+                      <div className="space-y-2">
+                        {allTransactions.map(tx => (
+                          <div key={tx.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                tx.type === 'payment' ? 'bg-blue-100' :
+                                tx.amount > 0 ? 'bg-green-100' : 'bg-red-100'
+                              }`}>
+                                {tx.type === 'payment' ? (
+                                  <CreditCard className="w-4 h-4 text-blue-600" />
+                                ) : tx.amount > 0 ? (
+                                  <Plus className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <Minus className="w-4 h-4 text-red-600" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-slate-900">{tx.description}</p>
+                                  {tx.type === 'bonus' && (
+                                    <span className="px-1.5 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                                      Bonus
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">{new Date(tx.date).toLocaleString('pl-PL')}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium text-slate-900">{payment.description || `Płatność ${payment.invoice_number || ''}`}</p>
-                              <p className="text-xs text-slate-500">{new Date(payment.paid_at || payment.created_at).toLocaleString('pl-PL')}</p>
+                            <div className="flex items-center gap-3">
+                              <p className={`font-bold ${
+                                tx.type === 'payment' ? 'text-slate-900' :
+                                tx.amount > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {tx.type === 'bonus' && tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(2)} PLN
+                              </p>
+                              {tx.invoice_url && (
+                                <a
+                                  href={tx.invoice_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-700"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <p className="font-bold text-slate-900">{Number(payment.amount).toFixed(2)} PLN</p>
-                            {payment.invoice_pdf_url && (
-                              <a
-                                href={payment.invoice_pdf_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-700"
-                              >
-                                <Download className="w-4 h-4" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-slate-500">
-                      <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                      <p>Brak transakcji</p>
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        <CreditCard className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p>Brak transakcji</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -727,10 +827,41 @@ export const DoradcaCompanyView: React.FC = () => {
               {subscriptionTab === 'history' && (
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">Historia zmian subskrypcji</h4>
-                  <div className="text-center py-8 text-slate-500">
-                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                    <p>Brak historii zmian subskrypcji</p>
-                  </div>
+                  {loadingSubscriptionData ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-slate-400" />
+                    </div>
+                  ) : subscriptionHistory.length > 0 ? (
+                    <div className="space-y-2">
+                      {subscriptionHistory.map(entry => (
+                        <div key={entry.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            entry.action === 'MODULE_ACTIVATED' ? 'bg-green-100' :
+                            entry.action === 'MODULE_DEACTIVATED' ? 'bg-red-100' :
+                            entry.action === 'USERS_CHANGED' ? 'bg-blue-100' :
+                            entry.action === 'DEMO_STARTED' ? 'bg-yellow-100' :
+                            entry.action === 'DEMO_ENDED' ? 'bg-orange-100' :
+                            'bg-slate-100'
+                          }`}>
+                            {entry.action === 'MODULE_ACTIVATED' && <Check className="w-4 h-4 text-green-600" />}
+                            {entry.action === 'MODULE_DEACTIVATED' && <X className="w-4 h-4 text-red-600" />}
+                            {entry.action === 'USERS_CHANGED' && <Users className="w-4 h-4 text-blue-600" />}
+                            {entry.action === 'DEMO_STARTED' && <Calendar className="w-4 h-4 text-yellow-600" />}
+                            {entry.action === 'DEMO_ENDED' && <X className="w-4 h-4 text-orange-600" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-slate-900">{entry.details}</p>
+                            <p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString('pl-PL')}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak historii zmian subskrypcji</p>
+                    </div>
+                  )}
                 </div>
               )}
 
