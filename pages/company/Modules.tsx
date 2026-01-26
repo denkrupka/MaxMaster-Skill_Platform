@@ -21,7 +21,7 @@ const MODULE_INFO: Record<string, { name: string; description: string; icon: Rea
 
 export const CompanyModulesPage: React.FC = () => {
   const { state, grantModuleAccess, revokeModuleAccess } = useAppContext();
-  const { currentCompany, allUsers, companyModules, moduleUserAccess } = state;
+  const { currentCompany, users, companyModules, moduleUserAccess } = state;
 
   const [search, setSearch] = useState('');
   const [selectedModule, setSelectedModule] = useState<string | null>(null);
@@ -39,13 +39,13 @@ export const CompanyModulesPage: React.FC = () => {
   // Get company users (excluding global users and admins)
   const companyUsers = useMemo(() => {
     if (!currentCompany) return [];
-    return allUsers.filter(u =>
+    return users.filter(u =>
       u.company_id === currentCompany.id &&
       !u.is_global_user &&
       u.role !== Role.COMPANY_ADMIN &&
       u.status !== UserStatus.INACTIVE
     );
-  }, [allUsers, currentCompany]);
+  }, [users, currentCompany]);
 
   // Filter users by search
   const filteredUsers = useMemo(() => {
