@@ -211,32 +211,31 @@ export const SalesActivities: React.FC = () => {
         ? new Date(`${taskForm.scheduled_date}T00:00`).toISOString()
         : null;
 
-      const activityData = {
-        activity_type: taskForm.activity_type,
-        subject: taskForm.subject.trim(),
-        description: taskForm.description.trim() || null,
-        scheduled_at: scheduledAt,
-        duration_minutes: taskForm.duration_minutes ? Number(taskForm.duration_minutes) : null,
-        crm_company_id: taskForm.crm_company_id || null,
-        contact_id: taskForm.contact_id || null,
-        deal_id: taskForm.deal_id || null,
-        is_completed: false,
-        created_by: state.currentUser?.id
-      };
-
       if (isEditing && editingActivityId) {
-        // Update existing activity
+        // Update existing activity - don't change is_completed or created_by
+        const updateData = {
+          activity_type: taskForm.activity_type,
+          subject: taskForm.subject.trim(),
+          description: taskForm.description.trim() || null,
+          scheduled_at: scheduledAt,
+          duration_minutes: taskForm.duration_minutes ? Number(taskForm.duration_minutes) : null,
+          crm_company_id: taskForm.crm_company_id || null,
+          contact_id: taskForm.contact_id || null,
+          deal_id: taskForm.deal_id || null,
+          updated_at: new Date().toISOString()
+        };
+
         const { data, error } = await supabase
           .from('crm_activities')
-          .update({
-            ...activityData,
-            updated_at: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', editingActivityId)
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase update error:', error);
+          throw error;
+        }
 
         setState(prev => ({
           ...prev,
@@ -246,13 +245,29 @@ export const SalesActivities: React.FC = () => {
         }));
       } else {
         // Create new activity
+        const insertData = {
+          activity_type: taskForm.activity_type,
+          subject: taskForm.subject.trim(),
+          description: taskForm.description.trim() || null,
+          scheduled_at: scheduledAt,
+          duration_minutes: taskForm.duration_minutes ? Number(taskForm.duration_minutes) : null,
+          crm_company_id: taskForm.crm_company_id || null,
+          contact_id: taskForm.contact_id || null,
+          deal_id: taskForm.deal_id || null,
+          is_completed: false,
+          created_by: state.currentUser?.id || null
+        };
+
         const { data, error } = await supabase
           .from('crm_activities')
-          .insert([activityData])
+          .insert([insertData])
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('Supabase insert error:', error);
+          throw error;
+        }
 
         setState(prev => ({
           ...prev,
@@ -263,6 +278,7 @@ export const SalesActivities: React.FC = () => {
       closeModal();
     } catch (error) {
       console.error('Error saving task:', error);
+      alert('Wystąpił błąd podczas zapisywania zadania. Spróbuj ponownie.');
     } finally {
       setIsSaving(false);
     }
