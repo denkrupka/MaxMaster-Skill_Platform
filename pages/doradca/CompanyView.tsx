@@ -82,10 +82,17 @@ export const DoradcaCompanyView: React.FC = () => {
     setShowUserCabinet(true);
   };
 
-  // Handle viewing as user (login as user for full access)
+  // Handle viewing as user - open in new window with user context
   const handleViewAsUser = () => {
     if (selectedEmployee) {
-      loginAsUser(selectedEmployee);
+      // Store the selected user in sessionStorage for the new window to pick up
+      sessionStorage.setItem('doradca_view_user', JSON.stringify(selectedEmployee));
+      // Open the dashboard in a new window
+      const newWindow = window.open(`/#/dashboard?viewAs=${selectedEmployee.id}`, '_blank', 'noopener');
+      if (newWindow) {
+        // Also trigger login as user to switch context
+        loginAsUser(selectedEmployee);
+      }
     }
   };
 
