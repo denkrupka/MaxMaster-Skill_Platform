@@ -12,7 +12,7 @@ import { COMPANY_STATUS_LABELS, COMPANY_STATUS_COLORS, SUBSCRIPTION_STATUS_LABEL
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
 export const SuperAdminCompaniesPage: React.FC = () => {
-  const { state, addCompany, updateCompany, deleteCompany, blockCompany, unblockCompany } = useAppContext();
+  const { state, addCompany, updateCompany, deleteCompany, blockCompany, unblockCompany, refreshData } = useAppContext();
   const { companies, users, companyModules, modules } = state;
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +29,15 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showBonusModal, setShowBonusModal] = useState(false);
   const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'history' | 'invoices'>('subscriptions');
+
+  // Subscription history state
+  const [subscriptionHistory, setSubscriptionHistory] = useState<Array<{
+    id: string;
+    action: string;
+    module_code?: string;
+    details: string;
+    created_at: string;
+  }>>([]);
 
   // Bonus modal state
   const [bonusAmount, setBonusAmount] = useState('');
@@ -276,6 +285,50 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     setShowModuleSettingsModal(true);
   };
 
+  // Load subscription history
+  const loadSubscriptionHistory = async (companyId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('subscription_history')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Subscription history table may not exist:', error);
+        setSubscriptionHistory([]);
+      } else {
+        setSubscriptionHistory(data || []);
+      }
+    } catch (err) {
+      console.log('Error loading subscription history:', err);
+      setSubscriptionHistory([]);
+    }
+  };
+
+  // Log subscription change
+  const logSubscriptionChange = async (companyId: string, action: string, moduleCode?: string, details?: string) => {
+    try {
+      await supabase.from('subscription_history').insert({
+        company_id: companyId,
+        action,
+        module_code: moduleCode,
+        details: details || '',
+        created_by: state.currentUser?.id
+      });
+    } catch (e) {
+      console.log('Could not log subscription change (table may not exist):', e);
+    }
+    // Add to local state for immediate display
+    setSubscriptionHistory(prev => [{
+      id: Date.now().toString(),
+      action,
+      module_code: moduleCode,
+      details: details || '',
+      created_at: new Date().toISOString()
+    }, ...prev]);
+  };
+
   // Handle toggle module
   const handleToggleModule = async (mod: any, enable: boolean) => {
     if (!selectedCompany) return;
@@ -296,6 +349,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           activated_at: new Date().toISOString()
         });
         if (error) throw error;
+        await logSubscriptionChange(selectedCompany.id, 'MODULE_ACTIVATED', mod.code, `Aktywowano moduł ${mod.name_pl} (10 użytkowników, ${mod.base_price_per_user} PLN/os)`);
       } else if (existingModule) {
         // Toggle existing module
         const { error } = await supabase
@@ -303,9 +357,15 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           .update({ is_active: enable })
           .eq('id', existingModule.id);
         if (error) throw error;
+        await logSubscriptionChange(
+          selectedCompany.id,
+          enable ? 'MODULE_ACTIVATED' : 'MODULE_DEACTIVATED',
+          mod.code,
+          enable ? `Aktywowano moduł ${mod.name_pl}` : `Dezaktywowano moduł ${mod.name_pl}`
+        );
       }
 
-      window.location.reload();
+      await refreshData();
     } catch (error) {
       console.error('Error toggling module:', error);
       alert('Błąd podczas zmiany statusu modułu');
@@ -320,6 +380,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     setLoadingModule(true);
     try {
       const existingModule = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code);
+      const oldMaxUsers = existingModule?.max_users || 0;
 
       if (existingModule) {
         // Update existing module
@@ -328,6 +389,14 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           .update({ max_users: moduleMaxUsers })
           .eq('id', existingModule.id);
         if (error) throw error;
+        if (oldMaxUsers !== moduleMaxUsers) {
+          await logSubscriptionChange(
+            selectedCompany.id,
+            'USERS_CHANGED',
+            selectedModule.code,
+            `Zmieniono liczbę użytkowników w module ${selectedModule.name_pl}: ${oldMaxUsers} → ${moduleMaxUsers}`
+          );
+        }
       } else {
         // Create new module with settings
         const { error } = await supabase.from('company_modules').insert({
@@ -341,6 +410,12 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           activated_at: new Date().toISOString()
         });
         if (error) throw error;
+        await logSubscriptionChange(
+          selectedCompany.id,
+          'MODULE_ACTIVATED',
+          selectedModule.code,
+          `Aktywowano moduł ${selectedModule.name_pl} (${moduleMaxUsers} użytkowników, ${selectedModule.base_price_per_user} PLN/os)`
+        );
       }
 
       // If demo period is set, update company subscription
@@ -350,10 +425,16 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           trial_ends_at: moduleDemoEndDate,
           status: 'active' as CompanyStatus
         });
+        await logSubscriptionChange(
+          selectedCompany.id,
+          'DEMO_STARTED',
+          undefined,
+          `Ustawiono okres DEMO do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
+        );
       }
 
       setShowModuleSettingsModal(false);
-      window.location.reload();
+      await refreshData();
     } catch (error) {
       console.error('Error saving module settings:', error);
       alert('Błąd podczas zapisywania ustawień modułu');
@@ -453,7 +534,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       setShowUserFormModal(false);
       setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' });
       // Refresh data
-      window.location.reload();
+      await refreshData();
     } catch (error: any) {
       console.error('Error adding user:', error);
       alert(error.message || 'Błąd podczas dodawania użytkownika');
@@ -478,7 +559,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       setShowUserFormModal(false);
       setEditingUser(null);
       setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' });
-      window.location.reload();
+      await refreshData();
     } catch (error: any) {
       console.error('Error updating user:', error);
       alert(error.message || 'Błąd podczas aktualizacji użytkownika');
@@ -492,7 +573,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     try {
       const { error } = await supabase.from('users').delete().eq('id', user.id);
       if (error) throw error;
-      window.location.reload();
+      await refreshData();
     } catch (error: any) {
       console.error('Error deleting user:', error);
       alert(error.message || 'Błąd podczas usuwania użytkownika');
@@ -1098,7 +1179,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
                 {/* Clickable Subscription */}
                 <button
-                  onClick={() => { loadBonusHistory(selectedCompany.id); setShowSubscriptionModal(true); }}
+                  onClick={() => { loadSubscriptionHistory(selectedCompany.id); setShowSubscriptionModal(true); }}
                   className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
                 >
                   <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
@@ -1337,6 +1418,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                       {modules.filter(m => m.is_active).map(mod => {
                         const companyMod = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === mod.code);
                         const isActive = companyMod?.is_active;
+                        const hasNegotiatedPrice = isActive && companyMod && companyMod.price_per_user !== mod.base_price_per_user;
                         return (
                           <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
                             <button
@@ -1349,6 +1431,9 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                                   ? `${companyMod.max_users} użytkowników, ${companyMod.price_per_user} PLN/os/mies.`
                                   : `${mod.base_price_per_user} PLN/os/mies.`
                                 }
+                                {hasNegotiatedPrice && (
+                                  <span className="ml-2 text-xs text-orange-600">(cena specjalna, standardowa: {mod.base_price_per_user} PLN)</span>
+                                )}
                               </p>
                             </button>
                             <div className="flex items-center gap-4">
@@ -1379,10 +1464,35 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               {subscriptionTab === 'history' && (
                 <div>
                   <h4 className="font-semibold text-slate-900 mb-3">Historia zmian subskrypcji</h4>
-                  <div className="text-center py-8 text-slate-500">
-                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                    <p>Historia zmian subskrypcji będzie wyświetlana tutaj.</p>
-                  </div>
+                  {subscriptionHistory.length > 0 ? (
+                    <div className="space-y-2">
+                      {subscriptionHistory.map(entry => (
+                        <div key={entry.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            entry.action === 'MODULE_ACTIVATED' ? 'bg-green-100' :
+                            entry.action === 'MODULE_DEACTIVATED' ? 'bg-red-100' :
+                            entry.action === 'USERS_CHANGED' ? 'bg-blue-100' :
+                            entry.action === 'DEMO_STARTED' ? 'bg-yellow-100' :
+                            'bg-slate-100'
+                          }`}>
+                            {entry.action === 'MODULE_ACTIVATED' && <Check className="w-4 h-4 text-green-600" />}
+                            {entry.action === 'MODULE_DEACTIVATED' && <X className="w-4 h-4 text-red-600" />}
+                            {entry.action === 'USERS_CHANGED' && <Users className="w-4 h-4 text-blue-600" />}
+                            {entry.action === 'DEMO_STARTED' && <Calendar className="w-4 h-4 text-yellow-600" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-slate-900">{entry.details}</p>
+                            <p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString('pl-PL')}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak historii zmian subskrypcji</p>
+                    </div>
+                  )}
                 </div>
               )}
 
