@@ -48,6 +48,13 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const [subscriptionType, setSubscriptionType] = useState<'demo' | 'full'>('full');
   const [loadingSubscription, setLoadingSubscription] = useState(false);
 
+  // Module settings modal state
+  const [showModuleSettingsModal, setShowModuleSettingsModal] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<any>(null);
+  const [moduleMaxUsers, setModuleMaxUsers] = useState(10);
+  const [moduleDemoEndDate, setModuleDemoEndDate] = useState('');
+  const [loadingModule, setLoadingModule] = useState(false);
+
   // User modal state
   const [showUserFormModal, setShowUserFormModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -260,24 +267,98 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     }
   };
 
-  // Add subscription period
-  const handleAddSubscriptionPeriod = async () => {
-    if (!selectedCompany || !subscriptionEndDate) return;
-    setLoadingSubscription(true);
+  // Open module settings modal
+  const openModuleSettings = (mod: any) => {
+    const companyMod = getCompanyModules(selectedCompany?.id || '').find(cm => cm.module_code === mod.code);
+    setSelectedModule(mod);
+    setModuleMaxUsers(companyMod?.max_users || 10);
+    setModuleDemoEndDate('');
+    setShowModuleSettingsModal(true);
+  };
+
+  // Handle toggle module
+  const handleToggleModule = async (mod: any, enable: boolean) => {
+    if (!selectedCompany) return;
+    setLoadingModule(true);
     try {
-      const updates: Partial<Company> = {
-        subscription_status: subscriptionType === 'demo' ? 'trialing' : 'active',
-        trial_ends_at: subscriptionType === 'demo' ? subscriptionEndDate : undefined,
-        status: 'active' as CompanyStatus
-      };
-      await updateCompany(selectedCompany.id, updates);
-      setSelectedCompany({ ...selectedCompany, ...updates });
-      setSubscriptionEndDate('');
-      setLoadingSubscription(false);
+      const existingModule = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === mod.code);
+
+      if (enable && !existingModule) {
+        // Create new company module
+        const { error } = await supabase.from('company_modules').insert({
+          company_id: selectedCompany.id,
+          module_code: mod.code,
+          max_users: 10,
+          current_users: 0,
+          price_per_user: mod.base_price_per_user,
+          billing_cycle: 'monthly',
+          is_active: true,
+          activated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+      } else if (existingModule) {
+        // Toggle existing module
+        const { error } = await supabase
+          .from('company_modules')
+          .update({ is_active: enable })
+          .eq('id', existingModule.id);
+        if (error) throw error;
+      }
+
+      window.location.reload();
     } catch (error) {
-      console.error('Error adding subscription period:', error);
-      alert('Błąd podczas dodawania okresu subskrypcji');
-      setLoadingSubscription(false);
+      console.error('Error toggling module:', error);
+      alert('Błąd podczas zmiany statusu modułu');
+    } finally {
+      setLoadingModule(false);
+    }
+  };
+
+  // Handle save module settings
+  const handleSaveModuleSettings = async () => {
+    if (!selectedCompany || !selectedModule) return;
+    setLoadingModule(true);
+    try {
+      const existingModule = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code);
+
+      if (existingModule) {
+        // Update existing module
+        const { error } = await supabase
+          .from('company_modules')
+          .update({ max_users: moduleMaxUsers })
+          .eq('id', existingModule.id);
+        if (error) throw error;
+      } else {
+        // Create new module with settings
+        const { error } = await supabase.from('company_modules').insert({
+          company_id: selectedCompany.id,
+          module_code: selectedModule.code,
+          max_users: moduleMaxUsers,
+          current_users: 0,
+          price_per_user: selectedModule.base_price_per_user,
+          billing_cycle: 'monthly',
+          is_active: true,
+          activated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+      }
+
+      // If demo period is set, update company subscription
+      if (moduleDemoEndDate) {
+        await updateCompany(selectedCompany.id, {
+          subscription_status: 'trialing' as SubscriptionStatus,
+          trial_ends_at: moduleDemoEndDate,
+          status: 'active' as CompanyStatus
+        });
+      }
+
+      setShowModuleSettingsModal(false);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error saving module settings:', error);
+      alert('Błąd podczas zapisywania ustawień modułu');
+    } finally {
+      setLoadingModule(false);
     }
   };
 
@@ -305,19 +386,19 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   // Handle add bonus
   const handleAddBonus = async () => {
     if (!selectedCompany || !bonusAmount) return;
+
+    const amount = parseFloat(bonusAmount);
+    if (isNaN(amount) || amount === 0) {
+      alert('Podaj prawidłową kwotę');
+      return;
+    }
+
     setLoadingBonus(true);
     try {
-      const amount = parseFloat(bonusAmount);
-      if (isNaN(amount) || amount === 0) {
-        alert('Podaj prawidłową kwotę');
-        setLoadingBonus(false);
-        return;
-      }
-
       const newBalance = (selectedCompany.bonus_balance || 0) + amount;
       await updateCompany(selectedCompany.id, { bonus_balance: newBalance });
 
-      // Try to save bonus transaction
+      // Try to save bonus transaction (table may not exist)
       try {
         await supabase.from('bonus_transactions').insert({
           company_id: selectedCompany.id,
@@ -327,17 +408,17 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           created_by: state.currentUser?.id
         });
       } catch (e) {
-        console.log('Could not save bonus transaction:', e);
+        console.log('Could not save bonus transaction (table may not exist):', e);
       }
 
       setSelectedCompany({ ...selectedCompany, bonus_balance: newBalance });
       setBonusAmount('');
       setBonusDescription('');
-      loadBonusHistory(selectedCompany.id);
-      setLoadingBonus(false);
+      await loadBonusHistory(selectedCompany.id);
     } catch (error) {
       console.error('Error adding bonus:', error);
       alert('Błąd podczas dodawania bonusu');
+    } finally {
       setLoadingBonus(false);
     }
   };
@@ -1249,65 +1330,47 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               {/* Subscriptions Tab */}
               {subscriptionTab === 'subscriptions' && (
                 <div className="space-y-6">
-                  {/* Active Modules */}
+                  {/* All Modules */}
                   <div>
-                    <h4 className="font-semibold text-slate-900 mb-3">Aktywne moduły</h4>
-                    {getCompanyModules(selectedCompany.id).filter(m => m.is_active).length > 0 ? (
-                      <div className="space-y-2">
-                        {getCompanyModules(selectedCompany.id).filter(m => m.is_active).map(cm => {
-                          const mod = modules.find(m => m.code === cm.module_code);
-                          return (
-                            <div key={cm.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                              <div>
-                                <p className="font-medium text-slate-900">{mod?.name_pl || cm.module_code}</p>
-                                <p className="text-sm text-slate-500">{cm.max_users} użytkowników, {cm.price_per_user} PLN/os/mies.</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-slate-900">{(cm.max_users * cm.price_per_user).toFixed(2)} PLN/mies.</p>
-                                <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">Aktywny</span>
-                              </div>
+                    <h4 className="font-semibold text-slate-900 mb-3">Moduły</h4>
+                    <div className="space-y-2">
+                      {modules.filter(m => m.is_active).map(mod => {
+                        const companyMod = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === mod.code);
+                        const isActive = companyMod?.is_active;
+                        return (
+                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
+                            <button
+                              onClick={() => openModuleSettings(mod)}
+                              className="flex-1 text-left"
+                            >
+                              <p className="font-medium text-slate-900">{mod.name_pl}</p>
+                              <p className="text-sm text-slate-500">
+                                {isActive && companyMod
+                                  ? `${companyMod.max_users} użytkowników, ${companyMod.price_per_user} PLN/os/mies.`
+                                  : `${mod.base_price_per_user} PLN/os/mies.`
+                                }
+                              </p>
+                            </button>
+                            <div className="flex items-center gap-4">
+                              {isActive && companyMod && (
+                                <p className="font-bold text-slate-900">{(companyMod.max_users * companyMod.price_per_user).toFixed(2)} PLN/mies.</p>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleToggleModule(mod, !isActive); }}
+                                disabled={loadingModule}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                                  isActive ? 'bg-green-500' : 'bg-slate-300'
+                                } ${loadingModule ? 'opacity-50' : ''}`}
+                              >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                                  isActive ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                              </button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-slate-500 text-sm p-4 bg-slate-50 rounded-lg">Brak aktywnych modułów</p>
-                    )}
-                  </div>
-
-                  {/* Add Subscription Period */}
-                  <div className="border-t border-slate-200 pt-6">
-                    <h4 className="font-semibold text-slate-900 mb-3">Dodaj okres subskrypcji</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Typ</label>
-                        <select
-                          value={subscriptionType}
-                          onChange={(e) => setSubscriptionType(e.target.value as 'demo' | 'full')}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="demo">DEMO</option>
-                          <option value="full">Pełna subskrypcja</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Data zakończenia</label>
-                        <input
-                          type="date"
-                          value={subscriptionEndDate}
-                          onChange={(e) => setSubscriptionEndDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <button
-                      onClick={handleAddSubscriptionPeriod}
-                      disabled={!subscriptionEndDate || loadingSubscription}
-                      className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
-                    >
-                      {loadingSubscription ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
-                      Dodaj okres
-                    </button>
                   </div>
                 </div>
               )}
@@ -1658,6 +1721,87 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Module Settings Modal */}
+      {showModuleSettingsModal && selectedCompany && selectedModule && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Ustawienia modułu</h3>
+              <button onClick={() => setShowModuleSettingsModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-lg mb-4">
+              <p className="font-semibold text-slate-900">{selectedModule.name_pl}</p>
+              <p className="text-sm text-slate-500">{selectedModule.description_pl}</p>
+              <p className="text-sm font-medium text-blue-600 mt-2">{selectedModule.base_price_per_user} PLN / użytkownik / miesiąc</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Liczba użytkowników</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setModuleMaxUsers(Math.max(1, moduleMaxUsers - 1))}
+                    className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    value={moduleMaxUsers}
+                    onChange={(e) => setModuleMaxUsers(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-20 text-center px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    onClick={() => setModuleMaxUsers(moduleMaxUsers + 1)}
+                    className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Okres DEMO do (opcjonalnie)</label>
+                <input
+                  type="date"
+                  value={moduleDemoEndDate}
+                  onChange={(e) => setModuleDemoEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Ustaw datę aby włączyć tryb DEMO</p>
+              </div>
+
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Koszt miesięczny:</strong> {(moduleMaxUsers * selectedModule.base_price_per_user).toFixed(2)} PLN
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowModuleSettingsModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveModuleSettings}
+                disabled={loadingModule}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingModule && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zapisz
+              </button>
             </div>
           </div>
         </div>
