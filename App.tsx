@@ -13,6 +13,8 @@ import { SetupPasswordPage } from './pages/SetupPassword';
 import { ForgotPasswordPage } from './pages/ForgotPassword';
 import { ResetPasswordPage } from './pages/ResetPassword';
 import { TerminatedPage } from './pages/Terminated';
+import { SubscriptionExpiredAdminPage } from './pages/SubscriptionExpiredAdmin';
+import { SubscriptionExpiredUserPage } from './pages/SubscriptionExpiredUser';
 import { AdminUsersPage } from './pages/admin/Users';
 
 // SuperAdmin Pages
@@ -104,6 +106,59 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   // BLOCK TERMINATED USERS
   if (state.currentUser.status === UserStatus.INACTIVE) {
       return <Navigate to="/terminated" replace />;
+  }
+
+  // SUBSCRIPTION CHECK for company users (non-global users)
+  const isGlobalUser = state.currentUser.is_global_user === true;
+  const currentPath = window.location.hash.replace('#', '');
+
+  if (!isGlobalUser && state.currentUser.company_id) {
+    const userCompany = state.companies.find(c => c.id === state.currentUser?.company_id);
+
+    // Check if subscription is expired (cancelled or past_due)
+    const isSubscriptionExpired = userCompany &&
+      (userCompany.subscription_status === 'cancelled' || userCompany.subscription_status === 'past_due');
+
+    // Check if company has any active modules
+    const companyModules = state.companyModules.filter(cm =>
+      cm.company_id === state.currentUser?.company_id && cm.is_active
+    );
+    const hasActiveModules = companyModules.length > 0;
+
+    // If subscription is expired AND no active modules
+    if (isSubscriptionExpired && !hasActiveModules) {
+      if (state.currentUser.role === Role.COMPANY_ADMIN) {
+        // Company admin can only access subscription page
+        if (!currentPath.includes('/company/subscription') && !currentPath.includes('/subscription-expired-admin')) {
+          return <Navigate to="/subscription-expired-admin" replace />;
+        }
+      } else {
+        // Other company users get blocked completely
+        if (!currentPath.includes('/subscription-expired-user')) {
+          return <Navigate to="/subscription-expired-user" replace />;
+        }
+      }
+    }
+
+    // Module-specific access check for candidates and employees
+    if (state.currentUser.role === Role.CANDIDATE || state.currentUser.role === Role.TRIAL) {
+      // Check if recruitment module has available seats
+      const recruitmentModule = companyModules.find(cm => cm.module_code === 'recruitment');
+      if (!recruitmentModule || recruitmentModule.max_users <= 0) {
+        // Check if user has access to skills module instead
+        const skillsModule = companyModules.find(cm => cm.module_code === 'skills');
+        const userHasSkillsAccess = state.moduleUserAccess.some(
+          mua => mua.user_id === state.currentUser?.id && mua.module_code === 'skills' && mua.is_enabled
+        );
+
+        if (!skillsModule || !userHasSkillsAccess) {
+          // No recruitment module and no skills access - show expired page
+          if (!currentPath.includes('/subscription-expired-user')) {
+            return <Navigate to="/subscription-expired-user" replace />;
+          }
+        }
+      }
+    }
   }
 
   // Trial User Logic - redirect to /trial/* routes
@@ -292,6 +347,8 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/terminated" element={<TerminatedPage />} />
+          <Route path="/subscription-expired-admin" element={<SubscriptionExpiredAdminPage />} />
+          <Route path="/subscription-expired-user" element={<SubscriptionExpiredUserPage />} />
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           
