@@ -1040,17 +1040,20 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2 mb-4">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                COMPANY_STATUS_COLORS[company.status] || 'bg-slate-100 text-slate-800 border-slate-200'
-              }`}>
-                {COMPANY_STATUS_LABELS[company.status] || company.status}
-              </span>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                formatSubscriptionDisplay(company).color
-              }`}>
-                {formatSubscriptionDisplay(company).text}
-              </span>
+            <div className="mb-4">
+              <p className="text-xs text-slate-400 mb-1.5">Status firmy / Subskrypcja</p>
+              <div className="flex flex-wrap gap-2">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                  COMPANY_STATUS_COLORS[company.status] || 'bg-slate-100 text-slate-800 border-slate-200'
+                }`}>
+                  {COMPANY_STATUS_LABELS[company.status] || company.status}
+                </span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                  formatSubscriptionDisplay(company).color
+                }`}>
+                  {formatSubscriptionDisplay(company).text}
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
@@ -1059,18 +1062,12 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 <p className="font-semibold text-slate-900">{getCompanyUsersCount(company.id)}</p>
               </div>
               <div>
-                <p className="text-slate-500">Moduły</p>
-                <p className="font-semibold text-slate-900">{getCompanyModules(company.id).length}</p>
+                <p className="text-slate-500">Aktywne moduły</p>
+                <p className="font-semibold text-slate-900">{getCompanyModules(company.id).filter(m => m.is_active).length}</p>
               </div>
-              <div>
+              <div className="col-span-2">
                 <p className="text-slate-500">Balans</p>
                 <p className="font-semibold text-slate-900">{company.bonus_balance?.toFixed(2) || '0.00'} PLN</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Kontakt</p>
-                <p className="font-semibold text-slate-900 truncate" title={company.contact_email || '-'}>
-                  {company.contact_email || '-'}
-                </p>
               </div>
             </div>
 
@@ -1462,6 +1459,14 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 <h5 className="font-semibold text-slate-900 mb-3">Dane kontaktowe</h5>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <p className="text-sm text-slate-500">Pełna nazwa firmy</p>
+                    <p className="font-medium text-slate-900">{selectedCompany.legal_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Branża</p>
+                    <p className="font-medium text-slate-900">{selectedCompany.industry || '-'}</p>
+                  </div>
+                  <div>
                     <p className="text-sm text-slate-500">Email</p>
                     <p className="font-medium text-slate-900">{selectedCompany.contact_email || '-'}</p>
                   </div>
@@ -1487,27 +1492,37 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               {/* Modules */}
               <div className="border-t border-slate-200 pt-4 mt-4">
                 <h5 className="font-semibold text-slate-900 mb-3">Aktywne moduły</h5>
-                {getCompanyModules(selectedCompany.id).length > 0 ? (
+                {modules.filter(m => m.is_active).length > 0 ? (
                   <div className="space-y-2">
-                    {getCompanyModules(selectedCompany.id).map(cm => {
-                      const mod = modules.find(m => m.code === cm.module_code);
-                      return (
-                        <div key={cm.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                          <div>
-                            <p className="font-medium text-slate-900">{mod?.name_pl || cm.module_code}</p>
-                            <p className="text-sm text-slate-500">{cm.max_users} użytkowników, {cm.price_per_user} PLN/os</p>
+                    {modules
+                      .filter(m => m.is_active)
+                      .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+                      .map(mod => {
+                        const cm = companyModules.find(cm => cm.company_id === selectedCompany.id && cm.module_code === mod.code);
+                        // Status logic: has subscription -> Aktywna, active without subscription -> DEMO, otherwise -> BRAK
+                        let statusText = 'BRAK';
+                        let statusColor = 'bg-gray-100 text-gray-800';
+                        if (cm?.is_active) {
+                          if (cm.stripe_subscription_id) {
+                            statusText = 'Aktywna';
+                            statusColor = 'bg-green-100 text-green-800';
+                          } else {
+                            statusText = 'DEMO';
+                            statusColor = 'bg-blue-100 text-blue-800';
+                          }
+                        }
+                        return (
+                          <div key={mod.code} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                            <p className="font-medium text-slate-900">{mod.name_pl}</p>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${statusColor}`}>
+                              {statusText}
+                            </span>
                           </div>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            cm.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
-                          }`}>
-                            {cm.is_active ? 'Aktywny' : 'Nieaktywny'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-sm">Brak aktywnych modułów</p>
+                  <p className="text-slate-500 text-sm">Brak modułów w systemie</p>
                 )}
               </div>
 
