@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2 } from 'lucide-react';
+import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { CRMCompany, CRMContact, CRMDeal } from '../../types';
-import { INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS, CRM_STATUS_COLORS } from '../../constants';
+import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority } from '../../types';
+import { INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS, CRM_STATUS_COLORS, DEAL_STAGE_LABELS, DEAL_STAGE_COLORS, DEAL_PRIORITY_LABELS, DEAL_PRIORITY_COLORS, MODULE_LABELS } from '../../constants';
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
 export const SalesCompanies: React.FC = () => {
@@ -75,6 +75,42 @@ export const SalesCompanies: React.FC = () => {
     { value: 'meeting', label: 'Spotkanie' },
     { value: 'task', label: 'Zadanie' }
   ];
+
+  // Phone formatting function
+  const formatPhoneNumber = (value: string): string => {
+    // Remove all non-digit characters except +
+    const cleaned = value.replace(/[^\d+]/g, '');
+
+    // If starts with +48 or 48, format as Polish number
+    if (cleaned.startsWith('+48')) {
+      const digits = cleaned.slice(3);
+      if (digits.length <= 3) return `+48 ${digits}`;
+      if (digits.length <= 6) return `+48 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+      return `+48 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+    }
+
+    if (cleaned.startsWith('48') && cleaned.length > 2) {
+      const digits = cleaned.slice(2);
+      if (digits.length <= 3) return `+48 ${digits}`;
+      if (digits.length <= 6) return `+48 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+      return `+48 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+    }
+
+    // If starts with +, keep it as is with basic formatting
+    if (cleaned.startsWith('+')) {
+      return cleaned;
+    }
+
+    // For Polish numbers without country code
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)}`;
+  };
+
+  const handlePhoneChange = (value: string) => {
+    const formatted = formatPhoneNumber(value);
+    setContactForm(prev => ({ ...prev, phone: formatted }));
+  };
 
   // GUS search state
   const [isSearchingGUS, setIsSearchingGUS] = useState(false);
@@ -1607,7 +1643,7 @@ export const SalesCompanies: React.FC = () => {
                               className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg transition"
                               title="Profil kontaktu"
                             >
-                              <History className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteContact(contact.id)}
@@ -1751,7 +1787,8 @@ export const SalesCompanies: React.FC = () => {
                   <input
                     type="tel"
                     value={contactForm.phone}
-                    onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    placeholder="+48 XXX XXX XXX"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -2045,7 +2082,8 @@ export const SalesCompanies: React.FC = () => {
                     <input
                       type="tel"
                       value={contactForm.phone}
-                      onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="+48 XXX XXX XXX"
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -2297,42 +2335,71 @@ export const SalesCompanies: React.FC = () => {
       {/* Deal Detail Modal */}
       {showDealDetailModal && selectedDeal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">{selectedDeal.title}</h3>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                  selectedDeal.stage === 'won' ? 'bg-green-100 text-green-700' :
-                  selectedDeal.stage === 'lost' ? 'bg-red-100 text-red-700' :
-                  'bg-blue-100 text-blue-700'
-                }`}>
-                  {selectedDeal.stage}
-                </span>
-              </div>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">{selectedDeal.title}</h3>
               <button onClick={() => { setShowDealDetailModal(false); setSelectedDeal(null); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-500 mb-1">Wartość</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {selectedDeal.value?.toLocaleString('pl-PL')} zł
-                </p>
+            <div className="space-y-4">
+              {/* Stage and Priority badges */}
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${DEAL_STAGE_COLORS[selectedDeal.stage as DealStage] || 'bg-slate-100 text-slate-700'}`}>
+                  {DEAL_STAGE_LABELS[selectedDeal.stage as DealStage] || selectedDeal.stage}
+                </span>
+                {selectedDeal.priority && (
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${DEAL_PRIORITY_COLORS[selectedDeal.priority as DealPriority] || 'bg-slate-100 text-slate-600'}`}>
+                    {DEAL_PRIORITY_LABELS[selectedDeal.priority as DealPriority] || selectedDeal.priority}
+                  </span>
+                )}
               </div>
 
+              {/* Value and Probability */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">Wartość</p>
+                  <p className="text-lg font-bold text-green-600">
+                    {selectedDeal.value ? new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 0 }).format(selectedDeal.value) : '—'}
+                  </p>
+                </div>
+                <div className="bg-slate-50 p-3 rounded-lg">
+                  <p className="text-xs text-slate-500 mb-1">Prawdopodobieństwo</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedDeal.probability || 0}%</p>
+                </div>
+              </div>
+
+              {/* Expected close date */}
               {selectedDeal.expected_close_date && (
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                  <CheckSquare className="w-5 h-5 text-slate-400" />
-                  <div>
-                    <p className="text-xs text-slate-500">Przewidywane zamknięcie</p>
-                    <p className="font-medium text-slate-900">
-                      {new Date(selectedDeal.expected_close_date).toLocaleDateString('pl-PL')}
-                    </p>
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Calendar className="w-4 h-4" />
+                  <span>Planowane zamknięcie: {new Date(selectedDeal.expected_close_date).toLocaleDateString('pl-PL')}</span>
+                </div>
+              )}
+
+              {/* Employee count estimate */}
+              {selectedDeal.employee_count_estimate && (
+                <div className="flex items-center gap-2 text-slate-600">
+                  <Users className="w-4 h-4" />
+                  <span>Szacowana liczba użytkowników: {selectedDeal.employee_count_estimate}</span>
+                </div>
+              )}
+
+              {/* Interested modules */}
+              {selectedDeal.modules_interested && selectedDeal.modules_interested.length > 0 && (
+                <div>
+                  <p className="text-sm text-slate-500 mb-2">Zainteresowane moduły:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedDeal.modules_interested.map(mod => (
+                      <span key={mod} className="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
+                        {MODULE_LABELS[mod] || mod}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
 
+              {/* Company info */}
               {selectedCompany && (
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                   <Building2 className="w-5 h-5 text-slate-400" />
@@ -2343,6 +2410,7 @@ export const SalesCompanies: React.FC = () => {
                 </div>
               )}
 
+              {/* Contact info */}
               {selectedContact && (
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                   <User className="w-5 h-5 text-slate-400" />
@@ -2353,9 +2421,22 @@ export const SalesCompanies: React.FC = () => {
                 </div>
               )}
 
+              {/* Notes */}
+              {selectedDeal.notes && (
+                <div>
+                  <p className="text-sm text-slate-500 mb-1">Notatki:</p>
+                  <p className="text-slate-700">{selectedDeal.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 mt-6 pt-4 border-t border-slate-100">
+              <button className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">
+                Edytuj
+              </button>
               <button
                 onClick={() => { setShowDealDetailModal(false); setSelectedDeal(null); }}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
               >
                 Zamknij
               </button>
