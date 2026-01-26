@@ -1,11 +1,13 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Search, Plus, Building2, Users, CreditCard, Lock, Unlock,
-  Edit2, Trash2, Eye, X, MoreVertical, Check, AlertCircle, Loader2
+  Search, Plus, Minus, Building2, Users, CreditCard, Lock, Unlock,
+  Edit2, Trash2, Eye, X, MoreVertical, Check, AlertCircle, Loader2,
+  Calendar, History, FileText, Download, PlusCircle, Wallet, UserPlus,
+  Mail, Phone, ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Company, CompanyStatus, SubscriptionStatus } from '../../types';
+import { Company, CompanyStatus, SubscriptionStatus, User, PaymentHistory } from '../../types';
 import { COMPANY_STATUS_LABELS, COMPANY_STATUS_COLORS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS } from '../../constants';
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
@@ -20,6 +22,43 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+
+  // New modal states
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'history' | 'invoices'>('subscriptions');
+
+  // Bonus modal state
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusDescription, setBonusDescription] = useState('');
+  const [bonusHistory, setBonusHistory] = useState<Array<{
+    id: string;
+    amount: number;
+    type: 'credit' | 'debit';
+    description: string;
+    created_at: string;
+    created_by?: string;
+  }>>([]);
+  const [loadingBonus, setLoadingBonus] = useState(false);
+
+  // Subscription modal state
+  const [subscriptionEndDate, setSubscriptionEndDate] = useState('');
+  const [subscriptionType, setSubscriptionType] = useState<'demo' | 'full'>('full');
+  const [loadingSubscription, setLoadingSubscription] = useState(false);
+
+  // User modal state
+  const [showUserFormModal, setShowUserFormModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userFormData, setUserFormData] = useState({
+    email: '',
+    first_name: '',
+    last_name: '',
+    role: 'company_admin',
+    phone: '',
+    plain_password: ''
+  });
 
   // GUS search state
   const [isSearchingGUS, setIsSearchingGUS] = useState(false);
@@ -48,6 +87,39 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   // Get modules for company
   const getCompanyModules = (companyId: string) => {
     return companyModules.filter(cm => cm.company_id === companyId);
+  };
+
+  // Get users for company
+  const getCompanyUsers = (companyId: string): User[] => {
+    return users.filter(u => u.company_id === companyId);
+  };
+
+  // Get payment history for company
+  const getCompanyPaymentHistory = (companyId: string): PaymentHistory[] => {
+    return (state.paymentHistory || []).filter(ph => ph.company_id === companyId);
+  };
+
+  // Format subscription status display
+  const formatSubscriptionDisplay = (company: Company): { text: string; color: string } => {
+    if (!company.subscription_status || company.subscription_status === 'cancelled') {
+      return { text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
+    }
+    if (company.subscription_status === 'trialing') {
+      const endDate = company.trial_ends_at ? new Date(company.trial_ends_at).toLocaleDateString('pl-PL') : '?';
+      return { text: `DEMO do ${endDate}`, color: 'bg-blue-100 text-blue-800 border-blue-200' };
+    }
+    if (company.subscription_status === 'active') {
+      // Check if there's an end date from modules
+      const activeModules = getCompanyModules(company.id).filter(m => m.is_active);
+      if (activeModules.length > 0) {
+        return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
+      }
+      return { text: 'AKTYWNA', color: 'bg-green-100 text-green-800 border-green-200' };
+    }
+    if (company.subscription_status === 'past_due') {
+      return { text: 'ZALEGŁA PŁATNOŚĆ', color: 'bg-red-100 text-red-800 border-red-200' };
+    }
+    return { text: SUBSCRIPTION_STATUS_LABELS[company.subscription_status] || company.subscription_status, color: SUBSCRIPTION_STATUS_COLORS[company.subscription_status] || 'bg-slate-100 text-slate-800 border-slate-200' };
   };
 
   // Filter companies
@@ -153,6 +225,211 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   // Handle unblock
   const handleUnblock = async (company: Company) => {
     await unblockCompany(company.id);
+  };
+
+  // Handle status change
+  const handleStatusChange = async (newStatus: CompanyStatus) => {
+    if (!selectedCompany) return;
+    try {
+      await updateCompany(selectedCompany.id, { status: newStatus });
+      setSelectedCompany({ ...selectedCompany, status: newStatus });
+      setShowStatusModal(false);
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('Błąd podczas zmiany statusu');
+    }
+  };
+
+  // Handle subscription status change
+  const handleSubscriptionChange = async (newStatus: SubscriptionStatus, endDate?: string) => {
+    if (!selectedCompany) return;
+    setLoadingSubscription(true);
+    try {
+      const updates: Partial<Company> = { subscription_status: newStatus };
+      if (newStatus === 'trialing' && endDate) {
+        updates.trial_ends_at = endDate;
+      }
+      await updateCompany(selectedCompany.id, updates);
+      setSelectedCompany({ ...selectedCompany, ...updates });
+      setSubscriptionEndDate('');
+      setLoadingSubscription(false);
+    } catch (error) {
+      console.error('Error updating subscription:', error);
+      alert('Błąd podczas zmiany subskrypcji');
+      setLoadingSubscription(false);
+    }
+  };
+
+  // Add subscription period
+  const handleAddSubscriptionPeriod = async () => {
+    if (!selectedCompany || !subscriptionEndDate) return;
+    setLoadingSubscription(true);
+    try {
+      const updates: Partial<Company> = {
+        subscription_status: subscriptionType === 'demo' ? 'trialing' : 'active',
+        trial_ends_at: subscriptionType === 'demo' ? subscriptionEndDate : undefined,
+        status: 'active' as CompanyStatus
+      };
+      await updateCompany(selectedCompany.id, updates);
+      setSelectedCompany({ ...selectedCompany, ...updates });
+      setSubscriptionEndDate('');
+      setLoadingSubscription(false);
+    } catch (error) {
+      console.error('Error adding subscription period:', error);
+      alert('Błąd podczas dodawania okresu subskrypcji');
+      setLoadingSubscription(false);
+    }
+  };
+
+  // Load bonus history
+  const loadBonusHistory = async (companyId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('bonus_transactions')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('Bonus history table may not exist:', error);
+        setBonusHistory([]);
+      } else {
+        setBonusHistory(data || []);
+      }
+    } catch (err) {
+      console.log('Error loading bonus history:', err);
+      setBonusHistory([]);
+    }
+  };
+
+  // Handle add bonus
+  const handleAddBonus = async () => {
+    if (!selectedCompany || !bonusAmount) return;
+    setLoadingBonus(true);
+    try {
+      const amount = parseFloat(bonusAmount);
+      if (isNaN(amount) || amount === 0) {
+        alert('Podaj prawidłową kwotę');
+        setLoadingBonus(false);
+        return;
+      }
+
+      const newBalance = (selectedCompany.bonus_balance || 0) + amount;
+      await updateCompany(selectedCompany.id, { bonus_balance: newBalance });
+
+      // Try to save bonus transaction
+      try {
+        await supabase.from('bonus_transactions').insert({
+          company_id: selectedCompany.id,
+          amount: Math.abs(amount),
+          type: amount > 0 ? 'credit' : 'debit',
+          description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
+          created_by: state.currentUser?.id
+        });
+      } catch (e) {
+        console.log('Could not save bonus transaction:', e);
+      }
+
+      setSelectedCompany({ ...selectedCompany, bonus_balance: newBalance });
+      setBonusAmount('');
+      setBonusDescription('');
+      loadBonusHistory(selectedCompany.id);
+      setLoadingBonus(false);
+    } catch (error) {
+      console.error('Error adding bonus:', error);
+      alert('Błąd podczas dodawania bonusu');
+      setLoadingBonus(false);
+    }
+  };
+
+  // Handle add user
+  const handleAddUser = async () => {
+    if (!selectedCompany || !userFormData.email || !userFormData.first_name || !userFormData.last_name) {
+      alert('Wypełnij wymagane pola');
+      return;
+    }
+
+    try {
+      // Generate password if not provided
+      const password = userFormData.plain_password || Math.random().toString(36).slice(-8);
+
+      const newUser = {
+        email: userFormData.email,
+        first_name: userFormData.first_name,
+        last_name: userFormData.last_name,
+        role: userFormData.role,
+        phone: userFormData.phone || undefined,
+        company_id: selectedCompany.id,
+        status: 'active',
+        is_global_user: false,
+        plain_password: password,
+        hired_date: new Date().toISOString().split('T')[0]
+      };
+
+      const { data, error } = await supabase.from('users').insert(newUser).select().single();
+      if (error) throw error;
+
+      setShowUserFormModal(false);
+      setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' });
+      // Refresh data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error adding user:', error);
+      alert(error.message || 'Błąd podczas dodawania użytkownika');
+    }
+  };
+
+  // Handle edit user
+  const handleEditUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      const { error } = await supabase.from('users').update({
+        email: userFormData.email,
+        first_name: userFormData.first_name,
+        last_name: userFormData.last_name,
+        role: userFormData.role,
+        phone: userFormData.phone || null
+      }).eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      setShowUserFormModal(false);
+      setEditingUser(null);
+      setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' });
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error updating user:', error);
+      alert(error.message || 'Błąd podczas aktualizacji użytkownika');
+    }
+  };
+
+  // Handle delete user
+  const handleDeleteUser = async (user: User) => {
+    if (!window.confirm(`Czy na pewno chcesz usunąć użytkownika ${user.first_name} ${user.last_name}?`)) return;
+
+    try {
+      const { error } = await supabase.from('users').delete().eq('id', user.id);
+      if (error) throw error;
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      alert(error.message || 'Błąd podczas usuwania użytkownika');
+    }
+  };
+
+  // Open user edit modal
+  const openUserEditModal = (user: User) => {
+    setEditingUser(user);
+    setUserFormData({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      role: user.role,
+      phone: user.phone || '',
+      plain_password: ''
+    });
+    setShowUserFormModal(true);
   };
 
   // Open edit modal
@@ -394,9 +671,9 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                 {COMPANY_STATUS_LABELS[company.status] || company.status}
               </span>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                SUBSCRIPTION_STATUS_COLORS[company.subscription_status] || 'bg-slate-100 text-slate-800 border-slate-200'
+                formatSubscriptionDisplay(company).color
               }`}>
-                {SUBSCRIPTION_STATUS_LABELS[company.subscription_status] || company.subscription_status}
+                {formatSubscriptionDisplay(company).text}
               </span>
             </div>
 
@@ -428,13 +705,6 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               >
                 <Eye className="w-4 h-4" />
                 Szczegóły
-              </button>
-              <button
-                onClick={() => openEditModal(company)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edytuj
               </button>
               {company.is_blocked ? (
                 <button
@@ -729,30 +999,62 @@ export const SuperAdminCompaniesPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase mb-1">Status</p>
+                {/* Clickable Status */}
+                <button
+                  onClick={() => setShowStatusModal(true)}
+                  className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
+                >
+                  <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Status
+                    <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                  </p>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                     COMPANY_STATUS_COLORS[selectedCompany.status]
                   }`}>
                     {COMPANY_STATUS_LABELS[selectedCompany.status]}
                   </span>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase mb-1">Subskrypcja</p>
+                </button>
+
+                {/* Clickable Subscription */}
+                <button
+                  onClick={() => { loadBonusHistory(selectedCompany.id); setShowSubscriptionModal(true); }}
+                  className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
+                >
+                  <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Subskrypcja
+                    <CreditCard className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                  </p>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                    SUBSCRIPTION_STATUS_COLORS[selectedCompany.subscription_status]
+                    formatSubscriptionDisplay(selectedCompany).color
                   }`}>
-                    {SUBSCRIPTION_STATUS_LABELS[selectedCompany.subscription_status]}
+                    {formatSubscriptionDisplay(selectedCompany).text}
                   </span>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase mb-1">Użytkownicy</p>
+                </button>
+
+                {/* Clickable Users */}
+                <button
+                  onClick={() => setShowUsersModal(true)}
+                  className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
+                >
+                  <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Użytkownicy
+                    <Users className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                  </p>
                   <p className="font-bold text-slate-900">{getCompanyUsersCount(selectedCompany.id)}</p>
-                </div>
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-xs text-slate-500 uppercase mb-1">Balans bonusowy</p>
+                </button>
+
+                {/* Clickable Bonus Balance */}
+                <button
+                  onClick={() => { loadBonusHistory(selectedCompany.id); setShowBonusModal(true); }}
+                  className="p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition text-left group"
+                >
+                  <p className="text-xs text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Balans bonusowy
+                    <Wallet className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                  </p>
                   <p className="font-bold text-slate-900">{selectedCompany.bonus_balance?.toFixed(2) || '0.00'} PLN</p>
-                </div>
+                </button>
+
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <p className="text-xs text-slate-500 uppercase mb-1">NIP</p>
                   <p className="font-medium text-slate-900">{selectedCompany.tax_id || '-'}</p>
@@ -813,6 +1115,547 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-slate-500 text-sm">Brak aktywnych modułów</p>
+                )}
+              </div>
+
+              {/* Edit Button */}
+              <div className="border-t border-slate-200 pt-4 mt-4">
+                <button
+                  onClick={() => { setShowDetailModal(false); openEditModal(selectedCompany); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edytuj dane firmy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Change Modal */}
+      {showStatusModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Zmień status firmy</h3>
+              <button onClick={() => setShowStatusModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-slate-600 mb-4">Wybierz nowy status dla firmy <strong>{selectedCompany.name}</strong>:</p>
+            <div className="space-y-2">
+              {(['active', 'trial', 'suspended', 'cancelled'] as CompanyStatus[]).map(status => (
+                <button
+                  key={status}
+                  onClick={() => handleStatusChange(status)}
+                  className={`w-full flex items-center justify-between p-3 rounded-lg border transition ${
+                    selectedCompany.status === status
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                    COMPANY_STATUS_COLORS[status]
+                  }`}>
+                    {COMPANY_STATUS_LABELS[status]}
+                  </span>
+                  {selectedCompany.status === status && (
+                    <Check className="w-5 h-5 text-blue-600" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowStatusModal(false)}
+              className="w-full mt-4 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Modal */}
+      {showSubscriptionModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Subskrypcja - {selectedCompany.name}</h3>
+              <button onClick={() => setShowSubscriptionModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Subscription Status Card */}
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <CreditCard className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-slate-500">Status subskrypcji</p>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border mt-1 ${
+                    formatSubscriptionDisplay(selectedCompany).color
+                  }`}>
+                    {formatSubscriptionDisplay(selectedCompany).text}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-500">Balans bonusowy</p>
+                  <p className="text-xl font-bold text-green-600">{selectedCompany.bonus_balance?.toFixed(2) || '0.00'} PLN</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200">
+              <button
+                onClick={() => setSubscriptionTab('subscriptions')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'subscriptions'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <Calendar className="w-4 h-4 inline mr-2" />
+                Subskrypcje
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('history')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'history'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <History className="w-4 h-4 inline mr-2" />
+                Historia
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('invoices')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'invoices'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <FileText className="w-4 h-4 inline mr-2" />
+                Faktury
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Subscriptions Tab */}
+              {subscriptionTab === 'subscriptions' && (
+                <div className="space-y-6">
+                  {/* Active Modules */}
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-3">Aktywne moduły</h4>
+                    {getCompanyModules(selectedCompany.id).filter(m => m.is_active).length > 0 ? (
+                      <div className="space-y-2">
+                        {getCompanyModules(selectedCompany.id).filter(m => m.is_active).map(cm => {
+                          const mod = modules.find(m => m.code === cm.module_code);
+                          return (
+                            <div key={cm.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                              <div>
+                                <p className="font-medium text-slate-900">{mod?.name_pl || cm.module_code}</p>
+                                <p className="text-sm text-slate-500">{cm.max_users} użytkowników, {cm.price_per_user} PLN/os/mies.</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-slate-900">{(cm.max_users * cm.price_per_user).toFixed(2)} PLN/mies.</p>
+                                <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">Aktywny</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-sm p-4 bg-slate-50 rounded-lg">Brak aktywnych modułów</p>
+                    )}
+                  </div>
+
+                  {/* Add Subscription Period */}
+                  <div className="border-t border-slate-200 pt-6">
+                    <h4 className="font-semibold text-slate-900 mb-3">Dodaj okres subskrypcji</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Typ</label>
+                        <select
+                          value={subscriptionType}
+                          onChange={(e) => setSubscriptionType(e.target.value as 'demo' | 'full')}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="demo">DEMO</option>
+                          <option value="full">Pełna subskrypcja</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Data zakończenia</label>
+                        <input
+                          type="date"
+                          value={subscriptionEndDate}
+                          onChange={(e) => setSubscriptionEndDate(e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleAddSubscriptionPeriod}
+                      disabled={!subscriptionEndDate || loadingSubscription}
+                      className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
+                    >
+                      {loadingSubscription ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                      Dodaj okres
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* History Tab */}
+              {subscriptionTab === 'history' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Historia zmian subskrypcji</h4>
+                  <div className="text-center py-8 text-slate-500">
+                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Historia zmian subskrypcji będzie wyświetlana tutaj.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Invoices Tab */}
+              {subscriptionTab === 'invoices' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Faktury i płatności</h4>
+                  {getCompanyPaymentHistory(selectedCompany.id).length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nr faktury</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {getCompanyPaymentHistory(selectedCompany.id).map(payment => (
+                            <tr key={payment.id} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-sm text-slate-900">
+                                {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pl-PL') : new Date(payment.created_at).toLocaleDateString('pl-PL')}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-slate-600 font-mono">{payment.invoice_number || '-'}</td>
+                              <td className="px-4 py-3 text-sm font-semibold text-slate-900">{Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  payment.status === 'paid' ? 'bg-green-100 text-green-800' :
+                                  payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                  payment.status === 'refunded' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {payment.status === 'paid' ? 'Opłacona' : payment.status === 'failed' ? 'Niepowodzenie' : payment.status === 'refunded' ? 'Zwrócona' : 'Oczekująca'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {payment.invoice_pdf_url && (
+                                  <a href={payment.invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm">
+                                    <Download className="w-4 h-4" /> Pobierz
+                                  </a>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak historii płatności</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Users Modal */}
+      {showUsersModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Użytkownicy - {selectedCompany.name}</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setEditingUser(null); setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' }); setShowUserFormModal(true); }}
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Dodaj użytkownika
+                </button>
+                <button onClick={() => setShowUsersModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {getCompanyUsers(selectedCompany.id).length > 0 ? (
+                <div className="space-y-3">
+                  {getCompanyUsers(selectedCompany.id).map(user => (
+                    <div key={user.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                          {user.first_name?.[0]}{user.last_name?.[0]}
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                          <div className="flex items-center gap-2 text-sm text-slate-500">
+                            <Mail className="w-3 h-3" />
+                            {user.email}
+                            {user.phone && (
+                              <>
+                                <span className="mx-1">|</span>
+                                <Phone className="w-3 h-3" />
+                                {user.phone}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          {user.role === 'company_admin' ? 'Admin' : user.role === 'hr' ? 'HR' : user.role === 'coordinator' ? 'Koordynator' : user.role}
+                        </span>
+                        <button
+                          onClick={() => openUserEditModal(user)}
+                          className="p-2 text-slate-600 hover:bg-slate-200 rounded-lg transition"
+                          title="Edytuj"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Usuń"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">Brak użytkowników</p>
+                  <button
+                    onClick={() => { setEditingUser(null); setUserFormData({ email: '', first_name: '', last_name: '', role: 'company_admin', phone: '', plain_password: '' }); setShowUserFormModal(true); }}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mx-auto"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Dodaj pierwszego użytkownika
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Form Modal (Add/Edit) */}
+      {showUserFormModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingUser ? 'Edytuj użytkownika' : 'Dodaj użytkownika'}
+              </h3>
+              <button onClick={() => { setShowUserFormModal(false); setEditingUser(null); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
+                  <input
+                    type="text"
+                    value={userFormData.first_name}
+                    onChange={(e) => setUserFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
+                  <input
+                    type="text"
+                    value={userFormData.last_name}
+                    onChange={(e) => setUserFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={userFormData.email}
+                  onChange={(e) => setUserFormData(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
+                <input
+                  type="tel"
+                  value={userFormData.phone}
+                  onChange={(e) => setUserFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Rola</label>
+                <select
+                  value={userFormData.role}
+                  onChange={(e) => setUserFormData(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="company_admin">Admin firmy</option>
+                  <option value="hr">HR</option>
+                  <option value="coordinator">Koordynator</option>
+                  <option value="brigadir">Brygadzista</option>
+                </select>
+              </div>
+              {!editingUser && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Hasło (opcjonalnie)</label>
+                  <input
+                    type="text"
+                    value={userFormData.plain_password}
+                    onChange={(e) => setUserFormData(prev => ({ ...prev, plain_password: e.target.value }))}
+                    placeholder="Zostaw puste aby wygenerować automatycznie"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowUserFormModal(false); setEditingUser(null); }}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={editingUser ? handleEditUser : handleAddUser}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {editingUser ? 'Zapisz zmiany' : 'Dodaj użytkownika'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus Balance Modal */}
+      {showBonusModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Balans bonusowy - {selectedCompany.name}</h3>
+              <button onClick={() => setShowBonusModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Current Balance */}
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl mb-6">
+                <div className="w-14 h-14 bg-green-500 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-green-700">Aktualny balans</p>
+                  <p className="text-3xl font-bold text-green-800">{selectedCompany.bonus_balance?.toFixed(2) || '0.00'} PLN</p>
+                </div>
+              </div>
+
+              {/* Add Bonus Form */}
+              <div className="border border-slate-200 rounded-xl p-4 mb-6">
+                <h4 className="font-semibold text-slate-900 mb-3">Dodaj/Odejmij bonus</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Kwota (PLN)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={bonusAmount}
+                      onChange={(e) => setBonusAmount(e.target.value)}
+                      placeholder="np. 100 lub -50"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Użyj wartości ujemnej aby odjąć</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                    <input
+                      type="text"
+                      value={bonusDescription}
+                      onChange={(e) => setBonusDescription(e.target.value)}
+                      placeholder="np. Doładowanie promocyjne"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleAddBonus}
+                  disabled={!bonusAmount || loadingBonus}
+                  className="mt-4 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition"
+                >
+                  {loadingBonus ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                  Zapisz
+                </button>
+              </div>
+
+              {/* Bonus History */}
+              <div>
+                <h4 className="font-semibold text-slate-900 mb-3">Historia operacji</h4>
+                {bonusHistory.length > 0 ? (
+                  <div className="space-y-2">
+                    {bonusHistory.map(entry => (
+                      <div key={entry.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            entry.type === 'credit' ? 'bg-green-100' : 'bg-red-100'
+                          }`}>
+                            {entry.type === 'credit' ? (
+                              <Plus className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Minus className="w-4 h-4 text-red-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">{entry.description}</p>
+                            <p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleDateString('pl-PL')}</p>
+                          </div>
+                        </div>
+                        <p className={`font-bold ${entry.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                          {entry.type === 'credit' ? '+' : '-'}{entry.amount.toFixed(2)} PLN
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500">
+                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Brak historii operacji</p>
+                  </div>
                 )}
               </div>
             </div>
