@@ -634,15 +634,9 @@ export const CompanySubscriptionPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-6">
-            <div className="text-center">
-              <p className="text-sm text-slate-500">Miesięcznie</p>
-              <p className="text-2xl font-bold text-slate-900">{totals.monthlyTotal.toFixed(2)} PLN</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-slate-500">Balans bonusowy</p>
-              <p className="text-2xl font-bold text-green-600">{totals.bonusBalance.toFixed(2)} PLN</p>
-            </div>
+          <div className="text-center">
+            <p className="text-sm text-slate-500">Balans bonusowy</p>
+            <p className="text-2xl font-bold text-green-600">{totals.bonusBalance.toFixed(2)} PLN</p>
           </div>
         </div>
       </div>
