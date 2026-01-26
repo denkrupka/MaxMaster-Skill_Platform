@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent } from 'lucide-react';
+import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent, UserPlus, Key, CreditCard, Shield } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority } from '../../types';
+import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority, Role, Company } from '../../types';
 import { INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS, CRM_STATUS_COLORS, DEAL_STAGE_LABELS, DEAL_STAGE_COLORS, DEAL_PRIORITY_LABELS, DEAL_PRIORITY_COLORS, MODULE_LABELS } from '../../constants';
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
@@ -68,6 +68,18 @@ export const SalesCompanies: React.FC = () => {
     description: '',
     scheduled_at: '',
     location: ''
+  });
+
+  // Portal account creation modal state
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false);
+  const [accountCreationMode, setAccountCreationMode] = useState<'select' | 'new'>('select');
+  const [selectedAccountContact, setSelectedAccountContact] = useState<CRMContact | null>(null);
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [newAccountForm, setNewAccountForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: ''
   });
 
   // Task type options
@@ -858,6 +870,223 @@ export const SalesCompanies: React.FC = () => {
     }
   };
 
+  // Generate random password for new account
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return password;
+  };
+
+  // Generate slug from name
+  const generateCompanySlug = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[ąą]/g, 'a')
+      .replace(/[ćć]/g, 'c')
+      .replace(/[ęę]/g, 'e')
+      .replace(/[łł]/g, 'l')
+      .replace(/[ńń]/g, 'n')
+      .replace(/[óó]/g, 'o')
+      .replace(/[śś]/g, 's')
+      .replace(/[źżźż]/g, 'z')
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      + '-' + Date.now().toString(36);
+  };
+
+  // Create portal account for company
+  const handleCreatePortalAccount = async () => {
+    if (!selectedCompany) return;
+
+    // Determine user data
+    let userData: { first_name: string; last_name: string; email: string; phone: string };
+
+    if (accountCreationMode === 'select' && selectedAccountContact) {
+      if (!selectedAccountContact.email) {
+        alert('Wybrany kontakt nie ma adresu email. Uzupełnij dane kontaktu lub dodaj nowego użytkownika.');
+        return;
+      }
+      userData = {
+        first_name: selectedAccountContact.first_name,
+        last_name: selectedAccountContact.last_name,
+        email: selectedAccountContact.email,
+        phone: selectedAccountContact.phone || ''
+      };
+    } else if (accountCreationMode === 'new') {
+      if (!newAccountForm.email || !newAccountForm.first_name || !newAccountForm.last_name) {
+        alert('Wypełnij wymagane pola: imię, nazwisko i email.');
+        return;
+      }
+      userData = newAccountForm;
+    } else {
+      alert('Wybierz kontakt lub dodaj nowego użytkownika.');
+      return;
+    }
+
+    setIsCreatingAccount(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Brak sesji - proszę zalogować się ponownie');
+      }
+
+      const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+      const password = generatePassword();
+      const companySlug = generateCompanySlug(selectedCompany.name);
+
+      // 1. Create company in companies table
+      const { data: newCompany, error: companyError } = await supabase
+        .from('companies')
+        .insert([{
+          name: selectedCompany.name,
+          slug: companySlug,
+          legal_name: selectedCompany.legal_name || null,
+          tax_id: selectedCompany.tax_id || null,
+          regon: selectedCompany.regon || null,
+          address_street: selectedCompany.address_street || null,
+          address_city: selectedCompany.address_city || null,
+          address_postal_code: selectedCompany.address_postal_code || null,
+          status: 'trial',
+          is_blocked: false,
+          subscription_status: 'trialing',
+          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days trial
+          bonus_balance: 0,
+          sales_owner_id: state.currentUser?.id
+        }])
+        .select()
+        .single();
+
+      if (companyError) throw companyError;
+
+      // 2. Create admin user via edge function
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-user-admin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
+          email: userData.email,
+          password: password,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          phone: userData.phone || null,
+          role: Role.COMPANY_ADMIN,
+          status: 'invited',
+          company_id: newCompany.id,
+          is_global_user: false
+        })
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        // Rollback: delete the company
+        await supabase.from('companies').delete().eq('id', newCompany.id);
+        throw new Error(result.error || 'Błąd podczas tworzenia użytkownika');
+      }
+
+      // 3. Update CRM company with linked_company_id
+      const { data: updatedCrmCompany, error: updateError } = await supabase
+        .from('crm_companies')
+        .update({
+          linked_company_id: newCompany.id,
+          subscription_status: 'trialing',
+          subscription_end_date: newCompany.trial_ends_at
+        })
+        .eq('id', selectedCompany.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // 4. Send invitation email
+      await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
+          template: 'USER_INVITATION',
+          to: userData.email,
+          data: {
+            userName: userData.first_name,
+            companyName: selectedCompany.name,
+            roleName: 'Administrator firmy',
+            email: userData.email,
+            inviteUrl: `${window.location.origin}/login?email=${encodeURIComponent(userData.email)}`
+          }
+        })
+      });
+
+      // 5. Log activity
+      await logCompanyActivity('status_change', `Utworzono konto w portalu dla: ${userData.first_name} ${userData.last_name} (${userData.email})`);
+
+      // 6. Update local state
+      setState(prev => ({
+        ...prev,
+        crmCompanies: prev.crmCompanies.map(c => c.id === selectedCompany.id ? updatedCrmCompany : c)
+      }));
+      setSelectedCompany(updatedCrmCompany);
+
+      // Reset and close modal
+      setShowCreateAccountModal(false);
+      setAccountCreationMode('select');
+      setSelectedAccountContact(null);
+      setNewAccountForm({ first_name: '', last_name: '', email: '', phone: '' });
+
+      alert(`Konto zostało utworzone pomyślnie!\n\nDane logowania:\nEmail: ${userData.email}\nHasło: ${password}\n\nEmail z zaproszeniem został wysłany.`);
+
+    } catch (error: any) {
+      console.error('Error creating portal account:', error);
+      alert(error.message || 'Błąd podczas tworzenia konta w portalu');
+    } finally {
+      setIsCreatingAccount(false);
+    }
+  };
+
+  // Get subscription status label
+  const getSubscriptionLabel = (company: CRMCompany): { text: string; color: string } => {
+    if (!company.linked_company_id) {
+      return { text: 'Brak', color: 'bg-slate-100 text-slate-600' };
+    }
+
+    switch (company.subscription_status) {
+      case 'active':
+        if (company.subscription_end_date) {
+          const endDate = new Date(company.subscription_end_date);
+          return {
+            text: `Ważna do ${endDate.toLocaleDateString('pl-PL')}`,
+            color: 'bg-green-100 text-green-700'
+          };
+        }
+        return { text: 'Aktywna', color: 'bg-green-100 text-green-700' };
+      case 'trialing':
+        if (company.subscription_end_date) {
+          const endDate = new Date(company.subscription_end_date);
+          return {
+            text: `Trial do ${endDate.toLocaleDateString('pl-PL')}`,
+            color: 'bg-blue-100 text-blue-700'
+          };
+        }
+        return { text: 'Okres próbny', color: 'bg-blue-100 text-blue-700' };
+      case 'past_due':
+        return { text: 'Zaległa płatność', color: 'bg-orange-100 text-orange-700' };
+      case 'cancelled':
+        return { text: 'Zakończona', color: 'bg-red-100 text-red-700' };
+      default:
+        return { text: 'Brak', color: 'bg-slate-100 text-slate-600' };
+    }
+  };
+
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
@@ -1508,6 +1737,49 @@ export const SalesCompanies: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Portal account and subscription tiles */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        {/* Portal account status */}
+                        <div className={`rounded-lg p-4 ${selectedCompany.linked_company_id ? 'bg-green-50 border border-green-200' : 'bg-slate-50'}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-2 text-slate-500 mb-1">
+                                <Shield className="w-4 h-4" />
+                                <span className="text-xs uppercase font-medium">Konto w portalu</span>
+                              </div>
+                              {selectedCompany.linked_company_id ? (
+                                <div className="flex items-center gap-2">
+                                  <Check className="w-5 h-5 text-green-600" />
+                                  <span className="font-medium text-green-700">Firma posiada konto w systemie</span>
+                                </div>
+                              ) : (
+                                <p className="text-slate-600">Brak konta w portalu</p>
+                              )}
+                            </div>
+                            {!selectedCompany.linked_company_id && (
+                              <button
+                                onClick={() => setShowCreateAccountModal(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition"
+                              >
+                                <UserPlus className="w-4 h-4" />
+                                Utwórz konto
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Subscription status */}
+                        <div className="bg-slate-50 rounded-lg p-4">
+                          <div className="flex items-center gap-2 text-slate-500 mb-1">
+                            <CreditCard className="w-4 h-4" />
+                            <span className="text-xs uppercase font-medium">Subskrypcja</span>
+                          </div>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${getSubscriptionLabel(selectedCompany).color}`}>
+                            {getSubscriptionLabel(selectedCompany).text}
+                          </span>
+                        </div>
+                      </div>
+
                       {/* Company details */}
                       <div className="grid grid-cols-2 gap-6">
                         <div>
@@ -1914,6 +2186,218 @@ export const SalesCompanies: React.FC = () => {
                   disabled={!taskForm.subject || !taskForm.scheduled_at}
                 >
                   Utwórz zadanie
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Portal Account Modal */}
+      {showCreateAccountModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Utwórz konto w portalu</h3>
+                <p className="text-sm text-slate-500">{selectedCompany.name}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCreateAccountModal(false);
+                  setAccountCreationMode('select');
+                  setSelectedAccountContact(null);
+                  setNewAccountForm({ first_name: '', last_name: '', email: '', phone: '' });
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              {/* Mode selection */}
+              <div className="flex gap-3 mb-6">
+                <button
+                  onClick={() => {
+                    setAccountCreationMode('select');
+                    setNewAccountForm({ first_name: '', last_name: '', email: '', phone: '' });
+                  }}
+                  className={`flex-1 p-4 rounded-lg border-2 transition ${
+                    accountCreationMode === 'select'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <Users className={`w-6 h-6 mx-auto mb-2 ${accountCreationMode === 'select' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <p className={`font-medium ${accountCreationMode === 'select' ? 'text-blue-700' : 'text-slate-700'}`}>
+                    Wybierz z kontaktów
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Istniejący kontakt firmy</p>
+                </button>
+                <button
+                  onClick={() => {
+                    setAccountCreationMode('new');
+                    setSelectedAccountContact(null);
+                  }}
+                  className={`flex-1 p-4 rounded-lg border-2 transition ${
+                    accountCreationMode === 'new'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <UserPlus className={`w-6 h-6 mx-auto mb-2 ${accountCreationMode === 'new' ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <p className={`font-medium ${accountCreationMode === 'new' ? 'text-blue-700' : 'text-slate-700'}`}>
+                    Dodaj nowego użytkownika
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Wprowadź dane ręcznie</p>
+                </button>
+              </div>
+
+              {/* Select from contacts mode */}
+              {accountCreationMode === 'select' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Wybierz kontakt</label>
+                  {getCompanyContacts(selectedCompany.id).length > 0 ? (
+                    <div className="space-y-2 max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-2">
+                      {getCompanyContacts(selectedCompany.id).map(contact => (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          onClick={() => setSelectedAccountContact(contact)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-lg transition text-left ${
+                            selectedAccountContact?.id === contact.id
+                              ? 'bg-blue-50 border-2 border-blue-500'
+                              : 'hover:bg-slate-50 border border-transparent'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            selectedAccountContact?.id === contact.id ? 'bg-blue-500 text-white' : 'bg-slate-100'
+                          }`}>
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-900">{contact.first_name} {contact.last_name}</p>
+                            <p className="text-sm text-slate-500 truncate">
+                              {contact.email || <span className="text-orange-500">Brak emaila</span>}
+                            </p>
+                          </div>
+                          {contact.is_decision_maker && (
+                            <Star className="w-4 h-4 text-yellow-500" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 border border-slate-200 rounded-lg">
+                      <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500">Brak kontaktów przypisanych do firmy</p>
+                      <p className="text-sm text-slate-400 mt-1">Dodaj nowego użytkownika lub najpierw dodaj kontakty</p>
+                    </div>
+                  )}
+
+                  {selectedAccountContact && !selectedAccountContact.email && (
+                    <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-sm text-orange-700">
+                        Wybrany kontakt nie ma adresu email. Uzupełnij dane kontaktu lub dodaj nowego użytkownika.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* New user form mode */}
+              {accountCreationMode === 'new' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>
+                      <input
+                        type="text"
+                        value={newAccountForm.first_name}
+                        onChange={(e) => setNewAccountForm(prev => ({ ...prev, first_name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Jan"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko *</label>
+                      <input
+                        type="text"
+                        value={newAccountForm.last_name}
+                        onChange={(e) => setNewAccountForm(prev => ({ ...prev, last_name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Kowalski"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+                    <input
+                      type="email"
+                      value={newAccountForm.email}
+                      onChange={(e) => setNewAccountForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="jan.kowalski@firma.pl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Telefon</label>
+                    <input
+                      type="tel"
+                      value={newAccountForm.phone}
+                      onChange={(e) => setNewAccountForm(prev => ({ ...prev, phone: formatPhoneNumber(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="+48 123 456 789"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Role info */}
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-700 mb-1">
+                  <Key className="w-4 h-4" />
+                  <span className="font-medium">Rola: Administrator firmy</span>
+                </div>
+                <p className="text-sm text-blue-600">
+                  Użytkownik otrzyma pełne uprawnienia do zarządzania firmą w portalu oraz email z danymi do logowania.
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowCreateAccountModal(false);
+                    setAccountCreationMode('select');
+                    setSelectedAccountContact(null);
+                    setNewAccountForm({ first_name: '', last_name: '', email: '', phone: '' });
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+                  disabled={isCreatingAccount}
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleCreatePortalAccount}
+                  disabled={
+                    isCreatingAccount ||
+                    (accountCreationMode === 'select' && (!selectedAccountContact || !selectedAccountContact.email)) ||
+                    (accountCreationMode === 'new' && (!newAccountForm.email || !newAccountForm.first_name || !newAccountForm.last_name))
+                  }
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCreatingAccount ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Tworzenie...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      Utwórz konto
+                    </>
+                  )}
                 </button>
               </div>
             </div>
