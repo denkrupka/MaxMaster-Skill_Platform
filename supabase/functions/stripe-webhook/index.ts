@@ -213,6 +213,31 @@ serve(async (req) => {
               invoice_pdf_url: invoice.invoice_pdf,
               paid_at: new Date().toISOString()
             })
+
+          // Apply scheduled price changes for this company's modules
+          // Get all modules with scheduled price changes
+          const { data: modulesWithScheduledPrice } = await supabaseAdmin
+            .from('company_modules')
+            .select('id, next_billing_cycle_price')
+            .eq('company_id', company.id)
+            .eq('is_active', true)
+            .not('next_billing_cycle_price', 'is', null)
+
+          if (modulesWithScheduledPrice && modulesWithScheduledPrice.length > 0) {
+            // Apply each scheduled price
+            for (const mod of modulesWithScheduledPrice) {
+              await supabaseAdmin
+                .from('company_modules')
+                .update({
+                  price_per_user: mod.next_billing_cycle_price,
+                  next_billing_cycle_price: null,
+                  price_scheduled_at: null
+                })
+                .eq('id', mod.id)
+
+              console.log(`Applied scheduled price ${mod.next_billing_cycle_price} to company_module ${mod.id}`)
+            }
+          }
         }
         break
       }

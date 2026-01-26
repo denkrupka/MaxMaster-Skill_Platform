@@ -44,16 +44,31 @@ export const SuperAdminSettingsPage: React.FC = () => {
     setError(null);
 
     try {
+      const newPrice = modulePrices[moduleCode];
+
+      // Update base price in modules table (for new activations)
       const { error: updateError } = await supabase
         .from('modules')
-        .update({ base_price_per_user: modulePrices[moduleCode] })
+        .update({ base_price_per_user: newPrice })
         .eq('code', moduleCode);
 
       if (updateError) throw updateError;
 
-      setSuccess(`Cena modułu ${moduleCode} została zaktualizowana`);
+      // Schedule price change for existing subscriptions (effective from next billing cycle)
+      const { error: scheduleError } = await supabase
+        .from('company_modules')
+        .update({
+          next_billing_cycle_price: newPrice,
+          price_scheduled_at: new Date().toISOString()
+        })
+        .eq('module_code', moduleCode)
+        .eq('is_active', true);
+
+      if (scheduleError) throw scheduleError;
+
+      setSuccess(`Cena modułu ${moduleCode} została zaktualizowana. Zmiana wejdzie w życie od następnego cyklu rozliczeniowego.`);
       await refreshData();
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err) {
       console.error('Error updating module price:', err);
       setError(err instanceof Error ? err.message : 'Błąd aktualizacji ceny');
@@ -178,13 +193,13 @@ export const SuperAdminSettingsPage: React.FC = () => {
               </div>
             ))}
 
-            <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-amber-800">Uwaga</p>
-                  <p className="text-sm text-amber-700">
-                    Zmiana cen nie wpływa na istniejące subskrypcje. Nowe ceny będą obowiązywać tylko dla nowych aktywacji.
+                  <p className="font-medium text-blue-800">Informacja</p>
+                  <p className="text-sm text-blue-700">
+                    Zmiana cen będzie obowiązywać od następnego cyklu rozliczeniowego dla istniejących subskrypcji oraz natychmiast dla nowych aktywacji.
                   </p>
                 </div>
               </div>
