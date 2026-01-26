@@ -18,6 +18,10 @@ export const SalesCompanies: React.FC = () => {
   const [detailTab, setDetailTab] = useState<'company' | 'contacts'>('company');
   const [isEditing, setIsEditing] = useState(false);
 
+  // Inline edit state for quick fields
+  const [editingField, setEditingField] = useState<'employee_count' | 'industry' | null>(null);
+  const [inlineValue, setInlineValue] = useState('');
+
   // Contact management state
   const [showContactModal, setShowContactModal] = useState(false);
   const [editingContact, setEditingContact] = useState<CRMContact | null>(null);
@@ -284,6 +288,40 @@ export const SalesCompanies: React.FC = () => {
     } catch (error) {
       console.error('Error deleting company:', error);
       alert('Błąd podczas usuwania firmy');
+    }
+  };
+
+  // Handle inline field update
+  const handleInlineUpdate = async (field: 'employee_count' | 'industry', value: string) => {
+    if (!selectedCompany) return;
+
+    try {
+      const updates: Record<string, any> = {};
+      if (field === 'employee_count') {
+        updates.employee_count = value ? parseInt(value) : null;
+      } else {
+        updates.industry = value || null;
+      }
+
+      const { data, error } = await supabase
+        .from('crm_companies')
+        .update(updates)
+        .eq('id', selectedCompany.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setState(prev => ({
+        ...prev,
+        crmCompanies: prev.crmCompanies.map(c => c.id === selectedCompany.id ? data : c)
+      }));
+      setSelectedCompany(data);
+      setEditingField(null);
+      setInlineValue('');
+    } catch (error) {
+      console.error('Error updating field:', error);
+      alert('Błąd podczas aktualizacji');
     }
   };
 
@@ -978,20 +1016,90 @@ export const SalesCompanies: React.FC = () => {
                     <div>
                       {/* Info cards */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-slate-50 rounded-lg p-4">
-                          <div className="flex items-center gap-2 text-slate-500 mb-1">
-                            <Users className="w-4 h-4" />
-                            <span className="text-xs uppercase font-medium">Pracownicy</span>
+                        {/* Employee count - editable */}
+                        <div
+                          className="bg-slate-50 rounded-lg p-4 cursor-pointer hover:bg-slate-100 transition group"
+                          onClick={() => {
+                            setEditingField('employee_count');
+                            setInlineValue(selectedCompany.employee_count?.toString() || '');
+                          }}
+                        >
+                          <div className="flex items-center justify-between text-slate-500 mb-1">
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4" />
+                              <span className="text-xs uppercase font-medium">Pracownicy</span>
+                            </div>
+                            <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                           </div>
-                          <p className="text-lg font-bold text-slate-900">{selectedCompany.employee_count || '-'}</p>
+                          {editingField === 'employee_count' ? (
+                            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                              <input
+                                type="number"
+                                value={inlineValue}
+                                onChange={(e) => setInlineValue(e.target.value)}
+                                className="w-full px-2 py-1 text-lg font-bold border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleInlineUpdate('employee_count', inlineValue);
+                                  if (e.key === 'Escape') { setEditingField(null); setInlineValue(''); }
+                                }}
+                              />
+                              <button
+                                onClick={() => handleInlineUpdate('employee_count', inlineValue)}
+                                className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-lg font-bold text-slate-900">{selectedCompany.employee_count || '-'}</p>
+                          )}
                         </div>
-                        <div className="bg-slate-50 rounded-lg p-4">
-                          <div className="flex items-center gap-2 text-slate-500 mb-1">
-                            <Briefcase className="w-4 h-4" />
-                            <span className="text-xs uppercase font-medium">Branża</span>
+
+                        {/* Industry - editable */}
+                        <div
+                          className="bg-slate-50 rounded-lg p-4 cursor-pointer hover:bg-slate-100 transition group"
+                          onClick={() => {
+                            setEditingField('industry');
+                            setInlineValue(selectedCompany.industry || '');
+                          }}
+                        >
+                          <div className="flex items-center justify-between text-slate-500 mb-1">
+                            <div className="flex items-center gap-2">
+                              <Briefcase className="w-4 h-4" />
+                              <span className="text-xs uppercase font-medium">Branża</span>
+                            </div>
+                            <Edit className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
                           </div>
-                          <p className="text-lg font-bold text-slate-900">{selectedCompany.industry || '-'}</p>
+                          {editingField === 'industry' ? (
+                            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                              <select
+                                value={inlineValue}
+                                onChange={(e) => setInlineValue(e.target.value)}
+                                className="w-full px-2 py-1 text-sm font-bold border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleInlineUpdate('industry', inlineValue);
+                                  if (e.key === 'Escape') { setEditingField(null); setInlineValue(''); }
+                                }}
+                              >
+                                <option value="">Wybierz branżę</option>
+                                {INDUSTRY_OPTIONS.map(ind => (
+                                  <option key={ind} value={ind}>{ind}</option>
+                                ))}
+                              </select>
+                              <button
+                                onClick={() => handleInlineUpdate('industry', inlineValue)}
+                                className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                              >
+                                <Check className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-lg font-bold text-slate-900">{selectedCompany.industry || '-'}</p>
+                          )}
                         </div>
+
                         <div className="bg-slate-50 rounded-lg p-4">
                           <div className="flex items-center gap-2 text-slate-500 mb-1">
                             <MapPin className="w-4 h-4" />
