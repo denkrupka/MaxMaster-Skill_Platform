@@ -32,6 +32,13 @@ CREATE INDEX IF NOT EXISTS idx_subscription_history_created_at ON subscription_h
 ALTER TABLE bonus_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscription_history ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (to allow re-running migration)
+DROP POLICY IF EXISTS "Allow superadmin full access to bonus_transactions" ON bonus_transactions;
+DROP POLICY IF EXISTS "Allow sales read access to bonus_transactions" ON bonus_transactions;
+DROP POLICY IF EXISTS "Allow superadmin full access to subscription_history" ON subscription_history;
+DROP POLICY IF EXISTS "Allow sales read access to subscription_history" ON subscription_history;
+DROP POLICY IF EXISTS "Allow company_admin read own company subscription_history" ON subscription_history;
+
 -- Create RLS policies for bonus_transactions
 CREATE POLICY "Allow superadmin full access to bonus_transactions"
   ON bonus_transactions FOR ALL
