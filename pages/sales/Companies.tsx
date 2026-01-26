@@ -1,15 +1,15 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent, UserPlus, Key, CreditCard, Shield } from 'lucide-react';
+import { Plus, Minus, Search, Building2, MapPin, Users, Edit, Trash2, X, Phone, Mail, User, Briefcase, Check, Loader2, ChevronRight, CheckSquare, History, Star, ExternalLink, Link2, Calendar, DollarSign, Percent, UserPlus, Key, CreditCard, Shield, Wallet, FileText, Download, PlusCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority, Role, Company } from '../../types';
+import { CRMCompany, CRMContact, CRMDeal, DealStage, DealPriority, Role, Company, PaymentHistory } from '../../types';
 import { INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS, CRM_STATUS_COLORS, DEAL_STAGE_LABELS, DEAL_STAGE_COLORS, DEAL_PRIORITY_LABELS, DEAL_PRIORITY_COLORS, MODULE_LABELS } from '../../constants';
 import { supabase, SUPABASE_ANON_KEY } from '../../lib/supabase';
 
 export const SalesCompanies: React.FC = () => {
   const navigate = useNavigate();
-  const { state, setState } = useAppContext();
+  const { state, setState, refreshData } = useAppContext();
   const { crmCompanies, crmContacts, crmActivities, crmDeals } = state;
 
   const [search, setSearch] = useState('');
@@ -81,6 +81,41 @@ export const SalesCompanies: React.FC = () => {
     email: '',
     phone: ''
   });
+
+  // Discount modal state
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [discountReason, setDiscountReason] = useState('');
+  const [loadingDiscount, setLoadingDiscount] = useState(false);
+
+  // Bonus modal state
+  const [showBonusModal, setShowBonusModal] = useState(false);
+  const [bonusHistory, setBonusHistory] = useState<Array<{
+    id: string;
+    amount: number;
+    type: 'credit' | 'debit';
+    description: string;
+    created_at: string;
+    created_by?: string;
+  }>>([]);
+  const [loadingBonus, setLoadingBonus] = useState(false);
+
+  // Subscription modal state
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subscriptionTab, setSubscriptionTab] = useState<'subscriptions' | 'history' | 'invoices'>('subscriptions');
+  const [subscriptionHistory, setSubscriptionHistory] = useState<Array<{
+    id: string;
+    action: string;
+    module_code?: string;
+    details: string;
+    created_at: string;
+  }>>([]);
+  const [loadingSubscription, setLoadingSubscription] = useState(false);
+
+  // Demo settings state
+  const [showDemoModal, setShowDemoModal] = useState(false);
+  const [demoEndDate, setDemoEndDate] = useState('');
+  const [loadingDemo, setLoadingDemo] = useState(false);
 
   // Task type options
   const TASK_TYPE_OPTIONS = [
@@ -195,6 +230,42 @@ export const SalesCompanies: React.FC = () => {
       !contactDealIds.includes(d.id) &&
       d.title.toLowerCase().includes(dealSearchTerm.toLowerCase())
     );
+  };
+
+  // Get linked portal company for a CRM company
+  const getLinkedCompany = (crmCompany: CRMCompany): Company | null => {
+    if (!crmCompany.linked_company_id) return null;
+    return state.companies.find(c => c.id === crmCompany.linked_company_id) || null;
+  };
+
+  // Get company modules for a linked company
+  const getLinkedCompanyModules = (linkedCompanyId: string) => {
+    return state.companyModules.filter(cm => cm.company_id === linkedCompanyId);
+  };
+
+  // Get max discount from system config
+  const maxDiscount = state.systemConfig.salesMaxDiscountPercent || 20;
+
+  // Get current discount for a company (from modules)
+  const getCurrentDiscount = (crmCompany: CRMCompany): number | null => {
+    const linkedCompany = getLinkedCompany(crmCompany);
+    if (!linkedCompany) return null;
+
+    const companyMods = getLinkedCompanyModules(linkedCompany.id);
+    if (companyMods.length === 0) return null;
+
+    // Calculate discount from price difference
+    const firstMod = companyMods[0];
+    const module = state.modules.find(m => m.code === firstMod.module_code);
+    if (!module || module.base_price_per_user === 0) return null;
+
+    const discountPercent = Math.round((1 - firstMod.price_per_user / module.base_price_per_user) * 100);
+    return discountPercent > 0 ? discountPercent : null;
+  };
+
+  // Get payment history for linked company
+  const getLinkedCompanyPaymentHistory = (linkedCompanyId: string): PaymentHistory[] => {
+    return (state.paymentHistory || []).filter(ph => ph.company_id === linkedCompanyId);
   };
 
   // Generate slug from name
@@ -1087,6 +1158,257 @@ export const SalesCompanies: React.FC = () => {
     }
   };
 
+  // Open discount modal
+  const openDiscountModal = () => {
+    if (!selectedCompany) return;
+    const currentDiscount = getCurrentDiscount(selectedCompany);
+    setDiscountPercent(currentDiscount || 0);
+    setDiscountReason('');
+    setShowDiscountModal(true);
+  };
+
+  // Apply discount to company modules
+  const handleApplyDiscount = async () => {
+    if (!selectedCompany) return;
+    const linkedCompany = getLinkedCompany(selectedCompany);
+    if (!linkedCompany) {
+      alert('Firma nie ma jeszcze konta w portalu');
+      return;
+    }
+
+    if (discountPercent < 0 || discountPercent > maxDiscount) {
+      alert(`Zniżka musi być w zakresie 0-${maxDiscount}%`);
+      return;
+    }
+
+    setLoadingDiscount(true);
+    try {
+      const activeModules = getLinkedCompanyModules(linkedCompany.id).filter(m => m.is_active);
+
+      for (const mod of activeModules) {
+        const module = state.modules.find(m => m.code === mod.module_code);
+        if (!module) continue;
+
+        const discountedPrice = Math.round(module.base_price_per_user * (1 - discountPercent / 100));
+
+        await supabase
+          .from('company_modules')
+          .update({ price_per_user: discountedPrice })
+          .eq('id', mod.id);
+      }
+
+      // Log the action
+      await supabase.from('sales_actions_log').insert({
+        sales_user_id: state.currentUser?.id,
+        company_id: linkedCompany.id,
+        action_type: 'discount',
+        value: discountPercent,
+        reason: discountReason || 'Zmiana rabatu',
+        created_at: new Date().toISOString()
+      });
+
+      // Log activity
+      await logCompanyActivity('status_change', `Zastosowano rabat ${discountPercent}% ${discountReason ? `(${discountReason})` : ''}`);
+
+      await refreshData();
+      setShowDiscountModal(false);
+      alert(`Rabat ${discountPercent}% został zastosowany`);
+    } catch (error) {
+      console.error('Error applying discount:', error);
+      alert('Błąd podczas aplikowania rabatu');
+    } finally {
+      setLoadingDiscount(false);
+    }
+  };
+
+  // Open bonus history modal
+  const openBonusModal = async () => {
+    if (!selectedCompany) return;
+    const linkedCompany = getLinkedCompany(selectedCompany);
+    if (!linkedCompany) return;
+
+    setShowBonusModal(true);
+    setLoadingBonus(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('bonus_transactions')
+        .select('*')
+        .eq('company_id', linkedCompany.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setBonusHistory(data || []);
+    } catch (error) {
+      console.error('Error loading bonus history:', error);
+      setBonusHistory([]);
+    } finally {
+      setLoadingBonus(false);
+    }
+  };
+
+  // Open subscription modal
+  const openSubscriptionModal = async () => {
+    if (!selectedCompany) return;
+    const linkedCompany = getLinkedCompany(selectedCompany);
+    if (!linkedCompany) {
+      alert('Firma nie ma jeszcze konta w portalu');
+      return;
+    }
+
+    setShowSubscriptionModal(true);
+    setSubscriptionTab('subscriptions');
+    setLoadingSubscription(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('subscription_history')
+        .select('*')
+        .eq('company_id', linkedCompany.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setSubscriptionHistory(data || []);
+    } catch (error) {
+      console.error('Error loading subscription history:', error);
+      setSubscriptionHistory([]);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
+  // Toggle module for linked company
+  const handleToggleModule = async (mod: any, activate: boolean) => {
+    if (!selectedCompany) return;
+    const linkedCompany = getLinkedCompany(selectedCompany);
+    if (!linkedCompany) return;
+
+    setLoadingSubscription(true);
+    try {
+      const existingModule = getLinkedCompanyModules(linkedCompany.id).find(cm => cm.module_code === mod.code);
+
+      if (activate) {
+        if (existingModule) {
+          await supabase
+            .from('company_modules')
+            .update({ is_active: true, activated_at: new Date().toISOString() })
+            .eq('id', existingModule.id);
+        } else {
+          await supabase
+            .from('company_modules')
+            .insert({
+              company_id: linkedCompany.id,
+              module_code: mod.code,
+              max_users: 10,
+              current_users: 0,
+              price_per_user: mod.base_price_per_user,
+              billing_cycle: 'monthly',
+              is_active: true,
+              activated_at: new Date().toISOString()
+            });
+        }
+
+        // Log history
+        await supabase.from('subscription_history').insert({
+          company_id: linkedCompany.id,
+          action: 'MODULE_ACTIVATED',
+          module_code: mod.code,
+          details: `Aktywowano moduł: ${mod.name_pl}`,
+          created_at: new Date().toISOString()
+        });
+      } else {
+        if (existingModule) {
+          await supabase
+            .from('company_modules')
+            .update({ is_active: false, deactivated_at: new Date().toISOString() })
+            .eq('id', existingModule.id);
+
+          // Log history
+          await supabase.from('subscription_history').insert({
+            company_id: linkedCompany.id,
+            action: 'MODULE_DEACTIVATED',
+            module_code: mod.code,
+            details: `Dezaktywowano moduł: ${mod.name_pl}`,
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+
+      await refreshData();
+      // Reload history
+      const { data } = await supabase
+        .from('subscription_history')
+        .select('*')
+        .eq('company_id', linkedCompany.id)
+        .order('created_at', { ascending: false });
+      setSubscriptionHistory(data || []);
+    } catch (error) {
+      console.error('Error toggling module:', error);
+      alert('Błąd podczas zmiany modułu');
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
+
+  // Start/extend demo period
+  const handleStartDemo = async () => {
+    if (!selectedCompany) return;
+    const linkedCompany = getLinkedCompany(selectedCompany);
+    if (!linkedCompany) return;
+
+    if (!demoEndDate) {
+      alert('Wybierz datę zakończenia okresu DEMO');
+      return;
+    }
+
+    setLoadingDemo(true);
+    try {
+      // Update company subscription status
+      await supabase
+        .from('companies')
+        .update({
+          subscription_status: 'trialing',
+          trial_ends_at: new Date(demoEndDate).toISOString()
+        })
+        .eq('id', linkedCompany.id);
+
+      // Update CRM company
+      await supabase
+        .from('crm_companies')
+        .update({
+          subscription_status: 'trialing',
+          subscription_end_date: new Date(demoEndDate).toISOString()
+        })
+        .eq('id', selectedCompany.id);
+
+      // Log history
+      await supabase.from('subscription_history').insert({
+        company_id: linkedCompany.id,
+        action: 'DEMO_STARTED',
+        details: `Uruchomiono/przedłużono DEMO do ${new Date(demoEndDate).toLocaleDateString('pl-PL')}`,
+        created_at: new Date().toISOString()
+      });
+
+      await refreshData();
+
+      // Update selected company locally
+      setSelectedCompany(prev => prev ? {
+        ...prev,
+        subscription_status: 'trialing',
+        subscription_end_date: new Date(demoEndDate).toISOString()
+      } : null);
+
+      setShowDemoModal(false);
+      setDemoEndDate('');
+      alert('Okres DEMO został ustawiony');
+    } catch (error) {
+      console.error('Error starting demo:', error);
+      alert('Błąd podczas ustawiania okresu DEMO');
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
@@ -1774,8 +2096,11 @@ export const SalesCompanies: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Subscription status */}
-                        <div className="bg-slate-50 rounded-lg p-4">
+                        {/* Subscription status - clickable */}
+                        <div
+                          className={`rounded-lg p-4 cursor-pointer hover:bg-slate-100 transition ${selectedCompany.linked_company_id ? 'bg-slate-50' : 'bg-slate-50 opacity-50'}`}
+                          onClick={() => selectedCompany.linked_company_id && openSubscriptionModal()}
+                        >
                           <div className="flex items-center gap-2 text-slate-500 mb-1">
                             <CreditCard className="w-4 h-4" />
                             <span className="text-xs uppercase font-medium">Subskrypcja</span>
@@ -1785,6 +2110,46 @@ export const SalesCompanies: React.FC = () => {
                           </span>
                         </div>
                       </div>
+
+                      {/* Discount and Bonus tiles - only show when linked to portal */}
+                      {selectedCompany.linked_company_id && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                          {/* Discount tile */}
+                          <div
+                            className="bg-slate-50 rounded-lg p-4 cursor-pointer hover:bg-slate-100 transition group"
+                            onClick={openDiscountModal}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 text-slate-500 mb-1">
+                                  <Percent className="w-4 h-4" />
+                                  <span className="text-xs uppercase font-medium">Rabat</span>
+                                </div>
+                                <p className="text-lg font-bold text-slate-900">
+                                  {getCurrentDiscount(selectedCompany) !== null
+                                    ? `${getCurrentDiscount(selectedCompany)}%`
+                                    : 'Brak'}
+                                </p>
+                              </div>
+                              <Edit className="w-4 h-4 text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+                            </div>
+                          </div>
+
+                          {/* Bonus balance tile */}
+                          <div
+                            className="bg-slate-50 rounded-lg p-4 cursor-pointer hover:bg-slate-100 transition"
+                            onClick={openBonusModal}
+                          >
+                            <div className="flex items-center gap-2 text-slate-500 mb-1">
+                              <Wallet className="w-4 h-4" />
+                              <span className="text-xs uppercase font-medium">Balans bonusowy</span>
+                            </div>
+                            <p className="text-lg font-bold text-green-600">
+                              {getLinkedCompany(selectedCompany)?.bonus_balance?.toFixed(2) || '0.00'} PLN
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Company details */}
                       <div className="grid grid-cols-2 gap-6">
@@ -3014,6 +3379,437 @@ export const SalesCompanies: React.FC = () => {
                   Dodaj deal
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount Modal */}
+      {showDiscountModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Rabat - {selectedCompany.name}</h3>
+              <button onClick={() => setShowDiscountModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+              <p className="text-sm text-blue-800">
+                <strong>Maksymalny rabat:</strong> {maxDiscount}%
+              </p>
+              <p className="text-xs text-blue-600 mt-1">Limit ustalony przez administratora systemu</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Procent rabatu (max {maxDiscount}%)
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max={maxDiscount}
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(Math.min(maxDiscount, Math.max(0, parseInt(e.target.value) || 0)))}
+                    className="w-full px-4 py-2 pr-10 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={maxDiscount}
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(parseInt(e.target.value))}
+                  className="w-full mt-2 accent-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Powód (opcjonalnie)</label>
+                <textarea
+                  value={discountReason}
+                  onChange={(e) => setDiscountReason(e.target.value)}
+                  placeholder="Opisz powód przyznania rabatu..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDiscountModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleApplyDiscount}
+                disabled={loadingDiscount}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Zastosuj rabat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus History Modal */}
+      {showBonusModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Balans bonusowy - {selectedCompany.name}</h3>
+              <button onClick={() => setShowBonusModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Current Balance */}
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl mb-6">
+                <div className="w-14 h-14 bg-green-500 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-7 h-7 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-green-700">Aktualny balans</p>
+                  <p className="text-3xl font-bold text-green-800">
+                    {getLinkedCompany(selectedCompany)?.bonus_balance?.toFixed(2) || '0.00'} PLN
+                  </p>
+                </div>
+              </div>
+
+              {/* Bonus History */}
+              <div>
+                <h4 className="font-semibold text-slate-900 mb-3">Historia operacji</h4>
+                {loadingBonus ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto text-slate-400" />
+                  </div>
+                ) : bonusHistory.length > 0 ? (
+                  <div className="space-y-2">
+                    {bonusHistory.map(entry => (
+                      <div key={entry.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                            entry.type === 'credit' ? 'bg-green-100' : 'bg-red-100'
+                          }`}>
+                            {entry.type === 'credit' ? (
+                              <Plus className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Minus className="w-4 h-4 text-red-600" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">{entry.description}</p>
+                            <p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleDateString('pl-PL')}</p>
+                          </div>
+                        </div>
+                        <p className={`font-bold ${entry.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
+                          {entry.type === 'credit' ? '+' : '-'}{entry.amount.toFixed(2)} PLN
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-500">
+                    <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p>Brak historii operacji</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subscription Modal */}
+      {showSubscriptionModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Subskrypcja - {selectedCompany.name}</h3>
+              <button onClick={() => setShowSubscriptionModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Subscription Status Card */}
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                  <CreditCard className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-slate-500">Status subskrypcji</p>
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border mt-1 ${
+                    getSubscriptionLabel(selectedCompany).color
+                  }`}>
+                    {getSubscriptionLabel(selectedCompany).text}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-500">Balans bonusowy</p>
+                  <p className="text-xl font-bold text-green-600">
+                    {getLinkedCompany(selectedCompany)?.bonus_balance?.toFixed(2) || '0.00'} PLN
+                  </p>
+                </div>
+              </div>
+
+              {/* Demo button */}
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => {
+                    const today = new Date();
+                    today.setDate(today.getDate() + 14);
+                    setDemoEndDate(today.toISOString().split('T')[0]);
+                    setShowDemoModal(true);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Nalicz DEMO
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 px-6 pt-4 border-b border-slate-200">
+              <button
+                onClick={() => setSubscriptionTab('subscriptions')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'subscriptions'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <Calendar className="w-4 h-4 inline mr-2" />
+                Subskrypcje
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('history')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'history'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <History className="w-4 h-4 inline mr-2" />
+                Historia
+              </button>
+              <button
+                onClick={() => setSubscriptionTab('invoices')}
+                className={`px-4 py-3 font-medium transition border-b-2 -mb-px ${
+                  subscriptionTab === 'invoices'
+                    ? 'text-blue-600 border-blue-600'
+                    : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
+              >
+                <FileText className="w-4 h-4 inline mr-2" />
+                Faktury
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Subscriptions Tab */}
+              {subscriptionTab === 'subscriptions' && (
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="font-semibold text-slate-900 mb-3">Moduły</h4>
+                    <div className="space-y-2">
+                      {state.modules.filter(m => m.is_active).map(mod => {
+                        const linkedCompany = getLinkedCompany(selectedCompany);
+                        const companyMod = linkedCompany
+                          ? getLinkedCompanyModules(linkedCompany.id).find(cm => cm.module_code === mod.code)
+                          : null;
+                        const isActive = companyMod?.is_active;
+                        return (
+                          <div key={mod.code} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 transition">
+                            <div className="flex-1">
+                              <p className="font-medium text-slate-900">{mod.name_pl}</p>
+                              <p className="text-sm text-slate-500">
+                                {isActive && companyMod
+                                  ? `${companyMod.max_users} użytkowników, ${companyMod.price_per_user} PLN/os/mies.`
+                                  : `${mod.base_price_per_user} PLN/os/mies.`
+                                }
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              {isActive && companyMod && (
+                                <p className="font-bold text-slate-900">{(companyMod.max_users * companyMod.price_per_user).toFixed(2)} PLN/mies.</p>
+                              )}
+                              <button
+                                onClick={() => handleToggleModule(mod, !isActive)}
+                                disabled={loadingSubscription}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                                  isActive ? 'bg-green-500' : 'bg-slate-300'
+                                } ${loadingSubscription ? 'opacity-50' : ''}`}
+                              >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                                  isActive ? 'translate-x-6' : 'translate-x-1'
+                                }`} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* History Tab */}
+              {subscriptionTab === 'history' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Historia zmian subskrypcji</h4>
+                  {loadingSubscription ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-slate-400" />
+                    </div>
+                  ) : subscriptionHistory.length > 0 ? (
+                    <div className="space-y-2">
+                      {subscriptionHistory.map(entry => (
+                        <div key={entry.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                            entry.action === 'MODULE_ACTIVATED' ? 'bg-green-100' :
+                            entry.action === 'MODULE_DEACTIVATED' ? 'bg-red-100' :
+                            entry.action === 'USERS_CHANGED' ? 'bg-blue-100' :
+                            entry.action === 'DEMO_STARTED' ? 'bg-yellow-100' :
+                            'bg-slate-100'
+                          }`}>
+                            {entry.action === 'MODULE_ACTIVATED' && <Check className="w-4 h-4 text-green-600" />}
+                            {entry.action === 'MODULE_DEACTIVATED' && <X className="w-4 h-4 text-red-600" />}
+                            {entry.action === 'USERS_CHANGED' && <Users className="w-4 h-4 text-blue-600" />}
+                            {entry.action === 'DEMO_STARTED' && <Calendar className="w-4 h-4 text-yellow-600" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-slate-900">{entry.details}</p>
+                            <p className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleString('pl-PL')}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <History className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p>Brak historii zmian subskrypcji</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Invoices Tab */}
+              {subscriptionTab === 'invoices' && (
+                <div>
+                  <h4 className="font-semibold text-slate-900 mb-3">Faktury i płatności</h4>
+                  {(() => {
+                    const linkedCompany = getLinkedCompany(selectedCompany);
+                    const payments = linkedCompany ? getLinkedCompanyPaymentHistory(linkedCompany.id) : [];
+                    return payments.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nr faktury</th>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                              <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                              <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {payments.map(payment => (
+                              <tr key={payment.id} className="hover:bg-slate-50">
+                                <td className="px-4 py-3 text-sm text-slate-900">
+                                  {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('pl-PL') : new Date(payment.created_at).toLocaleDateString('pl-PL')}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-slate-600 font-mono">{payment.invoice_number || '-'}</td>
+                                <td className="px-4 py-3 text-sm font-semibold text-slate-900">{Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    payment.status === 'paid' ? 'bg-green-100 text-green-800' :
+                                    payment.status === 'failed' ? 'bg-red-100 text-red-800' :
+                                    payment.status === 'refunded' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {payment.status === 'paid' ? 'Opłacona' : payment.status === 'failed' ? 'Niepowodzenie' : payment.status === 'refunded' ? 'Zwrócona' : 'Oczekująca'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  {payment.invoice_pdf_url && (
+                                    <a href={payment.invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm">
+                                      <Download className="w-4 h-4" /> Pobierz
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-slate-500">
+                        <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p>Brak historii płatności</p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Demo Modal */}
+      {showDemoModal && selectedCompany && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Nalicz DEMO</h3>
+              <button onClick={() => setShowDemoModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-slate-600 mb-4">
+              Ustaw okres DEMO dla firmy <strong>{selectedCompany.name}</strong>.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data zakończenia DEMO</label>
+                <input
+                  type="date"
+                  value={demoEndDate}
+                  onChange={(e) => setDemoEndDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDemoModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleStartDemo}
+                disabled={loadingDemo || !demoEndDate}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingDemo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                Ustaw DEMO
+              </button>
             </div>
           </div>
         </div>
