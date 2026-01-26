@@ -836,7 +836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('getSession timed out')), 5000)
+        setTimeout(() => reject(new Error('getSession timed out')), 10000)
       );
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as Awaited<typeof sessionPromise>;
       accessToken = session?.access_token || supabaseKey;
@@ -926,7 +926,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('getSession timed out')), 5000)
+        setTimeout(() => reject(new Error('getSession timed out')), 10000)
       );
       const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as Awaited<typeof sessionPromise>;
       accessToken = session?.access_token || supabaseKey;
