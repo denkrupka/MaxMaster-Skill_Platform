@@ -43,7 +43,7 @@ export const supabaseAdmin = serviceKey
 // ============================================================
 
 export const uploadDocument = async (file: File, userId: string): Promise<string | null> => {
-  const UPLOAD_TIMEOUT = 30000; // 30 seconds timeout for file uploads
+  const UPLOAD_TIMEOUT = 60000; // 60 seconds timeout for file uploads (increased for slow connections)
 
   try {
     const timestamp = Date.now();

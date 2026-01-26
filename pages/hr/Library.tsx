@@ -565,6 +565,16 @@ export const HRLibraryPage = () => {
                                     </div>
                                 </div>
                             )}
+
+                            {selectedResource.url && (
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><LinkIcon size={14}/> LINK ZEWNĘTRZNY</h4>
+                                    <a href={selectedResource.url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-6 bg-blue-50 text-blue-700 rounded-2xl hover:bg-blue-600 hover:text-white transition-all group shadow-sm border border-blue-100">
+                                        <div className="flex items-center gap-3"><LinkIcon size={20} className="group-hover:rotate-12 transition-transform"/><span className="font-black uppercase text-xs tracking-widest">Przejdź do linku</span></div>
+                                        <ExternalLink size={20}/>
+                                    </a>
+                                </div>
+                            )}
                         </div>
 
                         <div className="px-8 py-5 bg-slate-50 border-t flex justify-between items-center">
