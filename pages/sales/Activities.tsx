@@ -535,7 +535,7 @@ export const SalesActivities: React.FC = () => {
       {selectedActivity && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${getActivityColor(selectedActivity.activity_type)}`}>
                   {getActivityIcon(selectedActivity.activity_type)}
@@ -544,10 +544,16 @@ export const SalesActivities: React.FC = () => {
                   <span className={`text-xs px-2 py-0.5 rounded-full ${getActivityColor(selectedActivity.activity_type)}`}>
                     {ACTIVITY_TYPE_LABELS[selectedActivity.activity_type] || selectedActivity.activity_type}
                   </span>
-                  {selectedActivity.is_completed && (
+                  {selectedActivity.is_completed ? (
                     <span className="ml-2 text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">
                       Ukończone
                     </span>
+                  ) : (
+                    !selectedActivity.is_completed && selectedActivity.scheduled_at && new Date(selectedActivity.scheduled_at) < new Date() && (
+                      <span className="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+                        Przeterminowane
+                      </span>
+                    )
                   )}
                 </div>
               </div>
@@ -559,59 +565,92 @@ export const SalesActivities: React.FC = () => {
               </button>
             </div>
 
-            <h3 className="text-lg font-bold text-slate-900 mb-2">{selectedActivity.subject}</h3>
+            <div className="space-y-4">
+              {/* Typ zadania */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Typ zadania</label>
+                <p className="text-slate-900">{ACTIVITY_TYPE_LABELS[selectedActivity.activity_type] || selectedActivity.activity_type}</p>
+              </div>
 
-            {selectedActivity.description && (
-              <p className="text-slate-600 mb-4">{selectedActivity.description}</p>
-            )}
+              {/* Nazwa */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Nazwa</label>
+                <p className="text-slate-900 font-medium">{selectedActivity.subject}</p>
+              </div>
 
-            <div className="space-y-3 mb-4">
-              {selectedActivity.scheduled_at && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700">{formatDate(selectedActivity.scheduled_at)}</span>
+              {/* Zadanie (opis) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Zadanie</label>
+                <p className="text-slate-900">{selectedActivity.description || '—'}</p>
+              </div>
+
+              {/* Data i godzina wykonania */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">Data wykonania</label>
+                  <p className="text-slate-900">
+                    {selectedActivity.scheduled_at
+                      ? new Date(selectedActivity.scheduled_at).toLocaleDateString('pl-PL')
+                      : '—'}
+                  </p>
                 </div>
-              )}
-
-              {selectedActivity.duration_minutes && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700">Przewidziany czas: {selectedActivity.duration_minutes} min</span>
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">Godzina wykonania</label>
+                  <p className="text-slate-900">
+                    {selectedActivity.scheduled_at
+                      ? new Date(selectedActivity.scheduled_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })
+                      : '—'}
+                  </p>
                 </div>
-              )}
+              </div>
 
-              {getCompany(selectedActivity.crm_company_id) && (
-                <div className="flex items-center gap-3 text-sm">
-                  <Building2 className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700">{getCompany(selectedActivity.crm_company_id)?.name}</span>
-                </div>
-              )}
+              {/* Przewidziany czas */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Przewidziany czas na wykonanie</label>
+                <p className="text-slate-900">{selectedActivity.duration_minutes ? `${selectedActivity.duration_minutes} min` : '—'}</p>
+              </div>
 
-              {getContact(selectedActivity.contact_id) && (
-                <div className="flex items-center gap-3 text-sm">
-                  <User className="w-4 h-4 text-slate-400" />
-                  <span className="text-slate-700">
-                    {getContact(selectedActivity.contact_id)?.first_name} {getContact(selectedActivity.contact_id)?.last_name}
-                  </span>
-                </div>
-              )}
+              {/* Powiązana firma */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Powiązana firma</label>
+                <p className="text-slate-900">{getCompany(selectedActivity.crm_company_id)?.name || '—'}</p>
+              </div>
 
-              {getDeal(selectedActivity.deal_id) && (
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <p className="text-xs text-blue-600 mb-1">Powiązany deal</p>
-                  <p className="font-medium text-blue-900">{getDeal(selectedActivity.deal_id)?.title}</p>
-                </div>
-              )}
+              {/* Powiązany kontakt */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Powiązany kontakt</label>
+                <p className="text-slate-900">
+                  {getContact(selectedActivity.contact_id)
+                    ? `${getContact(selectedActivity.contact_id)?.first_name} ${getContact(selectedActivity.contact_id)?.last_name}`
+                    : '—'}
+                </p>
+              </div>
 
+              {/* Powiązany deal */}
+              <div>
+                <label className="block text-sm font-medium text-slate-500 mb-1">Powiązany deal</label>
+                {getDeal(selectedActivity.deal_id) ? (
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="font-medium text-blue-900">{getDeal(selectedActivity.deal_id)?.title}</p>
+                  </div>
+                ) : (
+                  <p className="text-slate-900">—</p>
+                )}
+              </div>
+
+              {/* Wynik / Notatki - jeśli istnieje */}
               {selectedActivity.outcome && (
-                <div className="bg-slate-50 p-3 rounded-lg">
-                  <p className="text-xs text-slate-500 mb-1">Wynik / Notatki</p>
-                  <p className="text-slate-700">{selectedActivity.outcome}</p>
+                <div>
+                  <label className="block text-sm font-medium text-slate-500 mb-1">Wynik / Notatki</label>
+                  <div className="bg-slate-50 p-3 rounded-lg">
+                    <p className="text-slate-700">{selectedActivity.outcome}</p>
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="flex gap-2 pt-4 border-t border-slate-100">
+            {/* Przyciski akcji */}
+            <div className="flex gap-2 pt-6 mt-6 border-t border-slate-100">
               {selectedActivity.is_completed ? (
                 <button
                   onClick={() => markAsNotCompleted(selectedActivity)}
