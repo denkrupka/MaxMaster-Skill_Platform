@@ -38,10 +38,20 @@ export const SalesCompanies: React.FC = () => {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [taskContact, setTaskContact] = useState<CRMContact | null>(null);
   const [taskForm, setTaskForm] = useState({
+    activity_type: 'task',
     subject: '',
     description: '',
-    scheduled_at: ''
+    scheduled_at: '',
+    location: ''
   });
+
+  // Task type options
+  const TASK_TYPE_OPTIONS = [
+    { value: 'call', label: 'Telefon' },
+    { value: 'email', label: 'Email' },
+    { value: 'meeting', label: 'Spotkanie' },
+    { value: 'task', label: 'Zadanie' }
+  ];
 
   // GUS search state
   const [isSearchingGUS, setIsSearchingGUS] = useState(false);
@@ -458,9 +468,11 @@ export const SalesCompanies: React.FC = () => {
   const openTaskModal = (contact: CRMContact) => {
     setTaskContact(contact);
     setTaskForm({
+      activity_type: 'task',
       subject: `Zadanie dla ${contact.first_name} ${contact.last_name}`,
       description: '',
-      scheduled_at: new Date().toISOString().slice(0, 16)
+      scheduled_at: new Date().toISOString().slice(0, 16),
+      location: ''
     });
     setShowTaskModal(true);
   };
@@ -472,12 +484,13 @@ export const SalesCompanies: React.FC = () => {
       const { data, error } = await supabase
         .from('crm_activities')
         .insert([{
-          activity_type: 'task',
+          activity_type: taskForm.activity_type,
           subject: taskForm.subject,
           description: taskForm.description || null,
           crm_company_id: selectedCompany.id,
           contact_id: taskContact.id,
           scheduled_at: taskForm.scheduled_at,
+          location: taskForm.location || null,
           is_completed: false,
           created_by: state.currentUser?.id
         }])
@@ -1392,6 +1405,18 @@ export const SalesCompanies: React.FC = () => {
               </p>
               <div className="space-y-4">
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Typ zadania *</label>
+                  <select
+                    value={taskForm.activity_type}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, activity_type: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    {TASK_TYPE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Temat *</label>
                   <input
                     type="text"
@@ -1415,6 +1440,16 @@ export const SalesCompanies: React.FC = () => {
                     type="datetime-local"
                     value={taskForm.scheduled_at}
                     onChange={(e) => setTaskForm(prev => ({ ...prev, scheduled_at: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Lokalizacja</label>
+                  <input
+                    type="text"
+                    value={taskForm.location}
+                    onChange={(e) => setTaskForm(prev => ({ ...prev, location: e.target.value }))}
+                    placeholder="np. Biuro, Online, Adres"
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
