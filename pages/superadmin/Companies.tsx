@@ -288,8 +288,56 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       alert(`Nie można usunąć firmy, która ma ${usersCount} użytkowników. Najpierw usuń lub przenieś użytkowników.`);
       return;
     }
-    if (window.confirm(`Czy na pewno chcesz usunąć firmę "${company.name}"? Ta operacja jest nieodwracalna.`)) {
-      await deleteCompany(company.id);
+    if (!window.confirm(`Czy na pewno chcesz usunąć firmę "${company.name}"? Ta operacja jest nieodwracalna.`)) {
+      return;
+    }
+
+    try {
+      // Delete related records first to avoid foreign key constraints
+      // Delete company modules
+      const { error: modulesError } = await supabase
+        .from('company_modules')
+        .delete()
+        .eq('company_id', company.id);
+      if (modulesError) console.log('Error deleting company_modules:', modulesError);
+
+      // Delete bonus transactions
+      const { error: bonusError } = await supabase
+        .from('bonus_transactions')
+        .delete()
+        .eq('company_id', company.id);
+      if (bonusError) console.log('Error deleting bonus_transactions:', bonusError);
+
+      // Delete subscription history
+      const { error: historyError } = await supabase
+        .from('subscription_history')
+        .delete()
+        .eq('company_id', company.id);
+      if (historyError) console.log('Error deleting subscription_history:', historyError);
+
+      // Delete module user access
+      const { error: accessError } = await supabase
+        .from('module_user_access')
+        .delete()
+        .eq('company_id', company.id);
+      if (accessError) console.log('Error deleting module_user_access:', accessError);
+
+      // Now delete the company
+      const { error: companyError } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', company.id);
+
+      if (companyError) {
+        throw companyError;
+      }
+
+      // Refresh data to update the UI
+      await refreshData();
+      alert(`Firma "${company.name}" została usunięta.`);
+    } catch (error: any) {
+      console.error('Error deleting company:', error);
+      alert('Błąd podczas usuwania firmy: ' + (error?.message || 'Nieznany błąd'));
     }
   };
 
@@ -1677,7 +1725,14 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                                 )}
                               </div>
                               <div>
-                                <p className="font-medium text-slate-900">{tx.description}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-slate-900">{tx.description}</p>
+                                  {tx.type === 'bonus' && (
+                                    <span className="px-1.5 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded">
+                                      Bonus
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-xs text-slate-500">{new Date(tx.date).toLocaleString('pl-PL')}</p>
                               </div>
                             </div>
