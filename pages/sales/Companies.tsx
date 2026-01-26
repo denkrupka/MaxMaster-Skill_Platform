@@ -1137,6 +1137,7 @@ export const SalesCompanies: React.FC = () => {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Branża</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Pracownicy</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Subskrypcja</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase"></th>
               </tr>
             </thead>
@@ -1187,6 +1188,21 @@ export const SalesCompanies: React.FC = () => {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${CRM_STATUS_COLORS[company.status] || 'bg-slate-100 text-slate-700'}`}>
                       {CRM_STATUS_LABELS[company.status] || company.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {company.subscription_end_date ? (
+                      new Date(company.subscription_end_date) >= new Date() ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                          ważna do {new Date(company.subscription_end_date).toLocaleDateString('pl-PL')}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 border border-red-200">
+                          zakończona
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-slate-400">brak</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <ChevronRight className="w-5 h-5 text-slate-400 inline" />

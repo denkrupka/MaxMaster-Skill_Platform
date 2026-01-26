@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, X, Search, Calendar, DollarSign, Percent, User, Trash2, Edit3, GripVertical, Building2, Phone, Mail, CheckSquare, FileText, Clock, History, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, X, Search, Calendar, DollarSign, Percent, User, Trash2, Edit3, GripVertical, Building2, Phone, Mail, CheckSquare, FileText, Clock, History, Loader2, CreditCard } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { DealStage, DealPriority, CRMDeal, CRMActivity, ActivityType, CRMCompany } from '../../types';
 import { DEAL_STAGE_LABELS, DEAL_STAGE_COLORS, DEAL_PRIORITY_LABELS, DEAL_PRIORITY_COLORS, MODULE_LABELS, ACTIVITY_TYPE_LABELS, INDUSTRY_OPTIONS, CRM_STATUS_OPTIONS, CRM_STATUS_LABELS } from '../../constants';
@@ -28,6 +29,7 @@ const STAGE_COLORS = [
 ];
 
 export const SalesPipeline: React.FC = () => {
+  const navigate = useNavigate();
   const { state, setState, addCrmDeal, updateCrmDeal, deleteCrmDeal } = useAppContext();
   const { crmDeals, crmCompanies, crmActivities, crmContacts, modules } = state;
 
@@ -1031,9 +1033,34 @@ export const SalesPipeline: React.FC = () => {
                   )}
                 </div>
 
+                {/* Subscription info */}
+                {selectedDeal.crm_company_id && (() => {
+                  const company = crmCompanies.find(c => c.id === selectedDeal.crm_company_id);
+                  if (!company) return null;
+                  return (
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <p className="text-xs text-slate-500 mb-1">Subskrypcja</p>
+                      {company.subscription_end_date ? (
+                        new Date(company.subscription_end_date) >= new Date() ? (
+                          <p className="text-sm font-medium text-green-600">
+                            ważna do {new Date(company.subscription_end_date).toLocaleDateString('pl-PL')}
+                          </p>
+                        ) : (
+                          <p className="text-sm font-medium text-red-600">zakończona</p>
+                        )
+                      ) : (
+                        <p className="text-sm font-medium text-slate-400">brak</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Company info */}
                 {selectedDeal.crm_company_id && crmCompanies.find(c => c.id === selectedDeal.crm_company_id) && (
-                  <div className="flex items-center gap-2 text-slate-600 bg-slate-50 p-3 rounded-lg">
+                  <div
+                    onClick={() => navigate('/sales/companies')}
+                    className="flex items-center gap-2 text-slate-600 bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100 transition"
+                  >
                     <Building2 className="w-4 h-4" />
                     <span>{crmCompanies.find(c => c.id === selectedDeal.crm_company_id)?.name}</span>
                   </div>
