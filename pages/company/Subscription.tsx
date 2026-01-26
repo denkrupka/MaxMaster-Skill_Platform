@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Package, CreditCard, FileText, Users, Plus, Minus, Check, AlertCircle,
   Download, Clock, ExternalLink, Loader2, Settings, Zap, Search, X,
-  ToggleLeft, ToggleRight, UserPlus, Award, Receipt
+  ToggleLeft, ToggleRight, UserPlus, Award, Receipt, ShoppingCart, Trash2, Calendar
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
@@ -27,6 +27,15 @@ const MODULE_INFO: Record<string, { name: string; description: string; icon: Rea
   }
 };
 
+// Cart item type for tracking module purchases
+interface CartItem {
+  moduleCode: string;
+  moduleName: string;
+  currentUsers: number;
+  newUsers: number;
+  pricePerUser: number;
+}
+
 export const CompanySubscriptionPage: React.FC = () => {
   const { state, refreshData, grantModuleAccess, revokeModuleAccess } = useAppContext();
   const { currentCompany, users, companyModules, modules, moduleUserAccess, paymentHistory: allPaymentHistory } = state;
@@ -44,6 +53,21 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Invoices state
   const [invoices, setInvoices] = useState<any[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+
+  // Cart state for module purchases
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<Record<string, number>>({});
+  const [cartBadgeAnimation, setCartBadgeAnimation] = useState<string | null>(null);
+  const [flyingNumber, setFlyingNumber] = useState<{moduleCode: string, value: number, x: number, y: number} | null>(null);
+
+  // Purchase flow state
+  const [purchaseMode, setPurchaseMode] = useState<'none' | 'now' | 'next_month'>('none');
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  // Refs for animation
+  const cartIconRef = useRef<HTMLButtonElement>(null);
+  const cartSectionRef = useRef<HTMLDivElement>(null);
 
   // Stripe configuration state
   const stripeEnabled = isStripeConfigured();
@@ -93,6 +117,255 @@ export const CompanySubscriptionPage: React.FC = () => {
     if (!currentCompany) return [];
     return allPaymentHistory.filter(ph => ph.company_id === currentCompany.id);
   }, [allPaymentHistory, currentCompany]);
+
+  // Helper function to get module status display
+  const getModuleStatus = (companyMod: typeof myModules[0] | undefined) => {
+    if (!companyMod) {
+      return { text: 'BRAK', color: 'bg-slate-100 text-slate-600', hasDate: false };
+    }
+
+    // Check if it's a demo module
+    if (companyMod.demo_end_date) {
+      const demoEndDate = new Date(companyMod.demo_end_date);
+      const now = new Date();
+      if (demoEndDate > now) {
+        return {
+          text: `DEMO do ${demoEndDate.toLocaleDateString('pl-PL')}`,
+          color: 'bg-amber-100 text-amber-700',
+          hasDate: true
+        };
+      }
+    }
+
+    // Active module
+    if (companyMod.is_active) {
+      if (companyMod.deactivated_at) {
+        const deactivationDate = new Date(companyMod.deactivated_at);
+        return {
+          text: `AKTYWNY DO ${deactivationDate.toLocaleDateString('pl-PL')}`,
+          color: 'bg-green-100 text-green-700',
+          hasDate: true
+        };
+      }
+      return { text: 'AKTYWNY', color: 'bg-green-100 text-green-700', hasDate: false };
+    }
+
+    return { text: 'BRAK', color: 'bg-slate-100 text-slate-600', hasDate: false };
+  };
+
+  // Get total cart count
+  const cartTotalUsers = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.newUsers, 0);
+  }, [cart]);
+
+  // Calculate days in current month
+  const getDaysInMonth = () => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return lastDay.getDate();
+  };
+
+  const getDaysRemaining = () => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return lastDay.getDate() - now.getDate() + 1;
+  };
+
+  // Calculate pro-rata price for immediate purchase
+  const calculateProRataPrice = (pricePerUser: number, newUsers: number) => {
+    const daysInMonth = getDaysInMonth();
+    const daysRemaining = getDaysRemaining();
+    return (pricePerUser * newUsers * daysRemaining) / daysInMonth;
+  };
+
+  // Calculate total cart value for immediate purchase
+  const cartTotalValueNow = useMemo(() => {
+    return cart.reduce((sum, item) => {
+      return sum + calculateProRataPrice(item.pricePerUser, item.newUsers);
+    }, 0);
+  }, [cart]);
+
+  // Calculate total cart value for next month
+  const cartTotalValueNextMonth = useMemo(() => {
+    return cart.reduce((sum, item) => {
+      return sum + (item.pricePerUser * item.newUsers);
+    }, 0);
+  }, [cart]);
+
+  // Handle adding users to pending (counter increment)
+  const handlePendingChange = (moduleCode: string, delta: number) => {
+    setPendingUsers(prev => {
+      const current = prev[moduleCode] || 0;
+      const newValue = Math.max(0, current + delta);
+      if (newValue === 0) {
+        const { [moduleCode]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [moduleCode]: newValue };
+    });
+  };
+
+  // Handle adding to cart with animation
+  const handleAddToCart = (moduleCode: string, moduleName: string, currentUsers: number, pricePerUser: number, buttonElement: HTMLButtonElement) => {
+    const pendingCount = pendingUsers[moduleCode] || 0;
+    if (pendingCount === 0) return;
+
+    const buttonRect = buttonElement.getBoundingClientRect();
+    setFlyingNumber({
+      moduleCode,
+      value: pendingCount,
+      x: buttonRect.left + buttonRect.width / 2,
+      y: buttonRect.top
+    });
+
+    setTimeout(() => {
+      setFlyingNumber(null);
+      setCart(prev => {
+        const existingIndex = prev.findIndex(item => item.moduleCode === moduleCode);
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            newUsers: updated[existingIndex].newUsers + pendingCount
+          };
+          return updated;
+        } else {
+          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: pendingCount, pricePerUser }];
+        }
+      });
+
+      setPendingUsers(prev => {
+        const { [moduleCode]: _, ...rest } = prev;
+        return rest;
+      });
+
+      setCartBadgeAnimation(moduleCode);
+      setTimeout(() => setCartBadgeAnimation(null), 600);
+    }, 500);
+  };
+
+  // Handle updating cart item
+  const handleCartItemChange = (moduleCode: string, delta: number) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item.moduleCode === moduleCode) {
+          const newUsers = Math.max(0, item.newUsers + delta);
+          return { ...item, newUsers };
+        }
+        return item;
+      }).filter(item => item.newUsers > 0);
+    });
+  };
+
+  // Handle removing from cart
+  const handleRemoveFromCart = (moduleCode: string) => {
+    setCart(prev => prev.filter(item => item.moduleCode !== moduleCode));
+  };
+
+  // Handle clearing cart
+  const handleClearCart = () => {
+    if (confirmClear) {
+      setCart([]);
+      setPurchaseMode('none');
+      setConfirmClear(false);
+    } else {
+      setConfirmClear(true);
+    }
+  };
+
+  // Scroll to cart section
+  const scrollToCart = () => {
+    cartSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Handle purchase now (pro-rata)
+  const handlePurchaseNow = async () => {
+    if (!currentCompany || cart.length === 0) return;
+
+    setLoading('purchase-now');
+    setError(null);
+
+    try {
+      for (const item of cart) {
+        const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
+        if (!companyMod) continue;
+
+        const newMaxUsers = companyMod.max_users + item.newUsers;
+
+        const { error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+          body: {
+            action: 'update-subscription',
+            companyId: currentCompany.id,
+            moduleCode: item.moduleCode,
+            quantity: newMaxUsers,
+            proRata: true
+          }
+        });
+
+        if (fnError) throw fnError;
+      }
+
+      setSuccess('Miejsca zostały dodane! Naliczono proporcjonalną opłatę za pozostałe dni miesiąca.');
+      setCart([]);
+      setPurchaseMode('none');
+      await refreshData();
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      console.error('Purchase now error:', err);
+      setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas zakupu');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle purchase for next month
+  const handlePurchaseNextMonth = async () => {
+    if (!currentCompany || cart.length === 0) return;
+
+    setLoading('purchase-next-month');
+    setError(null);
+
+    try {
+      for (const item of cart) {
+        const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
+        if (!companyMod) continue;
+
+        const newMaxUsers = companyMod.max_users + item.newUsers;
+
+        const { error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+          body: {
+            action: 'schedule-subscription-update',
+            companyId: currentCompany.id,
+            moduleCode: item.moduleCode,
+            quantity: newMaxUsers
+          }
+        });
+
+        if (fnError) throw fnError;
+      }
+
+      setSuccess('Zmiany zostały zaplanowane. Nowe miejsca będą dostępne od następnego okresu rozliczeniowego.');
+      setCart([]);
+      setPurchaseMode('none');
+      await refreshData();
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      console.error('Purchase next month error:', err);
+      setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas planowania zakupu');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle cancel purchase mode
+  const handleCancelPurchase = () => {
+    if (confirmCancel) {
+      setPurchaseMode('none');
+      setConfirmCancel(false);
+    } else {
+      setConfirmCancel(true);
+    }
+  };
 
   // Get active module codes for usage tab
   const activeModuleCodes = useMemo(() => {
@@ -425,85 +698,137 @@ export const CompanySubscriptionPage: React.FC = () => {
       {/* Modules Tab */}
       {activeTab === 'modules' && (
         <div className="space-y-4">
+          {/* Flying number animation */}
+          {flyingNumber && (
+            <div
+              className="fixed z-50 pointer-events-none"
+              style={{
+                left: flyingNumber.x,
+                top: flyingNumber.y,
+                animation: 'flyToCart 0.5s ease-in-out forwards'
+              }}
+            >
+              <span className="bg-blue-600 text-white px-3 py-1 rounded-full font-bold text-lg shadow-lg">
+                +{flyingNumber.value}
+              </span>
+            </div>
+          )}
+
+          <style>{`
+            @keyframes flyToCart {
+              0% { transform: translate(0, 0) scale(1); opacity: 1; }
+              100% { transform: translate(${cartIconRef.current ? cartIconRef.current.getBoundingClientRect().left - (flyingNumber?.x || 0) : 0}px, ${cartIconRef.current ? cartIconRef.current.getBoundingClientRect().top - (flyingNumber?.y || 0) : 0}px) scale(0.5); opacity: 0; }
+            }
+            @keyframes badgePulse {
+              0%, 100% { transform: scale(1); }
+              50% { transform: scale(1.2); }
+            }
+          `}</style>
+
           {/* Available Modules */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-semibold text-slate-900">Dostępne moduły</h3>
+              <button
+                ref={cartIconRef}
+                onClick={scrollToCart}
+                className={`relative p-2 rounded-lg transition ${
+                  cartTotalUsers > 0 ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                }`}
+                disabled={cart.length === 0}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {cartTotalUsers > 0 && (
+                  <span
+                    className={`absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1`}
+                    style={cartBadgeAnimation ? { animation: 'badgePulse 0.3s ease-in-out 2' } : {}}
+                  >
+                    {cartTotalUsers}
+                  </span>
+                )}
+              </button>
             </div>
             <div className="divide-y divide-slate-100">
               {modules.filter(m => m.is_active).map(mod => {
                 const companyMod = myModules.find(cm => cm.module_code === mod.code);
                 const isActive = companyMod?.is_active;
+                const hasDemo = companyMod?.demo_end_date && new Date(companyMod.demo_end_date) > new Date();
                 const isLoading = loading === mod.code;
+                const moduleStatus = getModuleStatus(companyMod);
+                const pendingCount = pendingUsers[mod.code] || 0;
+                const currentMaxUsers = companyMod?.max_users || 0;
 
                 return (
                   <div key={mod.code} className="p-5">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      <div className="flex items-start gap-4">
+                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1">
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                          isActive ? 'bg-green-100' : 'bg-slate-100'
+                          isActive ? 'bg-green-100' : hasDemo ? 'bg-amber-100' : 'bg-slate-100'
                         }`}>
-                          <Package className={`w-6 h-6 ${isActive ? 'text-green-600' : 'text-slate-400'}`} />
+                          <Package className={`w-6 h-6 ${isActive ? 'text-green-600' : hasDemo ? 'text-amber-600' : 'text-slate-400'}`} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-semibold text-slate-900">{mod.name_pl}</h4>
-                            {isActive && (
-                              <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                                Aktywny
-                              </span>
-                            )}
+                            <span className={`px-2 py-0.5 ${moduleStatus.color} text-xs rounded-full font-medium`}>
+                              {moduleStatus.text}
+                            </span>
                           </div>
                           <p className="text-sm text-slate-500 mt-1">{mod.description_pl || MODULE_DESCRIPTIONS[mod.code]}</p>
                           <p className="text-sm font-medium text-blue-600 mt-2">{mod.base_price_per_user} PLN / użytkownik / miesiąc</p>
                         </div>
                       </div>
 
-                      {isActive && companyMod && (
-                        <div className="flex items-center gap-4">
+                      {(isActive || hasDemo) && companyMod && (
+                        <div className="flex items-start gap-6">
                           <div className="text-center">
                             <p className="text-sm text-slate-500">Użytkowników</p>
-                            <p className="text-lg font-bold text-slate-900">
-                              {companyMod.activeUsers} / {companyMod.max_users}
-                            </p>
+                            <p className="text-lg font-bold text-slate-900">{currentMaxUsers}</p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
-                              disabled={isLoading || companyMod.max_users <= 1}
-                              onClick={() => handleChangeSeats(mod.code, -1)}
-                            >
-                              <Minus className="w-4 h-4 text-slate-600" />
-                            </button>
-                            <span className="w-12 text-center font-medium">
-                              {isLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : companyMod.max_users}
-                            </span>
-                            <button
-                              className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50"
-                              disabled={isLoading}
-                              onClick={() => handleChangeSeats(mod.code, 1)}
-                            >
-                              <Plus className="w-4 h-4 text-slate-600" />
-                            </button>
+                          <div className="text-center">
+                            <p className="text-sm text-slate-500 mb-1">Dokup miejsca</p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
+                                disabled={isLoading || pendingCount <= 0}
+                                onClick={() => handlePendingChange(mod.code, -1)}
+                              >
+                                <Minus className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <span className="w-10 text-center font-bold text-lg text-blue-600">{pendingCount}</span>
+                              <button
+                                className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
+                                disabled={isLoading}
+                                onClick={() => handlePendingChange(mod.code, 1)}
+                              >
+                                <Plus className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
                           </div>
+                          {pendingCount > 0 && (
+                            <div className="text-center">
+                              <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
+                              <button
+                                onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, e.currentTarget)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                              >
+                                <ShoppingCart className="w-4 h-4" />
+                                Dodaj
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {!isActive && (
+                      {!isActive && !hasDemo && (
                         <button
                           onClick={() => handleActivateModule(mod.code)}
                           disabled={isLoading || !stripeEnabled}
                           className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${
-                            stripeEnabled
-                              ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
-                              : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                            stripeEnabled ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
                           }`}
                         >
-                          {isLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Zap className="w-4 h-4" />
-                          )}
+                          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                           Aktywuj moduł
                         </button>
                       )}
@@ -514,6 +839,168 @@ export const CompanySubscriptionPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Cart Section */}
+          {cart.length > 0 && (
+            <div ref={cartSectionRef} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 bg-blue-50">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-blue-600" />
+                    Koszyk - dokup miejsca
+                  </h3>
+                  <span className="text-sm text-slate-500">{cart.length} {cart.length === 1 ? 'moduł' : cart.length < 5 ? 'moduły' : 'modułów'}</span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Moduł</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Obecnie</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Nowych</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Łącznie</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cart.map(item => (
+                      <tr key={item.moduleCode} className="hover:bg-slate-50">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                              <Package className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-slate-900">{item.moduleName}</p>
+                              <p className="text-xs text-slate-500">{item.pricePerUser} PLN/użytkownik</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <span className="text-slate-600 font-medium">{item.currentUsers}</span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition" disabled={item.newUsers <= 1} onClick={() => handleCartItemChange(item.moduleCode, -1)}>
+                              <Minus className="w-3 h-3 text-slate-600" />
+                            </button>
+                            <span className="w-8 text-center font-bold text-blue-600">{item.newUsers}</span>
+                            <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition" onClick={() => handleCartItemChange(item.moduleCode, 1)}>
+                              <Plus className="w-3 h-3 text-slate-600" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <span className="font-bold text-green-600">{item.currentUsers + item.newUsers}</span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <button onClick={() => handleRemoveFromCart(item.moduleCode)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Usuń z koszyka">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {purchaseMode === 'none' && (
+                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+                    <div className="text-sm text-slate-600"><span className="font-medium">{cartTotalUsers}</span> nowych użytkowników w koszyku</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={() => setPurchaseMode('now')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                        <Zap className="w-4 h-4" />Dokup na już
+                      </button>
+                      <button onClick={() => setPurchaseMode('next_month')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />Dokup od następnego miesiąca
+                      </button>
+                      <button onClick={handleClearCart} className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${confirmClear ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+                        <Trash2 className="w-4 h-4" />{confirmClear ? 'Na pewno?' : 'Wyczyść'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {purchaseMode === 'now' && (
+                <div className="px-5 py-4 border-t border-slate-200 bg-green-50">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-green-800 flex items-center gap-2"><Zap className="w-5 h-5" />Kalkulacja - dokup na już</h4>
+                    <div className="bg-white rounded-lg p-4 border border-green-200">
+                      <p className="text-sm text-slate-600 mb-3">Proporcjonalna opłata za pozostałe dni miesiąca ({getDaysRemaining()} dni z {getDaysInMonth()}):</p>
+                      <div className="space-y-2">
+                        {cart.map(item => {
+                          const proRataPrice = calculateProRataPrice(item.pricePerUser, item.newUsers);
+                          return (
+                            <div key={item.moduleCode} className="flex justify-between text-sm">
+                              <span className="text-slate-600">{item.moduleName}: {item.newUsers} × {item.pricePerUser} PLN × {getDaysRemaining()}/{getDaysInMonth()} dni</span>
+                              <span className="font-medium text-slate-900">{proRataPrice.toFixed(2)} PLN</span>
+                            </div>
+                          );
+                        })}
+                        <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                          <span className="font-semibold text-slate-900">Razem do zapłaty teraz:</span>
+                          <span className="font-bold text-xl text-green-600">{cartTotalValueNow.toFixed(2)} PLN</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-3">Od następnego miesiąca będzie pobierana pełna opłata za wszystkich użytkowników ({cartTotalValueNextMonth.toFixed(2)} PLN/mies. więcej).</p>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
+                      <button onClick={handlePurchaseNow} disabled={loading === 'purchase-now'} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
+                        {loading === 'purchase-now' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Kup teraz
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {purchaseMode === 'next_month' && (
+                <div className="px-5 py-4 border-t border-slate-200 bg-blue-50">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-blue-800 flex items-center gap-2"><Calendar className="w-5 h-5" />Kalkulacja - dokup od następnego miesiąca</h4>
+                    <div className="bg-white rounded-lg p-4 border border-blue-200">
+                      <p className="text-sm text-slate-600 mb-3">Nowe miejsca będą aktywowane z początkiem następnego okresu rozliczeniowego:</p>
+                      <div className="space-y-2">
+                        {cart.map(item => (
+                          <div key={item.moduleCode} className="flex justify-between text-sm">
+                            <span className="text-slate-600">{item.moduleName}: +{item.newUsers} użytkowników × {item.pricePerUser} PLN</span>
+                            <span className="font-medium text-slate-900">{(item.newUsers * item.pricePerUser).toFixed(2)} PLN/mies.</span>
+                          </div>
+                        ))}
+                        <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                          <span className="font-semibold text-slate-900">Wzrost miesięcznej opłaty:</span>
+                          <span className="font-bold text-xl text-blue-600">+{cartTotalValueNextMonth.toFixed(2)} PLN</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-3">Obecnie nie zostanie pobrana żadna opłata. Zmiana zostanie aktywowana z początkiem następnego okresu rozliczeniowego.</p>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
+                      <button onClick={handlePurchaseNextMonth} disabled={loading === 'purchase-next-month'} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50">
+                        {loading === 'purchase-next-month' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Zaplanuj zakup
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Stripe Info */}
+          {!stripeEnabled && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-amber-800">Stripe nie jest skonfigurowany</p>
+                <p className="text-sm text-amber-600 mt-1">
+                  Ustaw zmienną środowiskową <code className="bg-amber-100 px-1 rounded">VITE_STRIPE_PUBLISHABLE_KEY</code> aby aktywować płatności online.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
