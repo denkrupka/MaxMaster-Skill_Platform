@@ -337,6 +337,40 @@ export const INDUSTRY_OPTIONS = [
   'Inne'
 ];
 
+// CRM Company Status Options
+export const CRM_STATUS_OPTIONS = [
+  'new',
+  'contacted',
+  'interested',
+  'proposal',
+  'negotiation',
+  'won',
+  'lost',
+  'inactive'
+];
+
+export const CRM_STATUS_LABELS: Record<string, string> = {
+  'new': 'Nowy',
+  'contacted': 'Skontaktowany',
+  'interested': 'Zainteresowany',
+  'proposal': 'Propozycja',
+  'negotiation': 'Negocjacje',
+  'won': 'Wygrany',
+  'lost': 'Przegrany',
+  'inactive': 'Nieaktywny'
+};
+
+export const CRM_STATUS_COLORS: Record<string, string> = {
+  'new': 'bg-slate-100 text-slate-700 border-slate-200',
+  'contacted': 'bg-blue-100 text-blue-700 border-blue-200',
+  'interested': 'bg-cyan-100 text-cyan-700 border-cyan-200',
+  'proposal': 'bg-purple-100 text-purple-700 border-purple-200',
+  'negotiation': 'bg-orange-100 text-orange-700 border-orange-200',
+  'won': 'bg-green-100 text-green-700 border-green-200',
+  'lost': 'bg-red-100 text-red-700 border-red-200',
+  'inactive': 'bg-gray-100 text-gray-500 border-gray-200'
+};
+
 export const DEAL_STAGES_ORDER: DealStage[] = [
   DealStage.LEAD,
   DealStage.QUALIFIED,

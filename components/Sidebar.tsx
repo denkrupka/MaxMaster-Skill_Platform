@@ -165,12 +165,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                    Sales CRM {isSuperAdminSimulating && <span className="text-amber-500">(tryb)</span>}
                  </p>
                  <NavItem to="/sales/dashboard" icon={LayoutDashboard} label="Dashboard" />
-                 <NavItem to="/sales/pipeline" icon={Target} label="Pipeline" />
-                 <NavItem to="/sales/activities" icon={CheckSquare} label="Aktywności" />
+                 <NavItem to="/sales/pipeline" icon={Target} label="CRM" />
+                 <NavItem to="/sales/activities" icon={CheckSquare} label="Zadania" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/sales/clients" icon={Headphones} label="Klienci (Zniżki)" />
-                 <NavItem to="/sales/companies" icon={Building2} label="Firmy (CRM)" />
-                 <NavItem to="/sales/contacts" icon={UserCheck} label="Kontakty (LPR)" />
+                 <NavItem to="/sales/companies" icon={Building2} label="Firmy" />
+                 <NavItem to="/sales/contacts" icon={UserCheck} label="Kontakty" />
                </>
             )}
 
