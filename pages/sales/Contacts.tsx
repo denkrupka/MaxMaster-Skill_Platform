@@ -1,11 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, User, Building2, Phone, Mail, Star, X, Briefcase, Edit, Trash2, Link2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, User, Building2, Phone, Mail, Star, X, Briefcase, Edit, Trash2, Link2, ExternalLink } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { CRMContact, CRMCompany, CRMDeal } from '../../types';
 import { supabase } from '../../lib/supabase';
 
 export const SalesContacts: React.FC = () => {
+  const navigate = useNavigate();
   const { state, setState } = useAppContext();
   const { crmContacts, crmCompanies, crmDeals } = state;
 
@@ -626,14 +628,24 @@ export const SalesContacts: React.FC = () => {
                                 {deal.value?.toLocaleString('pl-PL')} zł
                               </p>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleUnlinkDeal(deal.id)}
-                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-                              title="Usuń powiązanie"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => navigate('/sales/pipeline')}
+                                className="p-2 text-slate-500 hover:bg-blue-100 rounded-lg transition"
+                                title="Przejdź do deala"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUnlinkDeal(deal.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                                title="Usuń powiązanie"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
