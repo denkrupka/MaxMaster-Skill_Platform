@@ -300,9 +300,12 @@ export const SuperAdminUsersPage: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
-          'apikey': SUPABASE_ANON_KEY
+          'apikey': SUPABASE_ANON_KEY,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         },
-        body: JSON.stringify({ nip: newCompanyData.tax_id })
+        body: JSON.stringify({ nip: newCompanyData.tax_id }),
+        cache: 'no-store'
       });
 
       const result = await response.json();
