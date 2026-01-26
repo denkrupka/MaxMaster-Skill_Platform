@@ -14,7 +14,7 @@ import { supabase } from '../../lib/supabase';
 
 export const DoradcaCompanyView: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
-  const { state, loginAsUser } = useAppContext();
+  const { state, loginAsUser, refreshData } = useAppContext();
   const { companies, users, companyModules, modules } = state;
 
   const [search, setSearch] = useState('');
@@ -322,8 +322,8 @@ export const DoradcaCompanyView: React.FC = () => {
       }
 
       setShowModuleSettingsModal(false);
-      // Reload page to refresh data
-      window.location.reload();
+      // Refresh data without page reload
+      await refreshData();
     } catch (error) {
       console.error('Error saving module settings:', error);
       alert('Błąd podczas zapisywania ustawień modułu');
@@ -360,8 +360,8 @@ export const DoradcaCompanyView: React.FC = () => {
       );
 
       setShowModuleSettingsModal(false);
-      // Reload page to refresh data
-      window.location.reload();
+      // Refresh data without page reload
+      await refreshData();
     } catch (error) {
       console.error('Error ending demo:', error);
       alert('Błąd podczas kończenia DEMO');
