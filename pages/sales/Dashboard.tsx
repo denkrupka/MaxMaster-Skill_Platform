@@ -128,7 +128,7 @@ export const SalesDashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Wartość Pipeline" value={formatCurrency(stats.totalPipeline)} subtitle={`Ważona: ${formatCurrency(stats.weightedPipeline)}`} icon={DollarSign} colorClass="bg-green-100 text-green-600" />
+        <StatCard title="Suma otwartych dealów" value={formatCurrency(stats.totalPipeline)} icon={DollarSign} colorClass="bg-green-100 text-green-600" />
         <StatCard title="Aktywne Deale" value={stats.activeDeals} subtitle="W toku" icon={Target} colorClass="bg-blue-100 text-blue-600" onClick={() => navigate('/sales/pipeline')} />
         <StatCard title="Firmy" value={stats.companiesCount} subtitle="W bazie" icon={Building2} colorClass="bg-purple-100 text-purple-600" onClick={() => navigate('/sales/companies')} />
         <StatCard title="Kontakty" value={stats.contactsCount} subtitle="W bazie" icon={Users} colorClass="bg-orange-100 text-orange-600" onClick={() => navigate('/sales/contacts')} />
