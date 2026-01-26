@@ -223,6 +223,9 @@ export interface Company {
   contact_phone?: string;
   billing_email?: string;
 
+  // Additional info
+  industry?: string;
+
   // Status
   status: CompanyStatus;
   is_blocked: boolean;

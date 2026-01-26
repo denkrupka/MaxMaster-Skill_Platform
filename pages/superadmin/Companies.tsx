@@ -92,7 +92,8 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     address_postal_code: '',
     contact_email: '',
     contact_phone: '',
-    billing_email: ''
+    billing_email: '',
+    industry: ''
   });
 
   // Get users count for company
@@ -219,7 +220,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   };
 
   // Handle form change
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -227,6 +228,26 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       ...(name === 'name' ? { slug: generateSlug(value) } : {})
     }));
   };
+
+  // Industry options for dropdown
+  const industryOptions = [
+    'Budownictwo',
+    'Produkcja',
+    'Logistyka i transport',
+    'Handel i dystrybucja',
+    'IT i telekomunikacja',
+    'Usługi finansowe',
+    'Ochrona zdrowia',
+    'Energetyka',
+    'Przemysł chemiczny',
+    'Motoryzacja',
+    'Przemysł spożywczy',
+    'Rolnictwo',
+    'Hotelarstwo i gastronomia',
+    'Edukacja',
+    'Administracja publiczna',
+    'Inne'
+  ];
 
   // Handle add company
   const handleAddCompany = async () => {
@@ -748,7 +769,8 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       address_postal_code: company.address_postal_code || '',
       contact_email: company.contact_email || '',
       contact_phone: company.contact_phone || '',
-      billing_email: company.billing_email || ''
+      billing_email: company.billing_email || '',
+      industry: company.industry || ''
     });
     setShowEditModal(true);
   };
@@ -766,7 +788,8 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       address_postal_code: '',
       contact_email: '',
       contact_phone: '',
-      billing_email: ''
+      billing_email: '',
+      industry: ''
     });
     setGusError(null);
   };
@@ -1124,6 +1147,23 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                       onChange={handleFormChange}
                       className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Branża</label>
+                  <div className="relative">
+                    <select
+                      name="industry"
+                      value={formData.industry}
+                      onChange={handleFormChange}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white appearance-none cursor-pointer"
+                    >
+                      <option value="">Wybierz branżę...</option>
+                      {industryOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
 
