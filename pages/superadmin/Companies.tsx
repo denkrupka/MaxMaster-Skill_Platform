@@ -323,13 +323,28 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       if (accessError) console.log('Error deleting module_user_access:', accessError);
 
       // Now delete the company
-      const { error: companyError } = await supabase
+      const { data: deletedData, error: companyError } = await supabase
         .from('companies')
         .delete()
-        .eq('id', company.id);
+        .eq('id', company.id)
+        .select();
 
       if (companyError) {
         throw companyError;
+      }
+
+      // Verify deletion actually happened (RLS might silently block it)
+      if (!deletedData || deletedData.length === 0) {
+        // Double-check if company still exists
+        const { data: checkData } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('id', company.id)
+          .single();
+
+        if (checkData) {
+          throw new Error('Nie udało się usunąć firmy. Brak uprawnień do usuwania.');
+        }
       }
 
       // Refresh data to update the UI
