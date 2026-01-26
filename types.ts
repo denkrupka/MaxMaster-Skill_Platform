@@ -605,6 +605,7 @@ export interface CRMCompany {
   status: string;
   source?: string;
   assigned_sales_id?: string;
+  subscription_end_date?: string;
   created_at: string;
   updated_at: string;
 }
