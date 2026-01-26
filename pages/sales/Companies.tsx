@@ -3681,12 +3681,14 @@ export const SalesCompanies: React.FC = () => {
                             entry.action === 'MODULE_DEACTIVATED' ? 'bg-red-100' :
                             entry.action === 'USERS_CHANGED' ? 'bg-blue-100' :
                             entry.action === 'DEMO_STARTED' ? 'bg-yellow-100' :
+                            entry.action === 'DEMO_ENDED' ? 'bg-orange-100' :
                             'bg-slate-100'
                           }`}>
                             {entry.action === 'MODULE_ACTIVATED' && <Check className="w-4 h-4 text-green-600" />}
                             {entry.action === 'MODULE_DEACTIVATED' && <X className="w-4 h-4 text-red-600" />}
                             {entry.action === 'USERS_CHANGED' && <Users className="w-4 h-4 text-blue-600" />}
                             {entry.action === 'DEMO_STARTED' && <Calendar className="w-4 h-4 text-yellow-600" />}
+                            {entry.action === 'DEMO_ENDED' && <X className="w-4 h-4 text-orange-600" />}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium text-slate-900">{entry.details}</p>

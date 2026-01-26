@@ -134,7 +134,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
   const getModuleStatus = (companyId: string, moduleCode: string) => {
     const companyMod = companyModules.find(cm => cm.company_id === companyId && cm.module_code === moduleCode);
     if (!companyMod) {
-      return { status: 'none', text: 'BRAK', color: 'bg-gray-100 text-gray-800 border-gray-200' };
+      return { status: 'none', text: 'Nieaktywny', color: 'bg-gray-100 text-gray-800 border-gray-200' };
     }
     if (companyMod.is_active) {
       // Check if it's a paid subscription (has Stripe ID) or demo
@@ -147,16 +147,19 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           pricePerUser: companyMod.price_per_user
         };
       }
-      // Demo module - always show user count, and date if available
+      // Demo module - check per-module demo_end_date first, then fallback to company's trial_ends_at
+      const demoEndDate = companyMod.demo_end_date;
       const company = companies.find(c => c.id === companyId);
-      if (company?.trial_ends_at) {
-        const endDate = new Date(company.trial_ends_at).toLocaleDateString('pl-PL');
+      const effectiveDemoDate = demoEndDate || company?.trial_ends_at;
+
+      if (effectiveDemoDate) {
+        const endDateStr = new Date(effectiveDemoDate).toLocaleDateString('pl-PL');
         return {
           status: 'demo',
-          text: `DEMO do ${endDate} (${companyMod.max_users} os.)`,
+          text: `DEMO do ${endDateStr} (${companyMod.max_users} os.)`,
           color: 'bg-blue-100 text-blue-800 border-blue-200',
           maxUsers: companyMod.max_users,
-          demoEndDate: company.trial_ends_at
+          demoEndDate: effectiveDemoDate
         };
       }
       return {
@@ -312,7 +315,12 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     const companyMod = getCompanyModules(selectedCompany?.id || '').find(cm => cm.module_code === mod.code);
     setSelectedModule(mod);
     setModuleMaxUsers(companyMod?.max_users || 10);
-    setModuleDemoEndDate('');
+    // Pre-populate demo date if set
+    if (companyMod?.demo_end_date) {
+      setModuleDemoEndDate(companyMod.demo_end_date.split('T')[0]);
+    } else {
+      setModuleDemoEndDate('');
+    }
     setShowModuleSettingsModal(true);
   };
 
@@ -416,14 +424,22 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     try {
       const existingModule = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code);
       const oldMaxUsers = existingModule?.max_users || 0;
+      const oldDemoEndDate = existingModule?.demo_end_date;
 
       if (existingModule) {
-        // Update existing module
+        // Update existing module - include demo_end_date
+        const updateData: any = { max_users: moduleMaxUsers };
+        if (moduleDemoEndDate) {
+          updateData.demo_end_date = moduleDemoEndDate;
+          updateData.is_active = true; // Activate module when setting demo
+        }
+
         const { error } = await supabase
           .from('company_modules')
-          .update({ max_users: moduleMaxUsers })
+          .update(updateData)
           .eq('id', existingModule.id);
         if (error) throw error;
+
         if (oldMaxUsers !== moduleMaxUsers) {
           await logSubscriptionChange(
             selectedCompany.id,
@@ -432,9 +448,19 @@ export const SuperAdminCompaniesPage: React.FC = () => {
             `Zmieniono liczbę użytkowników w module ${selectedModule.name_pl}: ${oldMaxUsers} → ${moduleMaxUsers}`
           );
         }
+
+        // Log demo change if date was set or changed
+        if (moduleDemoEndDate && moduleDemoEndDate !== oldDemoEndDate) {
+          await logSubscriptionChange(
+            selectedCompany.id,
+            'DEMO_STARTED',
+            selectedModule.code,
+            `Ustawiono okres DEMO dla modułu ${selectedModule.name_pl} do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
+          );
+        }
       } else {
-        // Create new module with settings
-        const { error } = await supabase.from('company_modules').insert({
+        // Create new module with settings (including demo if set)
+        const insertData: any = {
           company_id: selectedCompany.id,
           module_code: selectedModule.code,
           max_users: moduleMaxUsers,
@@ -443,29 +469,38 @@ export const SuperAdminCompaniesPage: React.FC = () => {
           billing_cycle: 'monthly',
           is_active: true,
           activated_at: new Date().toISOString()
-        });
+        };
+
+        if (moduleDemoEndDate) {
+          insertData.demo_end_date = moduleDemoEndDate;
+        }
+
+        const { error } = await supabase.from('company_modules').insert(insertData);
         if (error) throw error;
-        await logSubscriptionChange(
-          selectedCompany.id,
-          'MODULE_ACTIVATED',
-          selectedModule.code,
-          `Aktywowano moduł ${selectedModule.name_pl} (${moduleMaxUsers} użytkowników, ${selectedModule.base_price_per_user} PLN/os)`
-        );
+
+        if (moduleDemoEndDate) {
+          await logSubscriptionChange(
+            selectedCompany.id,
+            'DEMO_STARTED',
+            selectedModule.code,
+            `Ustawiono okres DEMO dla modułu ${selectedModule.name_pl} do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
+          );
+        } else {
+          await logSubscriptionChange(
+            selectedCompany.id,
+            'MODULE_ACTIVATED',
+            selectedModule.code,
+            `Aktywowano moduł ${selectedModule.name_pl} (${moduleMaxUsers} użytkowników, ${selectedModule.base_price_per_user} PLN/os)`
+          );
+        }
       }
 
-      // If demo period is set, update company subscription
+      // Also update company subscription status if demo was set
       if (moduleDemoEndDate) {
         await updateCompany(selectedCompany.id, {
           subscription_status: 'trialing' as SubscriptionStatus,
-          trial_ends_at: moduleDemoEndDate,
           status: 'active' as CompanyStatus
         });
-        await logSubscriptionChange(
-          selectedCompany.id,
-          'DEMO_STARTED',
-          undefined,
-          `Ustawiono okres DEMO do ${new Date(moduleDemoEndDate).toLocaleDateString('pl-PL')}`
-        );
       }
 
       setShowModuleSettingsModal(false);
@@ -473,6 +508,42 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     } catch (error) {
       console.error('Error saving module settings:', error);
       alert('Błąd podczas zapisywania ustawień modułu');
+    } finally {
+      setLoadingModule(false);
+    }
+  };
+
+  // Handle end demo for a module
+  const handleEndDemo = async () => {
+    if (!selectedCompany || !selectedModule) return;
+    setLoadingModule(true);
+    try {
+      const existingModule = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code);
+      if (!existingModule) return;
+
+      const { error } = await supabase
+        .from('company_modules')
+        .update({
+          demo_end_date: null,
+          is_active: false,
+          deactivated_at: new Date().toISOString()
+        })
+        .eq('id', existingModule.id);
+
+      if (error) throw error;
+
+      await logSubscriptionChange(
+        selectedCompany.id,
+        'DEMO_ENDED',
+        selectedModule.code,
+        `Zakończono DEMO dla modułu ${selectedModule.name_pl}`
+      );
+
+      setShowModuleSettingsModal(false);
+      await refreshData();
+    } catch (error) {
+      console.error('Error ending demo:', error);
+      alert('Błąd podczas kończenia DEMO');
     } finally {
       setLoadingModule(false);
     }
@@ -501,7 +572,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
   // Handle add bonus
   const handleAddBonus = async () => {
-    if (!selectedCompany || !bonusAmount) return;
+    if (!selectedCompany || !bonusAmount || loadingBonus) return;
 
     const amount = parseFloat(bonusAmount);
     if (isNaN(amount) || amount === 0) {
@@ -512,7 +583,16 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     setLoadingBonus(true);
     try {
       const newBalance = (selectedCompany.bonus_balance || 0) + amount;
-      await updateCompany(selectedCompany.id, { bonus_balance: newBalance });
+
+      // Update company balance
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update({ bonus_balance: newBalance })
+        .eq('id', selectedCompany.id);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       // Try to save bonus transaction (table may not exist)
       const newBonusEntry = {
@@ -523,11 +603,8 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         created_at: new Date().toISOString()
       };
 
-      // Add to local state for immediate display
-      setBonusHistory(prev => [newBonusEntry, ...prev]);
-
-      // Try to persist to database
-      const { error } = await supabase.from('bonus_transactions').insert({
+      // Try to persist to database first
+      const { error: transactionError } = await supabase.from('bonus_transactions').insert({
         company_id: selectedCompany.id,
         amount: Math.abs(amount),
         type: amount > 0 ? 'credit' : 'debit',
@@ -535,16 +612,23 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         created_by: state.currentUser?.id
       });
 
-      if (error) {
-        console.log('Could not save bonus transaction (table may not exist):', error);
+      if (transactionError) {
+        console.log('Could not save bonus transaction:', transactionError);
       }
 
+      // Add to local state for immediate display
+      setBonusHistory(prev => [newBonusEntry, ...prev]);
+
+      // Update local state
       setSelectedCompany({ ...selectedCompany, bonus_balance: newBalance });
       setBonusAmount('');
       setBonusDescription('');
-    } catch (error) {
+
+      // Refresh global state
+      await refreshData();
+    } catch (error: any) {
       console.error('Error adding bonus:', error);
-      alert('Błąd podczas dodawania bonusu');
+      alert('Błąd podczas dodawania bonusu: ' + (error?.message || 'Nieznany błąd'));
     } finally {
       setLoadingBonus(false);
     }
@@ -1588,12 +1672,14 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                             entry.action === 'MODULE_DEACTIVATED' ? 'bg-red-100' :
                             entry.action === 'USERS_CHANGED' ? 'bg-blue-100' :
                             entry.action === 'DEMO_STARTED' ? 'bg-yellow-100' :
+                            entry.action === 'DEMO_ENDED' ? 'bg-orange-100' :
                             'bg-slate-100'
                           }`}>
                             {entry.action === 'MODULE_ACTIVATED' && <Check className="w-4 h-4 text-green-600" />}
                             {entry.action === 'MODULE_DEACTIVATED' && <X className="w-4 h-4 text-red-600" />}
                             {entry.action === 'USERS_CHANGED' && <Users className="w-4 h-4 text-blue-600" />}
                             {entry.action === 'DEMO_STARTED' && <Calendar className="w-4 h-4 text-yellow-600" />}
+                            {entry.action === 'DEMO_ENDED' && <X className="w-4 h-4 text-orange-600" />}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium text-slate-900">{entry.details}</p>
@@ -1954,7 +2040,9 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       {/* Module Settings Modal */}
       {showModuleSettingsModal && selectedCompany && selectedModule && (() => {
         const moduleStatus = getModuleStatus(selectedCompany.id, selectedModule.code);
-        const hasPaidSubscription = moduleStatus.status === 'active' && getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code)?.stripe_subscription_id;
+        const companyMod = getCompanyModules(selectedCompany.id).find(cm => cm.module_code === selectedModule.code);
+        const hasPaidSubscription = moduleStatus.status === 'active' && companyMod?.stripe_subscription_id;
+        const hasActiveDemo = moduleStatus.status === 'demo' && companyMod?.is_active && (companyMod?.demo_end_date || moduleStatus.demoEndDate);
         return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
@@ -2019,6 +2107,27 @@ export const SuperAdminCompaniesPage: React.FC = () => {
                     Subskrypcja opłacona. Nie można dodać okresu DEMO.
                   </p>
                 </div>
+              )}
+
+              {/* End DEMO button when demo is active */}
+              {hasActiveDemo && (
+                <button
+                  onClick={handleEndDemo}
+                  disabled={loadingModule}
+                  className="w-full px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-red-200"
+                >
+                  {loadingModule ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Kończę...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      Zakończ DEMO
+                    </>
+                  )}
+                </button>
               )}
             </div>
 
