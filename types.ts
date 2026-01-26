@@ -278,6 +278,8 @@ export interface CompanyModule {
   deactivated_at?: string;
   stripe_subscription_id?: string;
   stripe_subscription_item_id?: string;
+  next_billing_cycle_price?: number | null;
+  price_scheduled_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
