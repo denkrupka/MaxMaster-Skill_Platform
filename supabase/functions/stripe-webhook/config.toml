@@ -1,0 +1,3 @@
+# Disable built-in JWT verification since webhooks are called by Stripe
+# and verified using the webhook signature, not user JWT tokens
+verify_jwt = false
