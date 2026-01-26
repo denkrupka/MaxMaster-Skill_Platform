@@ -605,6 +605,10 @@ export interface CRMCompany {
   status: string;
   source?: string;
   assigned_sales_id?: string;
+  // Portal account linking
+  linked_company_id?: string;
+  // Subscription info (synced from linked company)
+  subscription_status?: 'brak' | 'trialing' | 'active' | 'past_due' | 'cancelled';
   subscription_end_date?: string;
   created_at: string;
   updated_at: string;
