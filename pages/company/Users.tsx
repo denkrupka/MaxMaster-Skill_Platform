@@ -42,8 +42,7 @@ export const CompanyUsersPage: React.FC = () => {
     last_name: '',
     email: '',
     phone: '',
-    role: Role.EMPLOYEE as Role,
-    password: ''
+    role: Role.EMPLOYEE as Role
   });
 
   // Get company users
@@ -81,15 +80,6 @@ export const CompanyUsersPage: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Generate random password
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
-    let password = '';
-    for (let i = 0; i < 12; i++) {
-      password += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setFormData(prev => ({ ...prev, password }));
-  };
 
   // Handle add user
   const handleAddUser = async () => {
@@ -149,8 +139,7 @@ export const CompanyUsersPage: React.FC = () => {
       last_name: user.last_name || '',
       email: user.email || '',
       phone: user.phone || '',
-      role: user.role,
-      password: ''
+      role: user.role
     });
     setShowEditModal(true);
   };
@@ -162,8 +151,7 @@ export const CompanyUsersPage: React.FC = () => {
       last_name: '',
       email: '',
       phone: '',
-      role: Role.EMPLOYEE,
-      password: ''
+      role: Role.EMPLOYEE
     });
   };
 
@@ -187,7 +175,7 @@ export const CompanyUsersPage: React.FC = () => {
           <p className="text-slate-500 mt-1">{currentCompany.name} - {companyUsers.length} użytkowników</p>
         </div>
         <button
-          onClick={() => { resetForm(); generatePassword(); setShowAddModal(true); }}
+          onClick={() => { resetForm(); setShowAddModal(true); }}
           disabled={!canAddUsers}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
             canAddUsers
@@ -376,27 +364,7 @@ export const CompanyUsersPage: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hasło tymczasowe *</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleFormChange}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={generatePassword}
-                    className="px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
-                  >
-                    Generuj
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Użytkownik otrzyma email z linkiem do ustawienia własnego hasła.</p>
-              </div>
+              <p className="text-xs text-slate-500 mt-2">Użytkownik otrzyma email z linkiem do ustawienia własnego hasła.</p>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -408,7 +376,7 @@ export const CompanyUsersPage: React.FC = () => {
               </button>
               <button
                 onClick={handleAddUser}
-                disabled={!formData.first_name || !formData.last_name || !formData.email || !formData.password}
+                disabled={!formData.first_name || !formData.last_name || !formData.email}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-500"
               >
                 Dodaj użytkownika
