@@ -281,7 +281,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     }
   };
 
-  // Handle delete company
+  // Handle delete company - uses Edge Function with service_role to bypass RLS
   const handleDeleteCompany = async (company: Company) => {
     const usersCount = getCompanyUsersCount(company.id);
     if (usersCount > 0) {
@@ -293,63 +293,35 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     }
 
     try {
-      // Delete related records first to avoid foreign key constraints
-      // Delete company modules
-      const { error: modulesError } = await supabase
-        .from('company_modules')
-        .delete()
-        .eq('company_id', company.id);
-      if (modulesError) console.log('Error deleting company_modules:', modulesError);
-
-      // Delete bonus transactions
-      const { error: bonusError } = await supabase
-        .from('bonus_transactions')
-        .delete()
-        .eq('company_id', company.id);
-      if (bonusError) console.log('Error deleting bonus_transactions:', bonusError);
-
-      // Delete subscription history
-      const { error: historyError } = await supabase
-        .from('subscription_history')
-        .delete()
-        .eq('company_id', company.id);
-      if (historyError) console.log('Error deleting subscription_history:', historyError);
-
-      // Delete module user access
-      const { error: accessError } = await supabase
-        .from('module_user_access')
-        .delete()
-        .eq('company_id', company.id);
-      if (accessError) console.log('Error deleting module_user_access:', accessError);
-
-      // Now delete the company
-      const { data: deletedData, error: companyError } = await supabase
-        .from('companies')
-        .delete()
-        .eq('id', company.id)
-        .select();
-
-      if (companyError) {
-        throw companyError;
+      // Get current session for auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Brak sesji użytkownika');
       }
 
-      // Verify deletion actually happened (RLS might silently block it)
-      if (!deletedData || deletedData.length === 0) {
-        // Double-check if company still exists
-        const { data: checkData } = await supabase
-          .from('companies')
-          .select('id')
-          .eq('id', company.id)
-          .single();
-
-        if (checkData) {
-          throw new Error('Nie udało się usunąć firmy. Brak uprawnień do usuwania.');
+      // Call Edge Function to delete company (bypasses RLS with service_role)
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://diytvuczpciikzdhldny.supabase.co'}/functions/v1/delete-company`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({ companyId: company.id })
         }
+      );
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Nie udało się usunąć firmy');
       }
 
       // Refresh data to update the UI
       await refreshData();
-      alert(`Firma "${company.name}" została usunięta.`);
+      alert(result.message || `Firma "${company.name}" została usunięta.`);
     } catch (error: any) {
       console.error('Error deleting company:', error);
       alert('Błąd podczas usuwania firmy: ' + (error?.message || 'Nieznany błąd'));
