@@ -392,9 +392,12 @@ export const SalesPipeline: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
-          'apikey': SUPABASE_ANON_KEY
+          'apikey': SUPABASE_ANON_KEY,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         },
-        body: JSON.stringify({ nip: cleanNip })
+        body: JSON.stringify({ nip: cleanNip }),
+        cache: 'no-store'
       });
 
       if (!response.ok) {
