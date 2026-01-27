@@ -129,6 +129,8 @@ serve(async (req) => {
                 recurring: {
                   interval: 'month',
                 },
+                // Enable automatic tax on the price
+                tax_behavior: 'exclusive',
               },
               quantity: quantity,
             },
@@ -153,6 +155,10 @@ serve(async (req) => {
           allow_promotion_codes: true,
           billing_address_collection: 'required',
           tax_id_collection: {
+            enabled: true,
+          },
+          // Enable automatic tax calculation (VAT 23% for Poland)
+          automatic_tax: {
             enabled: true,
           },
         })
