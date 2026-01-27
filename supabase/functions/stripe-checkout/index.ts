@@ -145,6 +145,11 @@ serve(async (req) => {
             company_id: companyId,
             module_code: moduleCode,
           },
+          // Allow updating customer info from checkout form (required for tax_id_collection)
+          customer_update: {
+            name: 'auto',
+            address: 'auto',
+          },
           allow_promotion_codes: true,
           billing_address_collection: 'required',
           tax_id_collection: {
