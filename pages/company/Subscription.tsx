@@ -317,22 +317,20 @@ export const CompanySubscriptionPage: React.FC = () => {
 
       // For new modules - redirect to Stripe Checkout
       if (newModules.length > 0) {
-        // Stripe Checkout supports one subscription per session
-        // If multiple new modules, warn and process only the first one
-        if (newModules.length > 1) {
-          setError(`Uwaga: W koszyku jest ${newModules.length} nowych modułów. Stripe pozwala aktywować jeden moduł na raz. Aktywuję: ${newModules[0].moduleName}. Pozostałe moduły aktywuj po zakończeniu tej płatności.`);
-        }
-        const item = newModules[0];
+        // Prepare modules array for checkout (supports multiple modules in one session)
+        const modulesForCheckout = newModules.map(item => ({
+          moduleCode: item.moduleCode,
+          quantity: item.newUsers
+        }));
 
-        console.log('Creating checkout session for:', item.moduleCode, 'quantity:', item.newUsers);
+        console.log('Creating checkout session for modules:', modulesForCheckout);
 
         const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
           body: {
             action: 'create-checkout-session',
             companyId: currentCompany.id,
-            moduleCode: item.moduleCode,
-            quantity: item.newUsers,
-            successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${item.moduleCode}`,
+            modules: modulesForCheckout, // Array of modules
+            successUrl: `${window.location.origin}/#/company/subscription?success=true`,
             cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
           }
         });
@@ -401,15 +399,17 @@ export const CompanySubscriptionPage: React.FC = () => {
 
       // For new modules - redirect to Stripe Checkout (same as "now" - can't schedule new subscription)
       if (newModules.length > 0) {
-        const item = newModules[0];
+        const modulesForCheckout = newModules.map(item => ({
+          moduleCode: item.moduleCode,
+          quantity: item.newUsers
+        }));
 
         const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
           body: {
             action: 'create-checkout-session',
             companyId: currentCompany.id,
-            moduleCode: item.moduleCode,
-            quantity: item.newUsers,
-            successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${item.moduleCode}`,
+            modules: modulesForCheckout,
+            successUrl: `${window.location.origin}/#/company/subscription?success=true`,
             cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
           }
         });

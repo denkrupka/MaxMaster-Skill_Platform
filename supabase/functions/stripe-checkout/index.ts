@@ -54,11 +54,25 @@ serve(async (req) => {
 
     switch (action) {
       case 'create-checkout-session': {
-        const { companyId, moduleCode, quantity, successUrl, cancelUrl } = body
+        const { companyId, modules, successUrl, cancelUrl } = body
+        // Support legacy single module format
+        const moduleCode = body.moduleCode
+        const quantity = body.quantity
 
-        if (!companyId || !moduleCode || !quantity) {
-          throw new Error('companyId, moduleCode, and quantity are required')
+        // Build modules array (support both new array format and legacy single module)
+        let modulesToProcess: Array<{ moduleCode: string; quantity: number }> = []
+
+        if (modules && Array.isArray(modules) && modules.length > 0) {
+          modulesToProcess = modules
+        } else if (moduleCode && quantity) {
+          modulesToProcess = [{ moduleCode, quantity }]
         }
+
+        if (!companyId || modulesToProcess.length === 0) {
+          throw new Error('companyId and modules (or moduleCode + quantity) are required')
+        }
+
+        console.log('Processing modules:', modulesToProcess)
 
         // Get company details
         const { data: company, error: companyError } = await supabaseAdmin
@@ -71,19 +85,22 @@ serve(async (req) => {
           throw new Error('Company not found')
         }
 
-        // Get module info from database (price set by superadmin)
-        const { data: moduleInfo, error: moduleInfoError } = await supabaseAdmin
+        // Get all module info from database
+        const moduleCodes = modulesToProcess.map(m => m.moduleCode)
+        const { data: modulesInfo, error: modulesInfoError } = await supabaseAdmin
           .from('modules')
-          .select('name_pl, base_price_per_user')
-          .eq('code', moduleCode)
-          .single()
+          .select('code, name_pl, base_price_per_user')
+          .in('code', moduleCodes)
 
-        if (moduleInfoError || !moduleInfo) {
-          throw new Error(`Module not found: ${moduleCode}`)
+        if (modulesInfoError || !modulesInfo || modulesInfo.length === 0) {
+          throw new Error(`Modules not found: ${moduleCodes.join(', ')}`)
         }
 
-        if (!moduleInfo.base_price_per_user || moduleInfo.base_price_per_user <= 0) {
-          throw new Error(`Price not configured for module: ${moduleCode}. Superadmin must set base_price_per_user.`)
+        // Validate all modules have prices
+        for (const mod of modulesInfo) {
+          if (!mod.base_price_per_user || mod.base_price_per_user <= 0) {
+            throw new Error(`Price not configured for module: ${mod.code}. Superadmin must set base_price_per_user.`)
+          }
         }
 
         // Get or create Stripe customer
@@ -107,45 +124,52 @@ serve(async (req) => {
             .eq('id', companyId)
         }
 
-        // Calculate total: quantity (seats) × price per user
-        // Price in database is in PLN, Stripe needs grosze (cents)
-        const unitAmountInGrosze = Math.round(moduleInfo.base_price_per_user * 100)
+        // Build line_items for all modules
+        const lineItems = modulesToProcess.map(mod => {
+          const moduleInfo = modulesInfo.find(m => m.code === mod.moduleCode)!
+          const unitAmountInGrosze = Math.round(moduleInfo.base_price_per_user * 100)
 
-        console.log(`Creating checkout: ${quantity} seats × ${moduleInfo.base_price_per_user} PLN = ${quantity * moduleInfo.base_price_per_user} PLN`)
+          console.log(`Module ${mod.moduleCode}: ${mod.quantity} seats × ${moduleInfo.base_price_per_user} PLN = ${mod.quantity * moduleInfo.base_price_per_user} PLN`)
+
+          return {
+            price_data: {
+              currency: 'pln',
+              product_data: {
+                name: `${moduleInfo.name_pl} - subskrypcja`,
+                description: `Dostęp do modułu ${moduleInfo.name_pl}`,
+                metadata: {
+                  module_code: mod.moduleCode,
+                },
+              },
+              unit_amount: unitAmountInGrosze,
+              recurring: {
+                interval: 'month' as const,
+              },
+              tax_behavior: 'exclusive' as const,
+            },
+            quantity: mod.quantity,
+          }
+        })
+
+        // Store modules info in metadata (JSON stringified for multiple modules)
+        const modulesMetadata = JSON.stringify(modulesToProcess)
 
         // Create checkout session with dynamic pricing from database
         const session = await stripe.checkout.sessions.create({
           customer: customerId,
           mode: 'subscription',
-          line_items: [
-            {
-              price_data: {
-                currency: 'pln',
-                product_data: {
-                  name: `${moduleInfo.name_pl} - subskrypcja`,
-                  description: `Dostęp do modułu ${moduleInfo.name_pl}`,
-                },
-                unit_amount: unitAmountInGrosze,
-                recurring: {
-                  interval: 'month',
-                },
-                // Enable automatic tax on the price
-                tax_behavior: 'exclusive',
-              },
-              quantity: quantity,
-            },
-          ],
+          line_items: lineItems,
           success_url: successUrl,
           cancel_url: cancelUrl,
           subscription_data: {
             metadata: {
               company_id: companyId,
-              module_code: moduleCode,
+              modules: modulesMetadata, // JSON array of {moduleCode, quantity}
             },
           },
           metadata: {
             company_id: companyId,
-            module_code: moduleCode,
+            modules: modulesMetadata,
           },
           // Allow updating customer info from checkout form (required for tax_id_collection)
           customer_update: {
