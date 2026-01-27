@@ -429,15 +429,14 @@ serve(async (req) => {
         const scheduledTotalPrice = quantity * companyModule.price_per_user
 
         // Store scheduled change in database
-        // We store the new quantity in next_billing_cycle_price as total monthly price
-        // and use a custom field for the quantity (we'll use the price calculation)
+        // Store scheduled_max_users for UI display and next_billing_cycle_price for price tracking
         const { error: updateError } = await supabaseAdmin
           .from('company_modules')
           .update({
             next_billing_cycle_price: scheduledTotalPrice,
             price_scheduled_at: new Date().toISOString(),
-            // Store scheduled quantity in metadata or a JSON field
-            // For now, we calculate it back from price when applying
+            scheduled_max_users: quantity,
+            scheduled_change_at: new Date().toISOString()
           })
           .eq('company_id', companyId)
           .eq('module_code', moduleCode)

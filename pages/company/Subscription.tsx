@@ -952,6 +952,11 @@ export const CompanySubscriptionPage: React.FC = () => {
                           <div className="text-center">
                             <p className="text-sm text-slate-500">Użytkowników</p>
                             <p className="text-lg font-bold text-slate-900">{currentMaxUsers}</p>
+                            {companyMod.scheduled_max_users && companyMod.scheduled_max_users !== currentMaxUsers && (
+                              <p className={`text-xs mt-1 ${companyMod.scheduled_max_users > currentMaxUsers ? 'text-blue-600' : 'text-red-600'}`}>
+                                Od nast. okresu: {companyMod.scheduled_max_users}
+                              </p>
+                            )}
                           </div>
                           <div className="text-center">
                             <p className="text-sm text-slate-500 mb-1">Dokup lub zmniejsz</p>
@@ -1350,6 +1355,11 @@ export const CompanySubscriptionPage: React.FC = () => {
                         <Users className="w-4 h-4 inline mr-1" />
                         {cm.activeUsers} / {cm.max_users} użytkowników
                       </p>
+                      {cm.scheduled_max_users && cm.scheduled_max_users !== cm.max_users && (
+                        <p className={`text-xs mt-1 ${cm.scheduled_max_users > cm.max_users ? 'text-blue-600' : 'text-red-600'}`}>
+                          Od następnego okresu: {cm.scheduled_max_users} użytkowników
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

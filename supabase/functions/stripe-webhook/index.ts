@@ -267,9 +267,51 @@ serve(async (req) => {
         const companyId = subscription.metadata?.company_id
         const modulesJson = subscription.metadata?.modules
         const moduleCode = subscription.metadata?.module_code
+        const scheduledMaxUsers = subscription.metadata?.scheduled_max_users
 
         if (!companyId) {
           console.warn('customer.subscription.updated: Missing company_id')
+          break
+        }
+
+        // If there's a scheduled_max_users in metadata, this is a scheduled change
+        // Don't update max_users now - it will be applied on invoice.payment_succeeded
+        if (scheduledMaxUsers) {
+          console.log(`Subscription has scheduled_max_users=${scheduledMaxUsers}, skipping max_users update (will apply on payment)`)
+
+          // Store the scheduled quantity in the database for UI display
+          // Find the company_module by subscription ID
+          const { data: companyModule } = await supabaseAdmin
+            .from('company_modules')
+            .select('id, module_code')
+            .eq('stripe_subscription_id', subscription.id)
+            .single()
+
+          if (companyModule) {
+            await supabaseAdmin
+              .from('company_modules')
+              .update({
+                scheduled_max_users: parseInt(scheduledMaxUsers, 10),
+                scheduled_change_at: subscription.metadata?.scheduled_at || new Date().toISOString()
+              })
+              .eq('id', companyModule.id)
+
+            console.log(`Stored scheduled_max_users=${scheduledMaxUsers} for module ${companyModule.module_code}`)
+          }
+
+          // Still update company status but NOT max_users
+          const statusMap: Record<string, string> = {
+            'active': 'active',
+            'past_due': 'past_due',
+            'canceled': 'canceled',
+            'unpaid': 'suspended'
+          }
+
+          await supabaseAdmin
+            .from('companies')
+            .update({ subscription_status: statusMap[subscription.status] || 'active' })
+            .eq('id', companyId)
+
           break
         }
 
@@ -446,10 +488,14 @@ serve(async (req) => {
                   .single()
 
                 if (companyModule && newMaxUsers > 0) {
-                  // Apply the scheduled max_users change
+                  // Apply the scheduled max_users change and clear scheduled fields
                   await supabaseAdmin
                     .from('company_modules')
-                    .update({ max_users: newMaxUsers })
+                    .update({
+                      max_users: newMaxUsers,
+                      scheduled_max_users: null,
+                      scheduled_change_at: null
+                    })
                     .eq('id', companyModule.id)
 
                   console.log(`Applied scheduled max_users ${newMaxUsers} to company_module ${companyModule.id}`)
