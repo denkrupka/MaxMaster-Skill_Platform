@@ -293,7 +293,11 @@ export const CompanySubscriptionPage: React.FC = () => {
 
       // For new modules - redirect to Stripe Checkout
       if (newModules.length > 0) {
-        // For now, handle one new module at a time (Stripe limitation)
+        // Stripe Checkout supports one subscription per session
+        // If multiple new modules, warn and process only the first one
+        if (newModules.length > 1) {
+          setError(`Uwaga: W koszyku jest ${newModules.length} nowych modułów. Stripe pozwala aktywować jeden moduł na raz. Aktywuję: ${newModules[0].moduleName}. Pozostałe moduły aktywuj po zakończeniu tej płatności.`);
+        }
         const item = newModules[0];
 
         console.log('Creating checkout session for:', item.moduleCode, 'quantity:', item.newUsers);
@@ -636,14 +640,21 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Check URL params for success/cancel
   React.useEffect(() => {
     const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+
+    // Always reset loading state when returning from Stripe
+    setLoading(null);
+    setPurchaseMode('none');
+
     if (urlParams.get('success') === 'true') {
       setSuccess('Płatność zakończona pomyślnie! Moduł został aktywowany.');
+      setCart([]); // Clear cart after successful payment
       refreshData();
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname + '#/company/subscription');
     }
     if (urlParams.get('canceled') === 'true') {
-      setError('Płatność została anulowana.');
+      setError('Płatność została anulowana. Możesz spróbować ponownie.');
+      // Don't clear cart on cancel - user may want to retry
       window.history.replaceState({}, '', window.location.pathname + '#/company/subscription');
     }
   }, []);

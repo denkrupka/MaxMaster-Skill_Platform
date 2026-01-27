@@ -62,6 +62,9 @@ serve(async (req) => {
         const session = event.data.object as Stripe.Checkout.Session
         const { company_id, module_code } = session.metadata || {}
 
+        console.log('checkout.session.completed metadata:', session.metadata)
+        console.log('Session subscription ID:', session.subscription)
+
         if (company_id && module_code) {
           console.log(`Activating module ${module_code} for company ${company_id}`)
 
@@ -79,7 +82,7 @@ serve(async (req) => {
 
           if (existingModule) {
             // Update existing
-            await supabaseAdmin
+            const { error: updateError } = await supabaseAdmin
               .from('company_modules')
               .update({
                 is_active: true,
@@ -89,6 +92,12 @@ serve(async (req) => {
                 activated_at: new Date().toISOString()
               })
               .eq('id', existingModule.id)
+
+            if (updateError) {
+              console.error('Error updating company_module:', updateError)
+            } else {
+              console.log(`Successfully updated company_module ${existingModule.id} to active`)
+            }
           } else {
             // Get module info
             const { data: moduleInfo } = await supabaseAdmin
@@ -98,7 +107,7 @@ serve(async (req) => {
               .single()
 
             // Create new company_module
-            await supabaseAdmin
+            const { data: insertData, error: insertError } = await supabaseAdmin
               .from('company_modules')
               .insert({
                 company_id,
@@ -111,13 +120,29 @@ serve(async (req) => {
                 stripe_subscription_item_id: subscriptionItem.id,
                 activated_at: new Date().toISOString()
               })
+              .select()
+              .single()
+
+            if (insertError) {
+              console.error('Error inserting company_module:', insertError)
+            } else {
+              console.log(`Successfully created company_module:`, insertData)
+            }
           }
 
           // Update company subscription status
-          await supabaseAdmin
+          const { error: companyUpdateError } = await supabaseAdmin
             .from('companies')
             .update({ subscription_status: 'active' })
             .eq('id', company_id)
+
+          if (companyUpdateError) {
+            console.error('Error updating company subscription_status:', companyUpdateError)
+          } else {
+            console.log(`Company ${company_id} subscription_status updated to active`)
+          }
+        } else {
+          console.warn('checkout.session.completed: Missing company_id or module_code in metadata')
         }
         break
       }
