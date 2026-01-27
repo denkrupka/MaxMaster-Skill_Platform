@@ -164,6 +164,16 @@ export const CompanySubscriptionPage: React.FC = () => {
 
     // Active module
     if (companyMod.is_active) {
+      // Show subscription period end date from Stripe
+      if (companyMod.subscription_period_end) {
+        const periodEnd = new Date(companyMod.subscription_period_end);
+        return {
+          text: `AKTYWNY DO ${periodEnd.toLocaleDateString('pl-PL')}`,
+          color: 'bg-green-100 text-green-700',
+          hasDate: true
+        };
+      }
+      // Fallback: show deactivation scheduled date if exists
       if (companyMod.deactivated_at) {
         const deactivationDate = new Date(companyMod.deactivated_at);
         return {
@@ -183,32 +193,37 @@ export const CompanySubscriptionPage: React.FC = () => {
     return cart.reduce((sum, item) => sum + item.newUsers, 0);
   }, [cart]);
 
-  // Calculate days in current month
-  const getDaysInMonth = () => {
+  // Get subscription period info for a module
+  const getSubscriptionPeriod = (moduleCode: string) => {
+    const companyMod = myModules.find(cm => cm.module_code === moduleCode);
+    if (companyMod?.subscription_period_start && companyMod?.subscription_period_end) {
+      const start = new Date(companyMod.subscription_period_start);
+      const end = new Date(companyMod.subscription_period_end);
+      const now = new Date();
+      const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      const daysRemaining = Math.max(1, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+      return { totalDays, daysRemaining, periodEnd: end };
+    }
+    // Fallback to calendar month if no subscription period data
     const now = new Date();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return lastDay.getDate();
+    const totalDays = lastDay.getDate();
+    const daysRemaining = lastDay.getDate() - now.getDate() + 1;
+    return { totalDays, daysRemaining, periodEnd: lastDay };
   };
 
-  const getDaysRemaining = () => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    return lastDay.getDate() - now.getDate() + 1;
-  };
-
-  // Calculate pro-rata price for immediate purchase
-  const calculateProRataPrice = (pricePerUser: number, newUsers: number) => {
-    const daysInMonth = getDaysInMonth();
-    const daysRemaining = getDaysRemaining();
-    return (pricePerUser * newUsers * daysRemaining) / daysInMonth;
+  // Calculate pro-rata price for immediate purchase based on subscription period
+  const calculateProRataPrice = (moduleCode: string, pricePerUser: number, newUsers: number) => {
+    const { totalDays, daysRemaining } = getSubscriptionPeriod(moduleCode);
+    return (pricePerUser * newUsers * daysRemaining) / totalDays;
   };
 
   // Calculate total cart value for immediate purchase
   const cartTotalValueNow = useMemo(() => {
     return cart.reduce((sum, item) => {
-      return sum + calculateProRataPrice(item.pricePerUser, item.newUsers);
+      return sum + calculateProRataPrice(item.moduleCode, item.pricePerUser, item.newUsers);
     }, 0);
-  }, [cart]);
+  }, [cart, myModules]);
 
   // Calculate total cart value for next month
   const cartTotalValueNextMonth = useMemo(() => {
@@ -1214,23 +1229,25 @@ export const CompanySubscriptionPage: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <p className="text-sm text-slate-600 mb-3">Proporcjonalna opłata za pozostałe dni miesiąca ({getDaysRemaining()} dni z {getDaysInMonth()}):</p>
-                          <div className="space-y-2">
-                            {cart.map(item => {
-                              const proRataPrice = calculateProRataPrice(item.pricePerUser, item.newUsers);
-                              return (
-                                <div key={item.moduleCode} className="flex justify-between text-sm">
-                                  <span className="text-slate-600">{item.moduleName}: {item.newUsers} × {item.pricePerUser} PLN × {getDaysRemaining()}/{getDaysInMonth()} dni</span>
+                          {cart.map(item => {
+                            const period = getSubscriptionPeriod(item.moduleCode);
+                            const proRataPrice = calculateProRataPrice(item.moduleCode, item.pricePerUser, item.newUsers);
+                            const periodEndStr = period.periodEnd.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+                            return (
+                              <div key={item.moduleCode} className="mb-3">
+                                <p className="text-sm text-slate-600 mb-2">Proporcjonalna opłata za pozostałe dni okresu ({period.daysRemaining} dni z {period.totalDays} do {periodEndStr}):</p>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-600">{item.moduleName}: {item.newUsers} × {item.pricePerUser} PLN × {period.daysRemaining}/{period.totalDays} dni</span>
                                   <span className="font-medium text-slate-900">{proRataPrice.toFixed(2)} PLN</span>
                                 </div>
-                              );
-                            })}
-                            <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                              <span className="font-semibold text-slate-900">Razem do zapłaty teraz:</span>
-                              <span className="font-bold text-xl text-green-600">{cartTotalValueNow.toFixed(2)} PLN</span>
-                            </div>
+                              </div>
+                            );
+                          })}
+                          <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                            <span className="font-semibold text-slate-900">Razem do zapłaty teraz (netto):</span>
+                            <span className="font-bold text-xl text-green-600">{cartTotalValueNow.toFixed(2)} PLN</span>
                           </div>
-                          <p className="text-xs text-slate-500 mt-3">Od następnego miesiąca będzie pobierana pełna opłata za wszystkich użytkowników ({cartTotalValueNextMonth.toFixed(2)} PLN/mies. więcej).</p>
+                          <p className="text-xs text-slate-500 mt-3">Od następnego okresu będzie pobierana pełna opłata za wszystkich użytkowników ({cartTotalValueNextMonth.toFixed(2)} PLN/mies. więcej).</p>
                         </>
                       )}
                     </div>
@@ -1259,7 +1276,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                           </div>
                         ))}
                         <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                          <span className="font-semibold text-slate-900">Wzrost miesięcznej opłaty:</span>
+                          <span className="font-semibold text-slate-900">Wzrost miesięcznej opłaty (netto):</span>
                           <span className="font-bold text-xl text-blue-600">+{cartTotalValueNextMonth.toFixed(2)} PLN</span>
                         </div>
                       </div>
@@ -1289,7 +1306,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                           </div>
                         ))}
                         <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                          <span className="font-semibold text-slate-900">Zmniejszenie miesięcznej opłaty:</span>
+                          <span className="font-semibold text-slate-900">Zmniejszenie miesięcznej opłaty (netto):</span>
                           <span className="font-bold text-xl text-red-600">{cartTotalValueNextMonth.toFixed(2)} PLN</span>
                         </div>
                       </div>

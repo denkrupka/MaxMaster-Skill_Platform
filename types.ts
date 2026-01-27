@@ -286,6 +286,8 @@ export interface CompanyModule {
   price_scheduled_at?: string | null;
   scheduled_max_users?: number | null;
   scheduled_change_at?: string | null;
+  subscription_period_end?: string | null;
+  subscription_period_start?: string | null;
   created_at: string;
   updated_at?: string;
 }

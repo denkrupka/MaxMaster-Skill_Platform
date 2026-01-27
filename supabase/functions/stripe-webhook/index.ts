@@ -206,7 +206,9 @@ serve(async (req) => {
                 max_users: quantity,
                 stripe_subscription_id: subscription.id,
                 stripe_subscription_item_id: subscriptionItem.id,
-                activated_at: new Date().toISOString()
+                activated_at: new Date().toISOString(),
+                subscription_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString()
               })
               .eq('id', existingModule.id)
 
@@ -235,7 +237,9 @@ serve(async (req) => {
                 price_per_user: moduleInfo?.base_price_per_user || 79,
                 stripe_subscription_id: subscription.id,
                 stripe_subscription_item_id: subscriptionItem.id,
-                activated_at: new Date().toISOString()
+                activated_at: new Date().toISOString(),
+                subscription_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString()
               })
               .select()
               .single()
@@ -488,13 +492,15 @@ serve(async (req) => {
                   .single()
 
                 if (companyModule && newMaxUsers > 0) {
-                  // Apply the scheduled max_users change and clear scheduled fields
+                  // Apply the scheduled max_users change, clear scheduled fields, and update period dates
                   await supabaseAdmin
                     .from('company_modules')
                     .update({
                       max_users: newMaxUsers,
                       scheduled_max_users: null,
-                      scheduled_change_at: null
+                      scheduled_change_at: null,
+                      subscription_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+                      subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString()
                     })
                     .eq('id', companyModule.id)
 
@@ -510,6 +516,16 @@ serve(async (req) => {
                   })
                 }
               }
+              // Always update subscription period dates for this module
+              await supabaseAdmin
+                .from('company_modules')
+                .update({
+                  subscription_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+                  subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString()
+                })
+                .eq('stripe_subscription_id', subscription.id)
+
+              console.log(`Updated subscription period dates for subscription ${subscription.id}`)
             } catch (subErr) {
               console.error('Error applying scheduled max_users:', subErr)
             }
