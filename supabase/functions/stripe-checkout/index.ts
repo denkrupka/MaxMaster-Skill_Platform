@@ -7,12 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Stripe Price IDs for each module (configure in Stripe Dashboard)
-const MODULE_PRICE_IDS: Record<string, string> = {
-  'recruitment': Deno.env.get('STRIPE_PRICE_RECRUITMENT') ?? '',
-  'skills': Deno.env.get('STRIPE_PRICE_SKILLS') ?? '',
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -77,6 +71,21 @@ serve(async (req) => {
           throw new Error('Company not found')
         }
 
+        // Get module info from database (price set by superadmin)
+        const { data: moduleInfo, error: moduleInfoError } = await supabaseAdmin
+          .from('modules')
+          .select('name_pl, base_price_per_user')
+          .eq('code', moduleCode)
+          .single()
+
+        if (moduleInfoError || !moduleInfo) {
+          throw new Error(`Module not found: ${moduleCode}`)
+        }
+
+        if (!moduleInfo.base_price_per_user || moduleInfo.base_price_per_user <= 0) {
+          throw new Error(`Price not configured for module: ${moduleCode}. Superadmin must set base_price_per_user.`)
+        }
+
         // Get or create Stripe customer
         let customerId = company.stripe_customer_id
 
@@ -98,23 +107,29 @@ serve(async (req) => {
             .eq('id', companyId)
         }
 
-        // Get price ID for module
-        const priceId = MODULE_PRICE_IDS[moduleCode]
-        if (!priceId) {
-          throw new Error(`No Stripe price configured for module: ${moduleCode}. Set STRIPE_PRICE_${moduleCode.toUpperCase()} environment variable.`)
-        }
-        // Validate that it's a Price ID, not a Product ID
-        if (priceId.startsWith('prod_')) {
-          throw new Error(`Invalid price ID for module ${moduleCode}: "${priceId}" is a Product ID. Please use a Price ID (starts with "price_"). Go to Stripe Dashboard > Products > select product > copy the Price ID.`)
-        }
+        // Calculate total: quantity (seats) × price per user
+        // Price in database is in PLN, Stripe needs grosze (cents)
+        const unitAmountInGrosze = Math.round(moduleInfo.base_price_per_user * 100)
 
-        // Create checkout session
+        console.log(`Creating checkout: ${quantity} seats × ${moduleInfo.base_price_per_user} PLN = ${quantity * moduleInfo.base_price_per_user} PLN`)
+
+        // Create checkout session with dynamic pricing from database
         const session = await stripe.checkout.sessions.create({
           customer: customerId,
           mode: 'subscription',
           line_items: [
             {
-              price: priceId,
+              price_data: {
+                currency: 'pln',
+                product_data: {
+                  name: `${moduleInfo.name_pl} - subskrypcja`,
+                  description: `Dostęp do modułu ${moduleInfo.name_pl}`,
+                },
+                unit_amount: unitAmountInGrosze,
+                recurring: {
+                  interval: 'month',
+                },
+              },
               quantity: quantity,
             },
           ],

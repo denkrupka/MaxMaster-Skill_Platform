@@ -34,6 +34,7 @@ interface CartItem {
   currentUsers: number;
   newUsers: number;
   pricePerUser: number;
+  isNewModule: boolean; // true for new module activation, false for adding seats
 }
 
 export const CompanySubscriptionPage: React.FC = () => {
@@ -230,7 +231,7 @@ export const CompanySubscriptionPage: React.FC = () => {
   };
 
   // Handle adding to cart with animation
-  const handleAddToCart = (moduleCode: string, moduleName: string, currentUsers: number, pricePerUser: number, buttonElement: HTMLButtonElement) => {
+  const handleAddToCart = (moduleCode: string, moduleName: string, currentUsers: number, pricePerUser: number, isNewModule: boolean, buttonElement: HTMLButtonElement) => {
     const pendingCount = pendingUsers[moduleCode] || 0;
     if (pendingCount === 0) return;
 
@@ -254,7 +255,7 @@ export const CompanySubscriptionPage: React.FC = () => {
           };
           return updated;
         } else {
-          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: pendingCount, pricePerUser }];
+          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: pendingCount, pricePerUser, isNewModule }];
         }
       });
 
@@ -302,7 +303,7 @@ export const CompanySubscriptionPage: React.FC = () => {
     cartSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Handle purchase now (pro-rata)
+  // Handle purchase now (pro-rata for existing, checkout for new)
   const handlePurchaseNow = async () => {
     if (!currentCompany || cart.length === 0) return;
 
@@ -310,7 +311,39 @@ export const CompanySubscriptionPage: React.FC = () => {
     setError(null);
 
     try {
-      for (const item of cart) {
+      // Check if there are any new modules that need Stripe Checkout
+      const newModules = cart.filter(item => item.isNewModule);
+      const existingModules = cart.filter(item => !item.isNewModule);
+
+      // For new modules - redirect to Stripe Checkout
+      if (newModules.length > 0) {
+        // For now, handle one new module at a time (Stripe limitation)
+        const item = newModules[0];
+
+        const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+          body: {
+            action: 'create-checkout-session',
+            companyId: currentCompany.id,
+            moduleCode: item.moduleCode,
+            quantity: item.newUsers,
+            successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${item.moduleCode}`,
+            cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
+          }
+        });
+
+        if (fnError) throw fnError;
+
+        if (data?.url) {
+          // Clear cart and redirect to Stripe
+          setCart([]);
+          setPurchaseMode('none');
+          window.location.href = data.url;
+          return;
+        }
+      }
+
+      // For existing modules - update subscription
+      for (const item of existingModules) {
         const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
         if (!companyMod) continue;
 
@@ -350,7 +383,37 @@ export const CompanySubscriptionPage: React.FC = () => {
     setError(null);
 
     try {
-      for (const item of cart) {
+      // Check if there are any new modules - they need Stripe Checkout (can't schedule new subscription)
+      const newModules = cart.filter(item => item.isNewModule);
+      const existingModules = cart.filter(item => !item.isNewModule);
+
+      // For new modules - redirect to Stripe Checkout (same as "now" - can't schedule new subscription)
+      if (newModules.length > 0) {
+        const item = newModules[0];
+
+        const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+          body: {
+            action: 'create-checkout-session',
+            companyId: currentCompany.id,
+            moduleCode: item.moduleCode,
+            quantity: item.newUsers,
+            successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${item.moduleCode}`,
+            cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
+          }
+        });
+
+        if (fnError) throw fnError;
+
+        if (data?.url) {
+          setCart([]);
+          setPurchaseMode('none');
+          window.location.href = data.url;
+          return;
+        }
+      }
+
+      // For existing modules - schedule subscription update
+      for (const item of existingModules) {
         const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
         if (!companyMod) continue;
 
@@ -795,6 +858,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Active/Demo modules - show current users and add seats */}
                       {(isActive || hasDemo) && companyMod && (
                         <div className="flex items-start gap-6">
                           <div className="text-center">
@@ -825,7 +889,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                             <div className="text-center">
                               <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
                               <button
-                                onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, e.currentTarget)}
+                                onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                               >
                                 <ShoppingCart className="w-4 h-4" />
@@ -836,17 +900,49 @@ export const CompanySubscriptionPage: React.FC = () => {
                         </div>
                       )}
 
+                      {/* Inactive modules - show counter to select seats for activation */}
                       {!isActive && !hasDemo && (
-                        <button
-                          onClick={() => handleActivateModule(mod.code)}
-                          disabled={isLoading || !stripeEnabled}
-                          className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${
-                            stripeEnabled ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                          }`}
-                        >
-                          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                          Aktywuj moduł
-                        </button>
+                        <div className="flex items-start gap-6">
+                          <div className="text-center">
+                            <p className="text-sm text-slate-500 mb-1">Wybierz miejsca</p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
+                                disabled={isLoading || pendingCount <= 1}
+                                onClick={() => handlePendingChange(mod.code, -1)}
+                              >
+                                <Minus className="w-4 h-4 text-slate-600" />
+                              </button>
+                              <span className="w-10 text-center font-bold text-lg text-blue-600">{pendingCount || 1}</span>
+                              <button
+                                className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
+                                disabled={isLoading}
+                                onClick={() => handlePendingChange(mod.code, 1)}
+                              >
+                                <Plus className="w-4 h-4 text-slate-600" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
+                            <button
+                              onClick={(e) => {
+                                // If no pending count, set to 1 first
+                                if (!pendingCount) {
+                                  setPendingUsers(prev => ({ ...prev, [mod.code]: 1 }));
+                                }
+                                handleAddToCart(mod.code, mod.name_pl, 0, mod.base_price_per_user, true, e.currentTarget);
+                              }}
+                              disabled={isLoading || !stripeEnabled}
+                              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${
+                                stripeEnabled ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                              }`}
+                            >
+                              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingCart className="w-4 h-4" />}
+                              Do koszyka
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -862,7 +958,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                     <ShoppingCart className="w-5 h-5 text-blue-600" />
-                    Koszyk - dokup miejsca
+                    Koszyk
                   </h3>
                   <span className="text-sm text-slate-500">{cart.length} {cart.length === 1 ? 'moduł' : cart.length < 5 ? 'moduły' : 'modułów'}</span>
                 </div>
@@ -884,17 +980,26 @@ export const CompanySubscriptionPage: React.FC = () => {
                       <tr key={item.moduleCode} className="hover:bg-slate-50">
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                              <Package className="w-4 h-4 text-green-600" />
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.isNewModule ? 'bg-blue-100' : 'bg-green-100'}`}>
+                              <Package className={`w-4 h-4 ${item.isNewModule ? 'text-blue-600' : 'text-green-600'}`} />
                             </div>
                             <div>
-                              <p className="font-medium text-slate-900">{item.moduleName}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-slate-900">{item.moduleName}</p>
+                                {item.isNewModule && (
+                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">NOWY</span>
+                                )}
+                              </div>
                               <p className="text-xs text-slate-500">{item.pricePerUser} PLN/użytkownik</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-5 py-4 text-center">
-                          <span className="text-slate-600 font-medium">{item.currentUsers}</span>
+                          {item.isNewModule ? (
+                            <span className="text-blue-600 font-medium">—</span>
+                          ) : (
+                            <span className="text-slate-600 font-medium">{item.currentUsers}</span>
+                          )}
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center justify-center gap-2">
@@ -924,14 +1029,21 @@ export const CompanySubscriptionPage: React.FC = () => {
               {purchaseMode === 'none' && (
                 <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
                   <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
-                    <div className="text-sm text-slate-600"><span className="font-medium">{cartTotalUsers}</span> nowych użytkowników w koszyku</div>
+                    <div className="text-sm text-slate-600">
+                      <span className="font-medium">{cartTotalUsers}</span> {cart.some(i => i.isNewModule) ? 'użytkowników' : 'nowych użytkowników'} w koszyku
+                      {cart.some(i => i.isNewModule) && (
+                        <span className="ml-2 text-blue-600">(nowy moduł → płatność online)</span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => setPurchaseMode('now')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
-                        <Zap className="w-4 h-4" />Dokup na już
+                        <Zap className="w-4 h-4" />{cart.some(i => i.isNewModule) ? 'Aktywuj teraz' : 'Dokup na już'}
                       </button>
-                      <button onClick={() => setPurchaseMode('next_month')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />Dokup od następnego miesiąca
-                      </button>
+                      {!cart.some(i => i.isNewModule) && (
+                        <button onClick={() => setPurchaseMode('next_month')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />Dokup od następnego miesiąca
+                        </button>
+                      )}
                       <button onClick={handleClearCart} className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${confirmClear ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
                         <Trash2 className="w-4 h-4" />{confirmClear ? 'Na pewno?' : 'Wyczyść'}
                       </button>
@@ -943,30 +1055,55 @@ export const CompanySubscriptionPage: React.FC = () => {
               {purchaseMode === 'now' && (
                 <div className="px-5 py-4 border-t border-slate-200 bg-green-50">
                   <div className="space-y-4">
-                    <h4 className="font-semibold text-green-800 flex items-center gap-2"><Zap className="w-5 h-5" />Kalkulacja - dokup na już</h4>
+                    <h4 className="font-semibold text-green-800 flex items-center gap-2">
+                      <Zap className="w-5 h-5" />
+                      {cart.some(i => i.isNewModule) ? 'Aktywacja modułu' : 'Kalkulacja - dokup na już'}
+                    </h4>
                     <div className="bg-white rounded-lg p-4 border border-green-200">
-                      <p className="text-sm text-slate-600 mb-3">Proporcjonalna opłata za pozostałe dni miesiąca ({getDaysRemaining()} dni z {getDaysInMonth()}):</p>
-                      <div className="space-y-2">
-                        {cart.map(item => {
-                          const proRataPrice = calculateProRataPrice(item.pricePerUser, item.newUsers);
-                          return (
-                            <div key={item.moduleCode} className="flex justify-between text-sm">
-                              <span className="text-slate-600">{item.moduleName}: {item.newUsers} × {item.pricePerUser} PLN × {getDaysRemaining()}/{getDaysInMonth()} dni</span>
-                              <span className="font-medium text-slate-900">{proRataPrice.toFixed(2)} PLN</span>
+                      {cart.some(i => i.isNewModule) ? (
+                        <>
+                          <p className="text-sm text-slate-600 mb-3">Zostaniesz przekierowany do strony płatności Stripe:</p>
+                          <div className="space-y-2">
+                            {cart.filter(i => i.isNewModule).map(item => (
+                              <div key={item.moduleCode} className="flex justify-between text-sm">
+                                <span className="text-slate-600">{item.moduleName}: {item.newUsers} użytkowników × {item.pricePerUser} PLN</span>
+                                <span className="font-medium text-slate-900">{(item.newUsers * item.pricePerUser).toFixed(2)} PLN/mies.</span>
+                              </div>
+                            ))}
+                            <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                              <span className="font-semibold text-slate-900">Miesięczna subskrypcja:</span>
+                              <span className="font-bold text-xl text-green-600">{cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0).toFixed(2)} PLN</span>
                             </div>
-                          );
-                        })}
-                        <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                          <span className="font-semibold text-slate-900">Razem do zapłaty teraz:</span>
-                          <span className="font-bold text-xl text-green-600">{cartTotalValueNow.toFixed(2)} PLN</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-3">Od następnego miesiąca będzie pobierana pełna opłata za wszystkich użytkowników ({cartTotalValueNextMonth.toFixed(2)} PLN/mies. więcej).</p>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-3">Po dokonaniu płatności moduł zostanie aktywowany automatycznie.</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm text-slate-600 mb-3">Proporcjonalna opłata za pozostałe dni miesiąca ({getDaysRemaining()} dni z {getDaysInMonth()}):</p>
+                          <div className="space-y-2">
+                            {cart.map(item => {
+                              const proRataPrice = calculateProRataPrice(item.pricePerUser, item.newUsers);
+                              return (
+                                <div key={item.moduleCode} className="flex justify-between text-sm">
+                                  <span className="text-slate-600">{item.moduleName}: {item.newUsers} × {item.pricePerUser} PLN × {getDaysRemaining()}/{getDaysInMonth()} dni</span>
+                                  <span className="font-medium text-slate-900">{proRataPrice.toFixed(2)} PLN</span>
+                                </div>
+                              );
+                            })}
+                            <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                              <span className="font-semibold text-slate-900">Razem do zapłaty teraz:</span>
+                              <span className="font-bold text-xl text-green-600">{cartTotalValueNow.toFixed(2)} PLN</span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-3">Od następnego miesiąca będzie pobierana pełna opłata za wszystkich użytkowników ({cartTotalValueNextMonth.toFixed(2)} PLN/mies. więcej).</p>
+                        </>
+                      )}
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
                       <button onClick={handlePurchaseNow} disabled={loading === 'purchase-now'} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
-                        {loading === 'purchase-now' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Kup teraz
+                        {loading === 'purchase-now' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        {cart.some(i => i.isNewModule) ? 'Przejdź do płatności' : 'Kup teraz'}
                       </button>
                     </div>
                   </div>
