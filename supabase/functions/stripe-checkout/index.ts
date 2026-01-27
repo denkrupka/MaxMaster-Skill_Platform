@@ -269,6 +269,107 @@ serve(async (req) => {
         )
       }
 
+      case 'create-prorated-payment': {
+        // Create one-time payment checkout for adding seats to existing module
+        const { companyId, moduleCode, additionalQuantity, successUrl, cancelUrl } = body
+
+        if (!companyId || !moduleCode || !additionalQuantity) {
+          throw new Error('companyId, moduleCode, and additionalQuantity are required')
+        }
+
+        // Get company details
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('*')
+          .eq('id', companyId)
+          .single()
+
+        if (companyError || !company) {
+          throw new Error('Company not found')
+        }
+
+        if (!company.stripe_customer_id) {
+          throw new Error('Company has no Stripe account')
+        }
+
+        // Get module info
+        const { data: moduleInfo, error: moduleInfoError } = await supabaseAdmin
+          .from('modules')
+          .select('code, name_pl, base_price_per_user')
+          .eq('code', moduleCode)
+          .single()
+
+        if (moduleInfoError || !moduleInfo) {
+          throw new Error('Module not found')
+        }
+
+        // Get company module to find current subscription
+        const { data: companyModule, error: cmError } = await supabaseAdmin
+          .from('company_modules')
+          .select('stripe_subscription_id, stripe_subscription_item_id, max_users, price_per_user')
+          .eq('company_id', companyId)
+          .eq('module_code', moduleCode)
+          .single()
+
+        if (cmError || !companyModule?.stripe_subscription_id) {
+          throw new Error('Active module subscription not found')
+        }
+
+        // Get subscription to calculate pro-rata period
+        const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+
+        // Calculate days remaining in billing period
+        const now = Math.floor(Date.now() / 1000)
+        const periodEnd = subscription.current_period_end
+        const periodStart = subscription.current_period_start
+        const totalDays = Math.ceil((periodEnd - periodStart) / 86400)
+        const daysRemaining = Math.ceil((periodEnd - now) / 86400)
+
+        // Calculate prorated amount
+        const pricePerUser = companyModule.price_per_user || moduleInfo.base_price_per_user
+        const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDays) * 100) // in grosze
+
+        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDays} days = ${proratedAmount/100} PLN`)
+
+        // Create one-time payment checkout session
+        const session = await stripe.checkout.sessions.create({
+          customer: company.stripe_customer_id,
+          mode: 'payment',
+          line_items: [{
+            price_data: {
+              currency: 'pln',
+              product_data: {
+                name: `${moduleInfo.name_pl} - dodatkowe miejsca`,
+                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc na ${daysRemaining} dni`,
+              },
+              unit_amount: proratedAmount,
+              tax_behavior: 'exclusive' as const,
+            },
+            quantity: 1,
+          }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          metadata: {
+            company_id: companyId,
+            module_code: moduleCode,
+            additional_quantity: additionalQuantity.toString(),
+            action_type: 'add_seats',
+            new_total_quantity: (companyModule.max_users + additionalQuantity).toString(),
+          },
+          automatic_tax: {
+            enabled: true,
+          },
+        })
+
+        return new Response(
+          JSON.stringify({ sessionId: session.id, url: session.url }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
       case 'list-invoices': {
         const { customerId } = body
 
@@ -298,7 +399,7 @@ serve(async (req) => {
           throw new Error('companyId, moduleCode, and quantity are required')
         }
 
-        // Get company module with subscription info
+        // Get company module info
         const { data: companyModule, error: moduleError } = await supabaseAdmin
           .from('company_modules')
           .select('stripe_subscription_id, stripe_subscription_item_id, max_users, price_per_user')
@@ -306,97 +407,82 @@ serve(async (req) => {
           .eq('module_code', moduleCode)
           .single()
 
-        if (moduleError || !companyModule?.stripe_subscription_id) {
-          throw new Error('Module subscription not found')
+        if (moduleError || !companyModule) {
+          console.error('Module not found:', moduleError)
+          throw new Error('Moduł nie został znaleziony')
         }
 
-        // Get the subscription to find current period end
-        const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
-
-        // Check if there's an existing schedule for this subscription
-        const existingSchedules = await stripe.subscriptionSchedules.list({
-          customer: subscription.customer as string,
-          limit: 10
-        })
-
-        const activeSchedule = existingSchedules.data.find(
-          s => s.subscription === companyModule.stripe_subscription_id &&
-               (s.status === 'active' || s.status === 'not_started')
-        )
-
-        if (activeSchedule) {
-          // Update existing schedule - add a new phase with the updated quantity
-          const currentPhase = activeSchedule.phases[activeSchedule.phases.length - 1]
-
-          await stripe.subscriptionSchedules.update(activeSchedule.id, {
-            phases: [
-              // Current phase until period end
-              {
-                items: currentPhase.items.map(item => ({
-                  price: item.price as string,
-                  quantity: item.quantity
-                })),
-                start_date: currentPhase.start_date,
-                end_date: subscription.current_period_end,
-              },
-              // New phase with updated quantity
-              {
-                items: [{
-                  price: (subscription.items.data[0].price as any).id,
-                  quantity: quantity
-                }],
-                start_date: subscription.current_period_end,
-              }
-            ]
-          })
-        } else {
-          // Create a new schedule from the existing subscription
-          const schedule = await stripe.subscriptionSchedules.create({
-            from_subscription: companyModule.stripe_subscription_id
-          })
-
-          // Update the schedule to change quantity at the next billing period
-          await stripe.subscriptionSchedules.update(schedule.id, {
-            phases: [
-              // Current phase - keep current quantity until period end
-              {
-                items: [{
-                  price: (subscription.items.data[0].price as any).id,
-                  quantity: companyModule.max_users
-                }],
-                start_date: schedule.phases[0].start_date,
-                end_date: subscription.current_period_end,
-              },
-              // New phase - new quantity from next period
-              {
-                items: [{
-                  price: (subscription.items.data[0].price as any).id,
-                  quantity: quantity
-                }],
-                start_date: subscription.current_period_end,
-              }
-            ]
-          })
+        if (!companyModule.stripe_subscription_id) {
+          throw new Error('Moduł nie ma aktywnej subskrypcji. Najpierw aktywuj moduł.')
         }
 
-        // Store scheduled change in database (next_billing_cycle fields)
-        const scheduledPrice = quantity * companyModule.price_per_user
-        await supabaseAdmin
+        // Get subscription to find billing period end date
+        let effectiveDate: Date
+        try {
+          const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+          effectiveDate = new Date(subscription.current_period_end * 1000)
+        } catch (err) {
+          console.error('Failed to get subscription:', err)
+          // Fallback to next month if we can't get subscription
+          effectiveDate = new Date()
+          effectiveDate.setMonth(effectiveDate.getMonth() + 1)
+          effectiveDate.setDate(1)
+        }
+
+        // Calculate the scheduled price (new total price per month)
+        const scheduledTotalPrice = quantity * companyModule.price_per_user
+
+        // Store scheduled change in database
+        // We store the new quantity in next_billing_cycle_price as total monthly price
+        // and use a custom field for the quantity (we'll use the price calculation)
+        const { error: updateError } = await supabaseAdmin
           .from('company_modules')
           .update({
-            next_billing_cycle_price: scheduledPrice,
-            price_scheduled_at: new Date().toISOString()
+            next_billing_cycle_price: scheduledTotalPrice,
+            price_scheduled_at: new Date().toISOString(),
+            // Store scheduled quantity in metadata or a JSON field
+            // For now, we calculate it back from price when applying
           })
           .eq('company_id', companyId)
           .eq('module_code', moduleCode)
 
-        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users at next billing period`)
+        if (updateError) {
+          console.error('Failed to save scheduled change:', updateError)
+          throw new Error('Nie udało się zapisać zaplanowanej zmiany')
+        }
+
+        // Also update Stripe subscription to increase quantity at next billing
+        // This triggers Stripe to charge the new amount from next period
+        if (companyModule.stripe_subscription_item_id) {
+          try {
+            await stripe.subscriptionItems.update(
+              companyModule.stripe_subscription_item_id,
+              {
+                quantity,
+                proration_behavior: 'none' // No prorated charge, apply from next period
+              }
+            )
+            console.log(`Updated Stripe subscription item quantity to ${quantity} (no proration)`)
+          } catch (stripeErr) {
+            console.error('Failed to update Stripe subscription:', stripeErr)
+            // Don't throw - the database change was saved
+          }
+        }
+
+        // Update max_users in database to reflect scheduled change
+        await supabaseAdmin
+          .from('company_modules')
+          .update({ max_users: quantity })
+          .eq('company_id', companyId)
+          .eq('module_code', moduleCode)
+
+        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users`)
 
         return new Response(
           JSON.stringify({
             success: true,
             scheduledQuantity: quantity,
-            effectiveDate: new Date(subscription.current_period_end * 1000).toISOString()
+            effectiveDate: effectiveDate.toISOString()
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

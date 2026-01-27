@@ -61,13 +61,81 @@ serve(async (req) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        const { company_id, modules: modulesJson, module_code } = session.metadata || {}
+        const { company_id, modules: modulesJson, module_code, action_type, new_total_quantity, additional_quantity } = session.metadata || {}
 
         console.log('checkout.session.completed metadata:', session.metadata)
+        console.log('Session mode:', session.mode)
         console.log('Session subscription ID:', session.subscription)
 
         if (!company_id) {
           console.warn('checkout.session.completed: Missing company_id in metadata')
+          break
+        }
+
+        // Handle one-time payment for adding seats to existing subscription
+        if (session.mode === 'payment' && action_type === 'add_seats' && session.metadata?.module_code) {
+          const moduleCodeToUpdate = session.metadata.module_code
+          const newQuantity = parseInt(new_total_quantity || '0', 10)
+
+          console.log(`Processing add_seats payment: ${moduleCodeToUpdate}, new quantity: ${newQuantity}`)
+
+          if (newQuantity > 0) {
+            // Get company module with subscription info
+            const { data: companyModule, error: cmError } = await supabaseAdmin
+              .from('company_modules')
+              .select('stripe_subscription_id, stripe_subscription_item_id, max_users')
+              .eq('company_id', company_id)
+              .eq('module_code', moduleCodeToUpdate)
+              .single()
+
+            if (cmError || !companyModule) {
+              console.error('Company module not found:', cmError)
+              break
+            }
+
+            // Update subscription quantity in Stripe
+            if (companyModule.stripe_subscription_item_id) {
+              try {
+                await stripe.subscriptionItems.update(
+                  companyModule.stripe_subscription_item_id,
+                  { quantity: newQuantity }
+                )
+                console.log(`Updated Stripe subscription item to ${newQuantity} users`)
+              } catch (stripeErr) {
+                console.error('Failed to update Stripe subscription:', stripeErr)
+              }
+            }
+
+            // Update local record
+            const { error: updateError } = await supabaseAdmin
+              .from('company_modules')
+              .update({ max_users: newQuantity })
+              .eq('company_id', company_id)
+              .eq('module_code', moduleCodeToUpdate)
+
+            if (updateError) {
+              console.error('Failed to update company_modules:', updateError)
+            } else {
+              console.log(`Updated company_modules max_users to ${newQuantity}`)
+            }
+
+            // Log payment in payment_history
+            const { error: historyError } = await supabaseAdmin
+              .from('payment_history')
+              .insert({
+                company_id,
+                amount: session.amount_total ? session.amount_total / 100 : 0,
+                currency: session.currency?.toUpperCase() || 'PLN',
+                status: 'paid',
+                description: `Dokupienie ${additional_quantity} miejsc w module ${moduleCodeToUpdate}`,
+                stripe_invoice_id: session.invoice as string || null,
+                paid_at: new Date().toISOString()
+              })
+
+            if (historyError) {
+              console.error('Failed to log payment history:', historyError)
+            }
+          }
           break
         }
 
