@@ -315,17 +315,23 @@ serve(async (req) => {
           throw new Error('Active module subscription not found')
         }
 
-        // Calculate days remaining until end of calendar month (matching frontend calculation)
+        // Get subscription period from Stripe
+        const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+        const periodEnd = new Date(subscription.current_period_end * 1000)
+        const periodStart = new Date(subscription.current_period_start * 1000)
         const now = new Date()
-        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        const totalDaysInMonth = lastDayOfMonth.getDate()
-        const daysRemaining = lastDayOfMonth.getDate() - now.getDate() + 1
 
-        // Calculate prorated amount
-        const pricePerUser = companyModule.price_per_user || moduleInfo.base_price_per_user
-        const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDaysInMonth) * 100) // in grosze
+        // Calculate days remaining until subscription period end
+        const totalDaysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24))
+        const daysRemaining = Math.max(1, Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
 
-        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInMonth} days = ${proratedAmount/100} PLN`)
+        // Use base_price_per_user for consistent calculation with frontend
+        const pricePerUser = moduleInfo.base_price_per_user
+        const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDaysInPeriod) * 100) // in grosze
+
+        // Format dates for description
+        const formatDate = (d: Date) => d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
+        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInPeriod} days = ${proratedAmount/100} PLN`)
 
         // Create one-time payment checkout session
         const session = await stripe.checkout.sessions.create({
@@ -336,7 +342,7 @@ serve(async (req) => {
               currency: 'pln',
               product_data: {
                 name: `${moduleInfo.name_pl} - dodatkowe miejsca`,
-                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInMonth} dni miesiąca)`,
+                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInPeriod} dni do ${formatDate(periodEnd)})`,
               },
               unit_amount: proratedAmount,
               tax_behavior: 'exclusive' as const,
