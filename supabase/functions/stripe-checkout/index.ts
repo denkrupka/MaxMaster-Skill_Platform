@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import Stripe from 'https://esm.sh/stripe@11.1.0?target=deno'
+import Stripe from 'https://esm.sh/stripe@14?target=deno'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +25,7 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(stripeKey, {
-      apiVersion: '2022-11-15',
+      apiVersion: '2023-10-16',
       httpClient: Stripe.createFetchHttpClient(),
     })
 
@@ -101,7 +101,11 @@ serve(async (req) => {
         // Get price ID for module
         const priceId = MODULE_PRICE_IDS[moduleCode]
         if (!priceId) {
-          throw new Error(`No Stripe price configured for module: ${moduleCode}`)
+          throw new Error(`No Stripe price configured for module: ${moduleCode}. Set STRIPE_PRICE_${moduleCode.toUpperCase()} environment variable.`)
+        }
+        // Validate that it's a Price ID, not a Product ID
+        if (priceId.startsWith('prod_')) {
+          throw new Error(`Invalid price ID for module ${moduleCode}: "${priceId}" is a Product ID. Please use a Price ID (starts with "price_"). Go to Stripe Dashboard > Products > select product > copy the Price ID.`)
         }
 
         // Create checkout session
