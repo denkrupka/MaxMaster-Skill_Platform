@@ -72,6 +72,63 @@ serve(async (req) => {
           break
         }
 
+        // Handle balance top-up payment
+        if (session.mode === 'payment' && action_type === 'balance_topup') {
+          const topupAmount = parseFloat(session.metadata?.topup_amount || '0')
+
+          if (topupAmount > 0) {
+            // Get current balance
+            const { data: company } = await supabaseAdmin
+              .from('companies')
+              .select('bonus_balance')
+              .eq('id', company_id)
+              .single()
+
+            const currentBalance = company?.bonus_balance || 0
+            const newBalance = currentBalance + topupAmount
+
+            // Update company bonus balance
+            const { error: balanceError } = await supabaseAdmin
+              .from('companies')
+              .update({ bonus_balance: newBalance })
+              .eq('id', company_id)
+
+            if (balanceError) {
+              console.error('Failed to update bonus balance:', balanceError)
+            } else {
+              console.log(`Added ${topupAmount} PLN to company ${company_id} bonus balance (new total: ${newBalance} PLN)`)
+            }
+
+            // Log to bonus_transactions
+            await supabaseAdmin
+              .from('bonus_transactions')
+              .insert({
+                company_id,
+                amount: topupAmount,
+                type: 'credit',
+                description: `Doładowanie balansu - ${topupAmount} PLN`
+              })
+
+            // Log payment in payment_history
+            const { error: historyError } = await supabaseAdmin
+              .from('payment_history')
+              .insert({
+                company_id,
+                amount: session.amount_total ? session.amount_total / 100 : 0,
+                currency: session.currency?.toUpperCase() || 'PLN',
+                status: 'paid',
+                description: `Doładowanie balansu bonusowego - ${topupAmount} PLN`,
+                stripe_invoice_id: session.invoice as string || null,
+                paid_at: new Date().toISOString()
+              })
+
+            if (historyError) {
+              console.error('Failed to log payment history:', historyError)
+            }
+          }
+          break
+        }
+
         // Handle one-time payment for adding seats to existing subscription
         if (session.mode === 'payment' && action_type === 'add_seats' && session.metadata?.module_code) {
           const moduleCodeToUpdate = session.metadata.module_code

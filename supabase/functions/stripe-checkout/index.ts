@@ -564,6 +564,87 @@ serve(async (req) => {
         )
       }
 
+      case 'create-topup-session': {
+        // Create one-time payment for balance top-up
+        const { companyId, packageIndex, amount, points, successUrl, cancelUrl } = body
+
+        if (!companyId || amount === undefined || points === undefined) {
+          throw new Error('companyId, amount, and points are required')
+        }
+
+        // Get company details
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('*')
+          .eq('id', companyId)
+          .single()
+
+        if (companyError || !company) {
+          throw new Error('Company not found')
+        }
+
+        // Get or create Stripe customer
+        let customerId = company.stripe_customer_id
+
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: company.email || undefined,
+            name: company.name,
+            metadata: {
+              company_id: companyId,
+              tax_id: company.tax_id || ''
+            }
+          })
+          customerId = customer.id
+
+          // Save customer ID to company
+          await supabaseAdmin
+            .from('companies')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', companyId)
+        }
+
+        // Amount in grosze (1 PLN = 100 groszy)
+        const amountInGrosze = Math.round(amount * 100)
+
+        // Create checkout session for one-time payment
+        const session = await stripe.checkout.sessions.create({
+          customer: customerId,
+          mode: 'payment',
+          line_items: [{
+            price_data: {
+              currency: 'pln',
+              product_data: {
+                name: `Doładowanie balansu - ${points} PLN`,
+                description: `Pakiet doładowania konta bonusowego`,
+              },
+              unit_amount: amountInGrosze,
+              tax_behavior: 'exclusive' as const,
+            },
+            quantity: 1,
+          }],
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          metadata: {
+            company_id: companyId,
+            action_type: 'balance_topup',
+            topup_amount: points.toString(), // Amount to add to bonus balance
+            package_index: packageIndex?.toString() || '0',
+          },
+          automatic_tax: {
+            enabled: true,
+          },
+        })
+
+        return new Response(
+          JSON.stringify({ sessionId: session.id, url: session.url }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
       case 'sync-subscription-periods': {
         // Sync subscription period data from Stripe for all company modules
         const { companyId } = body
