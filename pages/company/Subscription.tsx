@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
-import { MODULE_LABELS, MODULE_DESCRIPTIONS, SUBSCRIPTION_STATUS_LABELS, SUBSCRIPTION_STATUS_COLORS } from '../../constants';
+import { MODULE_LABELS, MODULE_DESCRIPTIONS, COMPANY_SUBSCRIPTION_DISPLAY_LABELS, COMPANY_SUBSCRIPTION_DISPLAY_COLORS } from '../../constants';
 import {
   isStripeConfigured,
   getCardBrandName,
@@ -95,6 +95,30 @@ export const CompanySubscriptionPage: React.FC = () => {
         };
       });
   }, [companyModules, modules, moduleUserAccess, currentCompany]);
+
+  // Compute subscription display status (like super admin panel)
+  // BRAK - no active subscription and no demo
+  // DEMO - has demo modules but no paid subscriptions
+  // AKTYWNA - has active paid subscription
+  const subscriptionDisplayStatus = useMemo(() => {
+    const activeModules = myModules.filter(m => m.is_active);
+
+    // Check for any paid subscription (has stripe_subscription_id)
+    const hasPaidSubscription = activeModules.some(m => m.stripe_subscription_id);
+
+    if (hasPaidSubscription) {
+      return { key: 'active', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['active'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['active'] };
+    }
+
+    // Check for DEMO (active modules without stripe subscription)
+    const hasDemoModules = activeModules.some(m => !m.stripe_subscription_id);
+    if (hasDemoModules) {
+      return { key: 'demo', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['demo'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['demo'] };
+    }
+
+    // No subscriptions
+    return { key: 'none', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['none'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['none'] };
+  }, [myModules]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -626,10 +650,8 @@ export const CompanySubscriptionPage: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-slate-500">Status subskrypcji</p>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border mt-1 ${
-                SUBSCRIPTION_STATUS_COLORS[currentCompany.subscription_status] || 'bg-slate-100 text-slate-800'
-              }`}>
-                {SUBSCRIPTION_STATUS_LABELS[currentCompany.subscription_status] || currentCompany.subscription_status}
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border mt-1 ${subscriptionDisplayStatus.color}`}>
+                {subscriptionDisplayStatus.text}
               </span>
             </div>
           </div>

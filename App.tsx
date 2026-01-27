@@ -108,24 +108,30 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   }
 
   // SUBSCRIPTION CHECK for company users (non-global users)
+  // Logic (same as super admin panel):
+  // - BRAK: no active subscription and no demo → show expired pages
+  // - DEMO: has demo modules but no paid subscriptions → allow access
+  // - AKTYWNA: has active paid subscription → allow access
   const isGlobalUser = state.currentUser.is_global_user === true;
   const currentPath = window.location.hash.replace('#', '');
 
   if (!isGlobalUser && state.currentUser.company_id) {
-    const userCompany = state.companies.find(c => c.id === state.currentUser?.company_id);
-
-    // Check if subscription is expired (cancelled or past_due)
-    const isSubscriptionExpired = userCompany &&
-      (userCompany.subscription_status === 'cancelled' || userCompany.subscription_status === 'past_due');
-
     // Check if company has any active modules
     const companyModules = state.companyModules.filter(cm =>
       cm.company_id === state.currentUser?.company_id && cm.is_active
     );
-    const hasActiveModules = companyModules.length > 0;
 
-    // If subscription is expired AND no active modules
-    if (isSubscriptionExpired && !hasActiveModules) {
+    // Check for paid subscription (has stripe_subscription_id)
+    const hasPaidSubscription = companyModules.some(cm => cm.stripe_subscription_id);
+
+    // Check for demo modules (active but no stripe_subscription_id)
+    const hasDemoModules = companyModules.some(cm => !cm.stripe_subscription_id);
+
+    // Subscription status: BRAK if no paid subscription AND no demo
+    const isSubscriptionBrak = !hasPaidSubscription && !hasDemoModules;
+
+    // If subscription status is BRAK (no active modules at all)
+    if (isSubscriptionBrak) {
       if (state.currentUser.role === Role.COMPANY_ADMIN) {
         // Company admin can only access subscription page
         if (!currentPath.includes('/company/subscription') && !currentPath.includes('/subscription-expired-admin')) {

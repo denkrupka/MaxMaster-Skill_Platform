@@ -96,7 +96,7 @@ export const COMPANY_STATUS_COLORS: Record<string, string> = {
   'trial': 'bg-blue-100 text-blue-800 border-blue-200'
 };
 
-// Subscription status labels
+// Subscription status labels (database values)
 export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
   'trialing': 'Okres próbny',
   'active': 'Aktywna',
@@ -109,6 +109,22 @@ export const SUBSCRIPTION_STATUS_COLORS: Record<string, string> = {
   'active': 'bg-green-100 text-green-800 border-green-200',
   'past_due': 'bg-red-100 text-red-800 border-red-200',
   'cancelled': 'bg-gray-100 text-gray-800 border-gray-200'
+};
+
+// Company subscription display status (computed from modules)
+// BRAK - no active subscription and no demo
+// DEMO - has demo modules but no paid subscriptions
+// AKTYWNA - has active paid subscription
+export const COMPANY_SUBSCRIPTION_DISPLAY_LABELS: Record<string, string> = {
+  'none': 'BRAK',
+  'demo': 'DEMO',
+  'active': 'AKTYWNA'
+};
+
+export const COMPANY_SUBSCRIPTION_DISPLAY_COLORS: Record<string, string> = {
+  'none': 'bg-gray-100 text-gray-800 border-gray-200',
+  'demo': 'bg-blue-100 text-blue-800 border-blue-200',
+  'active': 'bg-green-100 text-green-800 border-green-200'
 };
 
 // Module labels
