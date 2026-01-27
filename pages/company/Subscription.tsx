@@ -41,7 +41,7 @@ export const CompanySubscriptionPage: React.FC = () => {
   const { state, refreshData, grantModuleAccess, revokeModuleAccess } = useAppContext();
   const { currentCompany, users, companyModules, modules, moduleUserAccess, paymentHistory: allPaymentHistory } = state;
 
-  const [activeTab, setActiveTab] = useState<'modules' | 'usage' | 'history' | 'invoices'>('modules');
+  const [activeTab, setActiveTab] = useState<'modules' | 'usage' | 'history' | 'subscription'>('modules');
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -549,9 +549,9 @@ export const CompanySubscriptionPage: React.FC = () => {
     }
   };
 
-  // Fetch invoices when tab changes to invoices
+  // Fetch invoices when tab changes to subscription management
   React.useEffect(() => {
-    if (activeTab === 'invoices' && currentCompany?.stripe_customer_id) {
+    if (activeTab === 'subscription' && currentCompany?.stripe_customer_id) {
       fetchInvoices();
     }
   }, [activeTab, currentCompany?.stripe_customer_id]);
@@ -781,15 +781,15 @@ export const CompanySubscriptionPage: React.FC = () => {
           Historia płatności
         </button>
         <button
-          onClick={() => setActiveTab('invoices')}
+          onClick={() => setActiveTab('subscription')}
           className={`px-4 py-3 font-medium transition border-b-2 -mb-px whitespace-nowrap ${
-            activeTab === 'invoices'
+            activeTab === 'subscription'
               ? 'text-blue-600 border-blue-600'
               : 'text-slate-500 border-transparent hover:text-slate-700'
           }`}
         >
-          <Receipt className="w-4 h-4 inline mr-2" />
-          Faktury
+          <Settings className="w-4 h-4 inline mr-2" />
+          Zarządzanie subskrypcją
         </button>
       </div>
 
@@ -1432,166 +1432,210 @@ export const CompanySubscriptionPage: React.FC = () => {
         </div>
       )}
 
-      {/* Invoices Tab */}
-      {activeTab === 'invoices' && (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900">Faktury ze Stripe</h3>
-            <button
-              onClick={fetchInvoices}
-              disabled={invoicesLoading}
-              className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              {invoicesLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ExternalLink className="w-4 h-4" />
+      {/* Subscription Management Tab */}
+      {activeTab === 'subscription' && (
+        <div className="space-y-6">
+          {/* Payment Method Section */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-slate-900">Zarządzanie płatnościami</h3>
+              {currentCompany.stripe_customer_id && (
+                <button
+                  onClick={handleOpenPortal}
+                  disabled={loading === 'portal'}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                >
+                  {loading === 'portal' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Settings className="w-4 h-4" />
+                  )}
+                  Panel Stripe
+                  <ExternalLink className="w-4 h-4" />
+                </button>
               )}
-              Odśwież
-            </button>
-          </div>
+            </div>
 
-          {!currentCompany.stripe_customer_id ? (
-            <div className="text-center py-12">
-              <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Brak konta Stripe</p>
-              <p className="text-sm text-slate-400 mt-1">Aktywuj moduł, aby zobaczyć faktury</p>
+            {/* Info box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-blue-900 font-medium">Panel Stripe</p>
+                  <p className="text-blue-700 text-sm mt-1">
+                    Tutaj możesz anulować subskrypcję lub zmienić metodę płatności. Kliknij przycisk "Panel Stripe" aby przejść do zarządzania.
+                  </p>
+                </div>
+              </div>
             </div>
-          ) : invoicesLoading ? (
-            <div className="text-center py-12">
-              <Loader2 className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
-              <p className="text-slate-500">Pobieranie faktur...</p>
-            </div>
-          ) : invoices.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Numer</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Pobierz</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {invoices.map((invoice: any) => (
-                    <tr key={invoice.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-4 text-sm text-slate-900">
-                        {invoice.created ? new Date(invoice.created * 1000).toLocaleDateString('pl-PL') : '-'}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-600 font-mono">
-                        {invoice.number || '-'}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                        {(invoice.amount_due / 100).toFixed(2)} {invoice.currency?.toUpperCase() || 'PLN'}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          invoice.status === 'paid'
-                            ? 'bg-green-100 text-green-800'
-                            : invoice.status === 'open'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : invoice.status === 'void'
-                            ? 'bg-slate-100 text-slate-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {invoice.status === 'paid' ? 'Opłacona'
-                            : invoice.status === 'open' ? 'Otwarta'
-                            : invoice.status === 'void' ? 'Anulowana'
-                            : invoice.status === 'draft' ? 'Szkic'
-                            : invoice.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        {invoice.invoice_pdf ? (
-                          <a
-                            href={invoice.invoice_pdf}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
-                          >
-                            <Download className="w-4 h-4" />
-                            PDF
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 text-sm">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">Brak faktur</p>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Payment Method Section */}
-      <div className="mt-6 bg-white rounded-xl border border-slate-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-slate-900">Zarządzanie płatnościami</h3>
-          {currentCompany.stripe_customer_id && (
-            <button
-              onClick={handleOpenPortal}
-              disabled={loading === 'portal'}
-              className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              {loading === 'portal' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Settings className="w-4 h-4" />
+            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
+              <div className="w-12 h-8 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center">
+                <CreditCard className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                {currentCompany.stripe_customer_id ? (
+                  <>
+                    <p className="font-medium text-slate-900">Konto Stripe aktywne</p>
+                    <p className="text-sm text-slate-500">Zarządzaj metodami płatności i subskrypcjami w panelu Stripe</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-slate-900">Karta nie została dodana</p>
+                    <p className="text-sm text-slate-500">Aktywuj moduł, aby utworzyć konto płatności</p>
+                  </>
+                )}
+              </div>
+              {!currentCompany.stripe_customer_id && stripeEnabled && (
+                <button
+                  onClick={() => {
+                    const firstInactiveModule = modules.find(m => m.is_active && !myModules.find(cm => cm.module_code === m.code && cm.is_active));
+                    if (firstInactiveModule) {
+                      handleActivateModule(firstInactiveModule.code);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  Rozpocznij
+                </button>
               )}
-              Panel Stripe
-              <ExternalLink className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+            </div>
 
-        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg">
-          <div className="w-12 h-8 bg-gradient-to-r from-blue-600 to-blue-400 rounded flex items-center justify-center">
-            <CreditCard className="w-6 h-6 text-white" />
-          </div>
-          <div className="flex-1">
-            {currentCompany.stripe_customer_id ? (
-              <>
-                <p className="font-medium text-slate-900">Konto Stripe aktywne</p>
-                <p className="text-sm text-slate-500">Zarządzaj metodami płatności i subskrypcjami w panelu Stripe</p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium text-slate-900">Karta nie została dodana</p>
-                <p className="text-sm text-slate-500">Aktywuj moduł, aby utworzyć konto płatności</p>
-              </>
+            {stripeEnabled && (
+              <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
+                <Check className="w-3 h-3 text-green-500" />
+                Bezpieczne płatności obsługiwane przez Stripe
+              </p>
             )}
           </div>
-          {!currentCompany.stripe_customer_id && stripeEnabled && (
-            <button
-              onClick={() => {
-                const firstInactiveModule = modules.find(m => m.is_active && !myModules.find(cm => cm.module_code === m.code && cm.is_active));
-                if (firstInactiveModule) {
-                  handleActivateModule(firstInactiveModule.code);
-                }
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-            >
-              Rozpocznij
-            </button>
-          )}
-        </div>
 
-        {stripeEnabled && (
-          <p className="text-xs text-slate-500 mt-3 flex items-center gap-1">
-            <Check className="w-3 h-3 text-green-500" />
-            Bezpieczne płatności obsługiwane przez Stripe
-          </p>
-        )}
-      </div>
+          {/* Active Subscriptions */}
+          {myModules.filter(m => m.is_active && m.stripe_subscription_id).length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100">
+                <h3 className="font-semibold text-slate-900">Aktywne subskrypcje</h3>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {myModules.filter(m => m.is_active && m.stripe_subscription_id).map(cm => (
+                  <div key={cm.id} className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <Package className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">{cm.module?.name_pl || MODULE_LABELS[cm.module_code]}</p>
+                        <p className="text-sm text-slate-500">{cm.max_users} użytkowników × {cm.price_per_user} PLN/mies.</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-900">{(cm.max_users * cm.price_per_user).toFixed(2)} PLN/mies.</p>
+                      <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">Aktywna</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Invoices Section */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-900">Faktury</h3>
+              <button
+                onClick={fetchInvoices}
+                disabled={invoicesLoading}
+                className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                {invoicesLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-4 h-4" />
+                )}
+                Odśwież
+              </button>
+            </div>
+
+            {!currentCompany.stripe_customer_id ? (
+              <div className="text-center py-12">
+                <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">Brak konta Stripe</p>
+                <p className="text-sm text-slate-400 mt-1">Aktywuj moduł, aby zobaczyć faktury</p>
+              </div>
+            ) : invoicesLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-12 h-12 text-blue-500 mx-auto mb-3 animate-spin" />
+                <p className="text-slate-500">Pobieranie faktur...</p>
+              </div>
+            ) : invoices.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Numer</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Pobierz</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {invoices.map((invoice: any) => (
+                      <tr key={invoice.id} className="hover:bg-slate-50">
+                        <td className="px-5 py-4 text-sm text-slate-900">
+                          {invoice.created ? new Date(invoice.created * 1000).toLocaleDateString('pl-PL') : '-'}
+                        </td>
+                        <td className="px-5 py-4 text-sm text-slate-600 font-mono">
+                          {invoice.number || '-'}
+                        </td>
+                        <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                          {(invoice.amount_due / 100).toFixed(2)} {invoice.currency?.toUpperCase() || 'PLN'}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            invoice.status === 'paid'
+                              ? 'bg-green-100 text-green-800'
+                              : invoice.status === 'open'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : invoice.status === 'void'
+                              ? 'bg-slate-100 text-slate-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {invoice.status === 'paid' ? 'Opłacona'
+                              : invoice.status === 'open' ? 'Otwarta'
+                              : invoice.status === 'void' ? 'Anulowana'
+                              : invoice.status === 'draft' ? 'Szkic'
+                              : invoice.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          {invoice.invoice_pdf ? (
+                            <a
+                              href={invoice.invoice_pdf}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
+                            >
+                              <Download className="w-4 h-4" />
+                              PDF
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-sm">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">Brak faktur</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

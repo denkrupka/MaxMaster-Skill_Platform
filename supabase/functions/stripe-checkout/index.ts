@@ -291,6 +291,120 @@ serve(async (req) => {
         )
       }
 
+      case 'schedule-subscription-update': {
+        const { companyId, moduleCode, quantity } = body
+
+        if (!companyId || !moduleCode || !quantity) {
+          throw new Error('companyId, moduleCode, and quantity are required')
+        }
+
+        // Get company module with subscription info
+        const { data: companyModule, error: moduleError } = await supabaseAdmin
+          .from('company_modules')
+          .select('stripe_subscription_id, stripe_subscription_item_id, max_users, price_per_user')
+          .eq('company_id', companyId)
+          .eq('module_code', moduleCode)
+          .single()
+
+        if (moduleError || !companyModule?.stripe_subscription_id) {
+          throw new Error('Module subscription not found')
+        }
+
+        // Get the subscription to find current period end
+        const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+
+        // Check if there's an existing schedule for this subscription
+        const existingSchedules = await stripe.subscriptionSchedules.list({
+          customer: subscription.customer as string,
+          limit: 10
+        })
+
+        const activeSchedule = existingSchedules.data.find(
+          s => s.subscription === companyModule.stripe_subscription_id &&
+               (s.status === 'active' || s.status === 'not_started')
+        )
+
+        if (activeSchedule) {
+          // Update existing schedule - add a new phase with the updated quantity
+          const currentPhase = activeSchedule.phases[activeSchedule.phases.length - 1]
+
+          await stripe.subscriptionSchedules.update(activeSchedule.id, {
+            phases: [
+              // Current phase until period end
+              {
+                items: currentPhase.items.map(item => ({
+                  price: item.price as string,
+                  quantity: item.quantity
+                })),
+                start_date: currentPhase.start_date,
+                end_date: subscription.current_period_end,
+              },
+              // New phase with updated quantity
+              {
+                items: [{
+                  price: (subscription.items.data[0].price as any).id,
+                  quantity: quantity
+                }],
+                start_date: subscription.current_period_end,
+              }
+            ]
+          })
+        } else {
+          // Create a new schedule from the existing subscription
+          const schedule = await stripe.subscriptionSchedules.create({
+            from_subscription: companyModule.stripe_subscription_id
+          })
+
+          // Update the schedule to change quantity at the next billing period
+          await stripe.subscriptionSchedules.update(schedule.id, {
+            phases: [
+              // Current phase - keep current quantity until period end
+              {
+                items: [{
+                  price: (subscription.items.data[0].price as any).id,
+                  quantity: companyModule.max_users
+                }],
+                start_date: schedule.phases[0].start_date,
+                end_date: subscription.current_period_end,
+              },
+              // New phase - new quantity from next period
+              {
+                items: [{
+                  price: (subscription.items.data[0].price as any).id,
+                  quantity: quantity
+                }],
+                start_date: subscription.current_period_end,
+              }
+            ]
+          })
+        }
+
+        // Store scheduled change in database (next_billing_cycle fields)
+        const scheduledPrice = quantity * companyModule.price_per_user
+        await supabaseAdmin
+          .from('company_modules')
+          .update({
+            next_billing_cycle_price: scheduledPrice,
+            price_scheduled_at: new Date().toISOString()
+          })
+          .eq('company_id', companyId)
+          .eq('module_code', moduleCode)
+
+        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users at next billing period`)
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            scheduledQuantity: quantity,
+            effectiveDate: new Date(subscription.current_period_end * 1000).toISOString()
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`)
     }
