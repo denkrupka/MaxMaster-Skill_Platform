@@ -427,6 +427,47 @@ serve(async (req) => {
               console.log(`Applied scheduled price ${mod.next_billing_cycle_price} to company_module ${mod.id}`)
             }
           }
+
+          // Apply scheduled max_users changes from Stripe subscription metadata
+          if (invoice.subscription) {
+            try {
+              const subscription = await stripe.subscriptions.retrieve(invoice.subscription as string)
+              const scheduledMaxUsers = subscription.metadata?.scheduled_max_users
+
+              if (scheduledMaxUsers) {
+                const newMaxUsers = parseInt(scheduledMaxUsers, 10)
+                const moduleCode = subscription.metadata?.module_code
+
+                // Find company_module by subscription ID
+                const { data: companyModule } = await supabaseAdmin
+                  .from('company_modules')
+                  .select('id, module_code')
+                  .eq('stripe_subscription_id', subscription.id)
+                  .single()
+
+                if (companyModule && newMaxUsers > 0) {
+                  // Apply the scheduled max_users change
+                  await supabaseAdmin
+                    .from('company_modules')
+                    .update({ max_users: newMaxUsers })
+                    .eq('id', companyModule.id)
+
+                  console.log(`Applied scheduled max_users ${newMaxUsers} to company_module ${companyModule.id}`)
+
+                  // Clear the scheduled metadata from Stripe
+                  await stripe.subscriptions.update(subscription.id, {
+                    metadata: {
+                      ...subscription.metadata,
+                      scheduled_max_users: null,
+                      scheduled_at: null
+                    }
+                  })
+                }
+              }
+            } catch (subErr) {
+              console.error('Error applying scheduled max_users:', subErr)
+            }
+          }
         }
         break
       }

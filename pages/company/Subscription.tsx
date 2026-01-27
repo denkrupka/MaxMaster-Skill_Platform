@@ -434,13 +434,14 @@ export const CompanySubscriptionPage: React.FC = () => {
       }
 
       // For existing modules - schedule subscription update
+      let effectiveDate: Date | null = null;
       for (const item of existingModules) {
         const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
         if (!companyMod) continue;
 
         const newMaxUsers = companyMod.max_users + item.newUsers;
 
-        const { error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+        const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
           body: {
             action: 'schedule-subscription-update',
             companyId: currentCompany.id,
@@ -450,9 +451,16 @@ export const CompanySubscriptionPage: React.FC = () => {
         });
 
         if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+        if (data?.effectiveDate) {
+          effectiveDate = new Date(data.effectiveDate);
+        }
       }
 
-      setSuccess('Zmiany zostały zaplanowane. Nowe miejsca będą dostępne od następnego okresu rozliczeniowego.');
+      const dateStr = effectiveDate
+        ? effectiveDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
+        : 'następnego okresu rozliczeniowego';
+      setSuccess(`Zmiany zostały zaplanowane. Nowe miejsca będą dostępne od ${dateStr}.`);
       setCart([]);
       setPurchaseMode('none');
       await refreshData();
@@ -776,7 +784,7 @@ export const CompanySubscriptionPage: React.FC = () => {
           }`}
         >
           <Users className="w-4 h-4 inline mr-1" />
-          Użytkownicy
+          Wykorzystanie
         </button>
         <button
           onClick={() => setActiveTab('history')}

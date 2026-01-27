@@ -315,21 +315,17 @@ serve(async (req) => {
           throw new Error('Active module subscription not found')
         }
 
-        // Get subscription to calculate pro-rata period
-        const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
-
-        // Calculate days remaining in billing period
-        const now = Math.floor(Date.now() / 1000)
-        const periodEnd = subscription.current_period_end
-        const periodStart = subscription.current_period_start
-        const totalDays = Math.ceil((periodEnd - periodStart) / 86400)
-        const daysRemaining = Math.ceil((periodEnd - now) / 86400)
+        // Calculate days remaining until end of calendar month (matching frontend calculation)
+        const now = new Date()
+        const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        const totalDaysInMonth = lastDayOfMonth.getDate()
+        const daysRemaining = lastDayOfMonth.getDate() - now.getDate() + 1
 
         // Calculate prorated amount
         const pricePerUser = companyModule.price_per_user || moduleInfo.base_price_per_user
-        const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDays) * 100) // in grosze
+        const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDaysInMonth) * 100) // in grosze
 
-        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDays} days = ${proratedAmount/100} PLN`)
+        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInMonth} days = ${proratedAmount/100} PLN`)
 
         // Create one-time payment checkout session
         const session = await stripe.checkout.sessions.create({
@@ -340,7 +336,7 @@ serve(async (req) => {
               currency: 'pln',
               product_data: {
                 name: `${moduleInfo.name_pl} - dodatkowe miejsca`,
-                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc na ${daysRemaining} dni`,
+                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInMonth} dni miesiąca)`,
               },
               unit_amount: proratedAmount,
               tax_behavior: 'exclusive' as const,
@@ -451,10 +447,21 @@ serve(async (req) => {
           throw new Error('Nie udało się zapisać zaplanowanej zmiany')
         }
 
-        // Also update Stripe subscription to increase quantity at next billing
-        // This triggers Stripe to charge the new amount from next period
+        // Update Stripe subscription with metadata about scheduled change
+        // The actual quantity change will apply when customer.subscription.updated fires
         if (companyModule.stripe_subscription_item_id) {
           try {
+            // Update subscription metadata to store scheduled quantity
+            const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+            await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
+              metadata: {
+                ...subscription.metadata,
+                scheduled_max_users: quantity.toString(),
+                scheduled_at: new Date().toISOString()
+              }
+            })
+
+            // Update subscription item quantity with no proration (charges from next period)
             await stripe.subscriptionItems.update(
               companyModule.stripe_subscription_item_id,
               {
@@ -462,21 +469,16 @@ serve(async (req) => {
                 proration_behavior: 'none' // No prorated charge, apply from next period
               }
             )
-            console.log(`Updated Stripe subscription item quantity to ${quantity} (no proration)`)
+            console.log(`Scheduled Stripe subscription update to ${quantity} users (effective from ${effectiveDate.toISOString()})`)
           } catch (stripeErr) {
             console.error('Failed to update Stripe subscription:', stripeErr)
-            // Don't throw - the database change was saved
+            throw new Error('Nie udało się zaplanować zmiany w Stripe')
           }
         }
 
-        // Update max_users in database to reflect scheduled change
-        await supabaseAdmin
-          .from('company_modules')
-          .update({ max_users: quantity })
-          .eq('company_id', companyId)
-          .eq('module_code', moduleCode)
-
-        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users`)
+        // DON'T update max_users immediately - it will be updated when payment succeeds
+        // Just log the scheduled change
+        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users (effective: ${effectiveDate.toISOString()})`)
 
         return new Response(
           JSON.stringify({
