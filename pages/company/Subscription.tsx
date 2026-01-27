@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef } from 'react';
 import {
   Package, CreditCard, FileText, Users, Plus, Minus, Check, AlertCircle,
   Download, Clock, ExternalLink, Loader2, Settings, Zap, Search, X,
-  ToggleLeft, ToggleRight, UserPlus, Award, Receipt, ShoppingCart, Trash2, Calendar
+  ToggleLeft, ToggleRight, UserPlus, Award, Receipt, ShoppingCart, Trash2, Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
@@ -54,6 +55,9 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Invoices state
   const [invoices, setInvoices] = useState<any[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+
+  // History loading state
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   // Cart state for module purchases
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -139,10 +143,23 @@ export const CompanySubscriptionPage: React.FC = () => {
     };
   }, [myModules, currentCompany]);
 
-  // Get payment history for current company
+  // Get payment history for current company (deduplicated)
   const paymentHistory = useMemo(() => {
     if (!currentCompany) return [];
-    return allPaymentHistory.filter(ph => ph.company_id === currentCompany.id);
+    const filtered = allPaymentHistory.filter(ph => ph.company_id === currentCompany.id);
+    // Deduplicate by stripe_payment_intent_id (if exists) or by id
+    const seen = new Set<string>();
+    return filtered.filter(ph => {
+      const key = ph.stripe_payment_intent_id || ph.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => {
+      // Sort by date descending (newest first)
+      const dateA = new Date(a.paid_at || a.created_at).getTime();
+      const dateB = new Date(b.paid_at || b.created_at).getTime();
+      return dateB - dateA;
+    });
   }, [allPaymentHistory, currentCompany]);
 
   // Helper function to get module status display
@@ -670,12 +687,29 @@ export const CompanySubscriptionPage: React.FC = () => {
     }
   };
 
+  // Refresh payment history
+  const refreshHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      await refreshData();
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // Fetch invoices when tab changes to subscription management
   React.useEffect(() => {
     if (activeTab === 'subscription' && currentCompany?.stripe_customer_id) {
       fetchInvoices();
     }
   }, [activeTab, currentCompany?.stripe_customer_id]);
+
+  // Auto-refresh history when tab changes to history
+  React.useEffect(() => {
+    if (activeTab === 'history' && currentCompany) {
+      refreshHistory();
+    }
+  }, [activeTab, currentCompany?.id]);
 
   // Handle Stripe checkout for module activation
   const handleActivateModule = async (moduleCode: string, maxUsers: number = 10) => {
@@ -963,7 +997,7 @@ export const CompanySubscriptionPage: React.FC = () => {
           }`}
         >
           <FileText className="w-4 h-4 inline mr-1" />
-          Historia
+          Historia płatności
         </button>
         <button
           onClick={() => setActiveTab('subscription')}
@@ -1633,69 +1667,109 @@ export const CompanySubscriptionPage: React.FC = () => {
       {/* History Tab */}
       {activeTab === 'history' && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-900">Historia płatności</h3>
+            <button
+              onClick={refreshHistory}
+              disabled={historyLoading}
+              className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition flex items-center gap-2 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${historyLoading ? 'animate-spin' : ''}`} />
+              Odśwież
+            </button>
           </div>
 
-          {paymentHistory.length > 0 ? (
+          {historyLoading && paymentHistory.length === 0 ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 text-blue-500 mx-auto mb-3 animate-spin" />
+              <p className="text-slate-500">Ładowanie historii...</p>
+            </div>
+          ) : paymentHistory.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Data</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Faktura</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
-                    <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">ID</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Data i czas</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Faktura</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Przeznaczenie</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paymentHistory.map(payment => (
-                    <tr key={payment.id} className="hover:bg-slate-50">
-                      <td className="px-5 py-4 text-sm text-slate-900">
-                        {payment.paid_at
-                          ? new Date(payment.paid_at).toLocaleDateString('pl-PL')
-                          : new Date(payment.created_at).toLocaleDateString('pl-PL')}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-slate-600 font-mono">
-                        {payment.invoice_number || '-'}
-                      </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                        {Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          payment.status === 'paid'
-                            ? 'bg-green-100 text-green-800'
-                            : payment.status === 'failed'
-                            ? 'bg-red-100 text-red-800'
-                            : payment.status === 'refunded'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {payment.status === 'paid' ? 'Opłacona'
-                            : payment.status === 'failed' ? 'Niepowodzenie'
-                            : payment.status === 'refunded' ? 'Zwrócona'
-                            : 'Oczekująca'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right">
-                        {payment.invoice_pdf_url ? (
-                          <a
-                            href={payment.invoice_pdf_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm"
-                          >
-                            <Download className="w-4 h-4" />
-                            Pobierz
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 text-sm">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {paymentHistory.map(payment => {
+                    const paymentDate = payment.paid_at || payment.created_at;
+                    const dateObj = new Date(paymentDate);
+                    const formattedDate = dateObj.toLocaleDateString('pl-PL', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    });
+                    const formattedTime = dateObj.toLocaleTimeString('pl-PL', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
+                    // Determine purpose based on payment type or description
+                    const purpose = payment.payment_type === 'balance_topup' || payment.description?.includes('bonus')
+                      ? 'Doładowanie salda'
+                      : 'Subskrypcja';
+
+                    return (
+                      <tr key={payment.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-4 text-xs text-slate-500 font-mono">
+                          {payment.stripe_payment_intent_id
+                            ? payment.stripe_payment_intent_id.slice(-8)
+                            : payment.id.slice(0, 8)}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-900">
+                          <div>{formattedDate}</div>
+                          <div className="text-xs text-slate-500">{formattedTime}</div>
+                        </td>
+                        <td className="px-4 py-4 text-sm font-mono">
+                          {payment.invoice_number ? (
+                            payment.invoice_pdf_url ? (
+                              <a
+                                href={payment.invoice_pdf_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                              >
+                                {payment.invoice_number}
+                                <Download className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              <span className="text-slate-600">{payment.invoice_number}</span>
+                            )
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-600">
+                          {purpose}
+                        </td>
+                        <td className="px-4 py-4 text-sm font-semibold text-slate-900">
+                          {Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            payment.status === 'paid'
+                              ? 'bg-green-100 text-green-800'
+                              : payment.status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : payment.status === 'refunded'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {payment.status === 'paid' ? 'Opłacona'
+                              : payment.status === 'failed' ? 'Niepowodzenie'
+                              : payment.status === 'refunded' ? 'Zwrócona'
+                              : 'Oczekująca'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
