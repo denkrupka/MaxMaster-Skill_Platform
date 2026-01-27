@@ -1,15 +1,13 @@
 
 import React, { useState } from 'react';
-import { Building2, Save, AlertTriangle, Trash2, X } from 'lucide-react';
+import { Building2, Save, AlertTriangle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export const CompanySettingsPage: React.FC = () => {
-  const { state, updateCompany, deleteCompany, logout } = useAppContext();
+  const { state, updateCompany } = useAppContext();
   const { currentCompany } = state;
 
   const [isSaving, setIsSaving] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -45,19 +43,6 @@ export const CompanySettingsPage: React.FC = () => {
       alert('Błąd podczas zapisywania danych');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  // Handle delete company
-  const handleDeleteCompany = async () => {
-    if (!currentCompany || deleteConfirmation !== currentCompany.name) return;
-
-    try {
-      await deleteCompany(currentCompany.id);
-      logout();
-    } catch (error) {
-      console.error('Error deleting company:', error);
-      alert('Błąd podczas usuwania firmy');
     }
   };
 
@@ -234,7 +219,7 @@ export const CompanySettingsPage: React.FC = () => {
       </div>
 
       {/* Save Button */}
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-end">
         <button
           onClick={handleSave}
           disabled={isSaving || !formData.name}
@@ -244,74 +229,6 @@ export const CompanySettingsPage: React.FC = () => {
           {isSaving ? 'Zapisywanie...' : 'Zapisz zmiany'}
         </button>
       </div>
-
-      {/* Danger Zone */}
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-red-800 mb-2">Strefa zagrożenia</h2>
-        <p className="text-sm text-red-600 mb-4">
-          Te akcje są nieodwracalne. Upewnij się, że wiesz co robisz.
-        </p>
-
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-        >
-          <Trash2 className="w-5 h-5" />
-          Usuń firmę
-        </button>
-      </div>
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-red-600">Usuń firmę</h3>
-              <button onClick={() => setShowDeleteModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="mb-6">
-              <div className="flex items-center gap-3 p-4 bg-red-50 rounded-lg mb-4">
-                <AlertTriangle className="w-8 h-8 text-red-500" />
-                <div>
-                  <p className="font-medium text-red-800">Ta operacja jest nieodwracalna!</p>
-                  <p className="text-sm text-red-600">Wszystkie dane firmy zostaną trwale usunięte.</p>
-                </div>
-              </div>
-
-              <p className="text-slate-600 mb-4">
-                Wpisz nazwę firmy <strong>"{currentCompany.name}"</strong> aby potwierdzić usunięcie:
-              </p>
-
-              <input
-                type="text"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                placeholder={currentCompany.name}
-                className="w-full px-4 py-2 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setShowDeleteModal(false); setDeleteConfirmation(''); }}
-                className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={handleDeleteCompany}
-                disabled={deleteConfirmation !== currentCompany.name}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
-              >
-                Usuń firmę
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
