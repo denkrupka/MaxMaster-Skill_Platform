@@ -284,6 +284,8 @@ export interface CompanyModule {
   stripe_subscription_item_id?: string;
   next_billing_cycle_price?: number | null;
   price_scheduled_at?: string | null;
+  scheduled_max_users?: number | null;
+  scheduled_change_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
