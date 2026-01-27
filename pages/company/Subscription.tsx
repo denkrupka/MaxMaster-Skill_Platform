@@ -1018,7 +1018,13 @@ export const CompanySubscriptionPage: React.FC = () => {
                       </div>
 
                       {/* Active/Demo modules - show current users and add/reduce seats */}
-                      {(isActive || hasDemo) && companyMod && (
+                      {(isActive || hasDemo) && companyMod && (() => {
+                        // Calculate effective max users (use scheduled if exists, otherwise current)
+                        const effectiveMaxUsers = companyMod.scheduled_max_users ?? currentMaxUsers;
+                        // Minimum reduction: can't go below 1 user
+                        const minReduction = -(effectiveMaxUsers - 1);
+
+                        return (
                         <div className="flex items-start gap-6">
                           <div className="text-center">
                             <p className="text-sm text-slate-500">Użytkowników</p>
@@ -1034,8 +1040,8 @@ export const CompanySubscriptionPage: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <button
                                 className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
-                                disabled={isLoading || pendingCount <= -(currentMaxUsers - 1)}
-                                onClick={() => handlePendingChange(mod.code, -1, -(currentMaxUsers - 1))}
+                                disabled={isLoading || pendingCount <= minReduction}
+                                onClick={() => handlePendingChange(mod.code, -1, minReduction)}
                               >
                                 <Minus className="w-4 h-4 text-slate-600" />
                               </button>
@@ -1043,7 +1049,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                               <button
                                 className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
                                 disabled={isLoading}
-                                onClick={() => handlePendingChange(mod.code, 1, -(currentMaxUsers - 1))}
+                                onClick={() => handlePendingChange(mod.code, 1, minReduction)}
                               >
                                 <Plus className="w-4 h-4 text-slate-600" />
                               </button>
@@ -1072,7 +1078,8 @@ export const CompanySubscriptionPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Inactive modules - show counter to select seats for activation */}
                       {!isActive && !hasDemo && (
@@ -1309,7 +1316,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                     </div>
                     <div className="flex gap-2 justify-end">
                       <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
-                      <button onClick={handlePurchaseNow} disabled={loading === 'purchase-now'} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
+                      <button onClick={() => handlePurchaseNow()} disabled={loading === 'purchase-now'} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2 disabled:opacity-50">
                         {loading === 'purchase-now' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                         {cart.some(i => i.isNewModule) ? 'Przejdź do płatności' : 'Kup teraz'}
                       </button>

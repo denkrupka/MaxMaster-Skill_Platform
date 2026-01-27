@@ -436,10 +436,26 @@ serve(async (req) => {
           throw new Error('Moduł nie ma aktywnej subskrypcji. Najpierw aktywuj moduł.')
         }
 
+        // Get module info for base price (in case admin changed it)
+        const { data: moduleInfo, error: moduleInfoError } = await supabaseAdmin
+          .from('modules')
+          .select('name_pl, base_price_per_user')
+          .eq('code', moduleCode)
+          .single()
+
+        if (moduleInfoError || !moduleInfo) {
+          throw new Error('Moduł nie istnieje')
+        }
+
+        // Use company-specific price if set, otherwise use base price
+        const pricePerUser = companyModule.price_per_user || moduleInfo.base_price_per_user
+        const unitAmountGrosze = Math.round(pricePerUser * 100)
+
         // Get subscription to find billing period end date
         let effectiveDate: Date
+        let subscription: any
         try {
-          const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+          subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
           effectiveDate = new Date(subscription.current_period_end * 1000)
         } catch (err) {
           console.error('Failed to get subscription:', err)
@@ -450,7 +466,7 @@ serve(async (req) => {
         }
 
         // Calculate the scheduled price (new total price per month)
-        const scheduledTotalPrice = quantity * companyModule.price_per_user
+        const scheduledTotalPrice = quantity * pricePerUser
 
         // Store scheduled change in database
         // Store scheduled_max_users for UI display and next_billing_cycle_price for price tracking
@@ -475,7 +491,6 @@ serve(async (req) => {
         if (companyModule.stripe_subscription_item_id) {
           try {
             // Update subscription metadata to store scheduled quantity
-            const subscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
             await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
               metadata: {
                 ...subscription.metadata,
@@ -484,15 +499,47 @@ serve(async (req) => {
               }
             })
 
-            // Update subscription item quantity with no proration (charges from next period)
-            await stripe.subscriptionItems.update(
-              companyModule.stripe_subscription_item_id,
-              {
-                quantity,
-                proration_behavior: 'none' // No prorated charge, apply from next period
-              }
+            // Check if Stripe price needs to be updated
+            // Get current subscription item to compare price
+            const subscriptionItem = subscription.items.data.find(
+              (item: any) => item.id === companyModule.stripe_subscription_item_id
             )
-            console.log(`Scheduled Stripe subscription update to ${quantity} users (effective from ${effectiveDate.toISOString()})`)
+            const currentUnitAmount = subscriptionItem?.price?.unit_amount || 0
+
+            if (currentUnitAmount !== unitAmountGrosze) {
+              // Price has changed - create a new price and update subscription item
+              console.log(`Price changed from ${currentUnitAmount/100} PLN to ${unitAmountGrosze/100} PLN - updating Stripe price`)
+
+              // Create new price with updated amount
+              const newPrice = await stripe.prices.create({
+                currency: 'pln',
+                unit_amount: unitAmountGrosze,
+                recurring: { interval: 'month' },
+                product: subscriptionItem.price.product as string,
+                tax_behavior: 'exclusive',
+              })
+
+              // Update subscription item with new price and quantity
+              await stripe.subscriptionItems.update(
+                companyModule.stripe_subscription_item_id,
+                {
+                  price: newPrice.id,
+                  quantity,
+                  proration_behavior: 'none' // No prorated charge, apply from next period
+                }
+              )
+              console.log(`Updated Stripe subscription to new price (${unitAmountGrosze/100} PLN) and ${quantity} users`)
+            } else {
+              // Price is the same, just update quantity
+              await stripe.subscriptionItems.update(
+                companyModule.stripe_subscription_item_id,
+                {
+                  quantity,
+                  proration_behavior: 'none' // No prorated charge, apply from next period
+                }
+              )
+              console.log(`Scheduled Stripe subscription update to ${quantity} users (effective from ${effectiveDate.toISOString()})`)
+            }
           } catch (stripeErr) {
             console.error('Failed to update Stripe subscription:', stripeErr)
             throw new Error('Nie udało się zaplanować zmiany w Stripe')
@@ -501,12 +548,13 @@ serve(async (req) => {
 
         // DON'T update max_users immediately - it will be updated when payment succeeds
         // Just log the scheduled change
-        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users (effective: ${effectiveDate.toISOString()})`)
+        console.log(`Scheduled subscription update for ${moduleCode}: ${companyModule.max_users} -> ${quantity} users at ${pricePerUser} PLN/user (effective: ${effectiveDate.toISOString()})`)
 
         return new Response(
           JSON.stringify({
             success: true,
             scheduledQuantity: quantity,
+            pricePerUser: pricePerUser,
             effectiveDate: effectiveDate.toISOString()
           }),
           {
