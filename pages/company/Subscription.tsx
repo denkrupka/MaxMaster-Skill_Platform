@@ -267,13 +267,22 @@ export const CompanySubscriptionPage: React.FC = () => {
         const existingIndex = prev.findIndex(item => item.moduleCode === moduleCode);
         if (existingIndex >= 0) {
           const updated = [...prev];
+          const existingItem = updated[existingIndex];
+          // Calculate minimum allowed value for existing modules (must leave at least 1 user)
+          const minChange = existingItem.isNewModule ? 1 : -(existingItem.currentUsers - 1);
+          // Validate the combined value doesn't go below minimum
+          const combinedValue = existingItem.newUsers + count;
+          const validatedValue = Math.max(minChange, combinedValue);
           updated[existingIndex] = {
-            ...updated[existingIndex],
-            newUsers: updated[existingIndex].newUsers + count
+            ...existingItem,
+            newUsers: validatedValue
           };
           return updated;
         } else {
-          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: count, pricePerUser, isNewModule }];
+          // For new cart items, also validate
+          const minChange = isNewModule ? 1 : -(currentUsers - 1);
+          const validatedCount = Math.max(minChange, count);
+          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: validatedCount, pricePerUser, isNewModule }];
         }
       });
 
