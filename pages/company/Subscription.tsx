@@ -292,11 +292,15 @@ export const CompanySubscriptionPage: React.FC = () => {
     setCart(prev => {
       return prev.map(item => {
         if (item.moduleCode === moduleCode) {
-          const newUsers = Math.max(0, item.newUsers + delta);
+          // Calculate minimum allowed value based on item type
+          // For new modules: minimum is 1
+          // For existing modules: minimum is -(currentUsers - 1) to ensure at least 1 user remains
+          const minChange = item.isNewModule ? 1 : -(item.currentUsers - 1);
+          const newUsers = Math.max(minChange, item.newUsers + delta);
           return { ...item, newUsers };
         }
         return item;
-      }).filter(item => item.newUsers > 0);
+      }).filter(item => item.newUsers !== 0); // Remove items with exactly 0 change
     });
   };
 
@@ -822,6 +826,38 @@ export const CompanySubscriptionPage: React.FC = () => {
       window.history.replaceState({}, '', window.location.pathname + '#/company/subscription');
     }
   }, []);
+
+  // Reset state when returning from Stripe (handles bfcache and tab visibility)
+  React.useEffect(() => {
+    // Handle page show event (fires when page is restored from bfcache)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        // Page was restored from bfcache - reset state and refresh
+        setLoading(null);
+        setPurchaseMode('none');
+        setShowMinPaymentModal(false);
+        refreshData();
+      }
+    };
+
+    // Handle visibility change (fires when tab becomes visible)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Tab became visible - reset loading state in case it was stuck
+        setLoading(null);
+        setPurchaseMode('none');
+        setShowMinPaymentModal(false);
+      }
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshData]);
 
   if (!currentCompany) {
     return (
