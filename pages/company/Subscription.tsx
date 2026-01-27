@@ -62,7 +62,7 @@ export const CompanySubscriptionPage: React.FC = () => {
   const [flyingNumber, setFlyingNumber] = useState<{moduleCode: string, value: number, x: number, y: number} | null>(null);
 
   // Purchase flow state
-  const [purchaseMode, setPurchaseMode] = useState<'none' | 'now' | 'next_month'>('none');
+  const [purchaseMode, setPurchaseMode] = useState<'none' | 'now' | 'next_month' | 'reduce'>('none');
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
@@ -218,10 +218,11 @@ export const CompanySubscriptionPage: React.FC = () => {
   }, [cart]);
 
   // Handle adding users to pending (counter increment)
-  const handlePendingChange = (moduleCode: string, delta: number) => {
+  // For existing modules, allow negative values (reduction) but not below -(max_users - 1)
+  const handlePendingChange = (moduleCode: string, delta: number, minValue: number = 0) => {
     setPendingUsers(prev => {
       const current = prev[moduleCode] || 0;
-      const newValue = Math.max(0, current + delta);
+      const newValue = Math.max(minValue, current + delta);
       if (newValue === 0) {
         const { [moduleCode]: _, ...rest } = prev;
         return rest;
@@ -468,6 +469,57 @@ export const CompanySubscriptionPage: React.FC = () => {
     } catch (err) {
       console.error('Purchase next month error:', err);
       setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas planowania zakupu');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Handle subscription reduction (schedule decrease from next month)
+  const handleReduceSubscription = async () => {
+    if (!currentCompany || cart.length === 0) return;
+
+    setLoading('reduce');
+    setError(null);
+
+    try {
+      // Process reductions (only existing modules with negative newUsers)
+      const reductions = cart.filter(item => item.newUsers < 0 && !item.isNewModule);
+
+      let effectiveDate: Date | null = null;
+      for (const item of reductions) {
+        const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
+        if (!companyMod) continue;
+
+        // Calculate new total quantity (current + negative change)
+        const newMaxUsers = companyMod.max_users + item.newUsers; // item.newUsers is negative
+
+        const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
+          body: {
+            action: 'schedule-subscription-update',
+            companyId: currentCompany.id,
+            moduleCode: item.moduleCode,
+            quantity: newMaxUsers
+          }
+        });
+
+        if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
+        if (data?.effectiveDate) {
+          effectiveDate = new Date(data.effectiveDate);
+        }
+      }
+
+      const dateStr = effectiveDate
+        ? effectiveDate.toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
+        : 'następnego okresu rozliczeniowego';
+      setSuccess(`Zmniejszenie subskrypcji zostało zaplanowane. Zmiana wejdzie w życie od ${dateStr}.`);
+      setCart([]);
+      setPurchaseMode('none');
+      await refreshData();
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err) {
+      console.error('Reduce subscription error:', err);
+      setError(err instanceof Error ? err.message : 'Wystąpił błąd podczas zmniejszania subskrypcji');
     } finally {
       setLoading(null);
     }
@@ -894,7 +946,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Active/Demo modules - show current users and add seats */}
+                      {/* Active/Demo modules - show current users and add/reduce seats */}
                       {(isActive || hasDemo) && companyMod && (
                         <div className="flex items-start gap-6">
                           <div className="text-center">
@@ -902,35 +954,45 @@ export const CompanySubscriptionPage: React.FC = () => {
                             <p className="text-lg font-bold text-slate-900">{currentMaxUsers}</p>
                           </div>
                           <div className="text-center">
-                            <p className="text-sm text-slate-500 mb-1">Dokup miejsca</p>
+                            <p className="text-sm text-slate-500 mb-1">Dokup lub zmniejsz</p>
                             <div className="flex items-center gap-2">
                               <button
                                 className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
-                                disabled={isLoading || pendingCount <= 0}
-                                onClick={() => handlePendingChange(mod.code, -1)}
+                                disabled={isLoading || pendingCount <= -(currentMaxUsers - 1)}
+                                onClick={() => handlePendingChange(mod.code, -1, -(currentMaxUsers - 1))}
                               >
                                 <Minus className="w-4 h-4 text-slate-600" />
                               </button>
-                              <span className="w-10 text-center font-bold text-lg text-blue-600">{pendingCount}</span>
+                              <span className={`w-10 text-center font-bold text-lg ${pendingCount < 0 ? 'text-red-600' : 'text-blue-600'}`}>{pendingCount}</span>
                               <button
                                 className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition"
                                 disabled={isLoading}
-                                onClick={() => handlePendingChange(mod.code, 1)}
+                                onClick={() => handlePendingChange(mod.code, 1, -(currentMaxUsers - 1))}
                               >
                                 <Plus className="w-4 h-4 text-slate-600" />
                               </button>
                             </div>
                           </div>
-                          {pendingCount > 0 && (
+                          {pendingCount !== 0 && (
                             <div className="text-center">
                               <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
-                              <button
-                                onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
-                              >
-                                <ShoppingCart className="w-4 h-4" />
-                                Dodaj
-                              </button>
+                              {pendingCount > 0 ? (
+                                <button
+                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
+                                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
+                                >
+                                  <ShoppingCart className="w-4 h-4" />
+                                  Dodaj
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
+                                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
+                                >
+                                  <ShoppingCart className="w-4 h-4" />
+                                  Zmniejsz
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1004,84 +1066,116 @@ export const CompanySubscriptionPage: React.FC = () => {
                     <tr>
                       <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Moduł</th>
                       <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Obecnie</th>
-                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Nowych</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Zmiana</th>
                       <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Łącznie</th>
                       <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {cart.map(item => (
-                      <tr key={item.moduleCode} className="hover:bg-slate-50">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.isNewModule ? 'bg-blue-100' : 'bg-green-100'}`}>
-                              <Package className={`w-4 h-4 ${item.isNewModule ? 'text-blue-600' : 'text-green-600'}`} />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-slate-900">{item.moduleName}</p>
-                                {item.isNewModule && (
-                                  <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">NOWY</span>
-                                )}
+                    {cart.map(item => {
+                      const isReduction = item.newUsers < 0;
+                      const minChange = item.isNewModule ? 1 : -(item.currentUsers - 1);
+                      return (
+                        <tr key={item.moduleCode} className="hover:bg-slate-50">
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.isNewModule ? 'bg-blue-100' : isReduction ? 'bg-red-100' : 'bg-green-100'}`}>
+                                <Package className={`w-4 h-4 ${item.isNewModule ? 'text-blue-600' : isReduction ? 'text-red-600' : 'text-green-600'}`} />
                               </div>
-                              <p className="text-xs text-slate-500">{item.pricePerUser} PLN/użytkownik</p>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-slate-900">{item.moduleName}</p>
+                                  {item.isNewModule && (
+                                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">NOWY</span>
+                                  )}
+                                  {isReduction && (
+                                    <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium">ZMNIEJSZENIE</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">{item.pricePerUser} PLN/użytkownik</p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-center">
-                          {item.isNewModule ? (
-                            <span className="text-blue-600 font-medium">—</span>
-                          ) : (
-                            <span className="text-slate-600 font-medium">{item.currentUsers}</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center justify-center gap-2">
-                            <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition" disabled={item.newUsers <= 1} onClick={() => handleCartItemChange(item.moduleCode, -1)}>
-                              <Minus className="w-3 h-3 text-slate-600" />
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            {item.isNewModule ? (
+                              <span className="text-blue-600 font-medium">—</span>
+                            ) : (
+                              <span className="text-slate-600 font-medium">{item.currentUsers}</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition" disabled={item.newUsers <= minChange} onClick={() => handleCartItemChange(item.moduleCode, -1)}>
+                                <Minus className="w-3 h-3 text-slate-600" />
+                              </button>
+                              <span className={`w-8 text-center font-bold ${isReduction ? 'text-red-600' : 'text-blue-600'}`}>{item.newUsers > 0 ? '+' : ''}{item.newUsers}</span>
+                              <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition" onClick={() => handleCartItemChange(item.moduleCode, 1)}>
+                                <Plus className="w-3 h-3 text-slate-600" />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <span className={`font-bold ${isReduction ? 'text-red-600' : 'text-green-600'}`}>{item.currentUsers + item.newUsers}</span>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <button onClick={() => handleRemoveFromCart(item.moduleCode)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Usuń z koszyka">
+                              <Trash2 className="w-4 h-4" />
                             </button>
-                            <span className="w-8 text-center font-bold text-blue-600">{item.newUsers}</span>
-                            <button className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition" onClick={() => handleCartItemChange(item.moduleCode, 1)}>
-                              <Plus className="w-3 h-3 text-slate-600" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-center">
-                          <span className="font-bold text-green-600">{item.currentUsers + item.newUsers}</span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <button onClick={() => handleRemoveFromCart(item.moduleCode)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Usuń z koszyka">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              {purchaseMode === 'none' && (
-                <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
-                  <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
-                    <div className="text-sm text-slate-600">
-                      <span className="font-medium">{cartTotalUsers}</span> użytkowników w koszyku
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={() => setPurchaseMode('now')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
-                        <Zap className="w-4 h-4" />{cart.some(i => i.isNewModule) ? 'Aktywuj teraz' : 'Dokup na już'}
-                      </button>
-                      {!cart.some(i => i.isNewModule) && (
-                        <button onClick={() => setPurchaseMode('next_month')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />Dokup od następnego miesiąca
+              {purchaseMode === 'none' && (() => {
+                const hasNewModules = cart.some(i => i.isNewModule);
+                const hasReductions = cart.some(i => i.newUsers < 0);
+                const hasAdditions = cart.some(i => i.newUsers > 0 && !i.isNewModule);
+                const onlyReductions = hasReductions && !hasNewModules && !hasAdditions;
+
+                return (
+                  <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
+                    <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
+                      <div className="text-sm text-slate-600">
+                        {onlyReductions ? (
+                          <span className="text-red-600 font-medium">Zmniejszenie o {Math.abs(cartTotalUsers)} miejsc</span>
+                        ) : (
+                          <><span className="font-medium">{cartTotalUsers}</span> użytkowników w koszyku</>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {onlyReductions ? (
+                          // Only show reduction button when cart contains only reductions
+                          <button onClick={() => setPurchaseMode('reduce')} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />Zmniejsz subskrypcję
+                          </button>
+                        ) : (
+                          <>
+                            {!hasReductions && (
+                              <button onClick={() => setPurchaseMode('now')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
+                                <Zap className="w-4 h-4" />{hasNewModules ? 'Aktywuj teraz' : 'Dokup na już'}
+                              </button>
+                            )}
+                            {!hasNewModules && !hasReductions && (
+                              <button onClick={() => setPurchaseMode('next_month')} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                                <Calendar className="w-4 h-4" />Dokup od następnego miesiąca
+                              </button>
+                            )}
+                            {hasReductions && hasAdditions && (
+                              <p className="text-sm text-amber-600">Nie można mieszać dokupowania i zmniejszania. Usuń jedne z koszyka.</p>
+                            )}
+                          </>
+                        )}
+                        <button onClick={handleClearCart} className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${confirmClear ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+                          <Trash2 className="w-4 h-4" />{confirmClear ? 'Na pewno?' : 'Wyczyść'}
                         </button>
-                      )}
-                      <button onClick={handleClearCart} className={`px-4 py-2 rounded-lg transition flex items-center gap-2 ${confirmClear ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-                        <Trash2 className="w-4 h-4" />{confirmClear ? 'Na pewno?' : 'Wyczyść'}
-                      </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {purchaseMode === 'now' && (
                 <div className="px-5 py-4 border-t border-slate-200 bg-green-50">
@@ -1170,6 +1264,36 @@ export const CompanySubscriptionPage: React.FC = () => {
                       <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
                       <button onClick={handlePurchaseNextMonth} disabled={loading === 'purchase-next-month'} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50">
                         {loading === 'purchase-next-month' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Zaplanuj zakup
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {purchaseMode === 'reduce' && (
+                <div className="px-5 py-4 border-t border-slate-200 bg-red-50">
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-red-800 flex items-center gap-2"><Calendar className="w-5 h-5" />Zmniejszenie subskrypcji</h4>
+                    <div className="bg-white rounded-lg p-4 border border-red-200">
+                      <p className="text-sm text-slate-600 mb-3">Liczba miejsc zostanie zmniejszona od następnego okresu rozliczeniowego:</p>
+                      <div className="space-y-2">
+                        {cart.filter(item => item.newUsers < 0).map(item => (
+                          <div key={item.moduleCode} className="flex justify-between text-sm">
+                            <span className="text-slate-600">{item.moduleName}: {item.newUsers} użytkowników (z {item.currentUsers} na {item.currentUsers + item.newUsers})</span>
+                            <span className="font-medium text-red-600">{(item.newUsers * item.pricePerUser).toFixed(2)} PLN/mies.</span>
+                          </div>
+                        ))}
+                        <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
+                          <span className="font-semibold text-slate-900">Zmniejszenie miesięcznej opłaty:</span>
+                          <span className="font-bold text-xl text-red-600">{cartTotalValueNextMonth.toFixed(2)} PLN</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-3">Zmniejszenie wejdzie w życie od następnego okresu rozliczeniowego. Do tego czasu obecna liczba miejsc pozostaje aktywna.</p>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={handleCancelPurchase} className={`px-4 py-2 rounded-lg transition ${confirmCancel ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>{confirmCancel ? 'Na pewno anulować?' : 'Anuluj'}</button>
+                      <button onClick={handleReduceSubscription} disabled={loading === 'reduce'} className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
+                        {loading === 'reduce' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}Zmniejsz subskrypcję
                       </button>
                     </div>
                   </div>
