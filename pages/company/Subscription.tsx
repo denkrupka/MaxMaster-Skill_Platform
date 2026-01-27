@@ -231,14 +231,14 @@ export const CompanySubscriptionPage: React.FC = () => {
   };
 
   // Handle adding to cart with animation
-  const handleAddToCart = (moduleCode: string, moduleName: string, currentUsers: number, pricePerUser: number, isNewModule: boolean, buttonElement: HTMLButtonElement) => {
-    const pendingCount = pendingUsers[moduleCode] || 0;
-    if (pendingCount === 0) return;
+  const handleAddToCart = (moduleCode: string, moduleName: string, currentUsers: number, pricePerUser: number, isNewModule: boolean, buttonElement: HTMLButtonElement, overrideCount?: number) => {
+    const count = overrideCount ?? pendingUsers[moduleCode] ?? 0;
+    if (count === 0) return;
 
     const buttonRect = buttonElement.getBoundingClientRect();
     setFlyingNumber({
       moduleCode,
-      value: pendingCount,
+      value: count,
       x: buttonRect.left + buttonRect.width / 2,
       y: buttonRect.top
     });
@@ -251,11 +251,11 @@ export const CompanySubscriptionPage: React.FC = () => {
           const updated = [...prev];
           updated[existingIndex] = {
             ...updated[existingIndex],
-            newUsers: updated[existingIndex].newUsers + pendingCount
+            newUsers: updated[existingIndex].newUsers + count
           };
           return updated;
         } else {
-          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: pendingCount, pricePerUser, isNewModule }];
+          return [...prev, { moduleCode, moduleName, currentUsers, newUsers: count, pricePerUser, isNewModule }];
         }
       });
 
@@ -320,6 +320,8 @@ export const CompanySubscriptionPage: React.FC = () => {
         // For now, handle one new module at a time (Stripe limitation)
         const item = newModules[0];
 
+        console.log('Creating checkout session for:', item.moduleCode, 'quantity:', item.newUsers);
+
         const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
           body: {
             action: 'create-checkout-session',
@@ -331,14 +333,20 @@ export const CompanySubscriptionPage: React.FC = () => {
           }
         });
 
+        console.log('Checkout response:', { data, fnError });
+
         if (fnError) throw fnError;
+        if (data?.error) throw new Error(data.error);
 
         if (data?.url) {
           // Clear cart and redirect to Stripe
           setCart([]);
           setPurchaseMode('none');
+          console.log('Redirecting to:', data.url);
           window.location.href = data.url;
           return;
+        } else {
+          throw new Error('Nie otrzymano URL sesji płatności');
         }
       }
 
@@ -927,11 +935,9 @@ export const CompanySubscriptionPage: React.FC = () => {
                             <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
                             <button
                               onClick={(e) => {
-                                // If no pending count, set to 1 first
-                                if (!pendingCount) {
-                                  setPendingUsers(prev => ({ ...prev, [mod.code]: 1 }));
-                                }
-                                handleAddToCart(mod.code, mod.name_pl, 0, mod.base_price_per_user, true, e.currentTarget);
+                                // Pass count directly (use pendingCount or default to 1)
+                                const countToAdd = pendingCount || 1;
+                                handleAddToCart(mod.code, mod.name_pl, 0, mod.base_price_per_user, true, e.currentTarget, countToAdd);
                               }}
                               disabled={isLoading || !stripeEnabled}
                               className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${
@@ -1030,10 +1036,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                 <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
                   <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
                     <div className="text-sm text-slate-600">
-                      <span className="font-medium">{cartTotalUsers}</span> {cart.some(i => i.isNewModule) ? 'użytkowników' : 'nowych użytkowników'} w koszyku
-                      {cart.some(i => i.isNewModule) && (
-                        <span className="ml-2 text-blue-600">(nowy moduł → płatność online)</span>
-                      )}
+                      <span className="font-medium">{cartTotalUsers}</span> użytkowników w koszyku
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button onClick={() => setPurchaseMode('now')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2">
@@ -1071,11 +1074,16 @@ export const CompanySubscriptionPage: React.FC = () => {
                               </div>
                             ))}
                             <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                              <span className="font-semibold text-slate-900">Miesięczna subskrypcja:</span>
+                              <div>
+                                <span className="font-semibold text-slate-900">Miesięczna subskrypcja</span>
+                                <p className="text-xs text-slate-500">
+                                  {new Date().toLocaleDateString('pl-PL')} — {new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleDateString('pl-PL')}
+                                </p>
+                              </div>
                               <span className="font-bold text-xl text-green-600">{cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0).toFixed(2)} PLN</span>
                             </div>
                           </div>
-                          <p className="text-xs text-slate-500 mt-3">Po dokonaniu płatności moduł zostanie aktywowany automatycznie.</p>
+                          <p className="text-xs text-slate-500 mt-3">Po dokonaniu płatności moduł zostanie aktywowany automatycznie. Subskrypcja odnawia się co miesiąc.</p>
                         </>
                       ) : (
                         <>
