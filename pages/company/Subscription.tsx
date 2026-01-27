@@ -65,6 +65,8 @@ export const CompanySubscriptionPage: React.FC = () => {
   const [purchaseMode, setPurchaseMode] = useState<'none' | 'now' | 'next_month' | 'reduce'>('none');
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [showMinPaymentModal, setShowMinPaymentModal] = useState(false);
+  const [minPaymentDetails, setMinPaymentDetails] = useState<{actualAmount: number, bonusAmount: number} | null>(null);
 
   // Refs for animation
   const cartIconRef = useRef<HTMLButtonElement>(null);
@@ -319,9 +321,27 @@ export const CompanySubscriptionPage: React.FC = () => {
     cartSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Minimum Stripe payment amount (2 PLN)
+  const MIN_STRIPE_AMOUNT = 2;
+
   // Handle purchase now (pro-rata for existing, checkout for new)
-  const handlePurchaseNow = async () => {
+  const handlePurchaseNow = async (forceMinPayment = false) => {
     if (!currentCompany || cart.length === 0) return;
+
+    // Check if amount is below minimum for existing modules
+    const existingModules = cart.filter(item => !item.isNewModule && item.newUsers > 0);
+    if (existingModules.length > 0 && !forceMinPayment) {
+      const totalAmount = cartTotalValueNow;
+      if (totalAmount < MIN_STRIPE_AMOUNT) {
+        // Show modal for minimum payment
+        setMinPaymentDetails({
+          actualAmount: totalAmount,
+          bonusAmount: MIN_STRIPE_AMOUNT - totalAmount
+        });
+        setShowMinPaymentModal(true);
+        return;
+      }
+    }
 
     setLoading('purchase-now');
     setError(null);
@@ -329,7 +349,6 @@ export const CompanySubscriptionPage: React.FC = () => {
     try {
       // Check if there are any new modules that need Stripe Checkout
       const newModules = cart.filter(item => item.isNewModule);
-      const existingModules = cart.filter(item => !item.isNewModule);
 
       // For new modules - redirect to Stripe Checkout
       if (newModules.length > 0) {
@@ -375,7 +394,10 @@ export const CompanySubscriptionPage: React.FC = () => {
         const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
         if (!companyMod) throw new Error('Module not found');
 
-        console.log('Creating prorated payment for module:', item.moduleCode, 'additional users:', item.newUsers);
+        const actualAmount = cartTotalValueNow;
+        const useMinPayment = forceMinPayment && actualAmount < MIN_STRIPE_AMOUNT;
+
+        console.log('Creating prorated payment for module:', item.moduleCode, 'additional users:', item.newUsers, 'useMinPayment:', useMinPayment);
 
         const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
           body: {
@@ -383,6 +405,7 @@ export const CompanySubscriptionPage: React.FC = () => {
             companyId: currentCompany.id,
             moduleCode: item.moduleCode,
             additionalQuantity: item.newUsers,
+            useMinPayment: useMinPayment, // Flag to use minimum payment with bonus
             successUrl: `${window.location.origin}/#/company/subscription?success=true`,
             cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
           }
@@ -396,6 +419,7 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (data?.url) {
           setCart([]);
           setPurchaseMode('none');
+          setShowMinPaymentModal(false);
           window.location.href = data.url;
           return;
         } else {
@@ -744,6 +768,38 @@ export const CompanySubscriptionPage: React.FC = () => {
       setLoading(null);
     }
   };
+
+  // Auto-sync subscription periods from Stripe if missing
+  React.useEffect(() => {
+    const syncPeriods = async () => {
+      if (!currentCompany) return;
+
+      // Check if any active modules are missing subscription period data
+      const modulesNeedingSync = myModules.filter(
+        m => m.is_active && m.stripe_subscription_id && !m.subscription_period_end
+      );
+
+      if (modulesNeedingSync.length > 0) {
+        console.log('Syncing subscription periods for', modulesNeedingSync.length, 'modules');
+        try {
+          const { data, error } = await supabase.functions.invoke('stripe-checkout', {
+            body: {
+              action: 'sync-subscription-periods',
+              companyId: currentCompany.id
+            }
+          });
+          if (!error && data?.success) {
+            console.log('Subscription periods synced:', data.results);
+            await refreshData();
+          }
+        } catch (err) {
+          console.error('Failed to sync subscription periods:', err);
+        }
+      }
+    };
+
+    syncPeriods();
+  }, [currentCompany?.id, myModules.length]);
 
   // Check URL params for success/cancel
   React.useEffect(() => {
@@ -1673,6 +1729,72 @@ export const CompanySubscriptionPage: React.FC = () => {
               Bezpieczne płatności obsługiwane przez Stripe
             </p>
           )}
+        </div>
+      )}
+
+      {/* Minimum Payment Modal */}
+      {showMinPaymentModal && minPaymentDetails && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Minimalna kwota płatności</h3>
+                <p className="text-sm text-slate-500">Wymagana przez system płatności</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-slate-600 mb-3">
+                Minimalna kwota do zapłaty przez Stripe wynosi <span className="font-bold">2,00 PLN netto</span>.
+              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Koszt dodatkowych miejsc:</span>
+                  <span className="font-medium text-slate-900">{minPaymentDetails.actualAmount.toFixed(2)} PLN</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Przelew na konto bonusowe:</span>
+                  <span className="font-medium text-green-600">+{minPaymentDetails.bonusAmount.toFixed(2)} PLN</span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 flex justify-between">
+                  <span className="font-semibold text-slate-900">Razem do zapłaty (netto):</span>
+                  <span className="font-bold text-lg text-blue-600">2,00 PLN</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-4">
+              Kwota {minPaymentDetails.bonusAmount.toFixed(2)} PLN zostanie dodana do Twojego konta bonusowego.
+              Możesz wykorzystać te środki do rozliczeń w przyszłości.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowMinPaymentModal(false);
+                  setMinPaymentDetails(null);
+                }}
+                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => handlePurchaseNow(true)}
+                disabled={loading === 'purchase-now'}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading === 'purchase-now' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                Zapłać 2,00 PLN
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

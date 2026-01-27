@@ -271,11 +271,14 @@ serve(async (req) => {
 
       case 'create-prorated-payment': {
         // Create one-time payment checkout for adding seats to existing module
-        const { companyId, moduleCode, additionalQuantity, successUrl, cancelUrl } = body
+        const { companyId, moduleCode, additionalQuantity, successUrl, cancelUrl, useMinPayment } = body
 
         if (!companyId || !moduleCode || !additionalQuantity) {
           throw new Error('companyId, moduleCode, and additionalQuantity are required')
         }
+
+        // Minimum payment amount in grosze (2 PLN)
+        const MIN_PAYMENT_GROSZE = 200
 
         // Get company details
         const { data: company, error: companyError } = await supabaseAdmin
@@ -329,9 +332,23 @@ serve(async (req) => {
         const pricePerUser = moduleInfo.base_price_per_user
         const proratedAmount = Math.round((pricePerUser * additionalQuantity * daysRemaining / totalDaysInPeriod) * 100) // in grosze
 
+        // Handle minimum payment: if amount is below 2 PLN and useMinPayment is true, charge 2 PLN
+        let chargeAmount = proratedAmount
+        let bonusAmount = 0
+        if (useMinPayment && proratedAmount < MIN_PAYMENT_GROSZE) {
+          chargeAmount = MIN_PAYMENT_GROSZE
+          bonusAmount = MIN_PAYMENT_GROSZE - proratedAmount // Difference goes to bonus balance
+        }
+
         // Format dates for description
         const formatDate = (d: Date) => d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
-        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInPeriod} days = ${proratedAmount/100} PLN`)
+        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInPeriod} days = ${proratedAmount/100} PLN (charging: ${chargeAmount/100} PLN, bonus: ${bonusAmount/100} PLN)`)
+
+        // Build description
+        let description = `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInPeriod} dni do ${formatDate(periodEnd)})`
+        if (bonusAmount > 0) {
+          description += ` + ${(bonusAmount/100).toFixed(2)} PLN bonus`
+        }
 
         // Create one-time payment checkout session
         const session = await stripe.checkout.sessions.create({
@@ -342,9 +359,9 @@ serve(async (req) => {
               currency: 'pln',
               product_data: {
                 name: `${moduleInfo.name_pl} - dodatkowe miejsca`,
-                description: `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInPeriod} dni do ${formatDate(periodEnd)})`,
+                description,
               },
-              unit_amount: proratedAmount,
+              unit_amount: chargeAmount,
               tax_behavior: 'exclusive' as const,
             },
             quantity: 1,
@@ -357,6 +374,7 @@ serve(async (req) => {
             additional_quantity: additionalQuantity.toString(),
             action_type: 'add_seats',
             new_total_quantity: (companyModule.max_users + additionalQuantity).toString(),
+            bonus_amount_grosze: bonusAmount.toString(), // Bonus to add to company balance
           },
           automatic_tax: {
             enabled: true,
@@ -491,6 +509,68 @@ serve(async (req) => {
             scheduledQuantity: quantity,
             effectiveDate: effectiveDate.toISOString()
           }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
+      case 'sync-subscription-periods': {
+        // Sync subscription period data from Stripe for all company modules
+        const { companyId } = body
+
+        if (!companyId) {
+          throw new Error('companyId is required')
+        }
+
+        // Get all company modules with stripe subscriptions
+        const { data: companyModules, error: cmError } = await supabaseAdmin
+          .from('company_modules')
+          .select('id, module_code, stripe_subscription_id')
+          .eq('company_id', companyId)
+          .not('stripe_subscription_id', 'is', null)
+
+        if (cmError) {
+          throw new Error('Failed to get company modules')
+        }
+
+        const results = []
+        for (const cm of companyModules || []) {
+          if (!cm.stripe_subscription_id) continue
+
+          try {
+            const subscription = await stripe.subscriptions.retrieve(cm.stripe_subscription_id)
+            const periodStart = new Date(subscription.current_period_start * 1000)
+            const periodEnd = new Date(subscription.current_period_end * 1000)
+
+            await supabaseAdmin
+              .from('company_modules')
+              .update({
+                subscription_period_start: periodStart.toISOString(),
+                subscription_period_end: periodEnd.toISOString()
+              })
+              .eq('id', cm.id)
+
+            results.push({
+              module_code: cm.module_code,
+              period_start: periodStart.toISOString(),
+              period_end: periodEnd.toISOString(),
+              status: 'synced'
+            })
+            console.log(`Synced period for ${cm.module_code}: ${periodStart.toISOString()} - ${periodEnd.toISOString()}`)
+          } catch (err) {
+            console.error(`Failed to sync period for ${cm.module_code}:`, err)
+            results.push({
+              module_code: cm.module_code,
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Unknown error'
+            })
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, results }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200

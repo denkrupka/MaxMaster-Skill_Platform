@@ -76,8 +76,9 @@ serve(async (req) => {
         if (session.mode === 'payment' && action_type === 'add_seats' && session.metadata?.module_code) {
           const moduleCodeToUpdate = session.metadata.module_code
           const newQuantity = parseInt(new_total_quantity || '0', 10)
+          const bonusAmountGrosze = parseInt(session.metadata?.bonus_amount_grosze || '0', 10)
 
-          console.log(`Processing add_seats payment: ${moduleCodeToUpdate}, new quantity: ${newQuantity}`)
+          console.log(`Processing add_seats payment: ${moduleCodeToUpdate}, new quantity: ${newQuantity}, bonus: ${bonusAmountGrosze} grosze`)
 
           if (newQuantity > 0) {
             // Get company module with subscription info
@@ -117,6 +118,30 @@ serve(async (req) => {
               console.error('Failed to update company_modules:', updateError)
             } else {
               console.log(`Updated company_modules max_users to ${newQuantity}`)
+            }
+
+            // Add bonus amount to company balance if applicable
+            if (bonusAmountGrosze > 0) {
+              const bonusAmount = bonusAmountGrosze / 100 // Convert to PLN
+              const { data: company } = await supabaseAdmin
+                .from('companies')
+                .select('bonus_balance')
+                .eq('id', company_id)
+                .single()
+
+              const currentBalance = company?.bonus_balance || 0
+              const newBalance = currentBalance + bonusAmount
+
+              const { error: bonusError } = await supabaseAdmin
+                .from('companies')
+                .update({ bonus_balance: newBalance })
+                .eq('id', company_id)
+
+              if (bonusError) {
+                console.error('Failed to update bonus balance:', bonusError)
+              } else {
+                console.log(`Added ${bonusAmount} PLN to company bonus balance (new total: ${newBalance} PLN)`)
+              }
             }
 
             // Log payment in payment_history
