@@ -36,7 +36,7 @@ serve(async (req) => {
       }
     )
 
-    // Verify webhook signature
+    // Verify webhook signature (use async version for Deno compatibility)
     const signature = req.headers.get('stripe-signature')
     if (!signature) {
       throw new Error('Missing stripe-signature header')
@@ -46,7 +46,8 @@ serve(async (req) => {
     let event: Stripe.Event
 
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret)
+      // IMPORTANT: Use constructEventAsync for Deno/Supabase Edge Functions
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message)
       return new Response(
