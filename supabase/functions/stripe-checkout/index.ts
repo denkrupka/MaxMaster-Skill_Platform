@@ -1037,6 +1037,28 @@ serve(async (req) => {
 
         console.log(`Added ${amount} PLN to Stripe Customer Balance for ${customerId} (transaction: ${balanceTransaction.id})`)
 
+        // Record in payment_history for unified view (using service role - bypasses RLS)
+        const isCredit = amount > 0
+        const { error: paymentHistoryError } = await supabaseAdmin
+          .from('payment_history')
+          .insert({
+            company_id: companyId,
+            amount: Math.abs(amount),
+            currency: 'PLN',
+            status: 'paid',
+            description: description || (isCredit ? 'Doładowanie balansu' : 'Pobranie z balansu'),
+            payment_method: 'portal',
+            payment_type: isCredit ? 'bonus_credit' : 'bonus_debit',
+            comment: description || null,
+            paid_at: new Date().toISOString()
+          })
+
+        if (paymentHistoryError) {
+          console.error('Failed to log payment history:', paymentHistoryError)
+        } else {
+          console.log(`Recorded bonus in payment_history for company ${companyId}`)
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
