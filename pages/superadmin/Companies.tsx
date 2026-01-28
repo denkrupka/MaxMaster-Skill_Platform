@@ -715,6 +715,23 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         console.log('Could not save bonus transaction:', transactionError);
       }
 
+      // Also record in payment_history for unified view
+      const { error: paymentHistoryError } = await supabase.from('payment_history').insert({
+        company_id: selectedCompany.id,
+        amount: Math.abs(amount),
+        currency: 'PLN',
+        status: 'paid',
+        description: description,
+        payment_method: 'portal',
+        payment_type: amount > 0 ? 'bonus_credit' : 'bonus_debit',
+        comment: bonusDescription || null,
+        paid_at: new Date().toISOString()
+      });
+
+      if (paymentHistoryError) {
+        console.log('Could not save payment history:', paymentHistoryError);
+      }
+
       // Add to local state for immediate display
       setBonusHistory(prev => [newBonusEntry, ...prev]);
 

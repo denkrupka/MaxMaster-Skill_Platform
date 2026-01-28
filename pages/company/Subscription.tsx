@@ -1858,6 +1858,8 @@ export const CompanySubscriptionPage: React.FC = () => {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Faktura</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Przeznaczenie</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kwota</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Metoda płatności</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Komentarz</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
                   </tr>
                 </thead>
@@ -1874,10 +1876,41 @@ export const CompanySubscriptionPage: React.FC = () => {
                       hour: '2-digit',
                       minute: '2-digit'
                     });
-                    // Determine purpose based on payment type or description
-                    const purpose = payment.payment_type === 'balance_topup' || payment.description?.includes('bonus')
-                      ? 'Doładowanie salda'
-                      : 'Subskrypcja';
+                    // Determine purpose based on payment type
+                    const getPurpose = () => {
+                      if (payment.payment_type === 'balance_topup') return 'Doładowanie salda (Stripe)';
+                      if (payment.payment_type === 'bonus_credit') return 'Doładowanie salda (Portal)';
+                      if (payment.payment_type === 'bonus_debit') return 'Wykorzystanie balansu';
+                      if (payment.payment_type === 'seats_purchase') return 'Zakup miejsc';
+                      if (payment.description?.includes('bonus') || payment.description?.includes('balansu')) return 'Operacja balansu';
+                      return 'Subskrypcja';
+                    };
+
+                    // Determine payment method display
+                    const getPaymentMethodDisplay = () => {
+                      switch (payment.payment_method) {
+                        case 'stripe': return { text: 'Stripe', color: 'bg-blue-100 text-blue-800' };
+                        case 'bonus': return { text: 'Balans bonusowy', color: 'bg-green-100 text-green-800' };
+                        case 'mixed': return { text: 'Stripe + Balans', color: 'bg-purple-100 text-purple-800' };
+                        case 'portal': return { text: 'Portal', color: 'bg-orange-100 text-orange-800' };
+                        default: return { text: 'Stripe', color: 'bg-blue-100 text-blue-800' };
+                      }
+                    };
+
+                    // Determine amount display (positive for credit, negative for debit)
+                    const isDebit = payment.payment_type === 'bonus_debit' || payment.payment_type === 'subscription' || payment.payment_type === 'seats_purchase';
+                    const amountDisplay = isDebit && payment.payment_method !== 'portal'
+                      ? `-${Number(payment.amount).toFixed(2)}`
+                      : payment.payment_type === 'bonus_credit'
+                      ? `+${Number(payment.amount).toFixed(2)}`
+                      : Number(payment.amount).toFixed(2);
+                    const amountColor = payment.payment_type === 'bonus_credit' || payment.payment_type === 'balance_topup'
+                      ? 'text-green-600'
+                      : payment.payment_type === 'bonus_debit'
+                      ? 'text-red-600'
+                      : 'text-slate-900';
+
+                    const paymentMethodDisplay = getPaymentMethodDisplay();
 
                     return (
                       <tr key={payment.id} className="hover:bg-slate-50">
@@ -1910,10 +1943,18 @@ export const CompanySubscriptionPage: React.FC = () => {
                           )}
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-600">
-                          {purpose}
+                          {getPurpose()}
                         </td>
-                        <td className="px-4 py-4 text-sm font-semibold text-slate-900">
-                          {Number(payment.amount).toFixed(2)} {payment.currency || 'PLN'}
+                        <td className={`px-4 py-4 text-sm font-semibold ${amountColor}`}>
+                          {amountDisplay} {payment.currency || 'PLN'}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${paymentMethodDisplay.color}`}>
+                            {paymentMethodDisplay.text}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-600 max-w-xs truncate" title={payment.comment || ''}>
+                          {payment.comment || '-'}
                         </td>
                         <td className="px-4 py-4">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
