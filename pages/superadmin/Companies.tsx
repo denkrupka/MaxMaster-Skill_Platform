@@ -665,7 +665,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       try {
         const { data: session } = await supabase.auth.getSession();
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+          `${import.meta.env.VITE_SUPABASE_URL || 'https://diytvuczpciikzdhldny.supabase.co'}/functions/v1/stripe-checkout`,
           {
             method: 'POST',
             headers: {
@@ -694,12 +694,13 @@ export const SuperAdminCompaniesPage: React.FC = () => {
       }
 
       // Try to save bonus transaction (table may not exist)
+      const now = new Date().toISOString();
       const newBonusEntry = {
         id: Date.now().toString(),
         amount: Math.abs(amount),
         type: amount > 0 ? 'credit' as const : 'debit' as const,
         description: description,
-        created_at: new Date().toISOString()
+        created_at: now
       };
 
       // Try to persist to database first
@@ -715,8 +716,23 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         console.log('Could not save bonus transaction:', transactionError);
       }
 
-      // Note: payment_history record is created by the stripe-checkout edge function
-      // using service role key to bypass RLS restrictions
+      // Also add to payment_history for display in "Historia płatności" tab
+      const { error: paymentHistoryError } = await supabase.from('payment_history').insert({
+        company_id: selectedCompany.id,
+        amount: Math.abs(amount),
+        currency: 'PLN',
+        status: 'paid',
+        description: description,
+        paid_at: now,
+        created_at: now,
+        payment_method: 'portal',
+        payment_type: amount > 0 ? 'bonus_credit' : 'bonus_debit',
+        comment: `Operacja wykonana przez: ${state.currentUser?.first_name} ${state.currentUser?.last_name}`
+      });
+
+      if (paymentHistoryError) {
+        console.log('Could not save payment history:', paymentHistoryError);
+      }
 
       // Add to local state for immediate display
       setBonusHistory(prev => [newBonusEntry, ...prev]);

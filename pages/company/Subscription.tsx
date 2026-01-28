@@ -190,6 +190,33 @@ export const CompanySubscriptionPage: React.FC = () => {
     };
   }, [myModules, currentCompany]);
 
+  // Get subscription period info for banner display
+  const subscriptionPeriodInfo = useMemo(() => {
+    const activeModules = myModules.filter(m => m.is_active && m.subscription_period_end);
+    if (activeModules.length === 0) return null;
+
+    // Find the earliest period end (next billing/trial end date)
+    const earliestEndDate = activeModules.reduce((earliest, mod) => {
+      const endDate = new Date(mod.subscription_period_end!);
+      return endDate < earliest ? endDate : earliest;
+    }, new Date(activeModules[0].subscription_period_end!));
+
+    const now = new Date();
+    const daysRemaining = Math.ceil((earliestEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const isTrialing = currentCompany?.subscription_status === 'trialing';
+
+    return {
+      endDate: earliestEndDate,
+      daysRemaining,
+      isTrialing,
+      formattedDate: earliestEndDate.toLocaleDateString('pl-PL', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })
+    };
+  }, [myModules, currentCompany?.subscription_status]);
+
   // Get payment history for current company (deduplicated)
   const paymentHistory = useMemo(() => {
     if (!currentCompany) return [];
@@ -1134,6 +1161,54 @@ export const CompanySubscriptionPage: React.FC = () => {
           <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-800">
             &times;
           </button>
+        </div>
+      )}
+
+      {/* Subscription Period Banner */}
+      {subscriptionPeriodInfo && (
+        <div className={`mb-4 p-4 rounded-xl flex items-center gap-3 ${
+          subscriptionPeriodInfo.isTrialing
+            ? 'bg-purple-50 border border-purple-200'
+            : subscriptionPeriodInfo.daysRemaining <= 7
+            ? 'bg-amber-50 border border-amber-200'
+            : 'bg-blue-50 border border-blue-200'
+        }`}>
+          <Clock className={`w-5 h-5 flex-shrink-0 ${
+            subscriptionPeriodInfo.isTrialing
+              ? 'text-purple-600'
+              : subscriptionPeriodInfo.daysRemaining <= 7
+              ? 'text-amber-600'
+              : 'text-blue-600'
+          }`} />
+          <div className="flex-1">
+            <p className={`font-medium ${
+              subscriptionPeriodInfo.isTrialing
+                ? 'text-purple-800'
+                : subscriptionPeriodInfo.daysRemaining <= 7
+                ? 'text-amber-800'
+                : 'text-blue-800'
+            }`}>
+              {subscriptionPeriodInfo.isTrialing
+                ? `Okres próbny kończy się ${subscriptionPeriodInfo.formattedDate}`
+                : `Następna płatność: ${subscriptionPeriodInfo.formattedDate}`
+              }
+            </p>
+            <p className={`text-sm ${
+              subscriptionPeriodInfo.isTrialing
+                ? 'text-purple-600'
+                : subscriptionPeriodInfo.daysRemaining <= 7
+                ? 'text-amber-600'
+                : 'text-blue-600'
+            }`}>
+              {subscriptionPeriodInfo.daysRemaining <= 0
+                ? 'Dzisiaj'
+                : subscriptionPeriodInfo.daysRemaining === 1
+                ? 'Pozostał 1 dzień'
+                : `Pozostało ${subscriptionPeriodInfo.daysRemaining} dni`
+              }
+              {subscriptionPeriodInfo.isTrialing && ' • Po okresie próbnym zostanie pobrana pierwsza opłata'}
+            </p>
+          </div>
         </div>
       )}
 
