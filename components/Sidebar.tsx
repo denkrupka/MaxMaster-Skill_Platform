@@ -10,6 +10,7 @@ import {
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
 import { ROLE_LABELS } from '../constants';
+import { useMemo } from 'react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,10 +19,20 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const { state, logout, setSimulatedRole, getEffectiveRole } = useAppContext();
-  const { currentUser, simulatedRole } = state;
+  const { currentUser, simulatedRole, currentCompany, companyModules } = state;
   const location = useLocation();
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  // Check if company is eligible for trial (never had paid subscriptions)
+  const isEligibleForTrial = useMemo(() => {
+    if (!currentCompany || currentUser?.role !== Role.COMPANY_ADMIN) return false;
+    // Check if company has never had a paid subscription
+    const hasHadSubscription = companyModules.some(m =>
+      m.company_id === currentCompany.id && m.stripe_subscription_id
+    );
+    return !hasHadSubscription;
+  }, [currentCompany, companyModules, currentUser?.role]);
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
 
@@ -265,6 +276,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
                  <NavItem to="/company/referrals" icon={Gift} label="Program Poleceń" />
                  <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
+
+                 {/* Trial Period Banner - only for companies without previous subscriptions */}
+                 {isEligibleForTrial && (
+                   <div className="mt-4 mx-2">
+                     <Link
+                       to="/company/subscription"
+                       onClick={() => setIsOpen(false)}
+                       className="block"
+                     >
+                       <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 p-[1px]">
+                         <div className="relative rounded-[11px] bg-gradient-to-br from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 backdrop-blur-sm p-3">
+                           <div className="flex items-start gap-2.5">
+                             <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center">
+                               <Gift className="w-4 h-4 text-white" />
+                             </div>
+                             <div className="flex-1 min-w-0">
+                               <p className="text-xs font-bold text-white leading-tight">
+                                 7 dni za darmo!
+                               </p>
+                               <p className="text-[10px] text-white/80 mt-0.5 leading-tight">
+                                 Wypróbuj bez zobowiązań
+                               </p>
+                             </div>
+                           </div>
+                           <div className="mt-2 flex items-center justify-between">
+                             <span className="text-[10px] text-white/70">Aktywuj teraz</span>
+                             <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                               <ChevronDown className="w-3 h-3 text-white -rotate-90" />
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     </Link>
+                   </div>
+                 )}
                </>
             )}
 

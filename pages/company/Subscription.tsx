@@ -1606,18 +1606,6 @@ export const CompanySubscriptionPage: React.FC = () => {
                           </button>
                         </div>
 
-                        {/* Trial info for first subscription */}
-                        {isFirstSubscription && (
-                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-2">
-                            <Zap className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-medium text-purple-800">7 dni bezpłatnego okresu próbnego!</p>
-                              <p className="text-xs text-purple-600 mt-1">
-                                Pierwsza płatność zostanie pobrana dopiero po 7 dniach. Możesz anulować w dowolnym momencie.
-                              </p>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -1647,9 +1635,6 @@ export const CompanySubscriptionPage: React.FC = () => {
                             <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
                               <div>
                                 <span className="font-semibold text-slate-900">{billingInterval === 'year' ? 'Roczna' : 'Miesięczna'} subskrypcja</span>
-                                {isFirstSubscription && (
-                                  <p className="text-xs text-purple-600 font-medium">Pierwsza płatność za 7 dni (okres próbny)</p>
-                                )}
                                 <p className="text-xs text-slate-500">
                                   {billingInterval === 'year'
                                     ? `${new Date().toLocaleDateString('pl-PL')} — ${new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toLocaleDateString('pl-PL')}`
@@ -1667,10 +1652,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                           </div>
                           <p className="text-xs text-slate-500 mt-3">
                             Po dokonaniu płatności moduł zostanie aktywowany automatycznie.
-                            {isFirstSubscription
-                              ? ' Masz 7 dni bezpłatnego okresu próbnego - pierwsza płatność zostanie pobrana po tym okresie.'
-                              : ` Subskrypcja odnawia się ${billingInterval === 'year' ? 'co rok' : 'co miesiąc'}.`
-                            }
+                            {` Subskrypcja odnawia się ${billingInterval === 'year' ? 'co rok' : 'co miesiąc'}.`}
                           </p>
                         </>
                       ) : (
@@ -2272,127 +2254,95 @@ export const CompanySubscriptionPage: React.FC = () => {
       {/* Card Info Modal - shown before Stripe checkout */}
       {showCardInfoModal && pendingCheckoutInfo && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 p-5">
+            {/* Header */}
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-blue-600" />
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                <CreditCard className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-slate-900">Informacja o płatności</h3>
-                <p className="text-sm text-slate-500">Przeczytaj przed kontynuowaniem</p>
+                <h3 className="text-base font-semibold text-slate-900">Podsumowanie płatności</h3>
               </div>
             </div>
 
-            <div className="bg-slate-50 rounded-lg p-4 mb-4">
-              <div className="space-y-3">
+            {/* Payment Summary - Compact */}
+            <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 mb-3 border border-slate-200">
+              <div className="space-y-2">
                 {pendingCheckoutInfo.balanceToUse > 0 && (
-                  <div className="flex items-start gap-3 text-sm">
-                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <Check className="w-4 h-4 text-green-600" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="text-sm text-slate-600">Z balansu:</span>
                     </div>
-                    <div>
-                      <p className="font-medium text-slate-900">Z Twojego balansu zostanie potrącone:</p>
-                      <p className="text-green-600 font-bold text-lg">{pendingCheckoutInfo.balanceToUse.toFixed(2)} PLN</p>
-                    </div>
+                    <span className="font-semibold text-green-600">{pendingCheckoutInfo.balanceToUse.toFixed(2)} PLN</span>
                   </div>
                 )}
-
-                <div className="flex items-start gap-3 text-sm">
-                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <CreditCard className="w-4 h-4 text-blue-600" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
+                      <CreditCard className="w-3 h-3 text-white" />
+                    </div>
+                    <span className="text-sm text-slate-600">Do zapłaty kartą:</span>
                   </div>
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      {pendingCheckoutInfo.amountToCharge > 0
-                        ? 'Do zapłaty kartą:'
-                        : 'Do zapłaty kartą:'}
-                    </p>
-                    <p className={`font-bold text-lg ${pendingCheckoutInfo.amountToCharge > 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                      {pendingCheckoutInfo.amountToCharge > 0
-                        ? `${pendingCheckoutInfo.amountToCharge.toFixed(2)} PLN netto`
-                        : '0,00 PLN (cała kwota z balansu!)'}
-                    </p>
-                  </div>
+                  <span className={`font-semibold ${pendingCheckoutInfo.amountToCharge > 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                    {pendingCheckoutInfo.amountToCharge > 0 ? `${pendingCheckoutInfo.amountToCharge.toFixed(2)} PLN` : '0,00 PLN'}
+                  </span>
                 </div>
+                {pendingCheckoutInfo.amountToCharge === 0 && (
+                  <p className="text-xs text-green-600 text-right font-medium">Cała kwota z balansu!</p>
+                )}
               </div>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800">
-                  <p className="font-semibold mb-1">Dlaczego wymagana jest karta?</p>
-                  <p>
-                    {pendingCheckoutInfo.amountToCharge > 0
-                      ? 'Karta jest potrzebna do opłacenia bieżącej transakcji oraz jako metoda płatności dla przyszłych cyklicznych opłat subskrypcji.'
-                      : 'Mimo że cała kwota zostanie pokryta z Twojego balansu, karta jest wymagana jako metoda płatności dla przyszłych cyklicznych opłat subskrypcji.'}
+            {/* Info Cards - Compact Grid */}
+            <div className="space-y-2 mb-4">
+              {/* Card requirement info */}
+              <div className="flex items-start gap-2.5 p-2.5 bg-amber-50 rounded-lg border border-amber-100">
+                <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                  Karta wymagana dla przyszłych cyklicznych opłat subskrypcji.
+                </p>
+              </div>
+
+              {/* Yearly billing info */}
+              {pendingCheckoutInfo.billingInterval === 'year' && (
+                <div className="flex items-start gap-2.5 p-2.5 bg-blue-50 rounded-lg border border-blue-100">
+                  <Award className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-700">
+                    Subskrypcja roczna ze zniżką 20%. Odnawiana co rok.
                   </p>
                 </div>
+              )}
+
+              {/* Full control info */}
+              <div className="flex items-start gap-2.5 p-2.5 bg-green-50 rounded-lg border border-green-100">
+                <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-green-700">
+                  Pełna kontrola: anuluj lub zmień w każdej chwili.
+                </p>
               </div>
             </div>
 
-            {/* Trial period info */}
-            {pendingCheckoutInfo.hasTrial && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <Zap className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-purple-800">
-                    <p className="font-semibold mb-1">🎉 7 dni bezpłatnego okresu próbnego!</p>
-                    <p>
-                      Twoja subskrypcja rozpocznie się z 7-dniowym bezpłatnym okresem próbnym.
-                      Pierwsza płatność zostanie pobrana dopiero po zakończeniu okresu próbnego.
-                      Możesz anulować w dowolnym momencie bez żadnych opłat.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Billing interval info */}
-            {pendingCheckoutInfo.billingInterval === 'year' && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <Award className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-semibold mb-1">Subskrypcja roczna (-20%)</p>
-                    <p>
-                      Wybrałeś subskrypcję roczną ze zniżką 20%. Płatność będzie odnawiana co rok.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-green-800">
-                  <p className="font-semibold mb-1">Pełna kontrola nad subskrypcją</p>
-                  <p>
-                    W każdej chwili możesz odpiąć kartę i anulować subskrypcję poprzez portal zarządzania płatnościami.
-                    Masz pełną kontrolę nad swoimi płatnościami.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
+            {/* Actions */}
+            <div className="flex gap-2">
               <button
                 onClick={() => {
                   setShowCardInfoModal(false);
                   setPendingCheckoutUrl(null);
                   setPendingCheckoutInfo(null);
                 }}
-                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition"
+                className="flex-1 px-3 py-2.5 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition text-sm font-medium"
               >
                 Anuluj
               </button>
               <button
                 onClick={proceedToCheckout}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
+                className="flex-1 px-3 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition flex items-center justify-center gap-2 text-sm font-medium shadow-lg shadow-blue-500/25"
               >
                 <CreditCard className="w-4 h-4" />
-                Rozumiem, przejdź do płatności
+                Przejdź do płatności
               </button>
             </div>
           </div>
