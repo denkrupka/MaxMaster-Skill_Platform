@@ -412,8 +412,14 @@ export const CompanySubscriptionPage: React.FC = () => {
     const existingModules = cart.filter(item => !item.isNewModule && item.newUsers > 0);
     if (existingModules.length > 0 && !forceMinPayment) {
       const totalAmount = cartTotalValueNow;
-      if (totalAmount < MIN_STRIPE_AMOUNT) {
-        // Show modal for minimum payment
+      const currentBalance = currentCompany.bonus_balance || 0;
+
+      // If balance covers full amount, no card charge needed - skip min payment modal
+      if (currentBalance >= totalAmount) {
+        // Process directly with balance payment, no modal needed
+        // Continue to the payment logic below
+      } else if (totalAmount < MIN_STRIPE_AMOUNT) {
+        // Card will be charged but amount is below minimum - show modal
         setMinPaymentDetails({
           actualAmount: totalAmount,
           bonusAmount: MIN_STRIPE_AMOUNT - totalAmount
@@ -1217,7 +1223,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                             </span>
                           </div>
                           <p className="text-sm text-slate-500 mt-1">{mod.description_pl || MODULE_DESCRIPTIONS[mod.code]}</p>
-                          <p className="text-sm font-medium text-blue-600 mt-2">{mod.base_price_per_user} PLN / użytkownik / miesiąc</p>
+                          <p className="text-sm font-medium text-blue-600 mt-2">{companyMod?.price_per_user || mod.base_price_per_user} PLN / użytkownik / miesiąc</p>
                         </div>
                       </div>
 
@@ -1264,7 +1270,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                               <p className="text-sm text-slate-500 mb-1">&nbsp;</p>
                               {pendingCount > 0 ? (
                                 <button
-                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
+                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, companyMod?.price_per_user || mod.base_price_per_user, false, e.currentTarget)}
                                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2"
                                 >
                                   <ShoppingCart className="w-4 h-4" />
@@ -1272,7 +1278,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                                 </button>
                               ) : (
                                 <button
-                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, mod.base_price_per_user, false, e.currentTarget)}
+                                  onClick={(e) => handleAddToCart(mod.code, mod.name_pl, currentMaxUsers, companyMod?.price_per_user || mod.base_price_per_user, false, e.currentTarget)}
                                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2"
                                 >
                                   <ShoppingCart className="w-4 h-4" />
@@ -1314,7 +1320,9 @@ export const CompanySubscriptionPage: React.FC = () => {
                               onClick={(e) => {
                                 // Pass count directly (use pendingCount or default to 1)
                                 const countToAdd = pendingCount || 1;
-                                handleAddToCart(mod.code, mod.name_pl, 0, mod.base_price_per_user, true, e.currentTarget, countToAdd);
+                                // Use company-specific price if set, otherwise base price
+                                const priceToUse = companyMod?.price_per_user || mod.base_price_per_user;
+                                handleAddToCart(mod.code, mod.name_pl, 0, priceToUse, true, e.currentTarget, countToAdd);
                               }}
                               disabled={isLoading || !stripeEnabled}
                               className={`px-4 py-2 rounded-lg flex items-center gap-2 transition ${

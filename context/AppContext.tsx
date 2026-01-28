@@ -257,33 +257,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabase.from('crm_activities').select('*').order('scheduled_at', { ascending: true })
       ]);
 
-      setState(prev => ({
-        ...prev,
-        users: users || [],
-        positions: positions || [],
-        skills: skills || [],
-        tests: tests || [],
-        userSkills: userSkills || [],
-        testAttempts: testAttempts || [],
-        candidateHistory: history || [],
-        qualityIncidents: incidents || [],
-        employeeNotes: notes || [],
-        employeeBadges: badges || [],
-        libraryResources: resources || [],
-        systemConfig: {
-            ...DEFAULT_SYSTEM_CONFIG,
-            ...(configData?.config_data || {})
-        },
-        companies: companies || [],
-        modules: modules || [],
-        companyModules: companyModules || [],
-        moduleUserAccess: moduleUserAccess || [],
-        paymentHistory: paymentHistory || [],
-        crmCompanies: crmCompanies || [],
-        crmContacts: crmContacts || [],
-        crmDeals: crmDeals || [],
-        crmActivities: crmActivities || []
-      }));
+      setState(prev => {
+        // Update currentCompany with fresh data if it's set
+        const updatedCurrentCompany = prev.currentCompany && companies
+          ? companies.find((c: Company) => c.id === prev.currentCompany!.id) || prev.currentCompany
+          : prev.currentCompany;
+
+        return {
+          ...prev,
+          users: users || [],
+          positions: positions || [],
+          skills: skills || [],
+          tests: tests || [],
+          userSkills: userSkills || [],
+          testAttempts: testAttempts || [],
+          candidateHistory: history || [],
+          qualityIncidents: incidents || [],
+          employeeNotes: notes || [],
+          employeeBadges: badges || [],
+          libraryResources: resources || [],
+          systemConfig: {
+              ...DEFAULT_SYSTEM_CONFIG,
+              ...(configData?.config_data || {})
+          },
+          companies: companies || [],
+          currentCompany: updatedCurrentCompany,
+          modules: modules || [],
+          companyModules: companyModules || [],
+          moduleUserAccess: moduleUserAccess || [],
+          paymentHistory: paymentHistory || [],
+          crmCompanies: crmCompanies || [],
+          crmContacts: crmContacts || [],
+          crmDeals: crmDeals || [],
+          crmActivities: crmActivities || []
+        };
+      });
     } catch (err) {
       console.error('Error refreshing data from Supabase:', err);
     }
