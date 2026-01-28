@@ -23,7 +23,7 @@ CREATE POLICY "Sales can view linked company payment history" ON payment_history
     USING (
         EXISTS (
             SELECT 1 FROM users u
-            JOIN companies c ON c.sales_user_id = u.id
+            JOIN companies c ON c.sales_owner_id = u.id
             WHERE u.id = auth.uid()
             AND u.role = 'sales'
             AND c.id = payment_history.company_id
