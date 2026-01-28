@@ -504,8 +504,9 @@ export const CompanySubscriptionPage: React.FC = () => {
           setShowMinPaymentModal(false);
           // Refresh data to show updated balance and module users
           await refreshData();
-          // Show success message via URL param
-          window.location.href = `${window.location.origin}/#/company/subscription?success=true&fromBalance=true`;
+          // Show success message without redirect
+          setSuccess('Płatność zakończona pomyślnie! Miejsca zostały dodane.');
+          setTimeout(() => setSuccess(null), 5000);
           return;
         }
 
