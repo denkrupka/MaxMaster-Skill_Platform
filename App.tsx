@@ -15,6 +15,7 @@ import { ResetPasswordPage } from './pages/ResetPassword';
 import { TerminatedPage } from './pages/Terminated';
 import { SubscriptionExpiredAdminPage } from './pages/SubscriptionExpiredAdmin';
 import { SubscriptionExpiredUserPage } from './pages/SubscriptionExpiredUser';
+import { ModuleAccessDeniedPage } from './pages/ModuleAccessDenied';
 import { AdminUsersPage } from './pages/admin/Users';
 
 // SuperAdmin Pages
@@ -96,7 +97,7 @@ import { CandidateRegisterPage } from './pages/candidate/Register';
 import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 
-const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean }) => {
+const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' }) => {
   const { state } = useAppContext();
 
   if (!state.currentUser) {
@@ -162,6 +163,28 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
           if (!currentPath.includes('/subscription-expired-user')) {
             return <Navigate to="/subscription-expired-user" replace />;
           }
+        }
+      }
+    }
+
+    // MODULE ACCESS CHECK for company users
+    // Check if the route requires a specific module and if the user has access
+    if (requiredModule && !currentPath.includes('/module-access-denied')) {
+      // Get user's module access for the required module
+      const userHasModuleAccess = state.moduleUserAccess.some(
+        mua => mua.user_id === state.currentUser?.id &&
+               mua.module_code === requiredModule &&
+               mua.is_enabled
+      );
+
+      // HR role always needs to check module access for protected routes
+      // Other roles (employee, brigadir, coordinator) also need access
+      if (!userHasModuleAccess) {
+        // Check if the company has the module at all
+        const companyHasModule = companyModules.some(cm => cm.module_code === requiredModule);
+
+        if (!companyHasModule || !userHasModuleAccess) {
+          return <Navigate to={`/module-access-denied?module=${requiredModule}`} replace />;
         }
       }
     }
@@ -355,6 +378,7 @@ export default function App() {
           <Route path="/terminated" element={<TerminatedPage />} />
           <Route path="/subscription-expired-admin" element={<SubscriptionExpiredAdminPage />} />
           <Route path="/subscription-expired-user" element={<SubscriptionExpiredUserPage />} />
+          <Route path="/module-access-denied" element={<ModuleAccessDeniedPage />} />
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
           
@@ -392,22 +416,22 @@ export default function App() {
           <Route path="/admin/users" element={<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPERADMIN]}><AdminUsersPage /></ProtectedRoute>} />
           {/* HR Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/hr/dashboard" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRDashboard /></ProtectedRoute>} />
-          <Route path="/hr/candidates" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRCandidatesPage /></ProtectedRoute>} />
+          <Route path="/hr/candidates" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]} requiredModule="recruitment"><HRCandidatesPage /></ProtectedRoute>} />
           <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HREmployeesPage /></ProtectedRoute>} />
-          <Route path="/hr/trial" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRTrialPage /></ProtectedRoute>} />
+          <Route path="/hr/trial" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]} requiredModule="recruitment"><HRTrialPage /></ProtectedRoute>} />
           <Route path="/hr/documents" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRDocumentsPage /></ProtectedRoute>} />
           <Route path="/hr/reports" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRReportsPage /></ProtectedRoute>} />
-          <Route path="/hr/library" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRLibraryPage /></ProtectedRoute>} />
-          <Route path="/hr/skills" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRSkillsPage /></ProtectedRoute>} />
-          <Route path="/hr/tests" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRTestsPage /></ProtectedRoute>} />
+          <Route path="/hr/library" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]} requiredModule="skills"><HRLibraryPage /></ProtectedRoute>} />
+          <Route path="/hr/skills" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]} requiredModule="skills"><HRSkillsPage /></ProtectedRoute>} />
+          <Route path="/hr/tests" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]} requiredModule="skills"><HRTestsPage /></ProtectedRoute>} />
           <Route path="/hr/settings" element={<ProtectedRoute allowedRoles={[Role.HR, Role.SUPERADMIN]}><HRSettingsPage /></ProtectedRoute>} />
 
           <Route path="/coordinator/dashboard" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorDashboard /></ProtectedRoute>} />
           <Route path="/coordinator/employees" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorEmployees /></ProtectedRoute>} />
-          <Route path="/coordinator/verifications" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorVerifications /></ProtectedRoute>} />
-          <Route path="/coordinator/quality" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorQuality /></ProtectedRoute>} />
-          <Route path="/coordinator/skills" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorSkills /></ProtectedRoute>} />
-          <Route path="/coordinator/library" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorLibrary /></ProtectedRoute>} />
+          <Route path="/coordinator/verifications" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]} requiredModule="skills"><CoordinatorVerifications /></ProtectedRoute>} />
+          <Route path="/coordinator/quality" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]} requiredModule="skills"><CoordinatorQuality /></ProtectedRoute>} />
+          <Route path="/coordinator/skills" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]} requiredModule="skills"><CoordinatorSkills /></ProtectedRoute>} />
+          <Route path="/coordinator/library" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]} requiredModule="skills"><CoordinatorLibrary /></ProtectedRoute>} />
           <Route path="/coordinator/profile" element={<ProtectedRoute allowedRoles={[Role.COORDINATOR]}><CoordinatorProfile /></ProtectedRoute>} />
 
           <Route path="/candidate/dashboard" element={<ProtectedRoute allowedRoles={[Role.CANDIDATE]}><CandidateDashboard /></ProtectedRoute>} />
@@ -418,31 +442,31 @@ export default function App() {
 
           {/* Trial Employee Routes - Old URLs with full functionality */}
           <Route path="/trial/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><TrialDashboard /></ProtectedRoute>} />
-          <Route path="/trial/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeSkills /></ProtectedRoute>} />
-          <Route path="/trial/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeQualityHistory /></ProtectedRoute>} />
-          <Route path="/trial/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeLibrary /></ProtectedRoute>} />
+          <Route path="/trial/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true} requiredModule="skills"><EmployeeSkills /></ProtectedRoute>} />
+          <Route path="/trial/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true} requiredModule="skills"><EmployeeQualityHistory /></ProtectedRoute>} />
+          <Route path="/trial/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true} requiredModule="skills"><EmployeeLibrary /></ProtectedRoute>} />
           <Route path="/trial/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeCareer /></ProtectedRoute>} />
           <Route path="/trial/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeReferrals /></ProtectedRoute>} />
           <Route path="/trial/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><TrialProfilePage /></ProtectedRoute>} />
-          <Route path="/trial/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeeTests /></ProtectedRoute>} />
-          <Route path="/trial/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true}><EmployeePractice /></ProtectedRoute>} />
+          <Route path="/trial/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true} requiredModule="skills"><EmployeeTests /></ProtectedRoute>} />
+          <Route path="/trial/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE]} checkTrial={true} requiredModule="skills"><EmployeePractice /></ProtectedRoute>} />
 
-          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeDashboard /></ProtectedRoute>} />
-          <Route path="/dashboard/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSkills /></ProtectedRoute>} />
-          <Route path="/dashboard/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeTests /></ProtectedRoute>} />
-          <Route path="/dashboard/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeePractice /></ProtectedRoute>} />
-          <Route path="/dashboard/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeQualityHistory /></ProtectedRoute>} />
-          <Route path="/dashboard/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeReferrals /></ProtectedRoute>} />
-          <Route path="/dashboard/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeLibrary /></ProtectedRoute>} />
-          <Route path="/dashboard/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeCareer /></ProtectedRoute>} />
-          <Route path="/dashboard/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeProfile /></ProtectedRoute>} />
-          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} noLayout={true}><CandidateTestsPage /></ProtectedRoute>} />
-          <Route path="/dashboard/salary" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} ><EmployeeSalaryPage /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]}><EmployeeDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/skills" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} requiredModule="skills"><EmployeeSkills /></ProtectedRoute>} />
+          <Route path="/dashboard/tests" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} requiredModule="skills"><EmployeeTests /></ProtectedRoute>} />
+          <Route path="/dashboard/practice" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} requiredModule="skills"><EmployeePractice /></ProtectedRoute>} />
+          <Route path="/dashboard/quality" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} requiredModule="skills"><EmployeeQualityHistory /></ProtectedRoute>} />
+          <Route path="/dashboard/referrals" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]}><EmployeeReferrals /></ProtectedRoute>} />
+          <Route path="/dashboard/library" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]} requiredModule="skills"><EmployeeLibrary /></ProtectedRoute>} />
+          <Route path="/dashboard/career" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]}><EmployeeCareer /></ProtectedRoute>} />
+          <Route path="/dashboard/profile" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]}><EmployeeProfile /></ProtectedRoute>} />
+          <Route path="/dashboard/run-test" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR, Role.COORDINATOR]} noLayout={true} requiredModule="skills"><CandidateTestsPage /></ProtectedRoute>} />
+          <Route path="/dashboard/salary" element={<ProtectedRoute allowedRoles={[Role.EMPLOYEE, Role.BRIGADIR]}><EmployeeSalaryPage /></ProtectedRoute>} />
 
-          <Route path="/brigadir/dashboard" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirDashboard /></ProtectedRoute>} />
-          <Route path="/brigadir/checks" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirChecksPage /></ProtectedRoute>} />
-          <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirTeamPage /></ProtectedRoute>} />
-          <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} ><BrigadirQualityPage /></ProtectedRoute>} />
+          <Route path="/brigadir/dashboard" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]}><BrigadirDashboard /></ProtectedRoute>} />
+          <Route path="/brigadir/checks" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} requiredModule="skills"><BrigadirChecksPage /></ProtectedRoute>} />
+          <Route path="/brigadir/team" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} requiredModule="skills"><BrigadirTeamPage /></ProtectedRoute>} />
+          <Route path="/brigadir/quality" element={<ProtectedRoute allowedRoles={[Role.BRIGADIR]} requiredModule="skills"><BrigadirQualityPage /></ProtectedRoute>} />
 
           <Route path="/" element={<EmailConfirmationHandler />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
