@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
+import { User, Mail, Phone, Upload, ArrowRight, CheckCircle, AlertCircle, Loader2, X, Building2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus } from '../../types';
@@ -31,8 +31,28 @@ export const CandidateRegisterPage = () => {
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [companyName, setCompanyName] = useState<string | null>(null);
 
     const referrerId = searchParams.get('ref');
+    const companyIdParam = searchParams.get('company');
+
+    // Load company name if companyIdParam is provided
+    useEffect(() => {
+        const loadCompanyName = async () => {
+            if (companyIdParam) {
+                const { data: company } = await supabase
+                    .from('companies')
+                    .select('name')
+                    .eq('id', companyIdParam)
+                    .maybeSingle();
+
+                if (company) {
+                    setCompanyName(company.name);
+                }
+            }
+        };
+        loadCompanyName();
+    }, [companyIdParam]);
 
     // Format phone number as +48 XXX XXX XXX
     const formatPhoneNumber = (value: string) => {
@@ -217,6 +237,24 @@ export const CandidateRegisterPage = () => {
                 }
             }
 
+            // Validate company ID if provided
+            let validCompanyId: string | null = null;
+            if (companyIdParam) {
+                console.log('Validating company ID:', companyIdParam);
+                const { data: company } = await supabase
+                    .from('companies')
+                    .select('id')
+                    .eq('id', companyIdParam)
+                    .maybeSingle();
+
+                if (company) {
+                    validCompanyId = companyIdParam;
+                    console.log('Company ID valid');
+                } else {
+                    console.warn('Company ID not found in database, ignoring');
+                }
+            }
+
             console.log('Checking for existing public profile...');
             const { data: existingUser } = await supabase
                 .from('users')
@@ -253,7 +291,8 @@ export const CandidateRegisterPage = () => {
                         status: UserStatus.STARTED,
                         referred_by_id: validReferrerId || existingUser.referred_by_id || null,
                         source: validReferrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
-                        hired_date: existingUser.hired_date || new Date().toISOString()
+                        hired_date: existingUser.hired_date || new Date().toISOString(),
+                        company_id: validCompanyId || existingUser.company_id || null
                     }])
                     .select()
                     .single();
@@ -277,7 +316,8 @@ export const CandidateRegisterPage = () => {
                         status: UserStatus.STARTED,
                         referred_by_id: validReferrerId || null,
                         source: validReferrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
-                        hired_date: new Date().toISOString()
+                        hired_date: new Date().toISOString(),
+                        company_id: validCompanyId || null
                     }])
                     .select()
                     .single();
@@ -457,12 +497,17 @@ export const CandidateRegisterPage = () => {
                 </div>
 
                 <form onSubmit={handleFinalSubmit} className="p-8 space-y-5">
+                        {companyName && (
+                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg flex items-center gap-3 text-xs text-blue-700 font-bold mb-4">
+                                <Building2 size={16}/> Rejestracja do firmy: {companyName}
+                            </div>
+                        )}
                         {referrerId && (
                             <div className="p-3 bg-green-50 border border-green-100 rounded-lg flex items-center gap-3 text-xs text-green-700 font-bold mb-4">
                                 <CheckCircle size={16}/> Rejestrujesz się z polecenia znajomego!
                             </div>
                         )}
-                        
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Imię *</label>

@@ -1181,8 +1181,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const inviteFriend = async (firstName: string, lastName: string, phone: string, targetPosition: string) => {
     if (state.currentUser) logCandidateAction(state.currentUser.id, `Zaproszono znajomego: ${firstName} ${lastName} (${targetPosition})`);
 
-    // Send SMS invitation
-    const portalUrl = APP_URL;
+    // Send SMS invitation with referral and company params
+    const params = new URLSearchParams();
+    if (state.currentUser?.id) params.append('ref', state.currentUser.id);
+    if (state.currentUser?.company_id) params.append('company', state.currentUser.company_id);
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const portalUrl = `${APP_URL}/#/candidate/welcome${queryStr}`;
+
     try {
       await sendTemplatedSMS(
         'CAND_INVITE_LINK',

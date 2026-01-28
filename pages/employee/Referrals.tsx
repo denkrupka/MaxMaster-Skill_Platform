@@ -58,7 +58,7 @@ export const EmployeeReferrals = () => {
         }, { earned: 0, pendingPayment: 0, inProgress: 0 });
     }, [myReferrals]);
 
-    const referralLink = `${window.location.origin}/#/candidate/welcome?ref=${currentUser.id}`;
+    const referralLink = `${window.location.origin}/#/candidate/welcome?ref=${currentUser.id}${currentUser.company_id ? `&company=${currentUser.company_id}` : ''}`;
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(referralLink);
