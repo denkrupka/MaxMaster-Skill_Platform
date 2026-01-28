@@ -123,7 +123,7 @@ serve(async (req) => {
             .update({ stripe_customer_id: customerId })
             .eq('id', companyId)
 
-          // Sync existing bonus_balance to Stripe Customer Balance
+          // Sync existing bonus_balance to Stripe Customer Balance for new customer
           if (company.bonus_balance && company.bonus_balance > 0) {
             try {
               const balanceInGrosze = Math.round(company.bonus_balance * 100) * -1 // Negative = credit
@@ -138,6 +138,35 @@ serve(async (req) => {
               console.log(`Synced existing balance ${company.bonus_balance} PLN to Stripe Customer Balance for new customer ${customerId}`)
             } catch (syncError) {
               console.error('Failed to sync existing balance to Stripe:', syncError)
+            }
+          }
+        } else {
+          // For existing customer - sync local balance with Stripe if needed
+          // This handles case when superadmin added balance but functions weren't deployed
+          if (company.bonus_balance && company.bonus_balance > 0) {
+            try {
+              const stripeCustomer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+              // Stripe balance is negative (credit), local is positive
+              const stripeBalancePLN = stripeCustomer.balance ? (stripeCustomer.balance / -100) : 0
+              const localBalance = company.bonus_balance
+
+              // If local balance is higher than Stripe - add the difference
+              if (localBalance > stripeBalancePLN) {
+                const differenceToAdd = localBalance - stripeBalancePLN
+                const differenceInGrosze = Math.round(differenceToAdd * 100) * -1 // Negative = credit
+                await stripe.customers.createBalanceTransaction(
+                  customerId,
+                  {
+                    amount: differenceInGrosze,
+                    currency: 'pln',
+                    description: `Synchronizacja balansu bonusowego - ${differenceToAdd.toFixed(2)} PLN`
+                  }
+                )
+                console.log(`Synced balance difference ${differenceToAdd} PLN to Stripe Customer Balance for ${customerId} (local: ${localBalance}, stripe was: ${stripeBalancePLN})`)
+              }
+            } catch (syncError) {
+              console.error('Failed to sync balance to Stripe:', syncError)
+              // Continue anyway - subscription can still be created
             }
           }
         }
