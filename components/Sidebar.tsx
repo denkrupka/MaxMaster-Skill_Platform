@@ -21,8 +21,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const { currentUser, simulatedRole } = state;
   const location = useLocation();
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
 
   // Get effective role for displaying the correct menu
   const effectiveRole = getEffectiveRole();
@@ -40,6 +45,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
       <span>{label}</span>
     </Link>
   );
+
+  const CollapsibleNavGroup = ({
+    groupId,
+    icon: Icon,
+    label,
+    children
+  }: {
+    groupId: string;
+    icon: any;
+    label: string;
+    children: React.ReactNode;
+  }) => {
+    const isOpen = openGroups[groupId] || false;
+
+    return (
+      <div className="mb-1">
+        <button
+          onClick={() => toggleGroup(groupId)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
+            isOpen ? 'bg-slate-100 text-slate-800' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <div className="flex items-center space-x-3">
+            <Icon size={20} />
+            <span>{label}</span>
+          </div>
+          <ChevronDown
+            size={16}
+            className={`transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {isOpen && (
+          <div className="ml-4 mt-1 border-l-2 border-slate-200 pl-2">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Role switcher for SuperAdmin
   const RoleSwitcher = () => {
@@ -192,15 +236,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  </p>
                  <NavItem to="/hr/dashboard" icon={Layers} label="Dashboard" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/hr/candidates" icon={UserPlus} label="Kandydaci" />
-                 <NavItem to="/hr/trial" icon={Clock} label="Okres Próbny" />
+                 <CollapsibleNavGroup groupId="hr-rekrutacja" icon={UserPlus} label="Rekrutacja">
+                   <NavItem to="/hr/candidates" icon={UserPlus} label="Kandydaci" />
+                   <NavItem to="/hr/trial" icon={Clock} label="Okres próbny" />
+                 </CollapsibleNavGroup>
                  <NavItem to="/hr/employees" icon={Users} label="Pracownicy" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/documents" icon={FileText} label="Dokumenty" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/hr/tests" icon={FileCheck} label="Testy" />
-                 <NavItem to="/hr/skills" icon={Award} label="Umiejętności" />
-                 <NavItem to="/hr/library" icon={BookOpen} label="Biblioteka" />
+                 <CollapsibleNavGroup groupId="hr-umiejetnosci" icon={Award} label="Umiejętności">
+                   <NavItem to="/hr/tests" icon={FileCheck} label="Testy" />
+                   <NavItem to="/hr/skills" icon={Award} label="Umiejętności" />
+                   <NavItem to="/hr/library" icon={BookOpen} label="Baza wiedzy" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty" />
                  <div className="my-2 border-t border-slate-100"></div>
@@ -234,10 +282,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/coordinator/dashboard" icon={LayoutDashboard} label="Dashboard" />
                     <NavItem to="/coordinator/employees" icon={Users} label="Pracownicy" />
                     <NavItem to="/coordinator/verifications" icon={CheckSquare} label="Weryfikacje Praktyki" />
-                    <NavItem to="/coordinator/quality" icon={AlertTriangle} label="Historia Jakości" />
+                    <NavItem to="/coordinator/quality" icon={AlertTriangle} label="Zgłoszenia jakości" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności" />
-                    <NavItem to="/coordinator/library" icon={BookOpen} label="Biblioteka" />
+                    <CollapsibleNavGroup groupId="coordinator-umiejetnosci" icon={Award} label="Umiejętności">
+                      <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności i uprawnienia" />
+                      <NavItem to="/coordinator/library" icon={BookOpen} label="Baza wiedzy" />
+                    </CollapsibleNavGroup>
                     <NavItem to="/coordinator/profile" icon={User} label="Mój Profil" />
                 </>
             )}
@@ -273,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                   <>
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Brygadzista</p>
                     <NavItem to="/brigadir/dashboard" icon={LayoutDashboard} label="Panel Zarządzania" />
-                    <NavItem to="/brigadir/checks" icon={CheckSquare} label="Weryfikacje" />
+                    <NavItem to="/brigadir/checks" icon={CheckSquare} label="Weryfikacje praktyki" />
                     <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
                     <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
                     <div className="my-4 border-t border-slate-100"></div>
@@ -283,9 +333,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Pracownik</p>
 
                 <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
-                <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i Uprawnienia" />
-                <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia Jakości" />
-                <NavItem to="/dashboard/library" icon={BookOpen} label="Biblioteka" />
+                <CollapsibleNavGroup groupId="employee-umiejetnosci" icon={Award} label="Umiejętności">
+                  <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i uprawnienia" />
+                  <NavItem to="/dashboard/library" icon={BookOpen} label="Baza wiedzy" />
+                  <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia jakości" />
+                </CollapsibleNavGroup>
                 <NavItem to="/dashboard/career" icon={Briefcase} label="Rozwój Zawodowy" />
                 <NavItem to="/dashboard/referrals" icon={UserPlus} label="Zaproś znajomego" />
                 <NavItem to="/dashboard/profile" icon={User} label="Mój Profil" />
