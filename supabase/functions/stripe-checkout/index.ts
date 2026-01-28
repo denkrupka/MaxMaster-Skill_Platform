@@ -432,10 +432,20 @@ serve(async (req) => {
 
           // Update subscription quantity in Stripe
           if (companyModule.stripe_subscription_item_id) {
-            await stripe.subscriptionItems.update(
-              companyModule.stripe_subscription_item_id,
-              { quantity: companyModule.max_users + additionalQuantity }
-            )
+            try {
+              const newQuantity = companyModule.max_users + additionalQuantity
+              console.log(`Updating Stripe subscription item ${companyModule.stripe_subscription_item_id} to quantity ${newQuantity}`)
+              await stripe.subscriptionItems.update(
+                companyModule.stripe_subscription_item_id,
+                { quantity: newQuantity }
+              )
+              console.log('Stripe subscription quantity updated successfully')
+            } catch (stripeErr: any) {
+              console.error('Failed to update Stripe subscription quantity:', stripeErr)
+              // Continue anyway - local update succeeded
+            }
+          } else {
+            console.log('No stripe_subscription_item_id found - skipping Stripe update')
           }
 
           // Update local record - also update scheduled_max_users if it exists
