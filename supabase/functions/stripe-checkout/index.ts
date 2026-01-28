@@ -42,11 +42,18 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const { data: { user: requestingUser } } = await supabaseAdmin.auth.getUser(token)
+    const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token)
 
-    if (!requestingUser) {
-      throw new Error('Invalid token')
+    if (authError) {
+      console.error('Auth error:', authError.message)
+      throw new Error(`Authentication failed: ${authError.message}`)
     }
+
+    if (!userData?.user) {
+      throw new Error('Invalid token: user not found')
+    }
+
+    const requestingUser = userData.user
 
     const body = await req.json()
     const { action } = body
