@@ -175,12 +175,15 @@ serve(async (req) => {
             // Calculate how many users were added
             const addedUsers = newQuantity - companyModule.max_users
 
-            // Update subscription quantity in Stripe
+            // Update subscription quantity in Stripe (with proration_behavior: 'none' since prorated payment was already charged)
             if (companyModule.stripe_subscription_item_id) {
               try {
                 await stripe.subscriptionItems.update(
                   companyModule.stripe_subscription_item_id,
-                  { quantity: newQuantity }
+                  {
+                    quantity: newQuantity,
+                    proration_behavior: 'none'
+                  }
                 )
                 console.log(`Updated Stripe subscription item to ${newQuantity} users`)
               } catch (stripeErr) {
