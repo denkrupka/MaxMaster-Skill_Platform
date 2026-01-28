@@ -54,10 +54,13 @@ serve(async (req) => {
 
     switch (action) {
       case 'create-checkout-session': {
-        const { companyId, modules, successUrl, cancelUrl } = body
+        const { companyId, modules, successUrl, cancelUrl, billingInterval = 'month' } = body
         // Support legacy single module format
         const moduleCode = body.moduleCode
         const quantity = body.quantity
+
+        // Validate billing interval
+        const interval: 'month' | 'year' = billingInterval === 'year' ? 'year' : 'month'
 
         // Build modules array (support both new array format and legacy single module)
         let modulesToProcess: Array<{ moduleCode: string; quantity: number }> = []
@@ -171,18 +174,42 @@ serve(async (req) => {
           }
         }
 
+        // Check if this is the company's first subscription (for 7-day trial)
+        const { data: existingSubscriptions, error: subsError } = await supabaseAdmin
+          .from('company_modules')
+          .select('id, stripe_subscription_id')
+          .eq('company_id', companyId)
+          .not('stripe_subscription_id', 'is', null)
+          .eq('is_active', true)
+
+        const isFirstSubscription = !existingSubscriptions || existingSubscriptions.length === 0
+        console.log(`Is first subscription: ${isFirstSubscription}`)
+
+        // Calculate discount for yearly billing (20% off)
+        const yearlyDiscountPercent = 20
+
         // Build line_items for all modules
         const lineItems = modulesToProcess.map(mod => {
           const moduleInfo = modulesInfo.find(m => m.code === mod.moduleCode)!
-          const unitAmountInGrosze = Math.round(moduleInfo.base_price_per_user * 100)
+          let pricePerUser = moduleInfo.base_price_per_user
 
-          console.log(`Module ${mod.moduleCode}: ${mod.quantity} seats × ${moduleInfo.base_price_per_user} PLN = ${mod.quantity * moduleInfo.base_price_per_user} PLN`)
+          // For yearly billing: calculate annual price with 20% discount
+          if (interval === 'year') {
+            // Monthly price × 12 months × (1 - 20% discount) = yearly price per user
+            pricePerUser = pricePerUser * 12 * (1 - yearlyDiscountPercent / 100)
+          }
+
+          const unitAmountInGrosze = Math.round(pricePerUser * 100)
+          const intervalLabel = interval === 'year' ? 'roczna' : 'miesięczna'
+          const discountLabel = interval === 'year' ? ' (-20%)' : ''
+
+          console.log(`Module ${mod.moduleCode}: ${mod.quantity} seats × ${pricePerUser.toFixed(2)} PLN (${interval})${discountLabel}`)
 
           return {
             price_data: {
               currency: 'pln',
               product_data: {
-                name: `${moduleInfo.name_pl} - subskrypcja`,
+                name: `${moduleInfo.name_pl} - subskrypcja ${intervalLabel}${discountLabel}`,
                 description: `Dostęp do modułu ${moduleInfo.name_pl}`,
                 metadata: {
                   module_code: mod.moduleCode,
@@ -190,7 +217,7 @@ serve(async (req) => {
               },
               unit_amount: unitAmountInGrosze,
               recurring: {
-                interval: 'month' as const,
+                interval: interval,
               },
               tax_behavior: 'exclusive' as const,
             },
@@ -201,6 +228,21 @@ serve(async (req) => {
         // Store modules info in metadata (JSON stringified for multiple modules)
         const modulesMetadata = JSON.stringify(modulesToProcess)
 
+        // Build subscription_data with optional trial period
+        const subscriptionData: any = {
+          metadata: {
+            company_id: companyId,
+            modules: modulesMetadata, // JSON array of {moduleCode, quantity}
+            billing_interval: interval,
+          },
+        }
+
+        // Add 7-day trial for first subscription
+        if (isFirstSubscription) {
+          subscriptionData.trial_period_days = 7
+          console.log('Adding 7-day trial period for first subscription')
+        }
+
         // Create checkout session with dynamic pricing from database
         const session = await stripe.checkout.sessions.create({
           customer: customerId,
@@ -208,15 +250,12 @@ serve(async (req) => {
           line_items: lineItems,
           success_url: successUrl,
           cancel_url: cancelUrl,
-          subscription_data: {
-            metadata: {
-              company_id: companyId,
-              modules: modulesMetadata, // JSON array of {moduleCode, quantity}
-            },
-          },
+          subscription_data: subscriptionData,
           metadata: {
             company_id: companyId,
             modules: modulesMetadata,
+            billing_interval: interval,
+            is_trial: isFirstSubscription ? 'true' : 'false',
           },
           // Allow updating customer info from checkout form (required for tax_id_collection)
           customer_update: {
@@ -235,7 +274,14 @@ serve(async (req) => {
         })
 
         return new Response(
-          JSON.stringify({ sessionId: session.id, url: session.url }),
+          JSON.stringify({
+            sessionId: session.id,
+            url: session.url,
+            isFirstSubscription,
+            hasTrial: isFirstSubscription,
+            trialDays: isFirstSubscription ? 7 : 0,
+            billingInterval: interval,
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
