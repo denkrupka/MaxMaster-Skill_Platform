@@ -430,29 +430,87 @@ serve(async (req) => {
             console.error('Failed to log transaction:', txError)
           }
 
-          // Update subscription quantity in Stripe
-          if (companyModule.stripe_subscription_item_id) {
+          // Update subscription quantity in Stripe (same logic as schedule-subscription-update)
+          if (companyModule.stripe_subscription_item_id && companyModule.stripe_subscription_id) {
             try {
               const newQuantity = companyModule.max_users + additionalQuantity
-              console.log(`Updating Stripe subscription item ${companyModule.stripe_subscription_item_id} to quantity ${newQuantity}`)
+              console.log(`Updating Stripe subscription for "buy now": ${companyModule.max_users} -> ${newQuantity} users`)
 
-              // Update with proration_behavior to control billing
-              const updatedItem = await stripe.subscriptionItems.update(
-                companyModule.stripe_subscription_item_id,
-                {
-                  quantity: newQuantity,
-                  proration_behavior: 'none' // Already paid prorated amount from balance
-                }
+              // Get current subscription to check price
+              const currentSubscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
+              const subscriptionItem = currentSubscription.items.data.find(
+                (item: any) => item.id === companyModule.stripe_subscription_item_id
               )
-              console.log('Stripe subscription quantity updated successfully to', updatedItem.quantity)
+
+              if (subscriptionItem) {
+                const currentUnitAmount = subscriptionItem.price?.unit_amount || 0
+                const expectedUnitAmount = Math.round(moduleInfo.base_price_per_user * 100)
+
+                if (currentUnitAmount !== expectedUnitAmount) {
+                  // Price changed - create new price and update
+                  console.log(`Price mismatch: Stripe has ${currentUnitAmount/100} PLN, expected ${expectedUnitAmount/100} PLN - creating new price`)
+
+                  const productId = subscriptionItem.price.product as string
+                  let activeProductId = productId
+
+                  // Check if product is active
+                  try {
+                    const product = await stripe.products.retrieve(productId)
+                    if (!product.active) {
+                      await stripe.products.update(productId, { active: true })
+                      console.log(`Reactivated product ${productId}`)
+                    }
+                  } catch (productErr) {
+                    console.log('Creating new product for subscription...')
+                    const newProduct = await stripe.products.create({
+                      name: `${moduleInfo.name_pl} - Subscription`,
+                      metadata: { module_code: moduleCode, company_id: companyId }
+                    })
+                    activeProductId = newProduct.id
+                  }
+
+                  // Create new price
+                  const newPrice = await stripe.prices.create({
+                    currency: 'pln',
+                    unit_amount: expectedUnitAmount,
+                    recurring: { interval: 'month' },
+                    product: activeProductId,
+                    tax_behavior: 'exclusive',
+                  })
+
+                  // Update subscription item with new price and quantity
+                  await stripe.subscriptionItems.update(
+                    companyModule.stripe_subscription_item_id,
+                    {
+                      price: newPrice.id,
+                      quantity: newQuantity,
+                      proration_behavior: 'none'
+                    }
+                  )
+                  console.log(`Updated Stripe subscription to new price and ${newQuantity} users`)
+                } else {
+                  // Price is same, just update quantity
+                  await stripe.subscriptionItems.update(
+                    companyModule.stripe_subscription_item_id,
+                    {
+                      quantity: newQuantity,
+                      proration_behavior: 'none'
+                    }
+                  )
+                  console.log(`Updated Stripe subscription to ${newQuantity} users`)
+                }
+              } else {
+                console.error('Could not find subscription item in Stripe subscription')
+              }
             } catch (stripeErr: any) {
-              console.error('Failed to update Stripe subscription quantity:', stripeErr?.message || stripeErr)
-              // Log full error for debugging
-              console.error('Full Stripe error:', JSON.stringify(stripeErr, null, 2))
-              // Don't fail the whole operation - local update succeeded
+              if (stripeErr.message?.includes('Deno.core.runMicrotasks')) {
+                console.warn('Deno.core.runMicrotasks warning - operation may have succeeded')
+              } else {
+                console.error('Failed to update Stripe subscription:', stripeErr?.message || stripeErr)
+              }
             }
           } else {
-            console.warn('No stripe_subscription_item_id found for module - skipping Stripe update. This may cause sync issues.')
+            console.warn('Missing stripe_subscription_item_id or stripe_subscription_id - skipping Stripe update')
           }
 
           // Update local record - also update scheduled_max_users if it exists
