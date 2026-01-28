@@ -101,7 +101,13 @@ export const CompanySubscriptionPage: React.FC = () => {
     balanceToUse: number;
     amountToCharge: number;
     totalAmount: number;
+    hasTrial?: boolean;
+    trialDays?: number;
+    billingInterval?: 'month' | 'year';
   } | null>(null);
+
+  // Billing interval selection for new subscriptions (month or year)
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
 
   // Refs for animation
   const cartIconRef = useRef<HTMLButtonElement>(null);
@@ -137,6 +143,7 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Compute subscription display status (like super admin panel)
   // BRAK - no active subscription and no demo
   // DEMO - has demo modules but no paid subscriptions
+  // TRIALING - has active subscription in trial period (7-day free trial)
   // AKTYWNA - has active paid subscription
   const subscriptionDisplayStatus = useMemo(() => {
     const activeModules = myModules.filter(m => m.is_active);
@@ -145,6 +152,10 @@ export const CompanySubscriptionPage: React.FC = () => {
     const hasPaidSubscription = activeModules.some(m => m.stripe_subscription_id);
 
     if (hasPaidSubscription) {
+      // Check if company is in trial period
+      if (currentCompany?.subscription_status === 'trialing') {
+        return { key: 'trialing', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['trialing'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['trialing'] };
+      }
       return { key: 'active', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['active'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['active'] };
     }
 
@@ -156,6 +167,11 @@ export const CompanySubscriptionPage: React.FC = () => {
 
     // No subscriptions
     return { key: 'none', text: COMPANY_SUBSCRIPTION_DISPLAY_LABELS['none'], color: COMPANY_SUBSCRIPTION_DISPLAY_COLORS['none'] };
+  }, [myModules, currentCompany?.subscription_status]);
+
+  // Check if this would be the first subscription (for trial eligibility)
+  const isFirstSubscription = useMemo(() => {
+    return !myModules.some(m => m.stripe_subscription_id);
   }, [myModules]);
 
   // Calculate totals
@@ -385,11 +401,23 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Minimum Stripe payment amount (2 PLN)
   const MIN_STRIPE_AMOUNT = 2;
 
+  // Calculate yearly price with 20% discount
+  const calculateYearlyPrice = (monthlyPrice: number) => {
+    return monthlyPrice * 12 * 0.8; // 20% discount
+  };
+
   // Show card info modal before redirecting to Stripe checkout
-  const showCardInfoBeforeCheckout = (url: string, balanceToUse: number, amountToCharge: number) => {
+  const showCardInfoBeforeCheckout = (url: string, balanceToUse: number, amountToCharge: number, options?: { hasTrial?: boolean; trialDays?: number; billingInterval?: 'month' | 'year' }) => {
     const totalAmount = balanceToUse + amountToCharge;
     setPendingCheckoutUrl(url);
-    setPendingCheckoutInfo({ balanceToUse, amountToCharge, totalAmount });
+    setPendingCheckoutInfo({
+      balanceToUse,
+      amountToCharge,
+      totalAmount,
+      hasTrial: options?.hasTrial,
+      trialDays: options?.trialDays,
+      billingInterval: options?.billingInterval
+    });
     setShowCardInfoModal(true);
   };
 
@@ -451,6 +479,7 @@ export const CompanySubscriptionPage: React.FC = () => {
             action: 'create-checkout-session',
             companyId: currentCompany.id,
             modules: modulesForCheckout, // Array of modules
+            billingInterval, // Pass selected billing interval (month or year)
             successUrl: `${window.location.origin}/#/company/subscription?success=true`,
             cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
           }
@@ -464,10 +493,18 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (data?.url) {
           // Show card info modal before redirect
           const balance = currentCompany.bonus_balance || 0;
-          const totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          // Calculate total based on billing interval
+          let totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          if (billingInterval === 'year') {
+            totalAmount = calculateYearlyPrice(totalAmount);
+          }
           const balanceToUse = Math.min(balance, totalAmount);
           const amountToCharge = totalAmount - balanceToUse;
-          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
+          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge, {
+            hasTrial: data.hasTrial,
+            trialDays: data.trialDays,
+            billingInterval
+          });
           return;
         } else {
           throw new Error('Nie otrzymano URL sesji płatności');
@@ -601,6 +638,7 @@ export const CompanySubscriptionPage: React.FC = () => {
             action: 'create-checkout-session',
             companyId: currentCompany.id,
             modules: modulesForCheckout,
+            billingInterval, // Pass selected billing interval (month or year)
             successUrl: `${window.location.origin}/#/company/subscription?success=true`,
             cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
           }
@@ -611,10 +649,18 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (data?.url) {
           // Show card info modal before redirect
           const balance = currentCompany.bonus_balance || 0;
-          const totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          // Calculate total based on billing interval
+          let totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          if (billingInterval === 'year') {
+            totalAmount = calculateYearlyPrice(totalAmount);
+          }
           const balanceToUse = Math.min(balance, totalAmount);
           const amountToCharge = totalAmount - balanceToUse;
-          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
+          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge, {
+            hasTrial: data.hasTrial,
+            trialDays: data.trialDays,
+            billingInterval
+          });
           return;
         }
       }
@@ -845,6 +891,7 @@ export const CompanySubscriptionPage: React.FC = () => {
           companyId: currentCompany.id,
           moduleCode,
           quantity: maxUsers,
+          billingInterval, // Pass selected billing interval (month or year)
           successUrl: `${window.location.origin}/#/company/subscription?success=true&module=${moduleCode}`,
           cancelUrl: `${window.location.origin}/#/company/subscription?canceled=true`
         }
@@ -856,11 +903,19 @@ export const CompanySubscriptionPage: React.FC = () => {
         // Show card info modal before redirect
         const mod = modules.find(m => m.code === moduleCode);
         const pricePerUser = mod?.base_price_per_user || 0;
-        const totalAmount = maxUsers * pricePerUser;
+        // Calculate total based on billing interval
+        let totalAmount = maxUsers * pricePerUser;
+        if (billingInterval === 'year') {
+          totalAmount = calculateYearlyPrice(totalAmount);
+        }
         const balance = currentCompany.bonus_balance || 0;
         const balanceToUse = Math.min(balance, totalAmount);
         const amountToCharge = totalAmount - balanceToUse;
-        showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
+        showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge, {
+          hasTrial: data.hasTrial,
+          trialDays: data.trialDays,
+          billingInterval
+        });
       } else {
         throw new Error('No checkout URL returned');
       }
@@ -1510,28 +1565,113 @@ export const CompanySubscriptionPage: React.FC = () => {
                       <Zap className="w-5 h-5" />
                       {cart.some(i => i.isNewModule) ? 'Aktywacja modułu' : 'Kalkulacja - dokup na już'}
                     </h4>
+
+                    {/* Billing interval selector - only for new modules */}
+                    {cart.some(i => i.isNewModule) && (
+                      <div className="bg-white rounded-lg p-4 border border-green-200">
+                        <p className="text-sm font-medium text-slate-700 mb-3">Wybierz okres rozliczeniowy:</p>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setBillingInterval('month')}
+                            className={`flex-1 p-3 rounded-lg border-2 transition ${
+                              billingInterval === 'month'
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="text-center">
+                              <span className={`text-lg font-bold ${billingInterval === 'month' ? 'text-green-600' : 'text-slate-700'}`}>
+                                Miesięcznie
+                              </span>
+                              <p className="text-sm text-slate-500 mt-1">Płatność co miesiąc</p>
+                            </div>
+                          </button>
+                          <button
+                            onClick={() => setBillingInterval('year')}
+                            className={`flex-1 p-3 rounded-lg border-2 transition relative ${
+                              billingInterval === 'year'
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                              -20%
+                            </div>
+                            <div className="text-center">
+                              <span className={`text-lg font-bold ${billingInterval === 'year' ? 'text-green-600' : 'text-slate-700'}`}>
+                                Rocznie
+                              </span>
+                              <p className="text-sm text-slate-500 mt-1">Oszczędzasz 20%</p>
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* Trial info for first subscription */}
+                        {isFirstSubscription && (
+                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg flex items-start gap-2">
+                            <Zap className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-purple-800">7 dni bezpłatnego okresu próbnego!</p>
+                              <p className="text-xs text-purple-600 mt-1">
+                                Pierwsza płatność zostanie pobrana dopiero po 7 dniach. Możesz anulować w dowolnym momencie.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="bg-white rounded-lg p-4 border border-green-200">
                       {cart.some(i => i.isNewModule) ? (
                         <>
                           <p className="text-sm text-slate-600 mb-3">Zostaniesz przekierowany do strony płatności Stripe:</p>
                           <div className="space-y-2">
-                            {cart.filter(i => i.isNewModule).map(item => (
-                              <div key={item.moduleCode} className="flex justify-between text-sm">
-                                <span className="text-slate-600">{item.moduleName}: {item.newUsers} użytkowników × {item.pricePerUser} PLN</span>
-                                <span className="font-medium text-slate-900">{(item.newUsers * item.pricePerUser).toFixed(2)} PLN/mies.</span>
+                            {cart.filter(i => i.isNewModule).map(item => {
+                              const monthlyPrice = item.newUsers * item.pricePerUser;
+                              const displayPrice = billingInterval === 'year' ? calculateYearlyPrice(monthlyPrice) : monthlyPrice;
+                              const priceLabel = billingInterval === 'year' ? 'PLN/rok' : 'PLN/mies.';
+                              return (
+                                <div key={item.moduleCode} className="flex justify-between text-sm">
+                                  <span className="text-slate-600">
+                                    {item.moduleName}: {item.newUsers} użytkowników × {billingInterval === 'year' ? calculateYearlyPrice(item.pricePerUser).toFixed(2) : item.pricePerUser} {priceLabel.replace('/rok', '/rok/użytk.').replace('/mies.', '')}
+                                  </span>
+                                  <span className="font-medium text-slate-900">{displayPrice.toFixed(2)} {priceLabel}</span>
+                                </div>
+                              );
+                            })}
+                            {billingInterval === 'year' && (
+                              <div className="text-sm text-green-600 font-medium">
+                                Oszczędzasz: {(cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0) * 12 * 0.2).toFixed(2)} PLN/rok (-20%)
                               </div>
-                            ))}
+                            )}
                             <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
                               <div>
-                                <span className="font-semibold text-slate-900">Miesięczna subskrypcja</span>
+                                <span className="font-semibold text-slate-900">{billingInterval === 'year' ? 'Roczna' : 'Miesięczna'} subskrypcja</span>
+                                {isFirstSubscription && (
+                                  <p className="text-xs text-purple-600 font-medium">Pierwsza płatność za 7 dni (okres próbny)</p>
+                                )}
                                 <p className="text-xs text-slate-500">
-                                  {new Date().toLocaleDateString('pl-PL')} — {new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleDateString('pl-PL')}
+                                  {billingInterval === 'year'
+                                    ? `${new Date().toLocaleDateString('pl-PL')} — ${new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toLocaleDateString('pl-PL')}`
+                                    : `${new Date().toLocaleDateString('pl-PL')} — ${new Date(new Date().setMonth(new Date().getMonth() + 1)).toLocaleDateString('pl-PL')}`
+                                  }
                                 </p>
                               </div>
-                              <span className="font-bold text-xl text-green-600">{cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0).toFixed(2)} PLN</span>
+                              <span className="font-bold text-xl text-green-600">
+                                {(billingInterval === 'year'
+                                  ? calculateYearlyPrice(cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0))
+                                  : cart.filter(i => i.isNewModule).reduce((sum, i) => sum + i.newUsers * i.pricePerUser, 0)
+                                ).toFixed(2)} PLN
+                              </span>
                             </div>
                           </div>
-                          <p className="text-xs text-slate-500 mt-3">Po dokonaniu płatności moduł zostanie aktywowany automatycznie. Subskrypcja odnawia się co miesiąc.</p>
+                          <p className="text-xs text-slate-500 mt-3">
+                            Po dokonaniu płatności moduł zostanie aktywowany automatycznie.
+                            {isFirstSubscription
+                              ? ' Masz 7 dni bezpłatnego okresu próbnego - pierwsza płatność zostanie pobrana po tym okresie.'
+                              : ` Subskrypcja odnawia się ${billingInterval === 'year' ? 'co rok' : 'co miesiąc'}.`
+                            }
+                          </p>
                         </>
                       ) : (
                         <>
@@ -2149,6 +2289,38 @@ export const CompanySubscriptionPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Trial period info */}
+            {pendingCheckoutInfo.hasTrial && (
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <Zap className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-purple-800">
+                    <p className="font-semibold mb-1">🎉 7 dni bezpłatnego okresu próbnego!</p>
+                    <p>
+                      Twoja subskrypcja rozpocznie się z 7-dniowym bezpłatnym okresem próbnym.
+                      Pierwsza płatność zostanie pobrana dopiero po zakończeniu okresu próbnego.
+                      Możesz anulować w dowolnym momencie bez żadnych opłat.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Billing interval info */}
+            {pendingCheckoutInfo.billingInterval === 'year' && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <Award className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold mb-1">Subskrypcja roczna (-20%)</p>
+                    <p>
+                      Wybrałeś subskrypcję roczną ze zniżką 20%. Płatność będzie odnawiana co rok.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
               <div className="flex items-start gap-3">

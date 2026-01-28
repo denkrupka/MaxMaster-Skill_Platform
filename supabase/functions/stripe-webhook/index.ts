@@ -421,16 +421,23 @@ serve(async (req) => {
           }
         }
 
+        // Determine subscription status based on subscription state
+        let subscriptionStatus = 'active'
+        if (subscription.status === 'trialing') {
+          subscriptionStatus = 'trialing'
+          console.log(`Subscription is in trial period until ${new Date(subscription.trial_end! * 1000).toISOString()}`)
+        }
+
         // Update company subscription status
         const { error: companyUpdateError } = await supabaseAdmin
           .from('companies')
-          .update({ subscription_status: 'active' })
+          .update({ subscription_status: subscriptionStatus })
           .eq('id', company_id)
 
         if (companyUpdateError) {
           console.error('Error updating company subscription_status:', companyUpdateError)
         } else {
-          console.log(`Company ${company_id} subscription_status updated to active`)
+          console.log(`Company ${company_id} subscription_status updated to ${subscriptionStatus}`)
         }
         break
       }
@@ -507,22 +514,25 @@ serve(async (req) => {
           const modCode = moduleCodes[i] || moduleCode
 
           if (modCode) {
+            // Module is active if subscription is active OR trialing
+            const isActive = subscription.status === 'active' || subscription.status === 'trialing'
             await supabaseAdmin
               .from('company_modules')
               .update({
                 max_users: item.quantity || 10,
-                is_active: subscription.status === 'active'
+                is_active: isActive
               })
               .eq('company_id', companyId)
               .eq('module_code', modCode)
 
-            console.log(`Updated module ${modCode}: quantity=${item.quantity}, active=${subscription.status === 'active'}`)
+            console.log(`Updated module ${modCode}: quantity=${item.quantity}, active=${isActive} (status: ${subscription.status})`)
           }
         }
 
         // Update company subscription status
         const statusMap: Record<string, string> = {
           'active': 'active',
+          'trialing': 'trialing',
           'past_due': 'past_due',
           'canceled': 'canceled',
           'unpaid': 'suspended'

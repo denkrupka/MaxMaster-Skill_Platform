@@ -114,16 +114,19 @@ export const SUBSCRIPTION_STATUS_COLORS: Record<string, string> = {
 // Company subscription display status (computed from modules)
 // BRAK - no active subscription and no demo
 // DEMO - has demo modules but no paid subscriptions
+// TRIALING - has active subscription in trial period
 // AKTYWNA - has active paid subscription
 export const COMPANY_SUBSCRIPTION_DISPLAY_LABELS: Record<string, string> = {
   'none': 'BRAK',
   'demo': 'DEMO',
+  'trialing': 'TRIAL',
   'active': 'AKTYWNA'
 };
 
 export const COMPANY_SUBSCRIPTION_DISPLAY_COLORS: Record<string, string> = {
   'none': 'bg-gray-100 text-gray-800 border-gray-200',
   'demo': 'bg-blue-100 text-blue-800 border-blue-200',
+  'trialing': 'bg-purple-100 text-purple-800 border-purple-200',
   'active': 'bg-green-100 text-green-800 border-green-200'
 };
 
