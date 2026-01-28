@@ -440,28 +440,8 @@ serve(async (req) => {
           )
         }
 
-        // Partial or no balance - need Stripe checkout for remaining amount
-        // First deduct available balance
-        if (balanceToUse > 0) {
-          const newBalance = currentBalance - balanceToUse
-
-          await supabaseAdmin
-            .from('companies')
-            .update({ bonus_balance: newBalance })
-            .eq('id', companyId)
-
-          // Log balance usage
-          await supabaseAdmin
-            .from('bonus_transactions')
-            .insert({
-              company_id: companyId,
-              amount: balanceToUse,
-              type: 'debit',
-              description: `Częściowa opłata za miejsca w module ${moduleCode} (reszta: ${remainingToCharge.toFixed(2)} PLN kartą)`
-            })
-
-          console.log(`Deducted ${balanceToUse} PLN from balance, charging ${remainingToCharge} PLN via Stripe`)
-        }
+        // Need Stripe checkout - balance will be deducted ONLY AFTER successful payment in webhook
+        // This prevents balance loss if user cancels or payment fails
 
         // Format dates for description
         const formatDate = (d: Date) => d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
@@ -469,13 +449,16 @@ serve(async (req) => {
         // Build description
         let description = `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInPeriod} dni do ${formatDate(periodEnd)})`
         if (balanceToUse > 0) {
-          description += ` - ${balanceToUse.toFixed(2)} PLN z balansu`
+          description += ` - ${balanceToUse.toFixed(2)} PLN zostanie potrącone z balansu`
         }
         if (bonusAmount > 0) {
           description += ` + ${(bonusAmount/100).toFixed(2)} PLN bonus`
         }
 
+        console.log(`Creating checkout for ${remainingToCharge} PLN. Balance to deduct after success: ${balanceToUse} PLN`)
+
         // Create one-time payment checkout session for remaining amount
+        // Balance deduction happens in webhook AFTER successful payment
         const session = await stripe.checkout.sessions.create({
           customer: company.stripe_customer_id,
           mode: 'payment',
@@ -500,7 +483,7 @@ serve(async (req) => {
             action_type: 'add_seats',
             new_total_quantity: (companyModule.max_users + additionalQuantity).toString(),
             bonus_amount_grosze: bonusAmount.toString(),
-            balance_used: balanceToUse.toString(), // Track how much balance was used
+            balance_to_deduct: balanceToUse.toString(), // Deduct this AFTER successful payment
           },
           automatic_tax: {
             enabled: true,
@@ -511,7 +494,7 @@ serve(async (req) => {
           JSON.stringify({
             sessionId: session.id,
             url: session.url,
-            balanceUsed: balanceToUse,
+            balanceToDeduct: balanceToUse,
             amountToCharge: remainingToCharge
           }),
           {
