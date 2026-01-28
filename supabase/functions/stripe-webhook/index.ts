@@ -139,7 +139,9 @@ serve(async (req) => {
                 status: 'paid',
                 description: `Doładowanie balansu bonusowego - ${topupAmount} PLN`,
                 stripe_invoice_id: session.invoice as string || null,
-                paid_at: new Date().toISOString()
+                paid_at: new Date().toISOString(),
+                payment_method: 'stripe',
+                payment_type: 'balance_topup'
               })
 
             if (historyError) {
@@ -289,6 +291,14 @@ serve(async (req) => {
               paymentDescription += ` (${balanceToDeduct.toFixed(2)} PLN z balansu + ${cardAmount.toFixed(2)} PLN kartą)`
             }
 
+            // Determine payment method: stripe, bonus, or mixed
+            let paymentMethod = 'stripe'
+            if (balanceToDeduct > 0 && cardAmount > 0) {
+              paymentMethod = 'mixed'
+            } else if (balanceToDeduct > 0 && cardAmount === 0) {
+              paymentMethod = 'bonus'
+            }
+
             const { error: historyError } = await supabaseAdmin
               .from('payment_history')
               .insert({
@@ -298,7 +308,9 @@ serve(async (req) => {
                 status: 'paid',
                 description: paymentDescription,
                 stripe_invoice_id: session.invoice as string || null,
-                paid_at: new Date().toISOString()
+                paid_at: new Date().toISOString(),
+                payment_method: paymentMethod,
+                payment_type: 'seats_purchase'
               })
 
             if (historyError) {
@@ -632,6 +644,15 @@ serve(async (req) => {
               })
           }
 
+          // Determine payment method based on balance usage
+          const cardPaidAmount = invoice.amount_paid / 100
+          let invoicePaymentMethod = 'stripe'
+          if (balanceUsed > 0 && cardPaidAmount > 0) {
+            invoicePaymentMethod = 'mixed'
+          } else if (balanceUsed > 0 && cardPaidAmount === 0) {
+            invoicePaymentMethod = 'bonus'
+          }
+
           // Log payment
           await supabaseAdmin
             .from('payment_history')
@@ -646,7 +667,9 @@ serve(async (req) => {
               paid_at: new Date().toISOString(),
               description: balanceUsed > 0
                 ? `Płatność: ${(invoice.amount_paid / 100).toFixed(2)} PLN z karty + ${balanceUsed.toFixed(2)} PLN z balansu`
-                : undefined
+                : undefined,
+              payment_method: invoicePaymentMethod,
+              payment_type: 'subscription'
             })
 
           // Apply scheduled price changes for this company's modules
@@ -762,7 +785,9 @@ serve(async (req) => {
               currency: invoice.currency.toUpperCase(),
               status: 'failed',
               invoice_number: invoice.number,
-              created_at: new Date().toISOString()
+              created_at: new Date().toISOString(),
+              payment_method: 'stripe',
+              payment_type: 'subscription'
             })
         }
         break

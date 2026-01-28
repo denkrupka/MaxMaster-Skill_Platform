@@ -322,6 +322,9 @@ export interface PaymentHistory {
   description?: string;
   paid_at?: string;
   created_at: string;
+  payment_method?: 'stripe' | 'bonus' | 'mixed' | 'portal';
+  payment_type?: 'subscription' | 'balance_topup' | 'seats_purchase' | 'bonus_credit' | 'bonus_debit';
+  comment?: string;
 }
 
 export interface UserSkill {
