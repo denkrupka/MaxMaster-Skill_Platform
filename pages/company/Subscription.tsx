@@ -230,12 +230,19 @@ export const CompanySubscriptionPage: React.FC = () => {
 
     // Active module
     if (companyMod.is_active) {
+      // Check if company is in trial period
+      const isTrialing = currentCompany?.subscription_status === 'trialing';
+
       // Show subscription period end date from Stripe
       if (companyMod.subscription_period_end) {
         const periodEnd = new Date(companyMod.subscription_period_end);
         return {
-          text: `AKTYWNY DO ${periodEnd.toLocaleDateString('pl-PL')}`,
-          color: 'bg-green-100 text-green-700',
+          text: isTrialing
+            ? `OKRES PRÓBNY do ${periodEnd.toLocaleDateString('pl-PL')}`
+            : `AKTYWNY DO ${periodEnd.toLocaleDateString('pl-PL')}`,
+          color: isTrialing
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-green-100 text-green-700',
           hasDate: true
         };
       }
@@ -243,12 +250,20 @@ export const CompanySubscriptionPage: React.FC = () => {
       if (companyMod.deactivated_at) {
         const deactivationDate = new Date(companyMod.deactivated_at);
         return {
-          text: `AKTYWNY DO ${deactivationDate.toLocaleDateString('pl-PL')}`,
-          color: 'bg-green-100 text-green-700',
+          text: isTrialing
+            ? `OKRES PRÓBNY do ${deactivationDate.toLocaleDateString('pl-PL')}`
+            : `AKTYWNY DO ${deactivationDate.toLocaleDateString('pl-PL')}`,
+          color: isTrialing
+            ? 'bg-purple-100 text-purple-700'
+            : 'bg-green-100 text-green-700',
           hasDate: true
         };
       }
-      return { text: 'AKTYWNY', color: 'bg-green-100 text-green-700', hasDate: false };
+      return {
+        text: isTrialing ? 'OKRES PRÓBNY' : 'AKTYWNY',
+        color: isTrialing ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700',
+        hasDate: false
+      };
     }
 
     return { text: 'BRAK', color: 'bg-slate-100 text-slate-600', hasDate: false };
