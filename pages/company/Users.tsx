@@ -27,6 +27,18 @@ const ASSIGNABLE_ROLES = [
   Role.EMPLOYEE,
 ];
 
+// Format phone number as +48 XXX XXX XXX
+const formatPhone = (val: string): string => {
+  let cleaned = val.replace(/\D/g, '');
+  if (cleaned.startsWith('48')) cleaned = cleaned.substring(2);
+  let limited = cleaned.substring(0, 9);
+  let result = '+48 ';
+  if (limited.length > 0) result += limited.substring(0, 3);
+  if (limited.length > 3) result += ' ' + limited.substring(3, 6);
+  if (limited.length > 6) result += ' ' + limited.substring(6, 9);
+  return result.trim();
+};
+
 export const CompanyUsersPage: React.FC = () => {
   const { state, addUser, updateUser, deleteUserCompletely } = useAppContext();
   const { currentUser, currentCompany, users, companyModules, modules, moduleUserAccess } = state;
@@ -77,7 +89,12 @@ export const CompanyUsersPage: React.FC = () => {
   // Handle form change
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'phone') {
+      const formatted = value ? formatPhone(value) : '';
+      setFormData(prev => ({ ...prev, [name]: formatted }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
 
@@ -138,7 +155,7 @@ export const CompanyUsersPage: React.FC = () => {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       email: user.email || '',
-      phone: user.phone || '',
+      phone: user.phone ? formatPhone(user.phone) : '',
       role: user.role
     });
     setShowEditModal(true);
@@ -346,6 +363,7 @@ export const CompanyUsersPage: React.FC = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleFormChange}
+                  placeholder="+48 XXX XXX XXX"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -441,6 +459,7 @@ export const CompanyUsersPage: React.FC = () => {
                   name="phone"
                   value={formData.phone}
                   onChange={handleFormChange}
+                  placeholder="+48 XXX XXX XXX"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
