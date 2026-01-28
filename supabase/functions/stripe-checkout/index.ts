@@ -756,10 +756,7 @@ serve(async (req) => {
           effectiveDate = new Date(subscription.current_period_end * 1000)
         } catch (err) {
           console.error('Failed to get subscription:', err)
-          // Fallback to next month if we can't get subscription
-          effectiveDate = new Date()
-          effectiveDate.setMonth(effectiveDate.getMonth() + 1)
-          effectiveDate.setDate(1)
+          throw new Error('Nie udało się pobrać danych subskrypcji z Stripe')
         }
 
         // Calculate the scheduled price (new total price per month)
