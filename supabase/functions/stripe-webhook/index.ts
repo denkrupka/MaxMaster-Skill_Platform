@@ -379,7 +379,7 @@ serve(async (req) => {
             .single()
 
           if (existingModule) {
-            // Update existing
+            // Update existing - clear all scheduled data from previous subscription
             const { error: updateError } = await supabaseAdmin
               .from('company_modules')
               .update({
@@ -389,14 +389,20 @@ serve(async (req) => {
                 stripe_subscription_item_id: subscriptionItem.id,
                 activated_at: new Date().toISOString(),
                 subscription_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString()
+                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+                // Clear scheduled data from previous subscription so new subscription starts fresh
+                scheduled_max_users: null,
+                scheduled_change_at: null,
+                next_billing_cycle_price: null,
+                price_scheduled_at: null,
+                deactivated_at: null
               })
               .eq('id', existingModule.id)
 
             if (updateError) {
               console.error(`Error updating company_module for ${mod.moduleCode}:`, updateError)
             } else {
-              console.log(`Successfully updated company_module ${existingModule.id} (${mod.moduleCode}) to active`)
+              console.log(`Successfully reactivated company_module ${existingModule.id} (${mod.moduleCode}), cleared previous scheduled data`)
             }
           } else {
             // Get module info
@@ -582,18 +588,25 @@ serve(async (req) => {
           moduleCodes = [moduleCode]
         }
 
-        // Deactivate all modules in subscription
+        // Deactivate all modules in subscription and clear all scheduled/period data
         for (const modCode of moduleCodes) {
           await supabaseAdmin
             .from('company_modules')
             .update({
               is_active: false,
-              deactivated_at: new Date().toISOString()
+              deactivated_at: new Date().toISOString(),
+              // Clear all scheduled and period fields so new subscription starts fresh
+              scheduled_max_users: null,
+              scheduled_change_at: null,
+              subscription_period_start: null,
+              subscription_period_end: null,
+              next_billing_cycle_price: null,
+              price_scheduled_at: null
             })
             .eq('company_id', companyId)
             .eq('module_code', modCode)
 
-          console.log(`Deactivated module ${modCode} for company ${companyId}`)
+          console.log(`Deactivated module ${modCode} for company ${companyId}, cleared scheduled data`)
         }
 
         // Check if company has any active modules left
