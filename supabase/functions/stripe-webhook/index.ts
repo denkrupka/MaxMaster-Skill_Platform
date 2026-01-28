@@ -77,17 +77,17 @@ serve(async (req) => {
           const topupAmount = parseFloat(session.metadata?.topup_amount || '0')
 
           if (topupAmount > 0) {
-            // Get current balance
+            // Get current balance and stripe_customer_id
             const { data: company } = await supabaseAdmin
               .from('companies')
-              .select('bonus_balance')
+              .select('bonus_balance, stripe_customer_id')
               .eq('id', company_id)
               .single()
 
             const currentBalance = company?.bonus_balance || 0
             const newBalance = currentBalance + topupAmount
 
-            // Update company bonus balance
+            // Update company bonus balance in database
             const { error: balanceError } = await supabaseAdmin
               .from('companies')
               .update({ bonus_balance: newBalance })
@@ -97,6 +97,26 @@ serve(async (req) => {
               console.error('Failed to update bonus balance:', balanceError)
             } else {
               console.log(`Added ${topupAmount} PLN to company ${company_id} bonus balance (new total: ${newBalance} PLN)`)
+            }
+
+            // Also add to Stripe Customer Balance for automatic deduction on future payments
+            if (company?.stripe_customer_id) {
+              try {
+                // Stripe Customer Balance: negative amount = credit (money owed TO customer)
+                const amountInGrosze = Math.round(topupAmount * 100) * -1
+                await stripe.customers.createBalanceTransaction(
+                  company.stripe_customer_id,
+                  {
+                    amount: amountInGrosze,
+                    currency: 'pln',
+                    description: `Doładowanie balansu - ${topupAmount} PLN`
+                  }
+                )
+                console.log(`Added ${topupAmount} PLN to Stripe Customer Balance for ${company.stripe_customer_id}`)
+              } catch (stripeBalanceError) {
+                console.error('Failed to add to Stripe Customer Balance:', stripeBalanceError)
+                // Don't fail the whole operation - local balance is updated
+              }
             }
 
             // Log to bonus_transactions
@@ -182,7 +202,7 @@ serve(async (req) => {
               const bonusAmount = bonusAmountGrosze / 100 // Convert to PLN
               const { data: company } = await supabaseAdmin
                 .from('companies')
-                .select('bonus_balance')
+                .select('bonus_balance, stripe_customer_id')
                 .eq('id', company_id)
                 .single()
 
@@ -198,6 +218,24 @@ serve(async (req) => {
                 console.error('Failed to update bonus balance:', bonusError)
               } else {
                 console.log(`Added ${bonusAmount} PLN to company bonus balance (new total: ${newBalance} PLN)`)
+              }
+
+              // Also add to Stripe Customer Balance
+              if (company?.stripe_customer_id) {
+                try {
+                  const amountInGrosze = bonusAmountGrosze * -1 // Negative = credit
+                  await stripe.customers.createBalanceTransaction(
+                    company.stripe_customer_id,
+                    {
+                      amount: amountInGrosze,
+                      currency: 'pln',
+                      description: `Bonus za minimmalną płatność - ${bonusAmount} PLN`
+                    }
+                  )
+                  console.log(`Added ${bonusAmount} PLN to Stripe Customer Balance for ${company.stripe_customer_id}`)
+                } catch (stripeBalanceError) {
+                  console.error('Failed to add to Stripe Customer Balance:', stripeBalanceError)
+                }
               }
             }
 
@@ -512,11 +550,39 @@ serve(async (req) => {
         // Find company by customer ID
         const { data: company } = await supabaseAdmin
           .from('companies')
-          .select('id')
+          .select('id, bonus_balance')
           .eq('stripe_customer_id', customerId)
           .single()
 
         if (company) {
+          // Check if Stripe Customer Balance was used for this payment
+          // starting_balance and ending_balance are negative (credit to customer)
+          const startingBalance = invoice.starting_balance || 0
+          const endingBalance = invoice.ending_balance || 0
+          const balanceUsed = (startingBalance - endingBalance) / 100 // Convert to PLN (positive if balance was used)
+
+          if (balanceUsed > 0) {
+            // Update local bonus_balance to match Stripe
+            const newLocalBalance = Math.max(0, (company.bonus_balance || 0) - balanceUsed)
+
+            await supabaseAdmin
+              .from('companies')
+              .update({ bonus_balance: newLocalBalance })
+              .eq('id', company.id)
+
+            console.log(`Stripe used ${balanceUsed} PLN from Customer Balance. Local balance updated: ${company.bonus_balance} -> ${newLocalBalance}`)
+
+            // Log balance usage in bonus_transactions
+            await supabaseAdmin
+              .from('bonus_transactions')
+              .insert({
+                company_id: company.id,
+                amount: balanceUsed,
+                type: 'debit',
+                description: `Automatyczne wykorzystanie balansu dla faktury ${invoice.number || invoice.id}`
+              })
+          }
+
           // Log payment
           await supabaseAdmin
             .from('payment_history')
@@ -528,7 +594,10 @@ serve(async (req) => {
               status: 'paid',
               invoice_number: invoice.number,
               invoice_pdf_url: invoice.invoice_pdf,
-              paid_at: new Date().toISOString()
+              paid_at: new Date().toISOString(),
+              description: balanceUsed > 0
+                ? `Płatność: ${(invoice.amount_paid / 100).toFixed(2)} PLN z karty + ${balanceUsed.toFixed(2)} PLN z balansu`
+                : undefined
             })
 
           // Apply scheduled price changes for this company's modules

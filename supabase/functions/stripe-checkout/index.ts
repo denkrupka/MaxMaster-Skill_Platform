@@ -122,6 +122,24 @@ serve(async (req) => {
             .from('companies')
             .update({ stripe_customer_id: customerId })
             .eq('id', companyId)
+
+          // Sync existing bonus_balance to Stripe Customer Balance
+          if (company.bonus_balance && company.bonus_balance > 0) {
+            try {
+              const balanceInGrosze = Math.round(company.bonus_balance * 100) * -1 // Negative = credit
+              await stripe.customers.createBalanceTransaction(
+                customerId,
+                {
+                  amount: balanceInGrosze,
+                  currency: 'pln',
+                  description: `Synchronizacja istniejącego balansu bonusowego - ${company.bonus_balance} PLN`
+                }
+              )
+              console.log(`Synced existing balance ${company.bonus_balance} PLN to Stripe Customer Balance for new customer ${customerId}`)
+            } catch (syncError) {
+              console.error('Failed to sync existing balance to Stripe:', syncError)
+            }
+          }
         }
 
         // Build line_items for all modules
@@ -638,6 +656,114 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ sessionId: session.id, url: session.url }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
+      case 'add-stripe-balance': {
+        // Add balance to Stripe Customer Balance (for admin bonus or top-up)
+        const { companyId, amount, description } = body
+
+        if (!companyId || amount === undefined) {
+          throw new Error('companyId and amount are required')
+        }
+
+        // Get company with Stripe customer ID
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('stripe_customer_id, name, email, tax_id')
+          .eq('id', companyId)
+          .single()
+
+        if (companyError || !company) {
+          throw new Error('Company not found')
+        }
+
+        // Get or create Stripe customer
+        let customerId = company.stripe_customer_id
+
+        if (!customerId) {
+          const customer = await stripe.customers.create({
+            email: company.email || undefined,
+            name: company.name,
+            metadata: {
+              company_id: companyId,
+              tax_id: company.tax_id || ''
+            }
+          })
+          customerId = customer.id
+
+          // Save customer ID to company
+          await supabaseAdmin
+            .from('companies')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', companyId)
+        }
+
+        // Convert amount to grosze (negative = credit to customer)
+        // Stripe Customer Balance: negative amount = credit (money owed TO customer)
+        const amountInGrosze = Math.round(amount * 100) * -1
+
+        // Create balance transaction in Stripe
+        const balanceTransaction = await stripe.customers.createBalanceTransaction(
+          customerId,
+          {
+            amount: amountInGrosze,
+            currency: 'pln',
+            description: description || `Bonus balance: ${amount} PLN`
+          }
+        )
+
+        console.log(`Added ${amount} PLN to Stripe Customer Balance for ${customerId} (transaction: ${balanceTransaction.id})`)
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            transactionId: balanceTransaction.id,
+            newBalance: balanceTransaction.ending_balance / -100 // Convert back to positive PLN
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          }
+        )
+      }
+
+      case 'get-stripe-balance': {
+        // Get current Stripe Customer Balance
+        const { companyId } = body
+
+        if (!companyId) {
+          throw new Error('companyId is required')
+        }
+
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('stripe_customer_id')
+          .eq('id', companyId)
+          .single()
+
+        if (companyError || !company?.stripe_customer_id) {
+          return new Response(
+            JSON.stringify({ balance: 0 }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200
+            }
+          )
+        }
+
+        // Get customer from Stripe
+        const customer = await stripe.customers.retrieve(company.stripe_customer_id) as Stripe.Customer
+
+        // Balance is negative in Stripe (credit = money owed to customer)
+        const balance = customer.balance ? (customer.balance / -100) : 0
+
+        return new Response(
+          JSON.stringify({ balance }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200
