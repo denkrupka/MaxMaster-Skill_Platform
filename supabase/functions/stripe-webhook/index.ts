@@ -141,7 +141,8 @@ serve(async (req) => {
                 stripe_invoice_id: session.invoice as string || null,
                 paid_at: new Date().toISOString(),
                 payment_method: 'stripe',
-                payment_type: 'balance_topup'
+                payment_type: 'balance_topup',
+                comment: `Doładowanie +${topupAmount} PLN`
               })
 
             if (historyError) {
@@ -299,6 +300,14 @@ serve(async (req) => {
               paymentMethod = 'bonus'
             }
 
+            // Build comment with module name
+            const moduleLabels: Record<string, string> = {
+              'recruitment': 'Rekrutacja',
+              'skills': 'Umiejętności'
+            }
+            const moduleName = moduleLabels[moduleCodeToUpdate] || moduleCodeToUpdate
+            const seatsComment = `+${additional_quantity} miejsc w module ${moduleName}`
+
             const { error: historyError } = await supabaseAdmin
               .from('payment_history')
               .insert({
@@ -310,7 +319,8 @@ serve(async (req) => {
                 stripe_invoice_id: session.invoice as string || null,
                 paid_at: new Date().toISOString(),
                 payment_method: paymentMethod,
-                payment_type: 'seats_purchase'
+                payment_type: 'seats_purchase',
+                comment: seatsComment
               })
 
             if (historyError) {
@@ -676,6 +686,29 @@ serve(async (req) => {
             invoicePaymentMethod = 'bonus'
           }
 
+          // Build comment with module details from active company modules
+          let paymentComment: string | null = null
+          try {
+            const { data: activeModules } = await supabaseAdmin
+              .from('company_modules')
+              .select('module_code, max_users')
+              .eq('company_id', company.id)
+              .eq('is_active', true)
+
+            if (activeModules && activeModules.length > 0) {
+              const moduleLabels: Record<string, string> = {
+                'recruitment': 'Rekrutacja',
+                'skills': 'Umiejętności'
+              }
+              const moduleDetails = activeModules.map(m =>
+                `${moduleLabels[m.module_code] || m.module_code}: ${m.max_users} miejsc`
+              ).join(', ')
+              paymentComment = moduleDetails
+            }
+          } catch (e) {
+            console.log('Could not fetch module details for payment comment:', e)
+          }
+
           // Log payment
           await supabaseAdmin
             .from('payment_history')
@@ -692,7 +725,8 @@ serve(async (req) => {
                 ? `Płatność: ${(invoice.amount_paid / 100).toFixed(2)} PLN z karty + ${balanceUsed.toFixed(2)} PLN z balansu`
                 : undefined,
               payment_method: invoicePaymentMethod,
-              payment_type: 'subscription'
+              payment_type: 'subscription',
+              comment: paymentComment
             })
 
           // Apply scheduled price changes for this company's modules
