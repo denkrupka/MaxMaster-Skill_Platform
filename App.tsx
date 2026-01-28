@@ -29,6 +29,7 @@ import { CompanyDashboard } from './pages/company/Dashboard';
 import { CompanyUsersPage } from './pages/company/Users';
 import { CompanySubscriptionPage } from './pages/company/Subscription';
 import { CompanySettingsPage } from './pages/company/Settings';
+import { CompanyReferralsPage } from './pages/company/Referrals';
 
 // Sales Pages
 import { SalesDashboard } from './pages/sales/Dashboard';
@@ -370,6 +371,7 @@ export default function App() {
           <Route path="/company/dashboard" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyDashboard /></ProtectedRoute>} />
           <Route path="/company/users" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyUsersPage /></ProtectedRoute>} />
           <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
+          <Route path="/company/referrals" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyReferralsPage /></ProtectedRoute>} />
           <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
