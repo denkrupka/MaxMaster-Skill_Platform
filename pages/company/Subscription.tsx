@@ -468,6 +468,18 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (fnError) throw fnError;
         if (data?.error) throw new Error(data.error);
 
+        // Check if payment was covered entirely from balance
+        if (data?.paidFromBalance) {
+          setCart([]);
+          setPurchaseMode('none');
+          setShowMinPaymentModal(false);
+          // Refresh data to show updated balance and module users
+          await refreshData();
+          // Show success message via URL param
+          window.location.href = `${window.location.origin}/#/company/subscription?success=true&fromBalance=true`;
+          return;
+        }
+
         if (data?.url) {
           setCart([]);
           setPurchaseMode('none');
