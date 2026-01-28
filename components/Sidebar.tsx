@@ -24,10 +24,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  // Check if company is eligible for trial (never had paid subscriptions)
+  // Check if company is eligible for trial (never had any subscriptions including trial)
   const isEligibleForTrial = useMemo(() => {
     if (!currentCompany || currentUser?.role !== Role.COMPANY_ADMIN) return false;
-    // Check if company has never had a paid subscription
+    // Only show banner if subscription_status is 'none' (never started any subscription)
+    // Don't show if already in trial, active, past_due, or cancelled
+    if (currentCompany.subscription_status && currentCompany.subscription_status !== 'none') {
+      return false;
+    }
+    // Also check if company has never had any subscription on any module
     const hasHadSubscription = companyModules.some(m =>
       m.company_id === currentCompany.id && m.stripe_subscription_id
     );
