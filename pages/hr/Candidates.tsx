@@ -47,7 +47,7 @@ export const HRCandidatesPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
     
-    const inviteLink = `${window.location.origin}/#/candidate/welcome`;
+    const inviteLink = `${window.location.origin}/#/candidate/welcome${currentCompany?.id ? `?company=${currentCompany.id}` : ''}`;
 
     const [selectedCandidate, setSelectedCandidate] = useState<User | null>(null);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -365,7 +365,8 @@ export const HRCandidatesPage = () => {
     const generateInvitationLink = () => {
         const origin = window.location.origin;
         const registrationPath = '/#/candidate/welcome';
-        const link = `${origin}${registrationPath}`;
+        const companyParam = currentCompany?.id ? `?company=${currentCompany.id}` : '';
+        const link = `${origin}${registrationPath}${companyParam}`;
         setInvitationLink(link);
         setIsInvitationModalOpen(true);
     };
@@ -440,7 +441,8 @@ export const HRCandidatesPage = () => {
         }
 
         // Load WELCOME message template
-        const fullUrl = `${window.location.origin}/#/candidate/welcome`;
+        const companyParam = currentCompany?.id ? `?company=${currentCompany.id}` : '';
+        const fullUrl = `${window.location.origin}/#/candidate/welcome${companyParam}`;
         const defaultMessage = `Cześć ${selectedCandidate.first_name}, zapraszamy do portalu MaxMaster! Tutaj sprawdzisz swoją stawkę: ${fullUrl}`;
 
         setWelcomeSMSData({
@@ -455,12 +457,13 @@ export const HRCandidatesPage = () => {
         setIsSendingSMS(true);
         try {
             // Send welcome SMS using the CAND_INVITE_LINK template
+            const companyParam = currentCompany?.id ? `?company=${currentCompany.id}` : '';
             const result = await sendTemplatedSMS(
                 'CAND_INVITE_LINK',
                 selectedCandidate.phone,
                 {
                     firstName: selectedCandidate.first_name,
-                    portalUrl: `${window.location.origin}/#/candidate/welcome`
+                    portalUrl: `${window.location.origin}/#/candidate/welcome${companyParam}`
                 },
                 selectedCandidate.id
             );

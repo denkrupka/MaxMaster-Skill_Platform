@@ -21,12 +21,18 @@ export const CandidateWelcomePage = () => {
 
     const handleInterested = () => {
         const refId = searchParams.get('ref');
-        const queryStr = refId ? `?ref=${refId}` : '';
+        const companyId = searchParams.get('company');
+
+        // Build query string with ref and company params
+        const params = new URLSearchParams();
+        if (refId) params.append('ref', refId);
+        if (companyId) params.append('company', companyId);
+        const queryStr = params.toString() ? `?${params.toString()}` : '';
 
         if (state.currentUser) {
             navigate('/candidate/dashboard');
         } else {
-            // Proceed to Step 2 (Registration) and preserve referral ID
+            // Proceed to Step 2 (Registration) and preserve referral ID and company ID
             navigate(`/candidate/register${queryStr}`);
         }
     };
