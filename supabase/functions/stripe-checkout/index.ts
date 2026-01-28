@@ -402,14 +402,22 @@ serve(async (req) => {
         if (remainingToChargeGrosze <= 0) {
           // Deduct from balance
           const newBalance = currentBalance - chargeAmountPLN
+          console.log(`Deducting ${chargeAmountPLN} PLN from balance. Current: ${currentBalance}, New: ${newBalance}`)
 
-          await supabaseAdmin
+          const { error: balanceError } = await supabaseAdmin
             .from('companies')
             .update({ bonus_balance: newBalance })
             .eq('id', companyId)
 
+          if (balanceError) {
+            console.error('Failed to update balance:', balanceError)
+            throw new Error('Nie udało się zaktualizować balansu')
+          }
+
+          console.log('Balance updated successfully')
+
           // Log balance usage
-          await supabaseAdmin
+          const { error: txError } = await supabaseAdmin
             .from('bonus_transactions')
             .insert({
               company_id: companyId,
@@ -417,6 +425,10 @@ serve(async (req) => {
               type: 'debit',
               description: `Opłata za ${additionalQuantity} dodatkowych miejsc w module ${moduleCode}`
             })
+
+          if (txError) {
+            console.error('Failed to log transaction:', txError)
+          }
 
           // Update subscription quantity in Stripe
           if (companyModule.stripe_subscription_item_id) {
@@ -599,8 +611,8 @@ serve(async (req) => {
           throw new Error('Moduł nie istnieje')
         }
 
-        // Use company-specific price if set, otherwise use base price
-        const pricePerUser = companyModule.price_per_user || moduleInfo.base_price_per_user
+        // Always use base price from superadmin settings for consistency
+        const pricePerUser = moduleInfo.base_price_per_user
         const unitAmountGrosze = Math.round(pricePerUser * 100)
 
         // Get subscription to find billing period end date
