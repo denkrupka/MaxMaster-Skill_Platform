@@ -649,8 +649,9 @@ export const SuperAdminCompaniesPage: React.FC = () => {
     setLoadingBonus(true);
     try {
       const newBalance = (selectedCompany.bonus_balance || 0) + amount;
+      const description = bonusDescription || (amount > 0 ? 'Doładowanie ręczne przez administratora' : 'Wykorzystanie');
 
-      // Update company balance
+      // Update company balance in database
       const { error: updateError } = await supabase
         .from('companies')
         .update({ bonus_balance: newBalance })
@@ -660,12 +661,44 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         throw updateError;
       }
 
+      // Sync with Stripe Customer Balance
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.session?.access_token}`
+            },
+            body: JSON.stringify({
+              action: 'add-stripe-balance',
+              companyId: selectedCompany.id,
+              amount: amount, // Positive = add credit, negative = deduct
+              description: description
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.warn('Stripe balance sync warning:', errorData.error);
+          // Don't throw - local balance is already updated
+        } else {
+          console.log('Stripe Customer Balance synced successfully');
+        }
+      } catch (stripeError) {
+        console.warn('Could not sync with Stripe Customer Balance:', stripeError);
+        // Continue anyway - local balance is updated
+      }
+
       // Try to save bonus transaction (table may not exist)
       const newBonusEntry = {
         id: Date.now().toString(),
         amount: Math.abs(amount),
         type: amount > 0 ? 'credit' as const : 'debit' as const,
-        description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
+        description: description,
         created_at: new Date().toISOString()
       };
 
@@ -674,7 +707,7 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         company_id: selectedCompany.id,
         amount: Math.abs(amount),
         type: amount > 0 ? 'credit' : 'debit',
-        description: bonusDescription || (amount > 0 ? 'Doładowanie ręczne' : 'Wykorzystanie'),
+        description: description,
         created_by: state.currentUser?.id
       });
 
