@@ -1360,6 +1360,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                     <tr>
                       <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Moduł</th>
                       <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Obecnie</th>
+                      <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Od nast. okresu</th>
                       <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Zmiana</th>
                       <th className="text-center px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Łącznie</th>
                       <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
@@ -1369,6 +1370,8 @@ export const CompanySubscriptionPage: React.FC = () => {
                     {cart.map(item => {
                       const isReduction = item.newUsers < 0;
                       const minChange = item.isNewModule ? 1 : -(item.currentUsers - 1);
+                      const companyMod = myModules.find(cm => cm.module_code === item.moduleCode);
+                      const scheduledUsers = companyMod?.scheduled_max_users;
                       return (
                         <tr key={item.moduleCode} className="hover:bg-slate-50">
                           <td className="px-5 py-4">
@@ -1395,6 +1398,15 @@ export const CompanySubscriptionPage: React.FC = () => {
                               <span className="text-blue-600 font-medium">—</span>
                             ) : (
                               <span className="text-slate-600 font-medium">{item.currentUsers}</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            {item.isNewModule ? (
+                              <span className="text-blue-600 font-medium">—</span>
+                            ) : scheduledUsers && scheduledUsers !== item.currentUsers ? (
+                              <span className={`font-medium ${scheduledUsers > item.currentUsers ? 'text-blue-600' : 'text-red-600'}`}>{scheduledUsers}</span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
                             )}
                           </td>
                           <td className="px-5 py-4">
