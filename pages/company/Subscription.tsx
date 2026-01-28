@@ -1429,7 +1429,7 @@ export const CompanySubscriptionPage: React.FC = () => {
                           </td>
                           <td className="px-5 py-4 text-center">
                             <span className={`font-bold ${isReduction ? 'text-red-600' : 'text-green-600'}`}>
-                              {(scheduledUsers || item.currentUsers) + item.newUsers}
+                              {(item.isNewModule ? item.currentUsers : (scheduledUsers || item.currentUsers)) + item.newUsers}
                             </span>
                           </td>
                           <td className="px-5 py-4 text-right">
