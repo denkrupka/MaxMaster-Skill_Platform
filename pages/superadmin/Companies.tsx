@@ -661,38 +661,36 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         throw updateError;
       }
 
-      // Sync with Stripe Customer Balance (only for positive amounts - credits)
-      if (amount > 0) {
-        try {
-          const { data: session } = await supabase.auth.getSession();
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.session?.access_token}`
-              },
-              body: JSON.stringify({
-                action: 'add-stripe-balance',
-                companyId: selectedCompany.id,
-                amount: amount,
-                description: description
-              })
-            }
-          );
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.warn('Stripe balance sync warning:', errorData.error);
-            // Don't throw - local balance is already updated
-          } else {
-            console.log('Stripe Customer Balance synced successfully');
+      // Sync with Stripe Customer Balance
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.session?.access_token}`
+            },
+            body: JSON.stringify({
+              action: 'add-stripe-balance',
+              companyId: selectedCompany.id,
+              amount: amount, // Positive = add credit, negative = deduct
+              description: description
+            })
           }
-        } catch (stripeError) {
-          console.warn('Could not sync with Stripe Customer Balance:', stripeError);
-          // Continue anyway - local balance is updated
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.warn('Stripe balance sync warning:', errorData.error);
+          // Don't throw - local balance is already updated
+        } else {
+          console.log('Stripe Customer Balance synced successfully');
         }
+      } catch (stripeError) {
+        console.warn('Could not sync with Stripe Customer Balance:', stripeError);
+        // Continue anyway - local balance is updated
       }
 
       // Try to save bonus transaction (table may not exist)
