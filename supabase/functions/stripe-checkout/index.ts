@@ -435,17 +435,24 @@ serve(async (req) => {
             try {
               const newQuantity = companyModule.max_users + additionalQuantity
               console.log(`Updating Stripe subscription item ${companyModule.stripe_subscription_item_id} to quantity ${newQuantity}`)
-              await stripe.subscriptionItems.update(
+
+              // Update with proration_behavior to control billing
+              const updatedItem = await stripe.subscriptionItems.update(
                 companyModule.stripe_subscription_item_id,
-                { quantity: newQuantity }
+                {
+                  quantity: newQuantity,
+                  proration_behavior: 'none' // Already paid prorated amount from balance
+                }
               )
-              console.log('Stripe subscription quantity updated successfully')
+              console.log('Stripe subscription quantity updated successfully to', updatedItem.quantity)
             } catch (stripeErr: any) {
-              console.error('Failed to update Stripe subscription quantity:', stripeErr)
-              // Continue anyway - local update succeeded
+              console.error('Failed to update Stripe subscription quantity:', stripeErr?.message || stripeErr)
+              // Log full error for debugging
+              console.error('Full Stripe error:', JSON.stringify(stripeErr, null, 2))
+              // Don't fail the whole operation - local update succeeded
             }
           } else {
-            console.log('No stripe_subscription_item_id found - skipping Stripe update')
+            console.warn('No stripe_subscription_item_id found for module - skipping Stripe update. This may cause sync issues.')
           }
 
           // Update local record - also update scheduled_max_users if it exists
