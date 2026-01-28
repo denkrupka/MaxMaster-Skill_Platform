@@ -5,7 +5,7 @@ import {
   Users, CheckSquare, Award, DollarSign, BookOpen, X,
   LogOut, Layers, UserPlus, Settings,
   FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network,
-  Building2, Target, UserCheck, Headphones, ChevronDown, RefreshCw, ShieldCheck
+  Building2, Target, UserCheck, Headphones, ChevronDown, RefreshCw, ShieldCheck, Gift
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -263,6 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
                  <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
+                 <NavItem to="/company/referrals" icon={Gift} label="Program Poleceń" />
                  <NavItem to="/company/settings" icon={Settings} label="Ustawienia" />
                </>
             )}

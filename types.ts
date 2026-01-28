@@ -243,6 +243,11 @@ export interface Company {
   // Bonus balance
   bonus_balance: number;
 
+  // Referral program
+  referred_by_company_id?: string;
+  referral_bonus_paid?: boolean;
+  referral_bonus_paid_at?: string;
+
   // Settings
   settings?: Record<string, any>;
 
@@ -398,6 +403,10 @@ export interface SystemConfig {
     // Sales limits (set by SuperAdmin)
     salesMaxDiscountPercent: number;      // Max discount % a salesperson can give
     salesMaxFreeExtensionDays: number;    // Max free extension days a salesperson can give
+
+    // Referral program settings (set by SuperAdmin)
+    referralMinPaymentAmount: number;     // Min payment by referral to trigger bonus (default: 100 PLN)
+    referralBonusAmount: number;          // Bonus for inviter (default: 50 PLN)
 }
 
 export interface CandidateHistoryEntry {
