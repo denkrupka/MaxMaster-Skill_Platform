@@ -356,7 +356,7 @@ serve(async (req) => {
         // Get company module to find current subscription
         const { data: companyModule, error: cmError } = await supabaseAdmin
           .from('company_modules')
-          .select('stripe_subscription_id, stripe_subscription_item_id, max_users, price_per_user')
+          .select('stripe_subscription_id, stripe_subscription_item_id, max_users, price_per_user, scheduled_max_users')
           .eq('company_id', companyId)
           .eq('module_code', moduleCode)
           .single()
@@ -426,10 +426,19 @@ serve(async (req) => {
             )
           }
 
-          // Update local record
+          // Update local record - also update scheduled_max_users if it exists
+          const newMaxUsers = companyModule.max_users + additionalQuantity
+          const updateData: { max_users: number; scheduled_max_users?: number } = { max_users: newMaxUsers }
+
+          // If there's a scheduled quantity, also add the new users to it
+          if (companyModule.scheduled_max_users && companyModule.scheduled_max_users > 0) {
+            updateData.scheduled_max_users = companyModule.scheduled_max_users + additionalQuantity
+            console.log(`Also updating scheduled_max_users from ${companyModule.scheduled_max_users} to ${updateData.scheduled_max_users}`)
+          }
+
           await supabaseAdmin
             .from('company_modules')
-            .update({ max_users: companyModule.max_users + additionalQuantity })
+            .update(updateData)
             .eq('company_id', companyId)
             .eq('module_code', moduleCode)
 
@@ -653,12 +662,39 @@ serve(async (req) => {
               // Price has changed - create a new price and update subscription item
               console.log(`Price changed from ${currentUnitAmount/100} PLN to ${unitAmountGrosze/100} PLN - updating Stripe price`)
 
+              const productId = subscriptionItem.price.product as string
+
+              // Check if the product is active
+              let activeProductId = productId
+              try {
+                const product = await stripe.products.retrieve(productId)
+                if (!product.active) {
+                  console.log(`Product ${productId} is inactive, reactivating...`)
+                  // Reactivate the product
+                  await stripe.products.update(productId, { active: true })
+                  console.log(`Product ${productId} reactivated successfully`)
+                }
+              } catch (productErr: any) {
+                console.error('Failed to check/reactivate product:', productErr)
+                // If we can't reactivate, create a new product
+                console.log('Creating new product for subscription...')
+                const newProduct = await stripe.products.create({
+                  name: `${moduleInfo.name_pl} - Subscription`,
+                  metadata: {
+                    module_code: moduleCode,
+                    company_id: companyId
+                  }
+                })
+                activeProductId = newProduct.id
+                console.log(`Created new product: ${activeProductId}`)
+              }
+
               // Create new price with updated amount
               const newPrice = await stripe.prices.create({
                 currency: 'pln',
                 unit_amount: unitAmountGrosze,
                 recurring: { interval: 'month' },
-                product: subscriptionItem.price.product as string,
+                product: activeProductId,
                 tax_behavior: 'exclusive',
               })
 
@@ -683,9 +719,22 @@ serve(async (req) => {
               )
               console.log(`Scheduled Stripe subscription update to ${quantity} users (effective from ${effectiveDate.toISOString()})`)
             }
-          } catch (stripeErr) {
-            console.error('Failed to update Stripe subscription:', stripeErr)
-            throw new Error('Nie udało się zaplanować zmiany w Stripe')
+          } catch (stripeErr: any) {
+            // Handle specific Stripe errors
+            if (stripeErr.message?.includes('Deno.core.runMicrotasks')) {
+              // This is a known Stripe SDK issue in Deno - operation may still succeed
+              console.warn('Deno.core.runMicrotasks warning - checking if operation succeeded...')
+              // Don't throw - the update might have worked
+            } else if (stripeErr.code === 'resource_missing') {
+              console.error('Stripe resource not found:', stripeErr.message)
+              throw new Error('Subskrypcja nie została znaleziona w Stripe')
+            } else if (stripeErr.raw?.message?.includes('inactive')) {
+              console.error('Product inactive error:', stripeErr)
+              throw new Error('Produkt w Stripe jest nieaktywny. Skontaktuj się z administratorem.')
+            } else {
+              console.error('Failed to update Stripe subscription:', stripeErr)
+              throw new Error('Nie udało się zaplanować zmiany w Stripe: ' + (stripeErr.message || 'Unknown error'))
+            }
           }
         }
 

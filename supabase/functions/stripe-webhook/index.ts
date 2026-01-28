@@ -162,7 +162,7 @@ serve(async (req) => {
             // Get company module with subscription info
             const { data: companyModule, error: cmError } = await supabaseAdmin
               .from('company_modules')
-              .select('stripe_subscription_id, stripe_subscription_item_id, max_users')
+              .select('stripe_subscription_id, stripe_subscription_item_id, max_users, scheduled_max_users')
               .eq('company_id', company_id)
               .eq('module_code', moduleCodeToUpdate)
               .single()
@@ -171,6 +171,9 @@ serve(async (req) => {
               console.error('Company module not found:', cmError)
               break
             }
+
+            // Calculate how many users were added
+            const addedUsers = newQuantity - companyModule.max_users
 
             // Update subscription quantity in Stripe
             if (companyModule.stripe_subscription_item_id) {
@@ -185,10 +188,18 @@ serve(async (req) => {
               }
             }
 
-            // Update local record
+            // Update local record - also update scheduled_max_users if it exists
+            const updateData: { max_users: number; scheduled_max_users?: number } = { max_users: newQuantity }
+
+            // If there's a scheduled quantity, also add the new users to it
+            if (companyModule.scheduled_max_users && companyModule.scheduled_max_users > 0 && addedUsers > 0) {
+              updateData.scheduled_max_users = companyModule.scheduled_max_users + addedUsers
+              console.log(`Also updating scheduled_max_users from ${companyModule.scheduled_max_users} to ${updateData.scheduled_max_users}`)
+            }
+
             const { error: updateError } = await supabaseAdmin
               .from('company_modules')
-              .update({ max_users: newQuantity })
+              .update(updateData)
               .eq('company_id', company_id)
               .eq('module_code', moduleCodeToUpdate)
 
