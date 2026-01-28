@@ -499,6 +499,17 @@ serve(async (req) => {
                   )
                   console.log(`Updated Stripe subscription to ${newQuantity} users`)
                 }
+
+                // Clear scheduled_max_users metadata to prevent webhook from overwriting our changes
+                // This is important because the webhook checks for this metadata and skips max_users update if present
+                await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
+                  metadata: {
+                    ...currentSubscription.metadata,
+                    scheduled_max_users: '',
+                    scheduled_at: ''
+                  }
+                })
+                console.log('Cleared scheduled_max_users metadata from Stripe subscription')
               } else {
                 console.error('Could not find subscription item in Stripe subscription')
               }
