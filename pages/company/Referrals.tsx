@@ -37,9 +37,13 @@ const BONUS_STATUS_CONFIG: Record<BonusStatus, { label: string; color: string }>
 
 export const CompanyReferralsPage: React.FC = () => {
   const { state } = useAppContext();
-  const { currentCompany } = state;
+  const { currentCompany, systemConfig } = state;
 
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // Get referral program settings from system config
+  const minPaymentAmount = systemConfig.referralMinPaymentAmount || 100;
+  const bonusAmount = systemConfig.referralBonusAmount || 50;
 
   // Generate unique referral link for this company
   const referralLink = useMemo(() => {
@@ -91,12 +95,12 @@ export const CompanyReferralsPage: React.FC = () => {
 
   const shareViaEmail = () => {
     const subject = encodeURIComponent('Zaproszenie do MaxMaster');
-    const body = encodeURIComponent(`Cześć!\n\nZapraszam do platformy MaxMaster - świetnego narzędzia do zarządzania firmą.\n\nZarejestruj się przez mój link polecający:\n${referralLink}\n\nPo rejestracji i dokonaniu pierwszej płatności (min. 100 zł) oboje otrzymamy bonus!\n\nPozdrawiam`);
+    const body = encodeURIComponent(`Cześć!\n\nZapraszam do platformy MaxMaster - świetnego narzędzia do zarządzania firmą.\n\nZarejestruj się przez mój link polecający:\n${referralLink}\n\nPo rejestracji i dokonaniu pierwszej płatności (min. ${minPaymentAmount} zł) oboje otrzymamy bonus ${bonusAmount} zł!\n\nPozdrawiam`);
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
 
   const shareViaSMS = () => {
-    const text = encodeURIComponent(`Zapraszam do MaxMaster! Zarejestruj się: ${referralLink} - po płatności min. 100 zł oboje dostaniemy bonus 50 zł!`);
+    const text = encodeURIComponent(`Zapraszam do MaxMaster! Zarejestruj się: ${referralLink} - po płatności min. ${minPaymentAmount} zł oboje dostaniemy bonus ${bonusAmount} zł!`);
     window.open(`sms:?body=${text}`, '_blank');
   };
 
@@ -233,8 +237,8 @@ export const CompanyReferralsPage: React.FC = () => {
                   <span className="text-xs font-bold text-amber-800">3</span>
                 </div>
                 <p className="text-amber-800">
-                  <strong>Po dokonaniu pierwszej płatności minimum 100 zł</strong> przez zaproszoną firmę,
-                  na Twoje konto bonusowe zostanie naliczone <strong className="text-amber-900">50 zł</strong>.
+                  <strong>Po dokonaniu pierwszej płatności minimum {minPaymentAmount} zł</strong> przez zaproszoną firmę,
+                  na Twoje konto bonusowe zostanie naliczone <strong className="text-amber-900">{bonusAmount} zł</strong>.
                 </p>
               </div>
             </div>

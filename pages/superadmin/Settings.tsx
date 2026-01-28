@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Settings, DollarSign, Package, Users, Percent, Calendar,
-  Save, Loader2, AlertCircle, Check, ChevronDown, ChevronUp
+  Save, Loader2, AlertCircle, Check, ChevronDown, ChevronUp, Gift
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -16,7 +16,8 @@ export const SuperAdminSettingsPage: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     modules: true,
-    sales: true
+    sales: true,
+    referrals: true
   });
 
   // Module prices state
@@ -32,6 +33,12 @@ export const SuperAdminSettingsPage: React.FC = () => {
   const [salesLimits, setSalesLimits] = useState({
     maxDiscountPercent: systemConfig.salesMaxDiscountPercent || 20,
     maxFreeExtensionDays: systemConfig.salesMaxFreeExtensionDays || 30
+  });
+
+  // Referral program settings state
+  const [referralSettings, setReferralSettings] = useState({
+    minPaymentAmount: systemConfig.referralMinPaymentAmount || 100,
+    bonusAmount: systemConfig.referralBonusAmount || 50
   });
 
   const toggleSection = (section: string) => {
@@ -105,6 +112,39 @@ export const SuperAdminSettingsPage: React.FC = () => {
     } catch (err) {
       console.error('Error updating sales limits:', err);
       setError(err instanceof Error ? err.message : 'Błąd aktualizacji limitów');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  // Save referral program settings
+  const handleSaveReferralSettings = async () => {
+    setLoading('referrals');
+    setError(null);
+
+    try {
+      const updatedConfig = {
+        ...systemConfig,
+        referralMinPaymentAmount: referralSettings.minPaymentAmount,
+        referralBonusAmount: referralSettings.bonusAmount
+      };
+
+      const { error: updateError } = await supabase
+        .from('system_config')
+        .upsert({
+          config_key: 'main',
+          config_data: updatedConfig,
+          config_value: updatedConfig
+        }, { onConflict: 'config_key' });
+
+      if (updateError) throw updateError;
+
+      setSuccess('Ustawienia programu poleceń zostały zaktualizowane');
+      await refreshData();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Error updating referral settings:', err);
+      setError(err instanceof Error ? err.message : 'Błąd aktualizacji ustawień');
     } finally {
       setLoading(null);
     }
@@ -305,6 +345,112 @@ export const SuperAdminSettingsPage: React.FC = () => {
                   <p className="text-sm text-blue-700">
                     Sprzedawcy mogą przyznawać rabaty i przedłużenia tylko w ramach tych limitów.
                     Wszystkie działania są logowane do historii.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Referral Program Section */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mt-6">
+        <button
+          onClick={() => toggleSection('referrals')}
+          className="w-full px-5 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <Gift className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="text-left">
+              <h3 className="font-semibold text-slate-900">Program poleceń</h3>
+              <p className="text-sm text-slate-500">Ustawienia bonusów za polecenia firm</p>
+            </div>
+          </div>
+          {expandedSections.referrals ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+        </button>
+
+        {expandedSections.referrals && (
+          <div className="p-5 space-y-6">
+            {/* Min Payment Amount */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900">Minimalna kwota płatności referała</p>
+                  <p className="text-sm text-slate-500">Po jakiej kwocie pierwszej płatności naliczany jest bonus</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={referralSettings.minPaymentAmount}
+                  onChange={e => setReferralSettings(prev => ({
+                    ...prev,
+                    minPaymentAmount: Math.max(0, parseInt(e.target.value) || 0)
+                  }))}
+                  className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <span className="text-slate-600 font-medium">PLN</span>
+              </div>
+            </div>
+
+            {/* Bonus Amount */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <Gift className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-slate-900">Bonus dla zapraszającego</p>
+                  <p className="text-sm text-slate-500">Kwota dodawana do balansu bonusów firmy</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="10"
+                  value={referralSettings.bonusAmount}
+                  onChange={e => setReferralSettings(prev => ({
+                    ...prev,
+                    bonusAmount: Math.max(0, parseInt(e.target.value) || 0)
+                  }))}
+                  className="w-24 px-3 py-2 border border-slate-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <span className="text-slate-600 font-medium">PLN</span>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end pt-4 border-t border-slate-100">
+              <Button
+                onClick={handleSaveReferralSettings}
+                disabled={loading === 'referrals'}
+              >
+                {loading === 'referrals' ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Zapisz ustawienia
+              </Button>
+            </div>
+
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-purple-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-purple-800">Jak działa program poleceń</p>
+                  <p className="text-sm text-purple-700">
+                    Gdy zaproszona firma dokona pierwszej płatności na kwotę minimum <strong>{referralSettings.minPaymentAmount} PLN</strong>,
+                    zapraszająca firma automatycznie otrzyma <strong>{referralSettings.bonusAmount} PLN</strong> na swój balans bonusowy.
+                    Bonus można wykorzystać na opłacenie subskrypcji.
                   </p>
                 </div>
               </div>

@@ -111,6 +111,7 @@ interface AppContextType {
   deleteCompany: (id: string) => Promise<void>;
   blockCompany: (id: string, reason?: string) => Promise<void>;
   unblockCompany: (id: string) => Promise<void>;
+  processReferralBonus: (companyId: string, paymentAmount: number) => Promise<void>;
   switchCompany: (companyId: string) => Promise<void>;
   getCompanyUsers: (companyId: string) => User[];
   isGlobalUser: () => boolean;
@@ -160,7 +161,11 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   positions: [],
   noteCategories: Object.values(NoteCategory),
   badgeTypes: Object.values(BadgeType),
-  skillCategories: Object.values(SkillCategory) // Added dynamic source
+  skillCategories: Object.values(SkillCategory), // Added dynamic source
+
+  // Referral program defaults
+  referralMinPaymentAmount: 100,
+  referralBonusAmount: 50
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -1416,6 +1421,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // Process referral bonus when a company makes a qualifying payment
+  const processReferralBonus = async (companyId: string, paymentAmount: number) => {
+    const company = state.companies.find(c => c.id === companyId);
+    if (!company) return;
+
+    // Check if company was referred and bonus hasn't been paid yet
+    if (!company.referred_by_company_id || company.referral_bonus_paid) {
+      return;
+    }
+
+    // Check if payment meets minimum threshold
+    const minPaymentAmount = state.systemConfig.referralMinPaymentAmount || 100;
+    const bonusAmount = state.systemConfig.referralBonusAmount || 50;
+
+    if (paymentAmount < minPaymentAmount) {
+      return;
+    }
+
+    // Find referring company
+    const referringCompany = state.companies.find(c => c.id === company.referred_by_company_id);
+    if (!referringCompany) return;
+
+    try {
+      // Add bonus to referring company's balance
+      const newBonusBalance = (referringCompany.bonus_balance || 0) + bonusAmount;
+
+      await supabase
+        .from('companies')
+        .update({ bonus_balance: newBonusBalance })
+        .eq('id', referringCompany.id);
+
+      // Mark bonus as paid for referred company
+      await supabase
+        .from('companies')
+        .update({
+          referral_bonus_paid: true,
+          referral_bonus_paid_at: new Date().toISOString()
+        })
+        .eq('id', companyId);
+
+      // Refresh data to update state
+      await refreshData();
+
+      console.log(`Referral bonus of ${bonusAmount} PLN added to company ${referringCompany.name}`);
+    } catch (error) {
+      console.error('Error processing referral bonus:', error);
+    }
+  };
+
   const switchCompany = async (companyId: string) => {
     const company = state.companies.find(c => c.id === companyId);
     if (company) {
@@ -1654,6 +1708,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteCompany,
     blockCompany,
     unblockCompany,
+    processReferralBonus,
     switchCompany,
     getCompanyUsers,
     isGlobalUser,
