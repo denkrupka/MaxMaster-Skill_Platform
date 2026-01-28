@@ -1449,9 +1449,20 @@ export const CompanySubscriptionPage: React.FC = () => {
                 const hasReductions = cart.some(i => i.newUsers < 0);
                 const hasAdditions = cart.some(i => i.newUsers > 0 && !i.isNewModule);
                 const onlyReductions = hasReductions && !hasNewModules && !hasAdditions;
+                const balance = currentCompany?.bonus_balance || 0;
 
                 return (
                   <div className="px-5 py-4 border-t border-slate-200 bg-slate-50">
+                    {/* Info about payment method */}
+                    {!onlyReductions && balance > 0 && (
+                      <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-sm text-blue-700">
+                          Środki zostaną najpierw pobrane z Twojego konta bonusowego ({balance.toFixed(2)} PLN).
+                          Jeśli saldo nie wystarczy, pozostała kwota zostanie pobrana z karty przez Stripe.
+                        </p>
+                      </div>
+                    )}
                     <div className="flex flex-col sm:flex-row gap-3 justify-between items-center">
                       <div className="text-sm text-slate-600">
                         {onlyReductions ? (
