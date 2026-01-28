@@ -123,7 +123,7 @@ serve(async (req) => {
             .update({ stripe_customer_id: customerId })
             .eq('id', companyId)
 
-          // Sync existing bonus_balance to Stripe Customer Balance
+          // Sync existing bonus_balance to Stripe Customer Balance for new customer
           if (company.bonus_balance && company.bonus_balance > 0) {
             try {
               const balanceInGrosze = Math.round(company.bonus_balance * 100) * -1 // Negative = credit
@@ -138,6 +138,35 @@ serve(async (req) => {
               console.log(`Synced existing balance ${company.bonus_balance} PLN to Stripe Customer Balance for new customer ${customerId}`)
             } catch (syncError) {
               console.error('Failed to sync existing balance to Stripe:', syncError)
+            }
+          }
+        } else {
+          // For existing customer - sync local balance with Stripe if needed
+          // This handles case when superadmin added balance but functions weren't deployed
+          if (company.bonus_balance && company.bonus_balance > 0) {
+            try {
+              const stripeCustomer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+              // Stripe balance is negative (credit), local is positive
+              const stripeBalancePLN = stripeCustomer.balance ? (stripeCustomer.balance / -100) : 0
+              const localBalance = company.bonus_balance
+
+              // If local balance is higher than Stripe - add the difference
+              if (localBalance > stripeBalancePLN) {
+                const differenceToAdd = localBalance - stripeBalancePLN
+                const differenceInGrosze = Math.round(differenceToAdd * 100) * -1 // Negative = credit
+                await stripe.customers.createBalanceTransaction(
+                  customerId,
+                  {
+                    amount: differenceInGrosze,
+                    currency: 'pln',
+                    description: `Synchronizacja balansu bonusowego - ${differenceToAdd.toFixed(2)} PLN`
+                  }
+                )
+                console.log(`Synced balance difference ${differenceToAdd} PLN to Stripe Customer Balance for ${customerId} (local: ${localBalance}, stripe was: ${stripeBalancePLN})`)
+              }
+            } catch (syncError) {
+              console.error('Failed to sync balance to Stripe:', syncError)
+              // Continue anyway - subscription can still be created
             }
           }
         }
@@ -298,7 +327,7 @@ serve(async (req) => {
         // Minimum payment amount in grosze (2 PLN)
         const MIN_PAYMENT_GROSZE = 200
 
-        // Get company details
+        // Get company details including bonus_balance
         const { data: company, error: companyError } = await supabaseAdmin
           .from('companies')
           .select('*')
@@ -358,17 +387,107 @@ serve(async (req) => {
           bonusAmount = MIN_PAYMENT_GROSZE - proratedAmount // Difference goes to bonus balance
         }
 
+        // Convert to PLN for balance calculations
+        const chargeAmountPLN = chargeAmount / 100
+        const currentBalance = company.bonus_balance || 0
+
+        // Check if balance can cover the payment (fully or partially)
+        const balanceToUse = Math.min(currentBalance, chargeAmountPLN)
+        const remainingToCharge = chargeAmountPLN - balanceToUse
+        const remainingToChargeGrosze = Math.round(remainingToCharge * 100)
+
+        console.log(`Prorated payment: ${chargeAmountPLN} PLN total, balance: ${currentBalance} PLN, using: ${balanceToUse} PLN, remaining: ${remainingToCharge} PLN`)
+
+        // If balance covers the entire payment - no Stripe checkout needed
+        if (remainingToChargeGrosze <= 0) {
+          // Deduct from balance
+          const newBalance = currentBalance - chargeAmountPLN
+
+          await supabaseAdmin
+            .from('companies')
+            .update({ bonus_balance: newBalance })
+            .eq('id', companyId)
+
+          // Log balance usage
+          await supabaseAdmin
+            .from('bonus_transactions')
+            .insert({
+              company_id: companyId,
+              amount: chargeAmountPLN,
+              type: 'debit',
+              description: `Opłata za ${additionalQuantity} dodatkowych miejsc w module ${moduleCode}`
+            })
+
+          // Update subscription quantity in Stripe
+          if (companyModule.stripe_subscription_item_id) {
+            await stripe.subscriptionItems.update(
+              companyModule.stripe_subscription_item_id,
+              { quantity: companyModule.max_users + additionalQuantity }
+            )
+          }
+
+          // Update local record
+          await supabaseAdmin
+            .from('company_modules')
+            .update({ max_users: companyModule.max_users + additionalQuantity })
+            .eq('company_id', companyId)
+            .eq('module_code', moduleCode)
+
+          // Add any bonus amount to balance
+          if (bonusAmount > 0) {
+            const bonusAmountPLN = bonusAmount / 100
+            await supabaseAdmin
+              .from('companies')
+              .update({ bonus_balance: newBalance + bonusAmountPLN })
+              .eq('id', companyId)
+          }
+
+          // Log in payment_history
+          await supabaseAdmin
+            .from('payment_history')
+            .insert({
+              company_id: companyId,
+              amount: chargeAmountPLN,
+              currency: 'PLN',
+              status: 'paid',
+              description: `Opłata z balansu: ${additionalQuantity} miejsc w module ${moduleCode}`,
+              paid_at: new Date().toISOString()
+            })
+
+          console.log(`Payment covered entirely from balance. New balance: ${newBalance} PLN`)
+
+          return new Response(
+            JSON.stringify({
+              paidFromBalance: true,
+              amountUsed: chargeAmountPLN,
+              newBalance: bonusAmount > 0 ? newBalance + bonusAmount/100 : newBalance
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 200
+            }
+          )
+        }
+
+        // Need Stripe checkout - balance will be deducted ONLY AFTER successful payment in webhook
+        // This prevents balance loss if user cancels or payment fails
+
         // Format dates for description
         const formatDate = (d: Date) => d.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' })
-        console.log(`Prorated payment: ${additionalQuantity} users × ${pricePerUser} PLN × ${daysRemaining}/${totalDaysInPeriod} days = ${proratedAmount/100} PLN (charging: ${chargeAmount/100} PLN, bonus: ${bonusAmount/100} PLN)`)
 
         // Build description
         let description = `Proporcjonalna opłata za ${additionalQuantity} miejsc (${daysRemaining}/${totalDaysInPeriod} dni do ${formatDate(periodEnd)})`
+        if (balanceToUse > 0) {
+          description += ` - ${balanceToUse.toFixed(2)} PLN zostanie potrącone z balansu`
+        }
         if (bonusAmount > 0) {
           description += ` + ${(bonusAmount/100).toFixed(2)} PLN bonus`
         }
 
-        // Create one-time payment checkout session
+        console.log(`Creating checkout for ${remainingToCharge} PLN. Balance to deduct after success: ${balanceToUse} PLN`)
+
+        // Create one-time payment checkout session for remaining amount
+        // Balance deduction happens in webhook AFTER successful payment
         const session = await stripe.checkout.sessions.create({
           customer: company.stripe_customer_id,
           mode: 'payment',
@@ -379,7 +498,7 @@ serve(async (req) => {
                 name: `${moduleInfo.name_pl} - dodatkowe miejsca`,
                 description,
               },
-              unit_amount: chargeAmount,
+              unit_amount: remainingToChargeGrosze,
               tax_behavior: 'exclusive' as const,
             },
             quantity: 1,
@@ -392,7 +511,8 @@ serve(async (req) => {
             additional_quantity: additionalQuantity.toString(),
             action_type: 'add_seats',
             new_total_quantity: (companyModule.max_users + additionalQuantity).toString(),
-            bonus_amount_grosze: bonusAmount.toString(), // Bonus to add to company balance
+            bonus_amount_grosze: bonusAmount.toString(),
+            balance_to_deduct: balanceToUse.toString(), // Deduct this AFTER successful payment
           },
           automatic_tax: {
             enabled: true,
@@ -400,7 +520,12 @@ serve(async (req) => {
         })
 
         return new Response(
-          JSON.stringify({ sessionId: session.id, url: session.url }),
+          JSON.stringify({
+            sessionId: session.id,
+            url: session.url,
+            balanceToDeduct: balanceToUse,
+            amountToCharge: remainingToCharge
+          }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 200

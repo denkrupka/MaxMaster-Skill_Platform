@@ -154,8 +154,9 @@ serve(async (req) => {
           const moduleCodeToUpdate = session.metadata.module_code
           const newQuantity = parseInt(new_total_quantity || '0', 10)
           const bonusAmountGrosze = parseInt(session.metadata?.bonus_amount_grosze || '0', 10)
+          const balanceToDeduct = parseFloat(session.metadata?.balance_to_deduct || '0')
 
-          console.log(`Processing add_seats payment: ${moduleCodeToUpdate}, new quantity: ${newQuantity}, bonus: ${bonusAmountGrosze} grosze`)
+          console.log(`Processing add_seats payment: ${moduleCodeToUpdate}, new quantity: ${newQuantity}, bonus: ${bonusAmountGrosze} grosze, balance to deduct: ${balanceToDeduct} PLN`)
 
           if (newQuantity > 0) {
             // Get company module with subscription info
@@ -197,16 +198,41 @@ serve(async (req) => {
               console.log(`Updated company_modules max_users to ${newQuantity}`)
             }
 
+            // Get company balance for deduction and bonus
+            const { data: company } = await supabaseAdmin
+              .from('companies')
+              .select('bonus_balance, stripe_customer_id')
+              .eq('id', company_id)
+              .single()
+
+            let currentBalance = company?.bonus_balance || 0
+
+            // Deduct balance that was reserved during checkout (AFTER successful payment)
+            if (balanceToDeduct > 0) {
+              const newBalance = Math.max(0, currentBalance - balanceToDeduct)
+
+              await supabaseAdmin
+                .from('companies')
+                .update({ bonus_balance: newBalance })
+                .eq('id', company_id)
+
+              // Log balance deduction
+              await supabaseAdmin
+                .from('bonus_transactions')
+                .insert({
+                  company_id,
+                  amount: balanceToDeduct,
+                  type: 'debit',
+                  description: `Opłata za ${additional_quantity} miejsc w module ${moduleCodeToUpdate} (część z balansu)`
+                })
+
+              console.log(`Deducted ${balanceToDeduct} PLN from balance (was: ${currentBalance}, now: ${newBalance})`)
+              currentBalance = newBalance
+            }
+
             // Add bonus amount to company balance if applicable
             if (bonusAmountGrosze > 0) {
               const bonusAmount = bonusAmountGrosze / 100 // Convert to PLN
-              const { data: company } = await supabaseAdmin
-                .from('companies')
-                .select('bonus_balance, stripe_customer_id')
-                .eq('id', company_id)
-                .single()
-
-              const currentBalance = company?.bonus_balance || 0
               const newBalance = currentBalance + bonusAmount
 
               const { error: bonusError } = await supabaseAdmin
@@ -220,7 +246,7 @@ serve(async (req) => {
                 console.log(`Added ${bonusAmount} PLN to company bonus balance (new total: ${newBalance} PLN)`)
               }
 
-              // Also add to Stripe Customer Balance
+              // Also add to Stripe Customer Balance for future subscription payments
               if (company?.stripe_customer_id) {
                 try {
                   const amountInGrosze = bonusAmountGrosze * -1 // Negative = credit
@@ -229,7 +255,7 @@ serve(async (req) => {
                     {
                       amount: amountInGrosze,
                       currency: 'pln',
-                      description: `Bonus za minimmalną płatność - ${bonusAmount} PLN`
+                      description: `Bonus za minimalną płatność - ${bonusAmount} PLN`
                     }
                   )
                   console.log(`Added ${bonusAmount} PLN to Stripe Customer Balance for ${company.stripe_customer_id}`)
@@ -239,15 +265,24 @@ serve(async (req) => {
               }
             }
 
+            // Calculate total paid (card + balance)
+            const cardAmount = session.amount_total ? session.amount_total / 100 : 0
+            const totalPaid = cardAmount + balanceToDeduct
+
             // Log payment in payment_history
+            let paymentDescription = `Dokupienie ${additional_quantity} miejsc w module ${moduleCodeToUpdate}`
+            if (balanceToDeduct > 0) {
+              paymentDescription += ` (${balanceToDeduct.toFixed(2)} PLN z balansu + ${cardAmount.toFixed(2)} PLN kartą)`
+            }
+
             const { error: historyError } = await supabaseAdmin
               .from('payment_history')
               .insert({
                 company_id,
-                amount: session.amount_total ? session.amount_total / 100 : 0,
+                amount: totalPaid,
                 currency: session.currency?.toUpperCase() || 'PLN',
                 status: 'paid',
-                description: `Dokupienie ${additional_quantity} miejsc w module ${moduleCodeToUpdate}`,
+                description: paymentDescription,
                 stripe_invoice_id: session.invoice as string || null,
                 paid_at: new Date().toISOString()
               })

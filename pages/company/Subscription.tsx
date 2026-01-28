@@ -94,6 +94,15 @@ export const CompanySubscriptionPage: React.FC = () => {
   const [selectedTopUpPackage, setSelectedTopUpPackage] = useState<number | null>(null);
   const [topUpLoading, setTopUpLoading] = useState(false);
 
+  // Card info modal state (shown before Stripe checkout)
+  const [showCardInfoModal, setShowCardInfoModal] = useState(false);
+  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState<string | null>(null);
+  const [pendingCheckoutInfo, setPendingCheckoutInfo] = useState<{
+    balanceToUse: number;
+    amountToCharge: number;
+    totalAmount: number;
+  } | null>(null);
+
   // Refs for animation
   const cartIconRef = useRef<HTMLButtonElement>(null);
   const cartSectionRef = useRef<HTMLDivElement>(null);
@@ -376,6 +385,25 @@ export const CompanySubscriptionPage: React.FC = () => {
   // Minimum Stripe payment amount (2 PLN)
   const MIN_STRIPE_AMOUNT = 2;
 
+  // Show card info modal before redirecting to Stripe checkout
+  const showCardInfoBeforeCheckout = (url: string, balanceToUse: number, amountToCharge: number) => {
+    const totalAmount = balanceToUse + amountToCharge;
+    setPendingCheckoutUrl(url);
+    setPendingCheckoutInfo({ balanceToUse, amountToCharge, totalAmount });
+    setShowCardInfoModal(true);
+  };
+
+  // Proceed to checkout after user confirms
+  const proceedToCheckout = () => {
+    if (pendingCheckoutUrl) {
+      setCart([]);
+      setPurchaseMode('none');
+      setShowMinPaymentModal(false);
+      setShowCardInfoModal(false);
+      window.location.href = pendingCheckoutUrl;
+    }
+  };
+
   // Handle purchase now (pro-rata for existing, checkout for new)
   const handlePurchaseNow = async (forceMinPayment = false) => {
     if (!currentCompany || cart.length === 0) return;
@@ -428,11 +456,12 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (data?.error) throw new Error(data.error);
 
         if (data?.url) {
-          // Clear cart and redirect to Stripe
-          setCart([]);
-          setPurchaseMode('none');
-          console.log('Redirecting to:', data.url);
-          window.location.href = data.url;
+          // Show card info modal before redirect
+          const balance = currentCompany.bonus_balance || 0;
+          const totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          const balanceToUse = Math.min(balance, totalAmount);
+          const amountToCharge = totalAmount - balanceToUse;
+          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
           return;
         } else {
           throw new Error('Nie otrzymano URL sesji płatności');
@@ -468,11 +497,24 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (fnError) throw fnError;
         if (data?.error) throw new Error(data.error);
 
-        if (data?.url) {
+        // Check if payment was covered entirely from balance
+        if (data?.paidFromBalance) {
           setCart([]);
           setPurchaseMode('none');
           setShowMinPaymentModal(false);
-          window.location.href = data.url;
+          // Refresh data to show updated balance and module users
+          await refreshData();
+          // Show success message via URL param
+          window.location.href = `${window.location.origin}/#/company/subscription?success=true&fromBalance=true`;
+          return;
+        }
+
+        if (data?.url) {
+          // Show card info modal before redirect
+          const balanceToUse = data.balanceToDeduct || 0;
+          const amountToCharge = data.amountToCharge || actualAmount;
+          setShowMinPaymentModal(false);
+          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
           return;
         } else {
           throw new Error('Nie otrzymano URL sesji płatności');
@@ -560,9 +602,12 @@ export const CompanySubscriptionPage: React.FC = () => {
         if (fnError) throw fnError;
 
         if (data?.url) {
-          setCart([]);
-          setPurchaseMode('none');
-          window.location.href = data.url;
+          // Show card info modal before redirect
+          const balance = currentCompany.bonus_balance || 0;
+          const totalAmount = newModules.reduce((sum, item) => sum + item.newUsers * item.pricePerUser, 0);
+          const balanceToUse = Math.min(balance, totalAmount);
+          const amountToCharge = totalAmount - balanceToUse;
+          showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
           return;
         }
       }
@@ -798,8 +843,14 @@ export const CompanySubscriptionPage: React.FC = () => {
       if (fnError) throw fnError;
 
       if (data?.url) {
-        // Redirect to Stripe Checkout
-        window.location.href = data.url;
+        // Show card info modal before redirect
+        const mod = modules.find(m => m.code === moduleCode);
+        const pricePerUser = mod?.base_price_per_user || 0;
+        const totalAmount = maxUsers * pricePerUser;
+        const balance = currentCompany.bonus_balance || 0;
+        const balanceToUse = Math.min(balance, totalAmount);
+        const amountToCharge = totalAmount - balanceToUse;
+        showCardInfoBeforeCheckout(data.url, balanceToUse, amountToCharge);
       } else {
         throw new Error('No checkout URL returned');
       }
@@ -1991,6 +2042,104 @@ export const CompanySubscriptionPage: React.FC = () => {
                   <Check className="w-4 h-4" />
                 )}
                 Zapłać 2,00 PLN
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Card Info Modal - shown before Stripe checkout */}
+      {showCardInfoModal && pendingCheckoutInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <CreditCard className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Informacja o płatności</h3>
+                <p className="text-sm text-slate-500">Przeczytaj przed kontynuowaniem</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-lg p-4 mb-4">
+              <div className="space-y-3">
+                {pendingCheckoutInfo.balanceToUse > 0 && (
+                  <div className="flex items-start gap-3 text-sm">
+                    <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Check className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">Z Twojego balansu zostanie potrącone:</p>
+                      <p className="text-green-600 font-bold text-lg">{pendingCheckoutInfo.balanceToUse.toFixed(2)} PLN</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3 text-sm">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <CreditCard className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      {pendingCheckoutInfo.amountToCharge > 0
+                        ? 'Do zapłaty kartą:'
+                        : 'Do zapłaty kartą:'}
+                    </p>
+                    <p className={`font-bold text-lg ${pendingCheckoutInfo.amountToCharge > 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                      {pendingCheckoutInfo.amountToCharge > 0
+                        ? `${pendingCheckoutInfo.amountToCharge.toFixed(2)} PLN netto`
+                        : '0,00 PLN (cała kwota z balansu!)'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800">
+                  <p className="font-semibold mb-1">Dlaczego wymagana jest karta?</p>
+                  <p>
+                    {pendingCheckoutInfo.amountToCharge > 0
+                      ? 'Karta jest potrzebna do opłacenia bieżącej transakcji oraz jako metoda płatności dla przyszłych cyklicznych opłat subskrypcji.'
+                      : 'Mimo że cała kwota zostanie pokryta z Twojego balansu, karta jest wymagana jako metoda płatności dla przyszłych cyklicznych opłat subskrypcji.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <div className="flex items-start gap-3">
+                <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-green-800">
+                  <p className="font-semibold mb-1">Pełna kontrola nad subskrypcją</p>
+                  <p>
+                    W każdej chwili możesz odpiąć kartę i anulować subskrypcję poprzez portal zarządzania płatnościami.
+                    Masz pełną kontrolę nad swoimi płatnościami.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowCardInfoModal(false);
+                  setPendingCheckoutUrl(null);
+                  setPendingCheckoutInfo(null);
+                }}
+                className="flex-1 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={proceedToCheckout}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2"
+              >
+                <CreditCard className="w-4 h-4" />
+                Rozumiem, przejdź do płatności
               </button>
             </div>
           </div>
