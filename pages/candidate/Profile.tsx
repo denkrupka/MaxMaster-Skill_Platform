@@ -1,9 +1,35 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { User as UserIcon, Lock, Mail, Phone, Briefcase, Save, Check, Send, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { User as UserIcon, Lock, Mail, Phone, Briefcase, Save, Check, Send, ChevronLeft, ChevronRight, X, MapPin } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus, User, Role } from '../../types';
+
+// --- PESEL Validation ---
+const validatePesel = (pesel: string): { valid: boolean; error?: string } => {
+    if (!pesel || pesel.length === 0) return { valid: true };
+    if (pesel.length < 11) return { valid: false, error: 'PESEL musi mieć 11 cyfr' };
+    if (!/^\d{11}$/.test(pesel)) return { valid: false, error: 'PESEL może zawierać tylko cyfry' };
+
+    const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+    const digits = pesel.split('').map(Number);
+    const checksum = weights.reduce((sum, w, i) => sum + w * digits[i], 0);
+    const controlDigit = (10 - (checksum % 10)) % 10;
+
+    if (controlDigit !== digits[10]) {
+        return { valid: false, error: 'Nieprawidłowy numer PESEL (błędna suma kontrolna)' };
+    }
+    return { valid: true };
+};
+
+// --- Bank Account Formatting (Polish: XX XXXX XXXX XXXX XXXX XXXX XXXX) ---
+const formatBankAccount = (digits: string): string => {
+    if (digits.length <= 2) return digits;
+    const prefix = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    const groups = rest.match(/.{1,4}/g) || [];
+    return (prefix + ' ' + groups.join(' ')).trim();
+};
 
 export const CandidateProfilePage = () => {
     const { state, updateUser, logCandidateAction, triggerNotification } = useAppContext();
@@ -34,6 +60,68 @@ export const CandidateProfilePage = () => {
         bank_account: '',
         nip: ''
     });
+
+    // PESEL validation state
+    const [peselError, setPeselError] = useState('');
+
+    // Address autocomplete state
+    const [addressQuery, setAddressQuery] = useState('');
+    const [addressSuggestions, setAddressSuggestions] = useState<Array<{ display: string; street: string; city: string; zip: string }>>([]);
+    const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+    const [addressLoading, setAddressLoading] = useState(false);
+    const addressRef = useRef<HTMLDivElement>(null);
+    const addressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Close address suggestions on outside click
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (addressRef.current && !addressRef.current.contains(e.target as Node)) {
+                setShowAddressSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    // Fetch address suggestions from Nominatim
+    const fetchAddressSuggestions = useCallback((query: string) => {
+        if (addressTimerRef.current) clearTimeout(addressTimerRef.current);
+        if (query.length < 3) {
+            setAddressSuggestions([]);
+            setShowAddressSuggestions(false);
+            return;
+        }
+        addressTimerRef.current = setTimeout(async () => {
+            setAddressLoading(true);
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&countrycodes=pl&limit=5&accept-language=pl`,
+                    { headers: { 'User-Agent': 'MaxMaster-SkillPlatform/1.0' } }
+                );
+                const data = await res.json();
+                const suggestions = data
+                    .filter((item: any) => item.address)
+                    .map((item: any) => {
+                        const a = item.address;
+                        const street = a.road || a.pedestrian || a.neighbourhood || '';
+                        const city = a.city || a.town || a.village || a.municipality || '';
+                        const zip = a.postcode || '';
+                        return {
+                            display: item.display_name,
+                            street,
+                            city,
+                            zip
+                        };
+                    });
+                setAddressSuggestions(suggestions);
+                setShowAddressSuggestions(suggestions.length > 0);
+            } catch {
+                setAddressSuggestions([]);
+            } finally {
+                setAddressLoading(false);
+            }
+        }, 400);
+    }, []);
 
     useEffect(() => {
         if (currentUser) {
@@ -79,7 +167,7 @@ export const CandidateProfilePage = () => {
     const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let val = e.target.value.replace(/\D/g, '');
         if (val.length > 26) val = val.slice(0, 26);
-        val = val.replace(/(.{4})/g, '$1 ').trim();
+        val = formatBankAccount(val);
         setContractData({ ...contractData, bank_account: val });
     };
 
@@ -87,6 +175,14 @@ export const CandidateProfilePage = () => {
         let val = e.target.value.replace(/\D/g, '');
         if (val.length > 11) val = val.slice(0, 11);
         setContractData({ ...contractData, pesel: val });
+        if (val.length === 11) {
+            const result = validatePesel(val);
+            setPeselError(result.error || '');
+        } else if (val.length > 0) {
+            setPeselError('PESEL musi mieć 11 cyfr');
+        } else {
+            setPeselError('');
+        }
     };
 
     if (!currentUser) return null;
@@ -98,6 +194,16 @@ export const CandidateProfilePage = () => {
         if (formData.password && formData.password !== formData.confirmPassword) {
             alert("Hasła nie są identyczne.");
             return;
+        }
+
+        // Validate PESEL before saving
+        if (contractData.pesel && contractData.pesel.length > 0) {
+            const peselResult = validatePesel(contractData.pesel);
+            if (!peselResult.valid) {
+                setPeselError(peselResult.error || '');
+                alert("Nieprawidłowy numer PESEL. Popraw dane przed zapisaniem.");
+                return;
+            }
         }
 
         const updates: any = { 
@@ -219,14 +325,16 @@ export const CandidateProfilePage = () => {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PESEL</label>
-                                            <input 
-                                                className={`w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors ${(!!currentUser.pesel && currentUser.pesel.length > 0) ? 'text-slate-500 bg-slate-50 cursor-not-allowed' : ''}`}
-                                                value={contractData.pesel} 
-                                                onChange={handlePeselChange} 
-                                                maxLength={11} 
-                                                disabled={isDataSubmitted || (!!currentUser.pesel && currentUser.pesel.length > 10)} 
+                                            <input
+                                                className={`w-full border-b-2 bg-white p-2 focus:outline-none transition-colors ${peselError ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'} ${(!!currentUser.pesel && currentUser.pesel.length > 0) ? 'text-slate-500 bg-slate-50 cursor-not-allowed' : ''}`}
+                                                value={contractData.pesel}
+                                                onChange={handlePeselChange}
+                                                maxLength={11}
+                                                disabled={isDataSubmitted || (!!currentUser.pesel && currentUser.pesel.length > 10)}
                                                 placeholder="XXXXXXXXXXX"
                                             />
+                                            {peselError && <span className="text-[10px] text-red-500 font-medium">{peselError}</span>}
+                                            {!peselError && contractData.pesel && contractData.pesel.length === 11 && <span className="text-[10px] text-green-500 font-medium">PESEL prawidłowy</span>}
                                             {(!!currentUser.pesel && currentUser.pesel.length > 10) && <span className="text-[10px] text-slate-400">Edycja zablokowana</span>}
                                         </div>
                                     </div>
@@ -287,50 +395,93 @@ export const CandidateProfilePage = () => {
                                     <div className="pt-4 pb-2 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">Adres Zamieszkania</div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="md:col-span-2">
+                                        <div className="md:col-span-2 relative" ref={addressRef}>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">ULICA</label>
-                                            <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
-                                                value={contractData.street} 
-                                                onChange={e => setContractData({...contractData, street: e.target.value})}
-                                                disabled={isDataSubmitted} 
-                                            />
+                                            <div className="relative">
+                                                <input
+                                                    className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium pr-8"
+                                                    value={contractData.street}
+                                                    onChange={e => {
+                                                        setContractData({...contractData, street: e.target.value});
+                                                        fetchAddressSuggestions(e.target.value);
+                                                    }}
+                                                    disabled={isDataSubmitted}
+                                                    placeholder="Zacznij wpisywać ulicę..."
+                                                    autoComplete="off"
+                                                />
+                                                {addressLoading && (
+                                                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                                                    </div>
+                                                )}
+                                                {!addressLoading && contractData.street && contractData.street.length >= 3 && (
+                                                    <MapPin size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                )}
+                                            </div>
+                                            {showAddressSuggestions && addressSuggestions.length > 0 && (
+                                                <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                    {addressSuggestions.map((s, i) => (
+                                                        <button
+                                                            key={i}
+                                                            type="button"
+                                                            className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
+                                                            onClick={() => {
+                                                                setContractData(prev => ({
+                                                                    ...prev,
+                                                                    street: s.street,
+                                                                    city: s.city,
+                                                                    zip_code: s.zip
+                                                                }));
+                                                                setShowAddressSuggestions(false);
+                                                            }}
+                                                        >
+                                                            <div className="flex items-start gap-2">
+                                                                <MapPin size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-slate-800">{s.street || 'Brak nazwy ulicy'}</div>
+                                                                    <div className="text-xs text-slate-500">{[s.zip, s.city].filter(Boolean).join(' ')}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR DOMU</label>
-                                            <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
-                                                value={contractData.house_number} 
+                                            <input
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium"
+                                                value={contractData.house_number}
                                                 onChange={e => setContractData({...contractData, house_number: e.target.value})}
-                                                disabled={isDataSubmitted} 
+                                                disabled={isDataSubmitted}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR LOKALU</label>
-                                            <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
-                                                value={contractData.apartment_number} 
+                                            <input
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium"
+                                                value={contractData.apartment_number}
                                                 onChange={e => setContractData({...contractData, apartment_number: e.target.value})}
-                                                disabled={isDataSubmitted} 
+                                                disabled={isDataSubmitted}
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">KOD POCZTOWY</label>
-                                            <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
-                                                value={contractData.zip_code} 
+                                            <input
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium"
+                                                value={contractData.zip_code}
                                                 onChange={handleZipCodeChange}
-                                                disabled={isDataSubmitted} 
+                                                disabled={isDataSubmitted}
                                                 placeholder="XX-XXX"
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MIASTO</label>
-                                            <input 
-                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" 
-                                                value={contractData.city} 
+                                            <input
+                                                className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium"
+                                                value={contractData.city}
                                                 onChange={e => setContractData({...contractData, city: e.target.value})}
-                                                disabled={isDataSubmitted} 
+                                                disabled={isDataSubmitted}
                                             />
                                         </div>
                                     </div>
