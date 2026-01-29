@@ -71,9 +71,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email, first_name, last_name, phone, target_position, source, status, company_id } = await req.json()
-
-    console.log('Creating candidate:', email, 'for company:', company_id)
+    const { email, first_name, last_name, phone, target_position, source, status, company_id: provided_company_id } = await req.json()
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -85,6 +83,29 @@ serve(async (req) => {
         }
       }
     )
+
+    // If company_id was not provided, try to get it from the calling HR user
+    let company_id = provided_company_id || null
+    if (!company_id) {
+      const authHeader = req.headers.get('Authorization')
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '')
+        const { data: { user: callingUser } } = await supabaseAdmin.auth.getUser(token)
+        if (callingUser) {
+          const { data: hrUser } = await supabaseAdmin
+            .from('users')
+            .select('company_id')
+            .eq('id', callingUser.id)
+            .maybeSingle()
+          if (hrUser?.company_id) {
+            company_id = hrUser.company_id
+            console.log('Resolved company_id from calling HR user:', company_id)
+          }
+        }
+      }
+    }
+
+    console.log('Creating candidate:', email, 'for company:', company_id)
 
     // Get the site URL from environment or use default
     // IMPORTANT: Use email-redirect.html to properly handle Supabase auth tokens
