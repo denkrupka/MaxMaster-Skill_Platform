@@ -49,7 +49,6 @@ export const HRCandidatesPage = () => {
     const navigate = useNavigate();
     
     const companyIdForLinks = currentCompany?.id || state.currentUser?.company_id;
-    const inviteLink = `${window.location.origin}/#/candidate/welcome${companyIdForLinks ? `?company=${companyIdForLinks}` : ''}`;
 
     const [selectedCandidate, setSelectedCandidate] = useState<User | null>(null);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -364,7 +363,7 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const generateInvitationLink = () => {
+    const generateInvitationLink = async () => {
         const origin = window.location.origin;
         const registrationPath = '/#/candidate/welcome';
         const companyId = currentCompany?.id || state.currentUser?.company_id;
@@ -372,8 +371,9 @@ export const HRCandidatesPage = () => {
             console.warn('No company_id found for current HR user - invitation link will not contain company param');
         }
         const companyParam = companyId ? `?company=${companyId}` : '';
-        const link = `${origin}${registrationPath}${companyParam}`;
-        setInvitationLink(link);
+        const fullLink = `${origin}${registrationPath}${companyParam}`;
+        const shortUrl = await createShortLink(fullLink, state.currentUser?.id);
+        setInvitationLink(shortUrl || fullLink);
         setIsInvitationModalOpen(true);
     };
 
