@@ -2464,32 +2464,26 @@ export const CompanySubscriptionPage: React.FC = () => {
 
         return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-green-600" />
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full mx-4 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-green-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Doladuj konto bonusowe</h3>
-                  <p className="text-sm text-slate-500">Wybierz jeden lub kilka pakietow</p>
+                  <h3 className="text-base font-semibold text-slate-900">Doladuj konto bonusowe</h3>
+                  <p className="text-xs text-slate-500">Otrzymaj wiecej niz placisz! Wybierz jeden lub kilka pakietow.</p>
                 </div>
               </div>
               <button
                 onClick={() => { setShowTopUpModal(false); setSelectedBonusPackages(new Set()); }}
-                className="p-2 hover:bg-slate-100 rounded-lg transition"
+                className="p-1.5 hover:bg-slate-100 rounded-lg transition"
               >
-                <X className="w-5 h-5 text-slate-500" />
+                <X className="w-4 h-4 text-slate-500" />
               </button>
             </div>
 
-            <div className="mb-5 p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-800">
-                Doladuj konto bonusowe i otrzymaj wiecej niz placisz! Srodki bonusowe mozesz wykorzystac na oplate subskrypcji i zakup dodatkowych miejsc.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
               {BONUS_PACKAGES.map((pkg, index) => {
                 const isSelected = selectedBonusPackages.has(index);
                 const extraAmount = pkg.bonusAmount - pkg.price;
@@ -2509,34 +2503,32 @@ export const CompanySubscriptionPage: React.FC = () => {
                         return next;
                       });
                     }}
-                    className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                    className={`relative p-3 rounded-lg border-2 cursor-pointer transition-all ${
                       isSelected
-                        ? 'border-green-500 bg-green-50 shadow-lg ring-1 ring-green-300'
-                        : 'border-slate-200 hover:border-green-300 hover:shadow'
+                        ? 'border-green-500 bg-green-50 shadow-md'
+                        : 'border-slate-200 hover:border-green-300 hover:shadow-sm'
                     }`}
                   >
                     {isSelected && (
-                      <div className="absolute top-3 right-3 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                        <Check className="w-4 h-4 text-white" />
+                      <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
 
                     <div className="text-center">
-                      <p className="text-sm text-slate-500 mb-1">Placisz</p>
-                      <p className="text-2xl font-bold text-slate-900 mb-2">
-                        {pkg.price} <span className="text-base font-normal">zl</span>
+                      <p className="text-lg font-bold text-slate-900">
+                        {pkg.price} <span className="text-xs font-normal text-slate-500">zl</span>
                       </p>
 
-                      <div className="mt-1 mb-3 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full inline-block">
-                        +{bonusPercent}% bonus
+                      <div className="my-1.5 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-semibold rounded-full inline-block">
+                        +{bonusPercent}%
                       </div>
 
-                      <p className="text-sm text-slate-500 mb-1">Otrzymujesz na konto</p>
-                      <p className="text-3xl font-bold text-green-600">
-                        {pkg.bonusAmount} <span className="text-base font-normal">zl</span>
+                      <p className="text-xl font-bold text-green-600">
+                        {pkg.bonusAmount} <span className="text-xs font-normal">zl</span>
                       </p>
 
-                      <p className="text-xs text-green-600 mt-2 font-medium">
+                      <p className="text-[10px] text-green-600 mt-0.5 font-medium">
                         +{extraAmount} zl gratis
                       </p>
                     </div>
@@ -2547,36 +2539,30 @@ export const CompanySubscriptionPage: React.FC = () => {
 
             {/* Summary when packages are selected */}
             {selectedBonusPackages.size > 0 && (
-              <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Wybrano pakietow: <span className="font-semibold">{selectedBonusPackages.size}</span></span>
-                  <span className="text-slate-600">Do zaplaty: <span className="font-bold text-slate-900">{totalPrice} zl</span></span>
-                </div>
-                <div className="flex items-center justify-between text-sm mt-1">
-                  <span className="text-green-600 font-medium">Bonus: +{totalExtra} zl gratis</span>
-                  <span className="text-green-600 font-bold">Na konto: {totalBonus} zl</span>
-                </div>
+              <div className="mb-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs">
+                <span className="text-slate-600">Pakietow: <span className="font-semibold">{selectedBonusPackages.size}</span> &middot; Do zaplaty: <span className="font-bold text-slate-900">{totalPrice} zl</span></span>
+                <span className="text-green-600 font-bold">Na konto: {totalBonus} zl (+{totalExtra} zl gratis)</span>
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
                 onClick={() => { setShowTopUpModal(false); setSelectedBonusPackages(new Set()); }}
-                className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition font-medium"
+                className="flex-1 px-3 py-2.5 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-medium"
               >
                 Anuluj
               </button>
               <button
                 onClick={handleBonusTopUp}
                 disabled={selectedBonusPackages.size === 0 || topUpLoading}
-                className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-3 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {topUpLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Zap className="w-4 h-4" />
                 )}
-                Doladuj
+                Doladuj{selectedBonusPackages.size > 0 ? ` ${totalPrice} zl` : ''}
               </button>
             </div>
           </div>
