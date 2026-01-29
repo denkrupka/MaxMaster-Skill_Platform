@@ -419,13 +419,14 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const shareViaSMS = () => {
-        // Initialize SMS invitation data with template - SHORT VERSION
-        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: portal.maxmaster.info/w`;
+    const shareViaSMS = async () => {
+        // Generate short link for SMS invitation
+        const companyParam = companyIdForLinks ? `?company=${companyIdForLinks}` : '';
+        const fullUrl = `${window.location.origin}/#/candidate/welcome${companyParam}`;
+        const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
+        const linkUrl = shortUrl || fullUrl;
 
-        console.log('📋 Available positions:', positions);
-        console.log('📋 Positions count:', positions?.length || 0);
-        console.log('📋 State:', state);
+        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: ${linkUrl}`;
 
         setSmsInvitationData({
             firstName: '',
