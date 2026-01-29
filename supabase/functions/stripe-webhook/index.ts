@@ -511,6 +511,7 @@ serve(async (req) => {
           // Still update company status but NOT max_users
           const statusMap: Record<string, string> = {
             'active': 'active',
+            'trialing': 'trialing',
             'past_due': 'past_due',
             'canceled': 'canceled',
             'unpaid': 'suspended'
