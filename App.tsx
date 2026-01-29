@@ -96,6 +96,7 @@ import { CandidateWelcomePage } from './pages/candidate/Welcome';
 import { CandidateRegisterPage } from './pages/candidate/Register';
 import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
+import { CompanyRegisterPage } from './pages/CompanyRegister';
 
 const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' }) => {
   const { state } = useAppContext();
@@ -384,6 +385,7 @@ export default function App() {
           <Route path="/module-access-denied" element={<ModuleAccessDeniedPage />} />
           <Route path="/candidate/welcome" element={<CandidateWelcomePage />} />
           <Route path="/candidate/register" element={<CandidateRegisterPage />} />
+          <Route path="/register" element={<CompanyRegisterPage />} />
           
           {/* SuperAdmin Routes */}
           <Route path="/superadmin/dashboard" element={<ProtectedRoute allowedRoles={[Role.SUPERADMIN]}><SuperAdminDashboard /></ProtectedRoute>} />
