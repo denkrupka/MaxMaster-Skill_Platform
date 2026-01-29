@@ -206,27 +206,28 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   }
 
   const effectiveRole = getEffectiveRole() || state.currentUser.role;
-  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
+  const actualRole = state.currentUser.role;
+  if (allowedRoles && !allowedRoles.includes(effectiveRole) && !allowedRoles.includes(actualRole)) {
     // Redirect based on actual (not simulated) role
-    if (state.currentUser.role === Role.SUPERADMIN) {
+    if (actualRole === Role.SUPERADMIN) {
         return <Navigate to="/superadmin/dashboard" replace />;
     }
-    if (state.currentUser.role === Role.SALES) {
+    if (actualRole === Role.SALES) {
         return <Navigate to="/sales/dashboard" replace />;
     }
-    if (state.currentUser.role === Role.DORADCA) {
+    if (actualRole === Role.DORADCA) {
         return <Navigate to="/doradca/dashboard" replace />;
     }
-    if (state.currentUser.role === Role.CANDIDATE) {
+    if (actualRole === Role.CANDIDATE) {
         return <Navigate to="/candidate/dashboard" replace />;
     }
-    if (state.currentUser.role === Role.HR) {
+    if (actualRole === Role.HR) {
         return <Navigate to="/hr/dashboard" replace />;
     }
-    if (state.currentUser.role === Role.ADMIN) {
+    if (actualRole === Role.ADMIN) {
         return <Navigate to="/admin/users" replace />;
     }
-    if (state.currentUser.role === Role.COMPANY_ADMIN) {
+    if (actualRole === Role.COMPANY_ADMIN) {
         return <Navigate to="/company/dashboard" replace />;
     }
     return <Navigate to="/dashboard" replace />;
