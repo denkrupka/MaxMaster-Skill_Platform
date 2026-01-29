@@ -135,8 +135,11 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     // If subscription status is BRAK (no active modules at all)
     if (isSubscriptionBrak) {
       if (state.currentUser.role === Role.COMPANY_ADMIN) {
-        // Company admin can only access subscription page
-        if (!currentPath.includes('/company/subscription') && !currentPath.includes('/subscription-expired-admin')) {
+        // Company admin can access subscription, referrals, and settings pages
+        if (!currentPath.includes('/company/subscription') &&
+            !currentPath.includes('/company/referrals') &&
+            !currentPath.includes('/company/settings') &&
+            !currentPath.includes('/subscription-expired-admin')) {
           return <Navigate to="/subscription-expired-admin" replace />;
         }
       } else {
