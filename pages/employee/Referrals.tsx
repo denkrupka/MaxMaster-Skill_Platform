@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { UserPlus, Copy, CheckCircle, Clock, XCircle, AlertTriangle, TrendingUp, DollarSign, Share2, Info, X, Plus } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
 import { UserStatus, User, Position } from '../../types';
 import { REFERRAL_STATUS_LABELS } from '../../constants';
+import { createShortLink } from '../../lib/shortLinks';
 
 export const EmployeeReferrals = () => {
     const { state, inviteFriend } = useAppContext();
@@ -58,7 +59,16 @@ export const EmployeeReferrals = () => {
         }, { earned: 0, pendingPayment: 0, inProgress: 0 });
     }, [myReferrals]);
 
-    const referralLink = `${window.location.origin}/#/candidate/welcome?ref=${currentUser.id}${currentUser.company_id ? `&company=${currentUser.company_id}` : ''}`;
+    const fullReferralLink = `${window.location.origin}/#/candidate/welcome?ref=${currentUser.id}${currentUser.company_id ? `&company=${currentUser.company_id}` : ''}`;
+    const [referralLink, setReferralLink] = useState(fullReferralLink);
+
+    useEffect(() => {
+        let cancelled = false;
+        createShortLink(fullReferralLink, currentUser.id).then(shortUrl => {
+            if (!cancelled && shortUrl) setReferralLink(shortUrl);
+        });
+        return () => { cancelled = true; };
+    }, [fullReferralLink, currentUser.id]);
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(referralLink);
