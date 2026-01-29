@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Przekierowanie - MaxMaster</title>
-    <meta http-equiv="refresh" content="0; url=/#/candidate/welcome">
     <script>
-        // Instant redirect
-        window.location.replace('/#/candidate/welcome');
+        // Forward all query parameters to the hash route
+        var params = window.location.search;
+        var target = '/#/candidate/welcome' + params;
+        window.location.replace(target);
     </script>
+    <meta http-equiv="refresh" content="2; url=/#/candidate/welcome">
     <style>
         body {
             margin: 0;

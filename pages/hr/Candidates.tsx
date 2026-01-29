@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Send, Clock, XCircle, Search, ChevronRight, Download, FileText,
@@ -16,6 +16,30 @@ import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
 import { sendTemplatedSMS, sendSMS } from '../../lib/smsService';
 import { createShortLink } from '../../lib/shortLinks';
+
+// --- PESEL Validation ---
+const validatePesel = (pesel: string): { valid: boolean; error?: string } => {
+    if (!pesel || pesel.length === 0) return { valid: true };
+    if (pesel.length < 11) return { valid: false, error: 'PESEL musi mieć 11 cyfr' };
+    if (!/^\d{11}$/.test(pesel)) return { valid: false, error: 'PESEL może zawierać tylko cyfry' };
+    const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+    const digits = pesel.split('').map(Number);
+    const checksum = weights.reduce((sum, w, i) => sum + w * digits[i], 0);
+    const controlDigit = (10 - (checksum % 10)) % 10;
+    if (controlDigit !== digits[10]) {
+        return { valid: false, error: 'Nieprawidłowy numer PESEL (błędna suma kontrolna)' };
+    }
+    return { valid: true };
+};
+
+// --- Bank Account Formatting (Polish: XX XXXX XXXX XXXX XXXX XXXX XXXX) ---
+const formatBankAccount = (digits: string): string => {
+    if (digits.length <= 2) return digits;
+    const prefix = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    const groups = rest.match(/.{1,4}/g) || [];
+    return (prefix + ' ' + groups.join(' ')).trim();
+};
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -170,6 +194,59 @@ export const HRCandidatesPage = () => {
 
     // Personal Data Edit State
     const [editPersonalData, setEditPersonalData] = useState<Partial<User>>({});
+    const [hrPeselError, setHrPeselError] = useState('');
+
+    // Address autocomplete state (HR)
+    const [hrAddressSuggestions, setHrAddressSuggestions] = useState<Array<{ display: string; street: string; city: string; zip: string }>>([]);
+    const [hrShowAddressSuggestions, setHrShowAddressSuggestions] = useState(false);
+    const [hrAddressLoading, setHrAddressLoading] = useState(false);
+    const hrAddressRef = useRef<HTMLDivElement>(null);
+    const hrAddressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Close address suggestions on outside click
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (hrAddressRef.current && !hrAddressRef.current.contains(e.target as Node)) {
+                setHrShowAddressSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, []);
+
+    const fetchHrAddressSuggestions = useCallback((query: string) => {
+        if (hrAddressTimerRef.current) clearTimeout(hrAddressTimerRef.current);
+        if (query.length < 3) {
+            setHrAddressSuggestions([]);
+            setHrShowAddressSuggestions(false);
+            return;
+        }
+        hrAddressTimerRef.current = setTimeout(async () => {
+            setHrAddressLoading(true);
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&countrycodes=pl&limit=5&accept-language=pl`,
+                    { headers: { 'User-Agent': 'MaxMaster-SkillPlatform/1.0' } }
+                );
+                const data = await res.json();
+                const suggestions = data
+                    .filter((item: any) => item.address)
+                    .map((item: any) => {
+                        const a = item.address;
+                        const street = a.road || a.pedestrian || a.neighbourhood || '';
+                        const city = a.city || a.town || a.village || a.municipality || '';
+                        const zip = a.postcode || '';
+                        return { display: item.display_name, street, city, zip };
+                    });
+                setHrAddressSuggestions(suggestions);
+                setHrShowAddressSuggestions(suggestions.length > 0);
+            } catch {
+                setHrAddressSuggestions([]);
+            } finally {
+                setHrAddressLoading(false);
+            }
+        }, 400);
+    }, []);
 
     const [newDocData, setNewDocData] = useState({ 
         typeId: '', customName: '', issue_date: new Date().toISOString().split('T')[0], expires_at: '', indefinite: false, files: [] as File[] 
@@ -419,14 +496,9 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const shareViaSMS = async () => {
-        // Generate short link for SMS invitation
-        const companyParam = companyIdForLinks ? `?company=${companyIdForLinks}` : '';
-        const fullUrl = `${window.location.origin}/#/candidate/welcome${companyParam}`;
-        const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
-        const linkUrl = shortUrl || fullUrl;
-
-        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: ${linkUrl}`;
+    const shareViaSMS = () => {
+        // Link will be built with position param and shortened when sending
+        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: {link}`;
 
         setSmsInvitationData({
             firstName: '',
@@ -512,10 +584,20 @@ export const HRCandidatesPage = () => {
 
         setIsSendingSMS(true);
         try {
+            // Build full invitation link with company and position params
+            const linkParams = new URLSearchParams();
+            const companyId = currentCompany?.id || state.currentUser?.company_id;
+            if (companyId) linkParams.append('company', companyId);
+            linkParams.append('position', smsInvitationData.position);
+            const fullUrl = `${window.location.origin}/#/candidate/welcome?${linkParams.toString()}`;
+            const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
+            const smsLink = shortUrl || fullUrl;
+
             // Replace placeholders in message
             const finalMessage = smsInvitationData.message
                 .replace(/\{imię\}/g, smsInvitationData.firstName)
-                .replace(/\{stanowisko\}/g, smsInvitationData.position);
+                .replace(/\{stanowisko\}/g, smsInvitationData.position)
+                .replace(/\{link\}/g, smsLink);
 
             // Send SMS with custom message (INVITE message)
             const result = await sendSMS({
@@ -548,6 +630,15 @@ export const HRCandidatesPage = () => {
 
     const handleSavePersonalData = async () => {
         if (!selectedCandidate) return;
+        // Validate PESEL before saving
+        if (editPersonalData.pesel && editPersonalData.pesel.length > 0) {
+            const peselResult = validatePesel(editPersonalData.pesel);
+            if (!peselResult.valid) {
+                setHrPeselError(peselResult.error || '');
+                alert("Nieprawidłowy numer PESEL. Popraw dane przed zapisaniem.");
+                return;
+            }
+        }
         setIsSubmitting(true);
         try {
             const dataToSave = { ...editPersonalData };
@@ -780,8 +871,22 @@ export const HRCandidatesPage = () => {
     const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let val = e.target.value.replace(/\D/g, '');
         if (val.length > 26) val = val.slice(0, 26);
-        val = val.replace(/(.{4})/g, '$1 ').trim();
+        val = formatBankAccount(val);
         setEditPersonalData({ ...editPersonalData, bank_account: val });
+    };
+
+    const handleHrPeselChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let val = e.target.value.replace(/\D/g, '');
+        if (val.length > 11) val = val.slice(0, 11);
+        setEditPersonalData({ ...editPersonalData, pesel: val });
+        if (val.length === 11) {
+            const result = validatePesel(val);
+            setHrPeselError(result.error || '');
+        } else if (val.length > 0) {
+            setHrPeselError('PESEL musi mieć 11 cyfr');
+        } else {
+            setHrPeselError('');
+        }
     };
 
     const renderDetail = () => {
@@ -850,7 +955,7 @@ export const HRCandidatesPage = () => {
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6 relative">
                     <button 
-                        onClick={() => setIsEditBasicModalOpen(true)}
+                        onClick={() => { setValidationErrors({}); setIsEditBasicModalOpen(true); }}
                         className="absolute top-5 right-5 p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                         title="Edytuj dane podstawowe"
                     >
@@ -984,21 +1089,141 @@ export const HRCandidatesPage = () => {
                             </div>
                         )}
                         {activeTab === 'personal' && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 animate-in fade-in duration-300">
-                                <div className="space-y-4">
-                                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2 uppercase tracking-tighter">Dane Kontaktowe</h4>
-                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">PESEL</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.pesel || ''} onChange={e => { let v = e.target.value.replace(/\D/g, '').slice(0, 11); setEditPersonalData({...editPersonalData, pesel: v}); }}/></div>
-                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Data Urodzenia</label><input type="date" className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.birth_date || ''} onChange={e => setEditPersonalData({...editPersonalData, birth_date: e.target.value})}/></div>
-                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Obywatelstwo</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.citizenship || ''} onChange={e => setEditPersonalData({...editPersonalData, citizenship: e.target.value})}/></div>
+                            <div className="space-y-6 animate-in fade-in duration-300">
+                                <h3 className="font-bold text-slate-900 mb-6 flex items-center gap-2 text-lg">Dane osobowe</h3>
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">STANOWISKO</label>
+                                            <input className="w-full border p-2 rounded bg-slate-50 text-slate-600 font-medium" value={selectedCandidate.target_position || '-'} disabled />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PESEL</label>
+                                            <input
+                                                className={`w-full border-b-2 bg-white p-2 focus:outline-none transition-colors ${hrPeselError ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'}`}
+                                                value={editPersonalData.pesel || ''}
+                                                onChange={handleHrPeselChange}
+                                                maxLength={11}
+                                                placeholder="XXXXXXXXXXX"
+                                            />
+                                            {hrPeselError && <span className="text-[10px] text-red-500 font-medium">{hrPeselError}</span>}
+                                            {!hrPeselError && editPersonalData.pesel && editPersonalData.pesel.length === 11 && <span className="text-[10px] text-green-500 font-medium">PESEL prawidłowy</span>}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">DATA URODZENIA</label>
+                                            <input type="date" className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors" value={editPersonalData.birth_date || ''} onChange={e => setEditPersonalData({...editPersonalData, birth_date: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">OBYWATELSTWO</label>
+                                            <select className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.citizenship || ''} onChange={e => setEditPersonalData({...editPersonalData, citizenship: e.target.value})}>
+                                                <option value="">Wybierz...</option>
+                                                <option value="Polskie">Polskie</option>
+                                                <option value="Ukraińskie">Ukraińskie</option>
+                                                <option value="Białoruskie">Białoruskie</option>
+                                                <option value="Inne">Inne</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">RODZAJ DOKUMENTU</label>
+                                            <select className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.document_type || 'Dowód osobisty'} onChange={e => setEditPersonalData({...editPersonalData, document_type: e.target.value})}>
+                                                <option value="Dowód osobisty">Dowód osobisty</option>
+                                                <option value="Paszport">Paszport</option>
+                                                <option value="Karta Pobytu">Karta Pobytu</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR DOKUMENTU</label>
+                                            <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.document_number || ''} onChange={e => setEditPersonalData({...editPersonalData, document_number: e.target.value})} />
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 pb-2 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">Adres Zamieszkania</div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="md:col-span-2 relative" ref={hrAddressRef}>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">ULICA</label>
+                                            <div className="relative">
+                                                <input
+                                                    className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium pr-8"
+                                                    value={editPersonalData.street || ''}
+                                                    onChange={e => {
+                                                        setEditPersonalData({...editPersonalData, street: e.target.value});
+                                                        fetchHrAddressSuggestions(e.target.value);
+                                                    }}
+                                                    placeholder="Zacznij wpisywać ulicę..."
+                                                    autoComplete="off"
+                                                />
+                                                {hrAddressLoading && (
+                                                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                                                    </div>
+                                                )}
+                                                {!hrAddressLoading && editPersonalData.street && editPersonalData.street.length >= 3 && (
+                                                    <MapPin size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                )}
+                                            </div>
+                                            {hrShowAddressSuggestions && hrAddressSuggestions.length > 0 && (
+                                                <div className="absolute z-50 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                    {hrAddressSuggestions.map((s, i) => (
+                                                        <button
+                                                            key={i}
+                                                            type="button"
+                                                            className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-0"
+                                                            onClick={() => {
+                                                                setEditPersonalData(prev => ({
+                                                                    ...prev,
+                                                                    street: s.street,
+                                                                    city: s.city,
+                                                                    zip_code: s.zip
+                                                                }));
+                                                                setHrShowAddressSuggestions(false);
+                                                            }}
+                                                        >
+                                                            <div className="flex items-start gap-2">
+                                                                <MapPin size={14} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-slate-800">{s.street || 'Brak nazwy ulicy'}</div>
+                                                                    <div className="text-xs text-slate-500">{[s.zip, s.city].filter(Boolean).join(' ')}</div>
+                                                                </div>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR DOMU</label>
+                                            <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.house_number || ''} onChange={e => setEditPersonalData({...editPersonalData, house_number: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR LOKALU</label>
+                                            <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.apartment_number || ''} onChange={e => setEditPersonalData({...editPersonalData, apartment_number: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">KOD POCZTOWY</label>
+                                            <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.zip_code || ''} onChange={handleZipCodeChange} placeholder="XX-XXX" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">MIASTO</label>
+                                            <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-medium" value={editPersonalData.city || ''} onChange={e => setEditPersonalData({...editPersonalData, city: e.target.value})} />
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 pb-2 border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">Bankowość</div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">NR KONTA BANKOWEGO</label>
+                                        <input className="w-full border-b-2 border-slate-200 bg-white p-2 focus:border-blue-500 focus:outline-none transition-colors font-mono tracking-wide font-bold" value={editPersonalData.bank_account || ''} onChange={handleBankAccountChange} placeholder="00 0000 0000 0000 0000 0000 0000" />
+                                    </div>
                                 </div>
-                                <div className="space-y-4">
-                                    <h4 className="font-bold text-slate-800 text-sm border-b pb-2 uppercase tracking-tighter">Adres</h4>
-                                    <div className="grid grid-cols-3 gap-2"><div className="col-span-2"><label className="text-[9px] font-black text-slate-400 uppercase">Miasto</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.city || ''} onChange={e => setEditPersonalData({...editPersonalData, city: e.target.value})}/></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Kod Pocztowy</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.zip_code || ''} onChange={handleZipCodeChange}/></div></div>
-                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Ulica</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.street || ''} onChange={e => editPersonalData.street = e.target.value}/></div>
-                                    <div className="flex gap-2"><div><label className="text-[9px] font-black text-slate-400 uppercase">Nr Domu</label><input className="w-full border-b p-1 text-sm font-bold w-16" value={editPersonalData.house_number || ''} onChange={e => setEditPersonalData({...editPersonalData, house_number: e.target.value})}/></div><div><label className="text-[9px] font-black text-slate-400 uppercase">Nr Lokalu</label><input className="w-full border-b p-1 text-sm font-bold w-16" value={editPersonalData.apartment_number || ''} onChange={e => setEditPersonalData({...editPersonalData, apartment_number: e.target.value})}/></div></div>
-                                    <div><label className="text-[9px] font-black text-slate-400 uppercase">Bank Account</label><input className="w-full border-b p-1 text-sm font-bold" value={editPersonalData.bank_account || ''} onChange={handleBankAccountChange}/></div>
-                                </div>
-                                <div className="md:col-span-2 flex justify-end gap-2 mt-4">
+
+                                <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
                                     <Button onClick={handleSavePersonalData} disabled={isSubmitting}><Save size={16} className="mr-2"/> Zapisz Dane</Button>
                                 </div>
                             </div>
@@ -1336,15 +1561,15 @@ export const HRCandidatesPage = () => {
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NAZWISKO</label><input required className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.last_name} onChange={e => setNewCandidateData({...newCandidateData, last_name: e.target.value})}/></div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label><input type="email" required className="w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.email} onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})}/></div>
-                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label><input required className="w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner" value={newCandidateData.phone} onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})}/></div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">EMAIL</label><input type="email" required className={`w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner ${validationErrors.email ? 'border-red-400' : ''}`} value={newCandidateData.email} onChange={e => setNewCandidateData({...newCandidateData, email: e.target.value.toLowerCase()})}/>{validationErrors.email && <p className="text-red-500 text-xs mt-1 font-medium">{validationErrors.email}</p>}</div>
+                            <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">TELEFON</label><input required className={`w-full bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-xl font-bold text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner ${validationErrors.phone ? 'border-red-400' : ''}`} value={newCandidateData.phone} onChange={e => setNewCandidateData({...newCandidateData, phone: formatPhone(e.target.value)})}/>{validationErrors.phone && <p className="text-red-500 text-xs mt-1 font-medium">{validationErrors.phone}</p>}</div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">STANOWISKO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.target_position} onChange={e => setNewCandidateData({...newCandidateData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
                             <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">ŹRÓDŁO</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold text-slate-800 appearance-none shadow-inner" value={newCandidateData.source} onChange={e => setNewCandidateData({...newCandidateData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                         </div>
                         <div className="space-y-1.5"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PLIK CV (PDF/DOC)</label><div className="border-2 border-dashed border-slate-200 p-4 rounded-xl flex items-center justify-center bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-400 transition-all" onClick={() => fileInputRef.current?.click()}><input type="file" ref={fileInputRef} className="hidden" accept=".pdf" onChange={e => setNewCandidateData({...newCandidateData, cvFile: e.target.files?.[0] || null})}/><span className="text-xs font-bold text-slate-400">{newCandidateData.cvFile ? newCandidateData.cvFile.name : 'WYBIERZ PLIK...'}</span></div></div>
-                        <div className="pt-4 sm:pt-6 flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">Anuluj</button><Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto px-6 sm:px-10 h-11 sm:h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">UTWÓRZ KANDYDATA</Button></div>
+                        <div className="pt-4 sm:pt-6 flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">Anuluj</button><Button type="submit" disabled={isSubmitting || !!validationErrors.email || !!validationErrors.phone} className="w-full sm:w-auto px-6 sm:px-10 h-11 sm:h-12 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-600/20">UTWÓRZ KANDYDATA</Button></div>
                     </form>
                 </div>
             </div>
@@ -1363,14 +1588,14 @@ export const HRCandidatesPage = () => {
                             <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Nazwisko</label><input required className="w-full bg-slate-50 border p-3 rounded-xl font-bold" value={editBasicData.last_name} onChange={e => setEditBasicData({...editBasicData, last_name: e.target.value})}/></div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label><input type="email" required className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.email} onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})}/></div>
-                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Telefon</label><input required className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.phone} onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})}/></div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label><input type="email" required className={`w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold ${validationErrors.email ? 'border-red-400' : ''}`} value={editBasicData.email} onChange={e => setEditBasicData({...editBasicData, email: e.target.value.toLowerCase()})}/>{validationErrors.email && <p className="text-red-500 text-xs mt-1 font-medium">{validationErrors.email}</p>}</div>
+                            <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Telefon</label><input required className={`w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold ${validationErrors.phone ? 'border-red-400' : ''}`} value={editBasicData.phone} onChange={e => setEditBasicData({...editBasicData, phone: formatPhone(e.target.value)})}/>{validationErrors.phone && <p className="text-red-500 text-xs mt-1 font-medium">{validationErrors.phone}</p>}</div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                             <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Stanowisko</label><select className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.target_position} onChange={e => setEditBasicData({...editBasicData, target_position: e.target.value})}><option value="">Wybierz...</option>{positions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}</select></div>
                             <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Źródło</label><select className="w-full bg-slate-50 border p-2.5 sm:p-3 rounded-xl font-bold" value={editBasicData.source} onChange={e => setEditBasicData({...editBasicData, source: e.target.value})}>{SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                         </div>
-                        <div className="pt-4 sm:pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsEditBasicModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">ZAPISZ ZMIANY</Button></div>
+                        <div className="pt-4 sm:pt-6 border-t flex flex-col-reverse sm:flex-row justify-end gap-3"><button type="button" onClick={() => setIsEditBasicModalOpen(false)} className="px-6 py-2 text-[10px] font-black uppercase text-slate-400">Anuluj</button><Button type="submit" disabled={isSubmitting || !!validationErrors.email || !!validationErrors.phone} className="w-full sm:w-auto">ZAPISZ ZMIANY</Button></div>
                     </form>
                 </div>
             </div>
@@ -1616,9 +1841,11 @@ export const HRCandidatesPage = () => {
 
     const renderSMSInvitationModal = () => {
         if (!isSMSInvitationModalOpen) return null;
+        const previewLink = `${window.location.host}/r.html?c=...`;
         const resolvedInvitationMessage = smsInvitationData.message
             .replace(/\{imię\}/g, smsInvitationData.firstName || '{imię}')
-            .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}');
+            .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}')
+            .replace(/\{link\}/g, previewLink);
         return (
             <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
@@ -1686,7 +1913,7 @@ export const HRCandidatesPage = () => {
                                     </span>
                                 </summary>
                                 <div className="px-4 pb-4 pt-2 space-y-2">
-                                    <p className="text-xs text-slate-500">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
+                                    <p className="text-xs text-slate-500">Użyj {'{imię}'}, {'{stanowisko}'} i {'{link}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
                                     <textarea
                                         className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
                                         rows={4}
