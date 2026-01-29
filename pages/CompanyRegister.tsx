@@ -330,6 +330,51 @@ export const CompanyRegisterPage: React.FC = () => {
         return;
       }
 
+      // 4. Create CRM company record for sales team
+      const employeeCountNum = personalData.employeeCount
+        ? parseInt(personalData.employeeCount.replace(/[^0-9]/g, '')) || null
+        : null;
+
+      const { data: crmCompany } = await supabase
+        .from('crm_companies')
+        .insert([{
+          name: editableCompanyData.nazwa,
+          legal_name: editableCompanyData.nazwa,
+          tax_id: editableCompanyData.nip,
+          regon: editableCompanyData.regon || null,
+          industry: personalData.industry || null,
+          address_street: addressStreet,
+          address_city: editableCompanyData.miejscowosc,
+          address_postal_code: editableCompanyData.kodPocztowy,
+          address_country: 'PL',
+          employee_count: employeeCountNum,
+          status: 'new',
+          source: referralCompanyId ? 'referral' : 'self_registration',
+          linked_company_id: newCompany.id,
+          subscription_status: 'trialing',
+          notes: referralCompanyName
+            ? `Rejestracja przez polecenie firmy: ${referralCompanyName}`
+            : 'Samodzielna rejestracja przez formularz'
+        }])
+        .select()
+        .single();
+
+      // 5. Create CRM contact for the registered person
+      if (crmCompany) {
+        await supabase
+          .from('crm_contacts')
+          .insert([{
+            crm_company_id: crmCompany.id,
+            first_name: personalData.firstName.trim(),
+            last_name: personalData.lastName.trim(),
+            email: personalData.email.trim().toLowerCase(),
+            phone: personalData.phone.replace(/\s/g, ''),
+            position: personalData.position.trim(),
+            is_decision_maker: true,
+            status: 'active'
+          }]);
+      }
+
       // Success!
       setRegisteredEmail(personalData.email.trim());
       setShowSuccessModal(true);
