@@ -1720,16 +1720,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // SuperAdmin role simulation methods
+  // Role simulation methods (SuperAdmin and Company Admin)
   const setSimulatedRole = (role: Role | null) => {
-    // Only superadmin can simulate roles
-    if (state.currentUser?.role !== Role.SUPERADMIN) return;
+    // SuperAdmin and Company Admin can simulate roles
+    if (state.currentUser?.role !== Role.SUPERADMIN && state.currentUser?.role !== Role.COMPANY_ADMIN) return;
     setState(prev => ({ ...prev, simulatedRole: role }));
   };
 
   const getEffectiveRole = (): Role | null => {
-    // If superadmin is simulating a role, return that role
-    if (state.currentUser?.role === Role.SUPERADMIN && state.simulatedRole) {
+    // If superadmin or company_admin is simulating a role, return that role
+    if ((state.currentUser?.role === Role.SUPERADMIN || state.currentUser?.role === Role.COMPANY_ADMIN) && state.simulatedRole) {
       return state.simulatedRole;
     }
     return state.currentUser?.role || null;

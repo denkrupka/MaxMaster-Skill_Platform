@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
+import { ROLE_LABELS } from '../../constants';
 
 const MODULE_INFO: Record<string, { name: string; description: string; icon: React.ReactNode }> = {
   recruitment: {
@@ -36,13 +37,12 @@ export const CompanyModulesPage: React.FC = () => {
       .map(cm => cm.module_code);
   }, [companyModules, currentCompany]);
 
-  // Get company users (excluding global users and admins)
+  // Get company users (excluding global users, including admin)
   const companyUsers = useMemo(() => {
     if (!currentCompany) return [];
     return users.filter(u =>
       u.company_id === currentCompany.id &&
       !u.is_global_user &&
-      u.role !== Role.COMPANY_ADMIN &&
       u.status !== UserStatus.INACTIVE
     );
   }, [users, currentCompany]);
@@ -218,7 +218,12 @@ export const CompanyModulesPage: React.FC = () => {
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                          {user.role === Role.COMPANY_ADMIN && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">Admin</span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500">{user.email}</p>
                       </div>
                     </div>
@@ -262,7 +267,12 @@ export const CompanyModulesPage: React.FC = () => {
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                          {user.role === Role.COMPANY_ADMIN && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">Admin</span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500">{user.email}</p>
                       </div>
                     </div>

@@ -102,12 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
   };
 
   // Role switcher for SuperAdmin
-  const RoleSwitcher = () => {
-    const availableRoles = [
-      { role: Role.SALES, label: 'Sales', icon: Target },
-      { role: Role.DORADCA, label: 'Doradca', icon: GraduationCap },
-    ];
-
+  const RoleSwitcher = ({ roles, returnLabel }: { roles: { role: Role; label: string; icon: any }[]; returnLabel: string }) => {
     return (
       <div className="px-4 py-2 mb-2">
         <div className="relative">
@@ -139,10 +134,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                   className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 border-b border-slate-100"
                 >
                   <ShieldCheck size={16} />
-                  <span>Powrót do SuperAdmin</span>
+                  <span>{returnLabel}</span>
                 </button>
               )}
-              {availableRoles.map(({ role, label, icon: Icon }) => (
+              {roles.map(({ role, label, icon: Icon }) => (
                 <button
                   key={role}
                   onClick={() => {
@@ -169,6 +164,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
       </div>
     );
   };
+
+  const isCompanyAdminSimulating = currentUser?.role === Role.COMPANY_ADMIN && simulatedRole !== null;
 
   return (
     <>
@@ -211,7 +208,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
             {currentUser?.role === Role.SUPERADMIN && (
               <>
                 <div className="my-3 border-t border-slate-100"></div>
-                <RoleSwitcher />
+                <RoleSwitcher
+                  roles={[
+                    { role: Role.SALES, label: 'Sales', icon: Target },
+                    { role: Role.DORADCA, label: 'Doradca', icon: GraduationCap },
+                  ]}
+                  returnLabel="Powrót do SuperAdmin"
+                />
                 <div className="my-2 border-t border-slate-100"></div>
               </>
             )}
@@ -244,11 +247,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                </>
             )}
 
-            {/* --- HR VIEW (or SuperAdmin simulating HR) --- */}
-            {(effectiveRole === Role.HR || (isSuperAdminSimulating && simulatedRole === Role.HR)) && (
+            {/* --- HR VIEW (or SuperAdmin/CompanyAdmin simulating HR) --- */}
+            {(effectiveRole === Role.HR || (isSuperAdminSimulating && simulatedRole === Role.HR) || (isCompanyAdminSimulating && simulatedRole === Role.HR)) && (
                <>
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
-                   Panel HR {isSuperAdminSimulating && <span className="text-amber-500">(tryb)</span>}
+                   Panel HR {(isSuperAdminSimulating || isCompanyAdminSimulating) && <span className="text-amber-500">(tryb)</span>}
                  </p>
                  <NavItem to="/hr/dashboard" icon={Layers} label="Dashboard" />
                  <div className="my-2 border-t border-slate-100"></div>
@@ -272,7 +275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
             )}
 
             {/* --- COMPANY ADMIN VIEW --- */}
-            {currentUser?.role === Role.COMPANY_ADMIN && (
+            {currentUser?.role === Role.COMPANY_ADMIN && !simulatedRole && (
                <>
                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Admin Firmy</p>
                  <NavItem to="/company/dashboard" icon={LayoutDashboard} label="Dashboard" />
@@ -318,6 +321,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                </>
             )}
 
+            {/* --- COMPANY ADMIN ROLE SWITCHER --- */}
+            {currentUser?.role === Role.COMPANY_ADMIN && (
+              <>
+                <div className="my-3 border-t border-slate-100"></div>
+                <RoleSwitcher
+                  roles={[
+                    { role: Role.HR, label: 'HR Manager', icon: UserPlus },
+                    { role: Role.BRIGADIR, label: 'Brygadzista', icon: Briefcase },
+                    { role: Role.COORDINATOR, label: 'Koordynator', icon: Network },
+                  ]}
+                  returnLabel="Powrót do Admin Firmy"
+                />
+                <div className="my-2 border-t border-slate-100"></div>
+              </>
+            )}
+
             {/* --- ADMIN VIEW (TECHNICAL / LEGACY) --- */}
             {currentUser?.role === Role.ADMIN && (
                <>
@@ -326,10 +345,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                </>
             )}
 
-            {/* --- COORDINATOR VIEW --- */}
-            {currentUser?.role === Role.COORDINATOR && (
+            {/* --- COORDINATOR VIEW (or CompanyAdmin simulating Coordinator) --- */}
+            {(currentUser?.role === Role.COORDINATOR || (isCompanyAdminSimulating && simulatedRole === Role.COORDINATOR)) && (
                 <>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Koordynator</p>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                      Koordynator {isCompanyAdminSimulating && <span className="text-amber-500">(tryb)</span>}
+                    </p>
                     <NavItem to="/coordinator/dashboard" icon={LayoutDashboard} label="Dashboard" />
                     <NavItem to="/coordinator/employees" icon={Users} label="Pracownicy" />
                     <NavItem to="/coordinator/verifications" icon={CheckSquare} label="Weryfikacje Praktyki" />
@@ -366,6 +387,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 </>
             )}
 
+            {/* --- BRIGADIR VIEW (CompanyAdmin simulating Brigadir) --- */}
+            {(isCompanyAdminSimulating && simulatedRole === Role.BRIGADIR) && (
+                <>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">
+                      Brygadzista <span className="text-amber-500">(tryb)</span>
+                    </p>
+                    <NavItem to="/brigadir/dashboard" icon={LayoutDashboard} label="Panel Zarządzania" />
+                    <NavItem to="/brigadir/checks" icon={CheckSquare} label="Weryfikacje praktyki" />
+                    <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
+                    <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
+                </>
+            )}
+
             {/* --- FULL EMPLOYEE VIEW (POST-TRIAL) --- */}
             {((currentUser?.role === Role.EMPLOYEE || currentUser?.role === Role.BRIGADIR) && currentUser?.status !== UserStatus.TRIAL) && (
               <>
@@ -398,11 +432,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
           </div>
 
           <div className="mt-auto pt-4 border-t border-slate-100">
-             <div className={`px-4 py-3 rounded-lg mb-4 ${isSuperAdminSimulating ? 'bg-amber-50' : 'bg-slate-50'}`}>
+             <div className={`px-4 py-3 rounded-lg mb-4 ${(isSuperAdminSimulating || isCompanyAdminSimulating) ? 'bg-amber-50' : 'bg-slate-50'}`}>
                 <p className="text-sm font-medium text-slate-900">{currentUser?.first_name} {currentUser?.last_name}</p>
                 <p className="text-xs text-slate-500 capitalize">
                     {isSuperAdminSimulating
                       ? <span className="text-amber-600">SuperAdmin → {ROLE_LABELS[simulatedRole!]}</span>
+                      : isCompanyAdminSimulating
+                      ? <span className="text-amber-600">Admin Firmy → {ROLE_LABELS[simulatedRole!]}</span>
                       : (currentUser?.target_position || ROLE_LABELS[currentUser?.role || Role.EMPLOYEE])
                     }
                 </p>
