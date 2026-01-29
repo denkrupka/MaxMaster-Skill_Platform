@@ -1,18 +1,32 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
+import {
     User as UserIcon, Bell, Settings as SettingsIcon, Save, Mail, Phone,
-    Plus, Trash2, Briefcase, DollarSign, List, 
-    ChevronUp, ChevronDown, Award, HardHat, X, TrendingUp, 
+    Plus, Trash2, Briefcase, DollarSign, List,
+    ChevronUp, ChevronDown, Award, HardHat, X, TrendingUp,
     Layers, FileJson, MessageSquare, Tag, GraduationCap, AlertTriangle,
-    ChevronRight, ShieldCheck, Info, ShieldAlert as ShieldAlertIcon, Star, Gift, Check, CheckCircle2, Zap, Calendar, MapPin
+    ChevronRight, ShieldCheck, Info, ShieldAlert as ShieldAlertIcon, Star, Gift, Check, CheckCircle2, Zap, Calendar, MapPin,
+    Users, Search, ToggleLeft, ToggleRight, Loader2, Package, UserPlus
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
-import { Role, ContractType, Position, Skill, SkillCategory, SystemConfig } from '../../types';
-import { CONTRACT_TYPE_LABELS } from '../../constants';
+import { Role, ContractType, Position, Skill, SkillCategory, SystemConfig, UserStatus } from '../../types';
+import { CONTRACT_TYPE_LABELS, MODULE_LABELS } from '../../constants';
 
-type TabType = 'general' | 'positions' | 'system';
+type TabType = 'general' | 'positions' | 'system' | 'access';
+
+const MODULE_INFO: Record<string, { name: string; description: string; icon: React.ReactNode }> = {
+  recruitment: {
+    name: 'Rekrutacja',
+    description: 'Zarządzanie kandydatami, procesem rekrutacji i dokumentami HR',
+    icon: <UserPlus className="w-5 h-5" />
+  },
+  skills: {
+    name: 'Umiejętności',
+    description: 'Zarządzanie kompetencjami, szkoleniami i certyfikatami pracowników',
+    icon: <Award className="w-5 h-5" />
+  }
+};
 
 // Fix: Added optional children to AccordionItem props to avoid missing children error
 const AccordionItem = ({ id, icon: Icon, title, description, children, isOpen, onToggle }: { id: string, icon: any, title: string, description: string, children?: React.ReactNode, isOpen: boolean, onToggle: (id: string) => void }) => {
@@ -44,12 +58,18 @@ const AccordionItem = ({ id, icon: Icon, title, description, children, isOpen, o
 };
 
 export const HRSettingsPage = () => {
-    const { state, updateUser, updateSystemConfig, addPosition, updatePosition, deletePosition, reorderPositions, triggerNotification } = useAppContext();
-    const { currentUser, systemConfig, positions, skills } = state;
+    const { state, updateUser, updateSystemConfig, addPosition, updatePosition, deletePosition, reorderPositions, triggerNotification, grantModuleAccess, revokeModuleAccess } = useAppContext();
+    const { currentUser, systemConfig, positions, skills, users, companyModules, modules, moduleUserAccess } = state;
+    const currentCompany = state.currentCompany;
     const [activeTab, setActiveTab] = useState<TabType>('system');
     const [successMsg, setSuccessMsg] = useState('');
 
     const [openAccordion, setOpenAccordion] = useState<string | null>(null);
+
+    // Module access management state
+    const [selectedModule, setSelectedModule] = useState<string | null>(null);
+    const [accessSearch, setAccessSearch] = useState('');
+    const [accessLoading, setAccessLoading] = useState<string | null>(null);
 
     const [profileData, setProfileData] = useState({ first_name: '', last_name: '', email: '', phone: '', password: '', confirmPassword: '' });
     useEffect(() => { if (currentUser) setProfileData({ first_name: currentUser.first_name, last_name: currentUser.last_name, email: currentUser.email, phone: currentUser.phone || '', password: '', confirmPassword: '' }); }, [currentUser]);
@@ -187,6 +207,69 @@ export const HRSettingsPage = () => {
     };
 
     const toggleAccordion = (id: string) => { setOpenAccordion(openAccordion === id ? null : id); };
+
+    // --- Module Access (Dostępy) logic ---
+    const myModules = useMemo(() => {
+        if (!currentCompany) return [];
+        return companyModules
+            .filter(cm => cm.company_id === currentCompany.id)
+            .map(cm => {
+                const mod = modules.find(m => m.code === cm.module_code);
+                const usersInModule = moduleUserAccess.filter(
+                    mua => mua.company_id === currentCompany.id && mua.module_code === cm.module_code && mua.is_enabled
+                ).length;
+                return { ...cm, module: mod, activeUsers: usersInModule };
+            });
+    }, [companyModules, modules, moduleUserAccess, currentCompany]);
+
+    const accessibleUsers = useMemo(() => {
+        if (!currentCompany) return [];
+        return users.filter(u =>
+            u.company_id === currentCompany.id &&
+            !u.is_global_user &&
+            u.role !== Role.COMPANY_ADMIN &&
+            u.status !== UserStatus.INACTIVE
+        );
+    }, [users, currentCompany]);
+
+    const filteredAccessUsers = useMemo(() => {
+        return accessibleUsers.filter(u =>
+            u.first_name.toLowerCase().includes(accessSearch.toLowerCase()) ||
+            u.last_name.toLowerCase().includes(accessSearch.toLowerCase()) ||
+            u.email?.toLowerCase().includes(accessSearch.toLowerCase())
+        );
+    }, [accessibleUsers, accessSearch]);
+
+    const hasModuleAccess = (userId: string, moduleCode: string): boolean => {
+        return moduleUserAccess.some(
+            mua => mua.user_id === userId && mua.module_code === moduleCode && mua.is_enabled
+        );
+    };
+
+    const usersWithAccess = useMemo(() => {
+        if (!selectedModule) return [];
+        return filteredAccessUsers.filter(u => hasModuleAccess(u.id, selectedModule));
+    }, [filteredAccessUsers, selectedModule, moduleUserAccess]);
+
+    const usersWithoutAccess = useMemo(() => {
+        if (!selectedModule) return [];
+        return filteredAccessUsers.filter(u => !hasModuleAccess(u.id, selectedModule));
+    }, [filteredAccessUsers, selectedModule, moduleUserAccess]);
+
+    const toggleAccess = async (userId: string, moduleCode: string, currentAccess: boolean) => {
+        setAccessLoading(userId);
+        try {
+            if (currentAccess) {
+                await revokeModuleAccess(userId, moduleCode);
+            } else {
+                await grantModuleAccess(userId, moduleCode);
+            }
+        } catch (err) {
+            console.error('Error toggling access:', err);
+        } finally {
+            setAccessLoading(null);
+        }
+    };
 
     const handleRemoveContractType = (type: string) => {
         if (['uop', 'uz', 'b2b'].includes(type.toLowerCase())) {
@@ -436,6 +519,186 @@ export const HRSettingsPage = () => {
         </div>
     );
 
+    const renderAccess = () => (
+        <div className="space-y-6">
+          {/* Active Modules Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {myModules.filter(m => m.is_active).map(cm => {
+              const moduleInfo = MODULE_INFO[cm.module_code];
+              const isSelected = selectedModule === cm.module_code;
+
+              return (
+                <div
+                  key={cm.id}
+                  onClick={() => setSelectedModule(isSelected ? null : cm.module_code)}
+                  className={`bg-white border rounded-xl p-4 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-blue-500 ring-2 ring-blue-100'
+                      : 'border-slate-200 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-100 text-blue-600">
+                      {moduleInfo?.icon || <Package className="w-5 h-5" />}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">{cm.module?.name_pl || MODULE_LABELS[cm.module_code]}</h3>
+                        <span className="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded-full">Aktywny</span>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-1">{moduleInfo?.description || ''}</p>
+                      <p className="text-sm text-blue-600 mt-2">
+                        <Users className="w-4 h-4 inline mr-1" />
+                        {cm.activeUsers} / {cm.max_users} użytkowników
+                      </p>
+                      {cm.scheduled_max_users && cm.scheduled_max_users !== cm.max_users && (
+                        <p className={`text-xs mt-1 ${cm.scheduled_max_users > cm.max_users ? 'text-blue-600' : 'text-red-600'}`}>
+                          Od następnego okresu: {cm.scheduled_max_users} użytkowników
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {myModules.filter(m => m.is_active).length === 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+              <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">Brak aktywnych modułów</p>
+            </div>
+          )}
+
+          {/* User Access Management */}
+          {selectedModule && (
+            <div className="bg-white border border-slate-200 rounded-xl">
+              <div className="p-4 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                      {MODULE_INFO[selectedModule]?.icon || <Package className="w-4 h-4" />}
+                    </div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Dostęp do: {MODULE_INFO[selectedModule]?.name || MODULE_LABELS[selectedModule]}
+                    </h2>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Szukaj użytkownika..."
+                      value={accessSearch}
+                      onChange={(e) => setAccessSearch(e.target.value)}
+                      className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg w-full sm:w-64 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Users with Access */}
+              <div className="p-4 border-b border-slate-100">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <Check className="w-4 h-4 text-green-500" />
+                  Z dostępem ({usersWithAccess.length})
+                </h3>
+                {usersWithAccess.length > 0 ? (
+                  <div className="space-y-2">
+                    {usersWithAccess.map(user => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-3 bg-green-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                            <span className="text-green-700 font-medium text-sm">
+                              {user.first_name.charAt(0)}{user.last_name.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                            <p className="text-xs text-slate-500">{user.email}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => toggleAccess(user.id, selectedModule, true)}
+                          disabled={accessLoading === user.id}
+                          className="flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
+                        >
+                          {accessLoading === user.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <ToggleRight className="w-5 h-5" />
+                          )}
+                          <span className="text-sm hidden sm:inline">Usuń dostęp</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">Brak użytkowników z dostępem</p>
+                )}
+              </div>
+
+              {/* Users without Access */}
+              <div className="p-4">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <X className="w-4 h-4 text-slate-400" />
+                  Bez dostępu ({usersWithoutAccess.length})
+                </h3>
+                {usersWithoutAccess.length > 0 ? (
+                  <div className="space-y-2">
+                    {usersWithoutAccess.map(user => (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
+                            <span className="text-slate-600 font-medium text-sm">
+                              {user.first_name.charAt(0)}{user.last_name.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                            <p className="text-xs text-slate-500">{user.email}</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => toggleAccess(user.id, selectedModule, false)}
+                          disabled={accessLoading === user.id}
+                          className="flex items-center gap-2 px-3 py-1.5 text-green-600 hover:bg-green-100 rounded-lg transition disabled:opacity-50"
+                        >
+                          {accessLoading === user.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <ToggleLeft className="w-5 h-5" />
+                          )}
+                          <span className="text-sm hidden sm:inline">Nadaj dostęp</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 py-2">Wszyscy użytkownicy mają dostęp</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Info Banner when no module selected */}
+          {!selectedModule && myModules.filter(m => m.is_active).length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+              <Users className="w-5 h-5 text-blue-500 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">Wybierz moduł powyżej</p>
+                <p className="text-sm text-blue-700 mt-1">Kliknij na kartę modułu, aby zarządzać dostępem użytkowników.</p>
+              </div>
+            </div>
+          )}
+        </div>
+    );
+
     return (
         <div className="p-6 max-w-7xl mx-auto pb-24">
             <h1 className="text-2xl font-bold text-slate-900 mb-6 tracking-tight">Ustawienia Systemu</h1>
@@ -443,7 +706,8 @@ export const HRSettingsPage = () => {
                 {[
                     { id: 'general', label: 'MÓJ PROFIL', icon: UserIcon },
                     { id: 'positions', label: 'STANOWISKA', icon: Briefcase },
-                    { id: 'system', label: 'KONFIGURACJA', icon: SettingsIcon }
+                    { id: 'system', label: 'KONFIGURACJA', icon: SettingsIcon },
+                    { id: 'access', label: 'DOSTĘPY', icon: Users }
                 ].map(t => (
                     <button key={t.id} type="button" onClick={() => setActiveTab(t.id as TabType)} className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-lg flex items-center gap-2.5 transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><t.icon size={14} /> {t.label}</button>
                 ))}
@@ -452,6 +716,7 @@ export const HRSettingsPage = () => {
                 {activeTab === 'general' && renderGeneral()}
                 {activeTab === 'positions' && renderPositions()}
                 {activeTab === 'system' && renderSystem()}
+                {activeTab === 'access' && renderAccess()}
             </div>
             {isPositionModalOpen && editingPosition && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
