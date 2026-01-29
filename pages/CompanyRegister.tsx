@@ -138,6 +138,19 @@ export const CompanyRegisterPage: React.FC = () => {
     setError(null);
 
     try {
+      // Check if company with this NIP already exists in the system
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('tax_id', cleanNip)
+        .maybeSingle();
+
+      if (existingCompany) {
+        setError(`Firma o NIP ${formatNip(cleanNip)} jest już zarejestrowana na portalu MaxMaster. Jeśli potrzebujesz dostępu, skontaktuj się z administratorem firmy.`);
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error: fnError } = await supabase.functions.invoke('search-gus', {
         body: { nip: cleanNip }
       });
@@ -217,19 +230,6 @@ export const CompanyRegisterPage: React.FC = () => {
 
       if (existingUser) {
         setError('Konto z tym adresem e-mail już istnieje. Zaloguj się lub użyj innego adresu.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Check if company with this NIP already exists
-      const { data: existingCompany } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('tax_id', editableCompanyData.nip)
-        .maybeSingle();
-
-      if (existingCompany) {
-        setError('Firma o tym NIP jest już zarejestrowana w systemie. Skontaktuj się z nami jeśli potrzebujesz dostępu.');
         setIsLoading(false);
         return;
       }
