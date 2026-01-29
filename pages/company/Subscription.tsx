@@ -38,21 +38,19 @@ interface CartItem {
   isNewModule: boolean; // true for new module activation, false for adding seats
 }
 
-// Top-up packages configuration
-interface TopUpPackage {
-  points: number;
-  basePrice: number;
-  discountPercent: number;
-  bonusPoints: number;
-  label: string;
+// Bonus top-up packages configuration
+interface BonusPackage {
+  price: number;       // Amount to pay in PLN
+  bonusAmount: number; // Amount credited to bonus account in PLN
 }
 
-const TOP_UP_PACKAGES: TopUpPackage[] = [
-  { points: 25, basePrice: 259, discountPercent: 25, bonusPoints: 3, label: '-25% / 3 pkt GRATIS' },
-  { points: 50, basePrice: 359, discountPercent: 25, bonusPoints: 0, label: 'Promocja -25%' },
-  { points: 75, basePrice: 499, discountPercent: 25, bonusPoints: 0, label: 'Promocja -25%' },
-  { points: 125, basePrice: 799, discountPercent: 25, bonusPoints: 0, label: 'Promocja -25%' },
-  { points: 250, basePrice: 1499, discountPercent: 25, bonusPoints: 0, label: 'Promocja -25%' },
+const BONUS_PACKAGES: BonusPackage[] = [
+  { price: 49, bonusAmount: 55 },
+  { price: 99, bonusAmount: 110 },
+  { price: 199, bonusAmount: 220 },
+  { price: 499, bonusAmount: 550 },
+  { price: 999, bonusAmount: 1100 },
+  { price: 1999, bonusAmount: 2200 },
 ];
 
 export const CompanySubscriptionPage: React.FC = () => {
@@ -91,7 +89,7 @@ export const CompanySubscriptionPage: React.FC = () => {
 
   // Top-up balance modal state
   const [showTopUpModal, setShowTopUpModal] = useState(false);
-  const [selectedTopUpPackage, setSelectedTopUpPackage] = useState<number | null>(null);
+  const [selectedBonusPackages, setSelectedBonusPackages] = useState<Set<number>>(new Set());
   const [topUpLoading, setTopUpLoading] = useState(false);
 
   // Card info modal state (shown before Stripe checkout)
@@ -614,26 +612,36 @@ export const CompanySubscriptionPage: React.FC = () => {
     }
   };
 
-  // Handle balance top-up
-  const handleTopUp = async (packageIndex: number) => {
-    if (!currentCompany) return;
-
-    const pkg = TOP_UP_PACKAGES[packageIndex];
-    if (!pkg) return;
+  // Handle bonus top-up (multiple packages)
+  const handleBonusTopUp = async () => {
+    if (!currentCompany || selectedBonusPackages.size === 0) return;
 
     setTopUpLoading(true);
     setError(null);
 
     try {
-      const discountedPrice = Math.round(pkg.basePrice * (1 - pkg.discountPercent / 100) * 100) / 100;
+      // Sum up all selected packages
+      let totalPrice = 0;
+      let totalBonus = 0;
+      const selectedIndices: number[] = [];
+
+      selectedBonusPackages.forEach((index) => {
+        const pkg = BONUS_PACKAGES[index];
+        if (pkg) {
+          totalPrice += pkg.price;
+          totalBonus += pkg.bonusAmount;
+          selectedIndices.push(index);
+        }
+      });
 
       const { data, error: fnError } = await supabase.functions.invoke('stripe-checkout', {
         body: {
           action: 'create-topup-session',
           companyId: currentCompany.id,
-          packageIndex,
-          amount: discountedPrice,
-          points: pkg.points + pkg.bonusPoints,
+          packageIndex: selectedIndices[0],
+          amount: totalPrice,
+          points: totalBonus,
+          selectedPackages: selectedIndices,
           successUrl: `${window.location.origin}/#/company/subscription?topup=success`,
           cancelUrl: `${window.location.origin}/#/company/subscription?topup=canceled`
         }
@@ -644,6 +652,7 @@ export const CompanySubscriptionPage: React.FC = () => {
 
       if (data?.url) {
         setShowTopUpModal(false);
+        setSelectedBonusPackages(new Set());
         window.location.href = data.url;
       } else {
         throw new Error('Nie otrzymano URL sesji płatności');
@@ -2439,94 +2448,141 @@ export const CompanySubscriptionPage: React.FC = () => {
         </div>
       )}
 
-      {/* Top-Up Balance Modal */}
-      {showTopUpModal && (
+      {/* Top-Up Bonus Balance Modal */}
+      {showTopUpModal && (() => {
+        // Calculate totals for selected packages
+        let totalPrice = 0;
+        let totalBonus = 0;
+        selectedBonusPackages.forEach((index) => {
+          const pkg = BONUS_PACKAGES[index];
+          if (pkg) {
+            totalPrice += pkg.price;
+            totalBonus += pkg.bonusAmount;
+          }
+        });
+        const totalExtra = totalBonus - totalPrice;
+
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                   <Zap className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">Doładuj balans bonusowy</h3>
-                  <p className="text-sm text-slate-500">Wybierz pakiet punktów</p>
+                  <h3 className="text-lg font-semibold text-slate-900">Doladuj konto bonusowe</h3>
+                  <p className="text-sm text-slate-500">Wybierz jeden lub kilka pakietow</p>
                 </div>
               </div>
               <button
-                onClick={() => setShowTopUpModal(false)}
+                onClick={() => { setShowTopUpModal(false); setSelectedBonusPackages(new Set()); }}
                 className="p-2 hover:bg-slate-100 rounded-lg transition"
               >
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-              {TOP_UP_PACKAGES.map((pkg, index) => {
-                const discountedPrice = Math.round(pkg.basePrice * (1 - pkg.discountPercent / 100) * 100) / 100;
-                const pricePerPoint = (discountedPrice / (pkg.points + pkg.bonusPoints)).toFixed(2);
-                const basePricePerPoint = (pkg.basePrice / pkg.points).toFixed(2);
+            <div className="mb-5 p-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800">
+                Doladuj konto bonusowe i otrzymaj wiecej niz placisz! Srodki bonusowe mozesz wykorzystac na oplate subskrypcji i zakup dodatkowych miejsc.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              {BONUS_PACKAGES.map((pkg, index) => {
+                const isSelected = selectedBonusPackages.has(index);
+                const extraAmount = pkg.bonusAmount - pkg.price;
+                const bonusPercent = Math.round((extraAmount / pkg.price) * 100);
 
                 return (
                   <div
                     key={index}
-                    onClick={() => setSelectedTopUpPackage(index)}
-                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedTopUpPackage === index
-                        ? 'border-blue-500 bg-blue-50 shadow-lg'
-                        : 'border-slate-200 hover:border-blue-300 hover:shadow'
+                    onClick={() => {
+                      setSelectedBonusPackages(prev => {
+                        const next = new Set(prev);
+                        if (next.has(index)) {
+                          next.delete(index);
+                        } else {
+                          next.add(index);
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                      isSelected
+                        ? 'border-green-500 bg-green-50 shadow-lg ring-1 ring-green-300'
+                        : 'border-slate-200 hover:border-green-300 hover:shadow'
                     }`}
                   >
+                    {isSelected && (
+                      <div className="absolute top-3 right-3 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+
                     <div className="text-center">
-                      <p className="text-3xl font-bold text-blue-600">
-                        {pkg.points + pkg.bonusPoints}
-                        <span className="text-lg font-normal text-slate-500">pkt</span>
+                      <p className="text-sm text-slate-500 mb-1">Placisz</p>
+                      <p className="text-2xl font-bold text-slate-900 mb-2">
+                        {pkg.price} <span className="text-base font-normal">zl</span>
                       </p>
 
-                      <div className="mt-2 mb-3 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                        {pkg.label}
+                      <div className="mt-1 mb-3 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-full inline-block">
+                        +{bonusPercent}% bonus
                       </div>
 
-                      <div className="text-sm text-slate-500 mb-1">
-                        <span className="line-through">{basePricePerPoint} zł</span>
-                        {' '}
-                        <span className="font-bold text-slate-900">{pricePerPoint} zł</span>
-                      </div>
+                      <p className="text-sm text-slate-500 mb-1">Otrzymujesz na konto</p>
+                      <p className="text-3xl font-bold text-green-600">
+                        {pkg.bonusAmount} <span className="text-base font-normal">zl</span>
+                      </p>
 
-                      <div className="text-sm text-slate-500">
-                        <span className="line-through">{pkg.basePrice} zł</span>
-                        {' '}
-                        <span className="font-bold text-green-600">{discountedPrice.toFixed(2)} zł</span>
-                      </div>
+                      <p className="text-xs text-green-600 mt-2 font-medium">
+                        +{extraAmount} zl gratis
+                      </p>
                     </div>
                   </div>
                 );
               })}
             </div>
 
+            {/* Summary when packages are selected */}
+            {selectedBonusPackages.size > 0 && (
+              <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Wybrano pakietow: <span className="font-semibold">{selectedBonusPackages.size}</span></span>
+                  <span className="text-slate-600">Do zaplaty: <span className="font-bold text-slate-900">{totalPrice} zl</span></span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-green-600 font-medium">Bonus: +{totalExtra} zl gratis</span>
+                  <span className="text-green-600 font-bold">Na konto: {totalBonus} zl</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <button
-                onClick={() => setShowTopUpModal(false)}
+                onClick={() => { setShowTopUpModal(false); setSelectedBonusPackages(new Set()); }}
                 className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 transition font-medium"
               >
                 Anuluj
               </button>
               <button
-                onClick={() => selectedTopUpPackage !== null && handleTopUp(selectedTopUpPackage)}
-                disabled={selectedTopUpPackage === null || topUpLoading}
+                onClick={handleBonusTopUp}
+                disabled={selectedBonusPackages.size === 0 || topUpLoading}
                 className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {topUpLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <ShoppingCart className="w-4 h-4" />
+                  <Zap className="w-4 h-4" />
                 )}
-                Wybierz
+                Doladuj
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
