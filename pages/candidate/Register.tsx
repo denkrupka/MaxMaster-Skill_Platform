@@ -238,21 +238,19 @@ export const CandidateRegisterPage = () => {
                 }
             }
 
-            // Validate company ID if provided
+            // Validate company ID format if provided
+            // Note: We only validate UUID format here, not against the companies table,
+            // because after signUp the session may not be set (email confirmation pending)
+            // and RLS on companies table blocks unauthenticated reads.
+            // The FK constraint on users.company_id will enforce referential integrity.
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             let validCompanyId: string | null = null;
             if (companyIdParam) {
-                console.log('Validating company ID:', companyIdParam);
-                const { data: company } = await supabase
-                    .from('companies')
-                    .select('id')
-                    .eq('id', companyIdParam)
-                    .maybeSingle();
-
-                if (company) {
+                if (uuidRegex.test(companyIdParam)) {
                     validCompanyId = companyIdParam;
-                    console.log('Company ID valid');
+                    console.log('Company ID format valid:', companyIdParam);
                 } else {
-                    console.warn('Company ID not found in database, ignoring');
+                    console.warn('Company ID invalid format, ignoring:', companyIdParam);
                 }
             }
 
