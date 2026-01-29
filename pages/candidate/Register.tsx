@@ -207,7 +207,9 @@ export const CandidateRegisterPage = () => {
                     data: {
                         first_name: formData.firstName,
                         last_name: formData.lastName,
-                        phone: formData.phone
+                        phone: formData.phone,
+                        role: 'candidate',
+                        status: 'started'
                     }
                 }
             });
@@ -254,81 +256,34 @@ export const CandidateRegisterPage = () => {
                 }
             }
 
-            console.log('Checking for existing public profile...');
-            const { data: existingUser } = await supabase
+            // Use upsert to handle race condition: AppContext's initializeAuth may
+            // have already created the user record (with wrong role/no company_id)
+            // after signUp triggered onAuthStateChange. Upsert ensures our values win.
+            console.log('Upserting candidate profile with id:', authId);
+            const { data: upserted, error: upsertError } = await supabase
                 .from('users')
-                .select('*')
-                .eq('email', cleanEmail)
-                .maybeSingle();
+                .upsert([{
+                    id: authId,
+                    email: cleanEmail,
+                    first_name: formData.firstName,
+                    last_name: formData.lastName,
+                    phone: formData.phone,
+                    role: 'candidate',
+                    status: UserStatus.STARTED,
+                    referred_by_id: validReferrerId || null,
+                    source: validReferrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
+                    hired_date: new Date().toISOString(),
+                    company_id: validCompanyId || null,
+                    target_position: positionParam || null
+                }], { onConflict: 'id' })
+                .select()
+                .single();
 
-            let finalUser: any = null;
-
-            if (existingUser) {
-                console.log('Profile exists. Recreating with auth ID...');
-
-                // Delete old record (can't update primary key)
-                const { error: deleteError } = await supabase
-                    .from('users')
-                    .delete()
-                    .eq('email', cleanEmail);
-
-                if (deleteError) {
-                    console.error('Delete existing user error:', deleteError);
-                    throw deleteError;
-                }
-
-                // Create new record with correct auth ID
-                const { data: inserted, error: insertError } = await supabase
-                    .from('users')
-                    .insert([{
-                        id: authId,
-                        email: cleanEmail,
-                        first_name: formData.firstName,
-                        last_name: formData.lastName,
-                        phone: formData.phone,
-                        role: 'candidate',
-                        status: UserStatus.STARTED,
-                        referred_by_id: validReferrerId || existingUser.referred_by_id || null,
-                        source: validReferrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
-                        hired_date: existingUser.hired_date || new Date().toISOString(),
-                        company_id: validCompanyId || existingUser.company_id || null,
-                        target_position: positionParam || existingUser.target_position || null
-                    }])
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    console.error('Insert user after delete error:', insertError);
-                    throw insertError;
-                }
-                finalUser = inserted;
-            } else {
-                console.log('No existing profile. Creating new one...');
-                const { data: inserted, error: insertError } = await supabase
-                    .from('users')
-                    .insert([{
-                        id: authId,
-                        email: cleanEmail,
-                        first_name: formData.firstName,
-                        last_name: formData.lastName,
-                        phone: formData.phone,
-                        role: 'candidate',
-                        status: UserStatus.STARTED,
-                        referred_by_id: validReferrerId || null,
-                        source: validReferrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
-                        hired_date: new Date().toISOString(),
-                        company_id: validCompanyId || null,
-                        target_position: positionParam || null
-                    }])
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    console.error('Insert public user error:', insertError);
-                    throw insertError;
-                }
-                finalUser = inserted;
+            if (upsertError) {
+                console.error('Upsert candidate error:', upsertError);
+                throw upsertError;
             }
+            let finalUser: any = upserted;
 
             if (formData.resumeFile && finalUser) {
                 console.log('Uploading resume...');
