@@ -119,7 +119,7 @@ serve(async (req) => {
 
         if (!customerId) {
           const customer = await stripe.customers.create({
-            email: company.email || undefined,
+            email: company.billing_email || company.contact_email || undefined,
             name: company.name,
             metadata: {
               company_id: companyId,
@@ -956,7 +956,7 @@ serve(async (req) => {
 
         if (!customerId) {
           const customer = await stripe.customers.create({
-            email: company.email || undefined,
+            email: company.billing_email || company.contact_email || undefined,
             name: company.name,
             metadata: {
               company_id: companyId,
@@ -1024,11 +1024,12 @@ serve(async (req) => {
         // Get company with Stripe customer ID
         const { data: company, error: companyError } = await supabaseAdmin
           .from('companies')
-          .select('stripe_customer_id, name, email, tax_id')
+          .select('stripe_customer_id, name, contact_email, billing_email, tax_id')
           .eq('id', companyId)
           .single()
 
         if (companyError || !company) {
+          console.error('Company lookup error:', companyError)
           throw new Error('Company not found')
         }
 
@@ -1037,7 +1038,7 @@ serve(async (req) => {
 
         if (!customerId) {
           const customer = await stripe.customers.create({
-            email: company.email || undefined,
+            email: company.billing_email || company.contact_email || undefined,
             name: company.name,
             metadata: {
               company_id: companyId,
