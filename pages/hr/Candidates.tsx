@@ -772,7 +772,15 @@ export const HRCandidatesPage = () => {
     const handleBankAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         let val = e.target.value.replace(/\D/g, '');
         if (val.length > 26) val = val.slice(0, 26);
-        val = val.replace(/(.{4})/g, '$1 ').trim();
+        // Format as Polish IBAN: XX XXXX XXXX XXXX XXXX XXXX XXXX
+        if (val.length <= 2) {
+            // just the prefix
+        } else {
+            const prefix = val.slice(0, 2);
+            const rest = val.slice(2);
+            const groups = rest.match(/.{1,4}/g) || [];
+            val = (prefix + ' ' + groups.join(' ')).trim();
+        }
         setEditPersonalData({ ...editPersonalData, bank_account: val });
     };
 

@@ -598,7 +598,7 @@ export const CandidateDashboard = () => {
                                 <div>
                                     <h2 className="text-2xl font-bold mb-2">Oferta Pracy!</h2>
                                     <p className="text-green-50 text-base leading-relaxed">
-                                        Rozpatrzyliśmy Twoje wyniki i z przyjemnością proponujemy Ci pracę zgodnie z warunkami przedstawionymi powyżej.
+                                        Rozpatrzyliśmy Twoje wyniki i z przyjemnością proponujemy Ci pracę zgodnie z warunkami przedstawionymi poniżej.
                                         Aby rozpocząć z nami współpracę, uzupełnij swoje dane do umowy.
                                     </p>
                                 </div>
