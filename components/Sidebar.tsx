@@ -258,9 +258,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  </CollapsibleNavGroup>
                  <NavItem to="/hr/employees" icon={Users} label="Pracownicy" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/hr/documents" icon={FileText} label="Dokumenty" />
-                 <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="hr-umiejetnosci" icon={Award} label="Umiejętności">
+                   <NavItem to="/hr/documents" icon={FileText} label="Dokumenty" />
                    <NavItem to="/hr/tests" icon={FileCheck} label="Testy" />
                    <NavItem to="/hr/skills" icon={Award} label="Umiejętności" />
                    <NavItem to="/hr/library" icon={BookOpen} label="Baza wiedzy" />
