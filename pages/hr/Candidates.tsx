@@ -420,7 +420,8 @@ export const HRCandidatesPage = () => {
 
     const shareViaSMS = () => {
         // Initialize SMS invitation data with template - SHORT VERSION
-        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: portal.maxmaster.info/w`;
+        // Link will be rebuilt with position param when sending
+        const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: {link}`;
 
         console.log('📋 Available positions:', positions);
         console.log('📋 Positions count:', positions?.length || 0);
@@ -504,10 +505,18 @@ export const HRCandidatesPage = () => {
 
         setIsSendingSMS(true);
         try {
+            // Build invitation link with company and position params
+            const linkParams = new URLSearchParams();
+            const companyId = currentCompany?.id || state.currentUser?.company_id;
+            if (companyId) linkParams.append('company', companyId);
+            linkParams.append('position', smsInvitationData.position);
+            const smsLink = `portal.maxmaster.info/w?${linkParams.toString()}`;
+
             // Replace placeholders in message
             const finalMessage = smsInvitationData.message
                 .replace(/\{imię\}/g, smsInvitationData.firstName)
-                .replace(/\{stanowisko\}/g, smsInvitationData.position);
+                .replace(/\{stanowisko\}/g, smsInvitationData.position)
+                .replace(/\{link\}/g, smsLink);
 
             // Send SMS with custom message (INVITE message)
             const result = await sendSMS({
@@ -1608,9 +1617,15 @@ export const HRCandidatesPage = () => {
 
     const renderSMSInvitationModal = () => {
         if (!isSMSInvitationModalOpen) return null;
+        const previewLinkParams = new URLSearchParams();
+        const previewCompanyId = currentCompany?.id || state.currentUser?.company_id;
+        if (previewCompanyId) previewLinkParams.append('company', previewCompanyId);
+        if (smsInvitationData.position) previewLinkParams.append('position', smsInvitationData.position);
+        const previewLink = `portal.maxmaster.info/w${previewLinkParams.toString() ? `?${previewLinkParams.toString()}` : ''}`;
         const resolvedInvitationMessage = smsInvitationData.message
             .replace(/\{imię\}/g, smsInvitationData.firstName || '{imię}')
-            .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}');
+            .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}')
+            .replace(/\{link\}/g, previewLink);
         return (
             <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
@@ -1678,7 +1693,7 @@ export const HRCandidatesPage = () => {
                                     </span>
                                 </summary>
                                 <div className="px-4 pb-4 pt-2 space-y-2">
-                                    <p className="text-xs text-slate-500">Użyj {'{imię}'} i {'{stanowisko}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
+                                    <p className="text-xs text-slate-500">Użyj {'{imię}'}, {'{stanowisko}'} i {'{link}'} - zostaną automatycznie zastąpione danymi kandydata.</p>
                                     <textarea
                                         className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-orange-500 focus:outline-none transition-colors resize-none"
                                         rows={4}

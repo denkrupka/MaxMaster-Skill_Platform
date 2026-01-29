@@ -35,6 +35,7 @@ export const CandidateRegisterPage = () => {
 
     const referrerId = searchParams.get('ref');
     const companyIdParam = searchParams.get('company');
+    const positionParam = searchParams.get('position');
 
     // Load company name if companyIdParam is provided
     useEffect(() => {
@@ -292,7 +293,8 @@ export const CandidateRegisterPage = () => {
                         referred_by_id: validReferrerId || existingUser.referred_by_id || null,
                         source: validReferrerId ? 'Polecenie (Link)' : existingUser.source || 'Strona WWW (Rejestracja)',
                         hired_date: existingUser.hired_date || new Date().toISOString(),
-                        company_id: validCompanyId || existingUser.company_id || null
+                        company_id: validCompanyId || existingUser.company_id || null,
+                        target_position: positionParam || existingUser.target_position || null
                     }])
                     .select()
                     .single();
@@ -317,7 +319,8 @@ export const CandidateRegisterPage = () => {
                         referred_by_id: validReferrerId || null,
                         source: validReferrerId ? 'Polecenie (Link)' : 'Strona WWW (Rejestracja)',
                         hired_date: new Date().toISOString(),
-                        company_id: validCompanyId || null
+                        company_id: validCompanyId || null,
+                        target_position: positionParam || null
                     }])
                     .select()
                     .single();
