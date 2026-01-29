@@ -22,11 +22,13 @@ export const CandidateWelcomePage = () => {
     const handleInterested = () => {
         const refId = searchParams.get('ref');
         const companyId = searchParams.get('company');
+        const position = searchParams.get('position');
 
-        // Build query string with ref and company params
+        // Build query string with ref, company, and position params
         const params = new URLSearchParams();
         if (refId) params.append('ref', refId);
         if (companyId) params.append('company', companyId);
+        if (position) params.append('position', position);
         const queryStr = params.toString() ? `?${params.toString()}` : '';
 
         if (state.currentUser) {
