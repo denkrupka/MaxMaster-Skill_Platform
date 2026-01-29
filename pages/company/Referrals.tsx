@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Copy, CheckCircle, Share2, Info, Gift, Users, Clock,
   CreditCard, Send, MessageCircle, Mail, Phone, ExternalLink
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { createShortLink } from '../../lib/shortLinks';
 
 // Referral status types
 type ReferralStatus = 'sent' | 'registered' | 'demo' | 'subscription';
@@ -45,11 +46,22 @@ export const CompanyReferralsPage: React.FC = () => {
   const minPaymentAmount = systemConfig.referralMinPaymentAmount || 100;
   const bonusAmount = systemConfig.referralBonusAmount || 50;
 
-  // Generate unique referral link for this company
-  const referralLink = useMemo(() => {
+  // Generate unique referral link for this company (shortened)
+  const fullReferralLink = useMemo(() => {
     if (!currentCompany) return '';
     return `${window.location.origin}/#/register?ref=${currentCompany.id}`;
   }, [currentCompany]);
+
+  const [referralLink, setReferralLink] = useState(fullReferralLink);
+
+  useEffect(() => {
+    if (!fullReferralLink) return;
+    let cancelled = false;
+    createShortLink(fullReferralLink, state.currentUser?.id).then(shortUrl => {
+      if (!cancelled && shortUrl) setReferralLink(shortUrl);
+    });
+    return () => { cancelled = true; };
+  }, [fullReferralLink, state.currentUser?.id]);
 
   // Mock referrals data (in production, fetch from database)
   const referrals: CompanyReferral[] = useMemo(() => {

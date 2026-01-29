@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
+import { createShortLink } from '../lib/shortLinks';
 import { EMAIL_REDIRECT_URLS, APP_URL } from '../config/app.config';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
@@ -1211,7 +1212,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (state.currentUser?.id) params.append('ref', state.currentUser.id);
     if (state.currentUser?.company_id) params.append('company', state.currentUser.company_id);
     const queryStr = params.toString() ? `?${params.toString()}` : '';
-    const portalUrl = `${APP_URL}/#/candidate/welcome${queryStr}`;
+    const fullPortalUrl = `${APP_URL}/#/candidate/welcome${queryStr}`;
+    const shortUrl = await createShortLink(fullPortalUrl, state.currentUser?.id);
+    const portalUrl = shortUrl || fullPortalUrl;
 
     try {
       await sendTemplatedSMS(

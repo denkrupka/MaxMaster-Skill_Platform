@@ -15,6 +15,7 @@ import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import { uploadDocument, supabase } from '../../lib/supabase';
 import { calculateSalary } from '../../services/salaryService';
 import { sendTemplatedSMS, sendSMS } from '../../lib/smsService';
+import { createShortLink } from '../../lib/shortLinks';
 
 const SOURCE_OPTIONS = ["OLX", "Pracuj.pl", "Facebook / Social Media", "Polecenie pracownika", "Strona WWW", "Inne"];
 
@@ -48,7 +49,6 @@ export const HRCandidatesPage = () => {
     const navigate = useNavigate();
     
     const companyIdForLinks = currentCompany?.id || state.currentUser?.company_id;
-    const inviteLink = `${window.location.origin}/#/candidate/welcome${companyIdForLinks ? `?company=${companyIdForLinks}` : ''}`;
 
     const [selectedCandidate, setSelectedCandidate] = useState<User | null>(null);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -363,7 +363,7 @@ export const HRCandidatesPage = () => {
         }
     };
 
-    const generateInvitationLink = () => {
+    const generateInvitationLink = async () => {
         const origin = window.location.origin;
         const registrationPath = '/#/candidate/welcome';
         const companyId = currentCompany?.id || state.currentUser?.company_id;
@@ -371,8 +371,9 @@ export const HRCandidatesPage = () => {
             console.warn('No company_id found for current HR user - invitation link will not contain company param');
         }
         const companyParam = companyId ? `?company=${companyId}` : '';
-        const link = `${origin}${registrationPath}${companyParam}`;
-        setInvitationLink(link);
+        const fullLink = `${origin}${registrationPath}${companyParam}`;
+        const shortUrl = await createShortLink(fullLink, state.currentUser?.id);
+        setInvitationLink(shortUrl || fullLink);
         setIsInvitationModalOpen(true);
     };
 
@@ -436,7 +437,7 @@ export const HRCandidatesPage = () => {
         setIsSMSInvitationModalOpen(true);
     };
 
-    const openWelcomeSMSModal = () => {
+    const openWelcomeSMSModal = async () => {
         if (!selectedCandidate) return;
 
         // Check if candidate has phone number
@@ -445,10 +446,13 @@ export const HRCandidatesPage = () => {
             return;
         }
 
-        // Load WELCOME message template
+        // Generate short link for the welcome URL
         const companyParam = currentCompany?.id ? `?company=${currentCompany.id}` : '';
         const fullUrl = `${window.location.origin}/#/candidate/welcome${companyParam}`;
-        const defaultMessage = `Cześć ${selectedCandidate.first_name}, zapraszamy do portalu MaxMaster! Tutaj sprawdzisz swoją stawkę: ${fullUrl}`;
+
+        const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
+        const linkUrl = shortUrl || fullUrl;
+        const defaultMessage = `Cześć ${selectedCandidate.first_name}, zapraszamy do portalu MaxMaster! Tutaj sprawdzisz swoją stawkę: ${linkUrl}`;
 
         setWelcomeSMSData({
             message: defaultMessage
@@ -461,14 +465,17 @@ export const HRCandidatesPage = () => {
 
         setIsSendingSMS(true);
         try {
-            // Send welcome SMS using the CAND_INVITE_LINK template
+            // Generate short link for template-based sending
             const companyParam = currentCompany?.id ? `?company=${currentCompany.id}` : '';
+            const fullUrl = `${window.location.origin}/#/candidate/welcome${companyParam}`;
+            const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
+
             const result = await sendTemplatedSMS(
                 'CAND_INVITE_LINK',
                 selectedCandidate.phone,
                 {
                     firstName: selectedCandidate.first_name,
-                    portalUrl: `${window.location.origin}/#/candidate/welcome${companyParam}`
+                    portalUrl: shortUrl || fullUrl
                 },
                 selectedCandidate.id
             );
