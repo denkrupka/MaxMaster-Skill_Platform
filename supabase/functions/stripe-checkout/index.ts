@@ -487,8 +487,13 @@ serve(async (req) => {
           // Update subscription quantity in Stripe (same logic as schedule-subscription-update)
           if (companyModule.stripe_subscription_item_id && companyModule.stripe_subscription_id) {
             try {
-              const newQuantity = companyModule.max_users + additionalQuantity
-              console.log(`Updating Stripe subscription for "buy now": ${companyModule.max_users} -> ${newQuantity} users`)
+              // If there's a scheduled quantity (from "purchase next period"), Stripe already has
+              // that higher quantity. We need to add to the scheduled quantity, not just max_users.
+              const baseQuantity = companyModule.scheduled_max_users && companyModule.scheduled_max_users > companyModule.max_users
+                ? companyModule.scheduled_max_users
+                : companyModule.max_users
+              const newQuantity = baseQuantity + additionalQuantity
+              console.log(`Updating Stripe subscription for "buy now": base=${baseQuantity} (max_users=${companyModule.max_users}, scheduled=${companyModule.scheduled_max_users}) + ${additionalQuantity} = ${newQuantity} users`)
 
               // Get current subscription to check price
               const currentSubscription = await stripe.subscriptions.retrieve(companyModule.stripe_subscription_id)
@@ -558,16 +563,27 @@ serve(async (req) => {
                   console.log(`Updated Stripe subscription to ${newQuantity} users`)
                 }
 
-                // Clear scheduled_max_users metadata to prevent webhook from overwriting our changes
-                // This is important because the webhook checks for this metadata and skips max_users update if present
-                await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
-                  metadata: {
-                    ...currentSubscription.metadata,
-                    scheduled_max_users: '',
-                    scheduled_at: ''
-                  }
-                })
-                console.log('Cleared scheduled_max_users metadata from Stripe subscription')
+                // Update Stripe metadata: if there's a scheduled quantity, update it to include the new seats.
+                // If no scheduled quantity, clear it so webhook can update max_users normally.
+                if (companyModule.scheduled_max_users && companyModule.scheduled_max_users > companyModule.max_users) {
+                  const newScheduled = companyModule.scheduled_max_users + additionalQuantity
+                  await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
+                    metadata: {
+                      ...currentSubscription.metadata,
+                      scheduled_max_users: newScheduled.toString(),
+                    }
+                  })
+                  console.log(`Updated scheduled_max_users metadata to ${newScheduled}`)
+                } else {
+                  await stripe.subscriptions.update(companyModule.stripe_subscription_id, {
+                    metadata: {
+                      ...currentSubscription.metadata,
+                      scheduled_max_users: '',
+                      scheduled_at: ''
+                    }
+                  })
+                  console.log('Cleared scheduled_max_users metadata from Stripe subscription')
+                }
               } else {
                 console.error('Could not find subscription item in Stripe subscription')
               }
@@ -675,7 +691,7 @@ serve(async (req) => {
             module_code: moduleCode,
             additional_quantity: additionalQuantity.toString(),
             action_type: 'add_seats',
-            new_total_quantity: (companyModule.max_users + additionalQuantity).toString(),
+            new_total_quantity: ((companyModule.scheduled_max_users && companyModule.scheduled_max_users > companyModule.max_users ? companyModule.scheduled_max_users : companyModule.max_users) + additionalQuantity).toString(),
             bonus_amount_grosze: bonusAmount.toString(),
             balance_to_deduct: balanceToUse.toString(), // Deduct this AFTER successful payment
           },
