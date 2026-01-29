@@ -661,7 +661,8 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         throw updateError;
       }
 
-      // Sync with Stripe Customer Balance
+      // Sync with Stripe Customer Balance (edge function also records payment_history)
+      let stripeSyncOk = false;
       try {
         const { data: session } = await supabase.auth.getSession();
         const response = await fetch(
@@ -684,13 +685,33 @@ export const SuperAdminCompaniesPage: React.FC = () => {
         if (!response.ok) {
           const errorData = await response.json();
           console.warn('Stripe balance sync warning:', errorData.error);
-          // Don't throw - local balance is already updated
         } else {
+          stripeSyncOk = true;
           console.log('Stripe Customer Balance synced successfully');
         }
       } catch (stripeError) {
         console.warn('Could not sync with Stripe Customer Balance:', stripeError);
-        // Continue anyway - local balance is updated
+      }
+
+      // If edge function failed, record payment_history from frontend as fallback
+      if (!stripeSyncOk) {
+        const now = new Date().toISOString();
+        const { error: paymentHistoryError } = await supabase.from('payment_history').insert({
+          company_id: selectedCompany.id,
+          amount: Math.abs(amount),
+          currency: 'PLN',
+          status: 'paid',
+          description: description,
+          paid_at: now,
+          created_at: now,
+          payment_method: 'portal',
+          payment_type: amount > 0 ? 'bonus_credit' : 'bonus_debit',
+          comment: description
+        });
+
+        if (paymentHistoryError) {
+          console.log('Could not save payment history:', paymentHistoryError);
+        }
       }
 
       // Try to save bonus transaction (table may not exist)
@@ -714,24 +735,6 @@ export const SuperAdminCompaniesPage: React.FC = () => {
 
       if (transactionError) {
         console.log('Could not save bonus transaction:', transactionError);
-      }
-
-      // Also add to payment_history for display in "Historia płatności" tab
-      const { error: paymentHistoryError } = await supabase.from('payment_history').insert({
-        company_id: selectedCompany.id,
-        amount: Math.abs(amount),
-        currency: 'PLN',
-        status: 'paid',
-        description: description,
-        paid_at: now,
-        created_at: now,
-        payment_method: 'portal',
-        payment_type: amount > 0 ? 'bonus_credit' : 'bonus_debit',
-        comment: `Operacja wykonana przez: ${state.currentUser?.first_name} ${state.currentUser?.last_name}`
-      });
-
-      if (paymentHistoryError) {
-        console.log('Could not save payment history:', paymentHistoryError);
       }
 
       // Add to local state for immediate display
