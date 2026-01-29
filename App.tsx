@@ -98,7 +98,7 @@ import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 
 const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' }) => {
-  const { state } = useAppContext();
+  const { state, getEffectiveRole } = useAppContext();
 
   if (!state.currentUser) {
     return <Navigate to="/login" replace />;
@@ -171,8 +171,10 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
 
     // MODULE ACCESS CHECK for company users
-    // Check if the route requires a specific module and if the user has access
-    if (requiredModule && !currentPath.includes('/module-access-denied')) {
+    // Company admins and superadmins simulating roles bypass module access check
+    const isSimulatingRole = state.simulatedRole !== null &&
+      (state.currentUser?.role === Role.COMPANY_ADMIN || state.currentUser?.role === Role.SUPERADMIN);
+    if (requiredModule && !currentPath.includes('/module-access-denied') && !isSimulatingRole) {
       // Get user's module access for the required module
       const userHasModuleAccess = state.moduleUserAccess.some(
         mua => mua.user_id === state.currentUser?.id &&
@@ -202,8 +204,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
       return <Navigate to="/dashboard" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(state.currentUser.role)) {
-    // Redirect based on role
+  const effectiveRole = getEffectiveRole() || state.currentUser.role;
+  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
+    // Redirect based on actual (not simulated) role
     if (state.currentUser.role === Role.SUPERADMIN) {
         return <Navigate to="/superadmin/dashboard" replace />;
     }

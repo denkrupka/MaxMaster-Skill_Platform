@@ -825,13 +825,12 @@ export const CompanySubscriptionPage: React.FC = () => {
     return myModules.filter(m => m.is_active).map(m => m.module_code);
   }, [myModules]);
 
-  // Get company users (excluding global users and admins) for access management
+  // Get company users (excluding global users, including admin) for access management
   const accessibleUsers = useMemo(() => {
     if (!currentCompany) return [];
     return users.filter(u =>
       u.company_id === currentCompany.id &&
       !u.is_global_user &&
-      u.role !== Role.COMPANY_ADMIN &&
       u.status !== UserStatus.INACTIVE
     );
   }, [users, currentCompany]);
@@ -1964,7 +1963,12 @@ export const CompanySubscriptionPage: React.FC = () => {
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                              {user.role === Role.COMPANY_ADMIN && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">Admin</span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500">{user.email}</p>
                           </div>
                         </div>
@@ -2008,7 +2012,12 @@ export const CompanySubscriptionPage: React.FC = () => {
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">{user.first_name} {user.last_name}</p>
+                              {user.role === Role.COMPANY_ADMIN && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">Admin</span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500">{user.email}</p>
                           </div>
                         </div>
