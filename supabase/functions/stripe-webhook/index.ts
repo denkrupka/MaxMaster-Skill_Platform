@@ -76,6 +76,8 @@ serve(async (req) => {
         // Handle balance top-up payment
         if (session.mode === 'payment' && action_type === 'balance_topup') {
           const topupAmount = parseFloat(session.metadata?.topup_amount || '0')
+          const topupPaid = parseFloat(session.metadata?.topup_paid || '0')
+          const bonusExtra = topupAmount - topupPaid
 
           if (topupAmount > 0) {
             // Get current balance and stripe_customer_id
@@ -97,7 +99,7 @@ serve(async (req) => {
             if (balanceError) {
               console.error('Failed to update bonus balance:', balanceError)
             } else {
-              console.log(`Added ${topupAmount} PLN to company ${company_id} bonus balance (new total: ${newBalance} PLN)`)
+              console.log(`Added ${topupAmount} PLN to company ${company_id} bonus balance (paid: ${topupPaid} PLN, bonus: +${bonusExtra} PLN, new total: ${newBalance} PLN)`)
             }
 
             // Also add to Stripe Customer Balance for automatic deduction on future payments
@@ -110,7 +112,7 @@ serve(async (req) => {
                   {
                     amount: amountInGrosze,
                     currency: 'pln',
-                    description: `Doładowanie balansu - ${topupAmount} PLN`
+                    description: `Doładowanie konta bonusowego – ${topupAmount} zł (zapłacono ${topupPaid} zł)`
                   }
                 )
                 console.log(`Added ${topupAmount} PLN to Stripe Customer Balance for ${company.stripe_customer_id}`)
@@ -127,7 +129,7 @@ serve(async (req) => {
                 company_id,
                 amount: topupAmount,
                 type: 'credit',
-                description: `Doładowanie balansu - ${topupAmount} PLN`
+                description: `Doładowanie konta bonusowego – ${topupAmount} zł (zapłacono ${topupPaid} zł, bonus +${bonusExtra} zł)`
               })
 
             // Log payment in payment_history
@@ -138,12 +140,12 @@ serve(async (req) => {
                 amount: session.amount_total ? session.amount_total / 100 : 0,
                 currency: session.currency?.toUpperCase() || 'PLN',
                 status: 'paid',
-                description: `Doładowanie balansu bonusowego - ${topupAmount} PLN`,
+                description: `Doładowanie konta bonusowego – ${topupAmount} zł`,
                 stripe_invoice_id: session.invoice as string || null,
                 paid_at: new Date().toISOString(),
                 payment_method: 'stripe',
                 payment_type: 'balance_topup',
-                comment: `Doładowanie +${topupAmount} PLN`
+                comment: `Zapłacono ${topupPaid} zł → otrzymano ${topupAmount} zł na konto (+${bonusExtra} zł gratis)`
               })
 
             if (historyError) {

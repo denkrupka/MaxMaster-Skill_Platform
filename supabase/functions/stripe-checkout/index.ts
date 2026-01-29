@@ -933,8 +933,8 @@ serve(async (req) => {
       }
 
       case 'create-topup-session': {
-        // Create one-time payment for balance top-up
-        const { companyId, packageIndex, amount, points, successUrl, cancelUrl } = body
+        // Create one-time payment for bonus balance top-up
+        const { companyId, packageIndex, amount, points, selectedPackages, successUrl, cancelUrl } = body
 
         if (!companyId || amount === undefined || points === undefined) {
           throw new Error('companyId, amount, and points are required')
@@ -983,8 +983,8 @@ serve(async (req) => {
             price_data: {
               currency: 'pln',
               product_data: {
-                name: `Doładowanie balansu - ${points} PLN`,
-                description: `Pakiet doładowania konta bonusowego`,
+                name: `Doładowanie konta bonusowego – ${points} zł`,
+                description: `Płacisz ${amount} zł, otrzymujesz ${points} zł na konto bonusowe (+${points - amount} zł gratis)`,
               },
               unit_amount: amountInGrosze,
               tax_behavior: 'exclusive' as const,
@@ -996,8 +996,10 @@ serve(async (req) => {
           metadata: {
             company_id: companyId,
             action_type: 'balance_topup',
-            topup_amount: points.toString(), // Amount to add to bonus balance
+            topup_amount: points.toString(), // Bonus amount to add to account
+            topup_paid: amount.toString(), // Actual amount paid
             package_index: packageIndex?.toString() || '0',
+            selected_packages: selectedPackages ? JSON.stringify(selectedPackages) : '',
           },
           automatic_tax: {
             enabled: true,
