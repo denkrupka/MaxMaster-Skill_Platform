@@ -616,7 +616,10 @@ serve(async (req) => {
               currency: 'PLN',
               status: 'paid',
               description: `Opłata z balansu: ${additionalQuantity} miejsc w module ${moduleCode}`,
-              paid_at: new Date().toISOString()
+              paid_at: new Date().toISOString(),
+              payment_method: 'bonus',
+              payment_type: 'seats_purchase',
+              comment: `+${additionalQuantity} miejsc w module ${moduleInfo.name_pl || moduleCode}`
             })
 
           console.log(`Payment covered entirely from balance. New balance: ${newBalance} PLN`)
