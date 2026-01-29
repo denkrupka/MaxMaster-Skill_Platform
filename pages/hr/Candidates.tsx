@@ -589,12 +589,14 @@ export const HRCandidatesPage = () => {
 
         setIsSendingSMS(true);
         try {
-            // Build invitation link with company and position params
+            // Build full invitation link with company and position params
             const linkParams = new URLSearchParams();
             const companyId = currentCompany?.id || state.currentUser?.company_id;
             if (companyId) linkParams.append('company', companyId);
             linkParams.append('position', smsInvitationData.position);
-            const smsLink = `portal.maxmaster.info/w?${linkParams.toString()}`;
+            const fullUrl = `${window.location.origin}/#/candidate/welcome?${linkParams.toString()}`;
+            const shortUrl = await createShortLink(fullUrl, state.currentUser?.id);
+            const smsLink = shortUrl || fullUrl;
 
             // Replace placeholders in message
             const finalMessage = smsInvitationData.message
@@ -1844,11 +1846,7 @@ export const HRCandidatesPage = () => {
 
     const renderSMSInvitationModal = () => {
         if (!isSMSInvitationModalOpen) return null;
-        const previewLinkParams = new URLSearchParams();
-        const previewCompanyId = currentCompany?.id || state.currentUser?.company_id;
-        if (previewCompanyId) previewLinkParams.append('company', previewCompanyId);
-        if (smsInvitationData.position) previewLinkParams.append('position', smsInvitationData.position);
-        const previewLink = `portal.maxmaster.info/w${previewLinkParams.toString() ? `?${previewLinkParams.toString()}` : ''}`;
+        const previewLink = `${window.location.host}/r.html?c=...`;
         const resolvedInvitationMessage = smsInvitationData.message
             .replace(/\{imię\}/g, smsInvitationData.firstName || '{imię}')
             .replace(/\{stanowisko\}/g, smsInvitationData.position || '{stanowisko}')
