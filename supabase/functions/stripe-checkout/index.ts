@@ -500,6 +500,10 @@ serve(async (req) => {
                 const currentUnitAmount = subscriptionItem.price?.unit_amount || 0
                 const expectedUnitAmount = Math.round(moduleInfo.base_price_per_user * 100)
 
+                // Get the existing interval from the subscription item to avoid interval mismatch
+                const existingInterval = subscriptionItem.price?.recurring?.interval || 'month'
+                const existingIntervalCount = subscriptionItem.price?.recurring?.interval_count || 1
+
                 if (currentUnitAmount !== expectedUnitAmount) {
                   // Price changed - create new price and update
                   console.log(`Price mismatch: Stripe has ${currentUnitAmount/100} PLN, expected ${expectedUnitAmount/100} PLN - creating new price`)
@@ -523,11 +527,11 @@ serve(async (req) => {
                     activeProductId = newProduct.id
                   }
 
-                  // Create new price
+                  // Create new price - use existing interval to avoid mismatch
                   const newPrice = await stripe.prices.create({
                     currency: 'pln',
                     unit_amount: expectedUnitAmount,
-                    recurring: { interval: 'month' },
+                    recurring: { interval: existingInterval, interval_count: existingIntervalCount },
                     product: activeProductId,
                     tax_behavior: 'exclusive',
                   })
@@ -807,6 +811,10 @@ serve(async (req) => {
             )
             const currentUnitAmount = subscriptionItem?.price?.unit_amount || 0
 
+            // Get the existing interval from the subscription item to avoid interval mismatch
+            const existingInterval = subscriptionItem.price?.recurring?.interval || 'month'
+            const existingIntervalCount = subscriptionItem.price?.recurring?.interval_count || 1
+
             if (currentUnitAmount !== unitAmountGrosze) {
               // Price has changed - create a new price and update subscription item
               console.log(`Price changed from ${currentUnitAmount/100} PLN to ${unitAmountGrosze/100} PLN - updating Stripe price`)
@@ -838,11 +846,11 @@ serve(async (req) => {
                 console.log(`Created new product: ${activeProductId}`)
               }
 
-              // Create new price with updated amount
+              // Create new price with updated amount - use existing interval to avoid mismatch
               const newPrice = await stripe.prices.create({
                 currency: 'pln',
                 unit_amount: unitAmountGrosze,
-                recurring: { interval: 'month' },
+                recurring: { interval: existingInterval, interval_count: existingIntervalCount },
                 product: activeProductId,
                 tax_behavior: 'exclusive',
               })
