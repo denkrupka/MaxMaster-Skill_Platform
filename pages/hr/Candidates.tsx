@@ -497,13 +497,8 @@ export const HRCandidatesPage = () => {
     };
 
     const shareViaSMS = () => {
-        // Initialize SMS invitation data with template - SHORT VERSION
-        // Link will be rebuilt with position param when sending
+        // Link will be built with position param and shortened when sending
         const defaultMessage = `Cześć {imię}! Zapraszamy do rekrutacji na stanowisko {stanowisko}. Zarejestruj się: {link}`;
-
-        console.log('📋 Available positions:', positions);
-        console.log('📋 Positions count:', positions?.length || 0);
-        console.log('📋 State:', state);
 
         setSmsInvitationData({
             firstName: '',

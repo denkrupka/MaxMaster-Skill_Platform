@@ -2,10 +2,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Copy, CheckCircle, Share2, Info, Gift, Users, Clock,
-  CreditCard, Send, MessageCircle, Mail, Phone, ExternalLink
+  CreditCard, Send, MessageCircle, Mail, Phone, ExternalLink, X, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { createShortLink } from '../../lib/shortLinks';
+import { sendSMS } from '../../lib/smsService';
 
 // Referral status types
 type ReferralStatus = 'sent' | 'registered' | 'demo' | 'subscription';
@@ -37,10 +38,19 @@ const BONUS_STATUS_CONFIG: Record<BonusStatus, { label: string; color: string }>
 };
 
 export const CompanyReferralsPage: React.FC = () => {
-  const { state } = useAppContext();
+  const { state, triggerNotification } = useAppContext();
   const { currentCompany, systemConfig } = state;
 
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // SMS Modal state
+  const [isSMSModalOpen, setIsSMSModalOpen] = useState(false);
+  const [isSendingSMS, setIsSendingSMS] = useState(false);
+  const [smsData, setSmsData] = useState({
+    firstName: '',
+    phone: '',
+    message: ''
+  });
 
   // Get referral program settings from system config
   const minPaymentAmount = systemConfig.referralMinPaymentAmount || 100;
@@ -111,9 +121,59 @@ export const CompanyReferralsPage: React.FC = () => {
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
 
-  const shareViaSMS = () => {
-    const text = encodeURIComponent(`Zapraszam do MaxMaster! Zarejestruj się: ${referralLink} - po płatności min. ${minPaymentAmount} zł oboje dostaniemy bonus ${bonusAmount} zł!`);
-    window.open(`sms:?body=${text}`, '_blank');
+  const openSMSModal = () => {
+    const defaultMessage = `Cześć {imię}! Zapraszam do MaxMaster! Zarejestruj się: ${referralLink} - po płatności min. ${minPaymentAmount} zł oboje dostaniemy bonus ${bonusAmount} zł!`;
+    setSmsData({
+      firstName: '',
+      phone: '',
+      message: defaultMessage
+    });
+    setIsSMSModalOpen(true);
+  };
+
+  // Format phone number as user types
+  const formatPhoneNumber = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.startsWith('48')) {
+      const withoutCode = digits.slice(2);
+      if (withoutCode.length <= 3) return `+48 ${withoutCode}`;
+      if (withoutCode.length <= 6) return `+48 ${withoutCode.slice(0, 3)} ${withoutCode.slice(3)}`;
+      return `+48 ${withoutCode.slice(0, 3)} ${withoutCode.slice(3, 6)} ${withoutCode.slice(6, 9)}`;
+    } else {
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+    }
+  };
+
+  const handleSendSMS = async () => {
+    if (!smsData.firstName || !smsData.phone) {
+      triggerNotification('error', 'Błąd', 'Wypełnij imię i numer telefonu');
+      return;
+    }
+
+    setIsSendingSMS(true);
+    try {
+      const finalMessage = smsData.message.replace(/\{imię\}/g, smsData.firstName);
+
+      const result = await sendSMS({
+        phoneNumber: smsData.phone,
+        message: finalMessage,
+        templateCode: 'SMS_REFERRAL'
+      });
+
+      if (result.success) {
+        triggerNotification('success', 'SMS wysłany', `Zaproszenie wysłane do ${smsData.firstName}`);
+        setIsSMSModalOpen(false);
+      } else {
+        triggerNotification('error', 'Błąd wysyłania SMS', result.error || 'Nie udało się wysłać SMS');
+      }
+    } catch (error) {
+      console.error('Failed to send SMS:', error);
+      triggerNotification('error', 'Błąd', 'Nie udało się wysłać SMS');
+    } finally {
+      setIsSendingSMS(false);
+    }
   };
 
   if (!currentCompany) {
@@ -127,6 +187,9 @@ export const CompanyReferralsPage: React.FC = () => {
       </div>
     );
   }
+
+  // Resolved message for preview
+  const resolvedMessage = smsData.message.replace(/\{imię\}/g, smsData.firstName || '{imię}');
 
   return (
     <div className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
@@ -209,7 +272,7 @@ export const CompanyReferralsPage: React.FC = () => {
               <span>Email</span>
             </button>
             <button
-              onClick={shareViaSMS}
+              onClick={openSMSModal}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-medium transition-colors"
             >
               <Phone size={20} />
@@ -364,6 +427,115 @@ export const CompanyReferralsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* SMS Modal */}
+      {isSMSModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[120] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-purple-600 to-purple-500">
+              <div>
+                <h2 className="text-xl font-black text-white tracking-tight uppercase">Wyślij SMS Zaproszenie</h2>
+                <p className="text-xs text-purple-100 font-medium mt-1">Wypełnij dane i wyślij zaproszenie SMS</p>
+              </div>
+              <button onClick={() => setIsSMSModalOpen(false)} className="text-white/80 hover:text-white p-2 hover:bg-white/10 rounded-full transition-all">
+                <X size={24}/>
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+              {/* Name & Phone */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Imię</label>
+                  <input
+                    type="text"
+                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-purple-500 focus:outline-none transition-colors"
+                    placeholder="np. Jan"
+                    value={smsData.firstName}
+                    onChange={(e) => setSmsData({...smsData, firstName: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Numer Telefonu</label>
+                  <input
+                    type="tel"
+                    className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-purple-500 focus:outline-none transition-colors"
+                    placeholder="+48 500 123 456"
+                    value={smsData.phone}
+                    onChange={(e) => setSmsData({...smsData, phone: formatPhoneNumber(e.target.value)})}
+                  />
+                </div>
+              </div>
+
+              {/* SMS Message */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Treść SMS (max 160 znaków)</label>
+                <details className="rounded-xl border-2 border-slate-200 bg-white">
+                  <summary className="cursor-pointer select-none px-4 py-3 text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center justify-between">
+                    <span>Edytuj treść wiadomości</span>
+                    <span className={smsData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-400'}>
+                      {smsData.message.length} / 160
+                    </span>
+                  </summary>
+                  <div className="px-4 pb-4 pt-2 space-y-2">
+                    <p className="text-xs text-slate-500">Użyj {'{imię}'} - zostanie automatycznie zastąpione imieniem odbiorcy.</p>
+                    <textarea
+                      className="w-full border-2 border-slate-200 p-3 rounded-xl text-sm focus:border-purple-500 focus:outline-none transition-colors resize-none"
+                      rows={4}
+                      placeholder="Treść SMS..."
+                      value={smsData.message}
+                      onChange={(e) => setSmsData({...smsData, message: e.target.value})}
+                    />
+                    <div className="flex justify-between text-xs">
+                      <span className={smsData.message.length > 160 ? 'text-red-600 font-bold' : 'text-slate-500'}>
+                        Szablon: {smsData.message.length} znaków
+                      </span>
+                      <span className={resolvedMessage.length > 160 ? 'text-red-600 font-bold' : 'text-green-600'}>
+                        Po podstawieniu: {resolvedMessage.length} / 160
+                      </span>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              {/* Preview */}
+              <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-2">Podgląd wiadomości</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                  {resolvedMessage}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => setIsSMSModalOpen(false)}
+                className="flex-1 text-sm font-black uppercase text-slate-500 hover:text-slate-700 transition-colors"
+                disabled={isSendingSMS}
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSendSMS}
+                className="flex-[2] font-black uppercase text-sm tracking-widest bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 px-6 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                disabled={isSendingSMS}
+              >
+                {isSendingSMS ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Wysyłanie...
+                  </>
+                ) : (
+                  <>
+                    <Phone size={16} />
+                    Wyślij SMS
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
