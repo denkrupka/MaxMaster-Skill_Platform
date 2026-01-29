@@ -8,6 +8,123 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
 }
 
+// Priority order for auto-granting module access
+const ROLE_PRIORITY = ['hr', 'coordinator', 'brigadir', 'employee', 'trial', 'candidate']
+
+/**
+ * Auto-grant module access to company users after module purchase/seat addition.
+ * Grants access based on role priority: HR > Coordinator > Brigadir > Employee > Trial > Candidate.
+ * If seats >= users, all users get access. Otherwise, highest priority roles get access first.
+ */
+async function autoGrantModuleAccess(supabaseAdmin: any, companyId: string, moduleCode: string) {
+  try {
+    // Get the company module info
+    const { data: companyModule } = await supabaseAdmin
+      .from('company_modules')
+      .select('id, max_users, is_active')
+      .eq('company_id', companyId)
+      .eq('module_code', moduleCode)
+      .single()
+
+    if (!companyModule || !companyModule.is_active) {
+      console.log(`autoGrantModuleAccess: Module ${moduleCode} not active for company ${companyId}`)
+      return
+    }
+
+    // Get all company users (excluding inactive/blocked)
+    const { data: companyUsers } = await supabaseAdmin
+      .from('users')
+      .select('id, role, status')
+      .eq('company_id', companyId)
+      .neq('status', 'inactive')
+
+    if (!companyUsers || companyUsers.length === 0) {
+      console.log(`autoGrantModuleAccess: No active users for company ${companyId}`)
+      return
+    }
+
+    // Get current module access records for this module
+    const { data: currentAccess } = await supabaseAdmin
+      .from('module_user_access')
+      .select('id, user_id, is_enabled')
+      .eq('company_id', companyId)
+      .eq('module_code', moduleCode)
+
+    const enabledUserIds = new Set(
+      (currentAccess || []).filter((a: any) => a.is_enabled).map((a: any) => a.user_id)
+    )
+    const existingAccessMap = new Map(
+      (currentAccess || []).map((a: any) => [a.user_id, a])
+    )
+
+    // Users who don't have access yet
+    const usersWithoutAccess = companyUsers.filter((u: any) => !enabledUserIds.has(u.id))
+
+    if (usersWithoutAccess.length === 0) {
+      console.log(`autoGrantModuleAccess: All users already have access to ${moduleCode}`)
+      return
+    }
+
+    // Available seats
+    const availableSeats = companyModule.max_users - enabledUserIds.size
+    if (availableSeats <= 0) {
+      console.log(`autoGrantModuleAccess: No available seats for ${moduleCode} (${enabledUserIds.size}/${companyModule.max_users})`)
+      return
+    }
+
+    // Sort users without access by role priority
+    usersWithoutAccess.sort((a: any, b: any) => {
+      const aIdx = ROLE_PRIORITY.indexOf(a.role)
+      const bIdx = ROLE_PRIORITY.indexOf(b.role)
+      return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx)
+    })
+
+    // Grant access up to available seats
+    const usersToGrant = usersWithoutAccess.slice(0, availableSeats)
+    let grantedCount = 0
+
+    for (const user of usersToGrant) {
+      const existing = existingAccessMap.get(user.id)
+
+      if (existing) {
+        // Re-enable existing record
+        const { error } = await supabaseAdmin
+          .from('module_user_access')
+          .update({ is_enabled: true, enabled_at: new Date().toISOString(), disabled_at: null })
+          .eq('id', existing.id)
+
+        if (!error) grantedCount++
+        else console.error(`Failed to re-enable access for user ${user.id}:`, error)
+      } else {
+        // Create new access record
+        const { error } = await supabaseAdmin
+          .from('module_user_access')
+          .insert({
+            company_id: companyId,
+            user_id: user.id,
+            module_code: moduleCode,
+            is_enabled: true,
+            enabled_at: new Date().toISOString()
+          })
+
+        if (!error) grantedCount++
+        else console.error(`Failed to grant access for user ${user.id}:`, error)
+      }
+    }
+
+    // Update current_users count
+    const newCurrentUsers = enabledUserIds.size + grantedCount
+    await supabaseAdmin
+      .from('company_modules')
+      .update({ current_users: newCurrentUsers })
+      .eq('id', companyModule.id)
+
+    console.log(`autoGrantModuleAccess: Granted ${moduleCode} access to ${grantedCount} users (total: ${newCurrentUsers}/${companyModule.max_users})`)
+  } catch (err) {
+    console.error(`autoGrantModuleAccess error for ${moduleCode}:`, err)
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -329,6 +446,9 @@ serve(async (req) => {
             if (historyError) {
               console.error('Failed to log payment history:', historyError)
             }
+
+            // Auto-grant module access after adding seats
+            await autoGrantModuleAccess(supabaseAdmin, company_id, moduleCodeToUpdate)
           }
           break
         }
@@ -470,6 +590,12 @@ serve(async (req) => {
         } else {
           console.log(`Company ${company_id} subscription_status updated to ${subscriptionStatus}`)
         }
+
+        // Auto-grant module access to company users for each activated module
+        for (const mod of modulesToActivate) {
+          await autoGrantModuleAccess(supabaseAdmin, company_id, mod.moduleCode)
+        }
+
         break
       }
 
