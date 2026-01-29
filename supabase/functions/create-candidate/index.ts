@@ -6,6 +6,65 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Priority order for auto-granting module access
+const ROLE_PRIORITY = ['hr', 'coordinator', 'brigadir', 'employee', 'trial', 'candidate']
+
+/**
+ * Auto-grant module access to a new user if there are free seats.
+ * Checks all active company modules and grants access where seats are available.
+ */
+async function autoGrantAccessForNewUser(supabaseAdmin: any, userId: string, companyId: string) {
+  try {
+    // Get all active modules for the company
+    const { data: activeModules } = await supabaseAdmin
+      .from('company_modules')
+      .select('id, module_code, max_users')
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+
+    if (!activeModules || activeModules.length === 0) return
+
+    for (const mod of activeModules) {
+      // Count currently enabled users
+      const { count } = await supabaseAdmin
+        .from('module_user_access')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('module_code', mod.module_code)
+        .eq('is_enabled', true)
+
+      const currentEnabled = count || 0
+
+      if (currentEnabled < mod.max_users) {
+        // Grant access
+        const { error } = await supabaseAdmin
+          .from('module_user_access')
+          .insert({
+            company_id: companyId,
+            user_id: userId,
+            module_code: mod.module_code,
+            is_enabled: true,
+            enabled_at: new Date().toISOString()
+          })
+
+        if (!error) {
+          // Update current_users count
+          await supabaseAdmin
+            .from('company_modules')
+            .update({ current_users: currentEnabled + 1 })
+            .eq('id', mod.id)
+
+          console.log(`Auto-granted ${mod.module_code} access to user ${userId}`)
+        } else {
+          console.error(`Failed to auto-grant ${mod.module_code} access:`, error)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('autoGrantAccessForNewUser error:', err)
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -83,6 +142,11 @@ serve(async (req) => {
     }
 
     console.log('Candidate created successfully:', userData.id)
+
+    // 2.5 Auto-grant module access if there are free seats
+    if (company_id) {
+      await autoGrantAccessForNewUser(supabaseAdmin, userData.id, company_id)
+    }
 
     // 3. Send invitation email with confirmation link
     try {

@@ -119,6 +119,7 @@ interface AppContextType {
   // Module access methods
   grantModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
   revokeModuleAccess: (userId: string, moduleCode: string) => Promise<void>;
+  autoGrantModuleAccessForCompany: (companyId: string, moduleCode: string) => Promise<void>;
 
   // SuperAdmin role simulation
   setSimulatedRole: (role: Role | null) => void;
@@ -586,6 +587,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (error) throw error;
     setState(prev => ({ ...prev, users: [...prev.users, data] }));
+
+    // Auto-grant module access if there are free seats
+    if (data.company_id) {
+      await autoGrantAccessForNewUser(data.id, data.company_id);
+    }
   };
 
   const deleteUser = async (id: string) => {
@@ -645,12 +651,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Update local state with the created candidate
     const createdCandidate = result.data;
     setState(prev => ({ ...prev, users: [...prev.users, createdCandidate] }));
+
+    // Auto-grant module access if there are free seats
+    if (createdCandidate.company_id) {
+      await autoGrantAccessForNewUser(createdCandidate.id, createdCandidate.company_id);
+    }
+
     return createdCandidate;
   };
 
   const moveCandidateToTrial = async (id: string, config: any) => {
     const user = state.users.find(u => u.id === id);
     await updateUser(id, { status: UserStatus.TRIAL, role: Role.EMPLOYEE, ...config });
+
+    // Auto-grant module access for the new employee role (e.g. Skills module)
+    if (user?.company_id) {
+      await autoGrantAccessForNewUser(id, user.company_id);
+    }
 
     // Send SMS notification about trial start
     if (user?.phone && config.contract_end_date) {
@@ -1607,6 +1624,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Role priority for auto-granting module access
+  const ROLE_PRIORITY = ['hr', 'coordinator', 'brigadir', 'employee', 'trial', 'candidate'];
+
+  /**
+   * Auto-grant module access to a single newly created user.
+   * Checks all active company modules for free seats and grants access.
+   */
+  const autoGrantAccessForNewUser = async (userId: string, companyId: string) => {
+    try {
+      // Refresh state to get latest data
+      const { data: activeModules } = await supabase
+        .from('company_modules')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('is_active', true);
+
+      if (!activeModules || activeModules.length === 0) return;
+
+      for (const mod of activeModules) {
+        // Count currently enabled users for this module
+        const { count } = await supabase
+          .from('module_user_access')
+          .select('id', { count: 'exact', head: true })
+          .eq('company_id', companyId)
+          .eq('module_code', mod.module_code)
+          .eq('is_enabled', true);
+
+        const currentEnabled = count || 0;
+
+        // Check if there's room
+        if (currentEnabled < mod.max_users) {
+          // Check if user already has access
+          const { data: existingAccess } = await supabase
+            .from('module_user_access')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('module_code', mod.module_code)
+            .eq('is_enabled', true)
+            .maybeSingle();
+
+          if (!existingAccess) {
+            await grantModuleAccess(userId, mod.module_code);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('autoGrantAccessForNewUser error:', err);
+    }
+  };
+
+  /**
+   * Auto-grant module access to all company users for a specific module.
+   * Used after module purchase or seat addition, grants in role priority order.
+   */
+  const autoGrantModuleAccessForCompany = async (companyId: string, moduleCode: string) => {
+    try {
+      const companyModule = state.companyModules.find(
+        cm => cm.company_id === companyId && cm.module_code === moduleCode && cm.is_active
+      );
+      if (!companyModule) return;
+
+      const companyUsers = state.users.filter(
+        u => u.company_id === companyId && u.status !== UserStatus.INACTIVE
+      );
+
+      const currentlyGranted = state.moduleUserAccess.filter(
+        mua => mua.module_code === moduleCode && mua.is_enabled &&
+               companyUsers.some(u => u.id === mua.user_id)
+      );
+
+      const availableSeats = companyModule.max_users - currentlyGranted.length;
+      if (availableSeats <= 0) return;
+
+      const usersWithoutAccess = companyUsers.filter(
+        u => !currentlyGranted.some(mua => mua.user_id === u.id)
+      );
+
+      // Sort by priority
+      usersWithoutAccess.sort((a, b) => {
+        const aIdx = ROLE_PRIORITY.indexOf(a.role);
+        const bIdx = ROLE_PRIORITY.indexOf(b.role);
+        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
+      });
+
+      const usersToGrant = usersWithoutAccess.slice(0, availableSeats);
+      for (const user of usersToGrant) {
+        await grantModuleAccess(user.id, moduleCode);
+      }
+    } catch (err) {
+      console.error('autoGrantModuleAccessForCompany error:', err);
+    }
+  };
+
   // SuperAdmin role simulation methods
   const setSimulatedRole = (role: Role | null) => {
     // Only superadmin can simulate roles
@@ -1729,6 +1839,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Module access
     grantModuleAccess,
     revokeModuleAccess,
+    autoGrantModuleAccessForCompany,
 
     // SuperAdmin role simulation
     setSimulatedRole,
