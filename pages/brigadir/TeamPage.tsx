@@ -49,7 +49,7 @@ export const BrigadirTeamPage = () => {
 
     const myTeamData = useMemo(() => {
         if (!currentUser) return [];
-        const team = users.filter(u => u.assigned_brigadir_id === currentUser.id && u.status !== UserStatus.INACTIVE);
+        const team = users.filter(u => u.assigned_brigadir_id === currentUser.id && u.status !== UserStatus.INACTIVE && ![Role.ADMIN, Role.COMPANY_ADMIN].includes(u.role));
         
         return team.map(u => {
             const memberSkills = userSkills.filter(us => us.user_id === u.id);

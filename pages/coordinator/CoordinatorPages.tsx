@@ -78,7 +78,7 @@ export const CoordinatorEmployees = () => {
     const filteredEmployees = useMemo(() => {
         return users.filter(u => {
             // Exclude internal roles, candidates and INACTIVE (fired) employees
-            if (u.role === Role.CANDIDATE || [Role.ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)) return false;
+            if (u.role === Role.CANDIDATE || [Role.ADMIN, Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)) return false;
             if (u.status === UserStatus.INACTIVE) return false;
 
             const searchLower = search.toLowerCase();

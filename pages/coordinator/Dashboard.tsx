@@ -49,7 +49,7 @@ export const CoordinatorDashboard = () => {
                 u.assigned_brigadir_id === brig.id && 
                 u.status !== UserStatus.INACTIVE &&
                 u.role !== Role.CANDIDATE &&
-                ![Role.ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)
+                ![Role.ADMIN, Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR].includes(u.role)
             );
             const teamIds = myTeam.map(u => u.id);
 
