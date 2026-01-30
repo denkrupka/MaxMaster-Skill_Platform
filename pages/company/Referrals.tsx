@@ -73,11 +73,32 @@ export const CompanyReferralsPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [fullReferralLink, state.currentUser?.id]);
 
-  // Mock referrals data (in production, fetch from database)
-  const referrals: CompanyReferral[] = useMemo(() => {
-    // This would be fetched from database in production
-    return [];
-  }, []);
+  // Load referred companies from database
+  const [referrals, setReferrals] = useState<CompanyReferral[]>([]);
+
+  useEffect(() => {
+    if (!currentCompany) return;
+    // Find companies that were referred by this company
+    const referred = state.companies.filter(c => c.referred_by_company_id === currentCompany.id);
+    const mapped: CompanyReferral[] = referred.map(c => {
+      let status: ReferralStatus = 'registered';
+      if (c.subscription_status === 'active') status = 'subscription';
+      else if (c.status === 'trial') status = 'demo';
+
+      return {
+        id: c.id,
+        companyName: c.name || c.legal_name || '—',
+        contactEmail: c.contact_email || '—',
+        contactPhone: c.contact_phone || undefined,
+        invitedAt: c.created_at,
+        status,
+        bonusStatus: c.referral_bonus_paid ? 'paid' : 'pending',
+        bonusAmount: bonusAmount,
+        paidAmount: c.referral_bonus_paid ? bonusAmount : undefined
+      };
+    });
+    setReferrals(mapped);
+  }, [currentCompany, state.companies, bonusAmount]);
 
   // Calculate stats
   const stats = useMemo(() => {

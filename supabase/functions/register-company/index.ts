@@ -157,6 +157,7 @@ serve(async (req) => {
         is_blocked: false,
         subscription_status: 'trialing',
         bonus_balance: 0,
+        referred_by_company_id: referralCompanyId || null,
         slug: cleanNip
       }])
       .select()
