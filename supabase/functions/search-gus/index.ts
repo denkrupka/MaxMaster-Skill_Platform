@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,6 +38,32 @@ serve(async (req) => {
     const checkDigit = sum % 11
     if (checkDigit === 10 || checkDigit !== parseInt(cleanNip[9])) {
       throw new Error('Nieprawidłowy NIP - błędna suma kontrolna')
+    }
+
+    // Check if company with this NIP already exists in the system
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    const { data: existingCompany } = await supabaseAdmin
+      .from('companies')
+      .select('id, name')
+      .eq('tax_id', cleanNip)
+      .maybeSingle()
+
+    if (existingCompany) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Firma o tym NIP jest już zarejestrowana na portalu MaxMaster. Skontaktuj się z administratorem firmy, aby uzyskać dostęp.`,
+          data: { found: false, already_registered: true, company_name: existingCompany.name }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      )
     }
 
     console.log('Searching DataPort.pl for NIP:', cleanNip)

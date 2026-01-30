@@ -134,19 +134,6 @@ export const CompanyRegisterPage: React.FC = () => {
     setError(null);
 
     try {
-      // Check if company with this NIP already exists in the system
-      const { data: existingCompany } = await supabase
-        .from('companies')
-        .select('id, name')
-        .eq('tax_id', cleanNip)
-        .maybeSingle();
-
-      if (existingCompany) {
-        setError(`Firma o NIP ${formatNip(cleanNip)} jest już zarejestrowana na portalu MaxMaster. Jeśli potrzebujesz dostępu, skontaktuj się z administratorem firmy.`);
-        setIsLoading(false);
-        return;
-      }
-
       const { data, error: fnError } = await supabase.functions.invoke('search-gus', {
         body: { nip: cleanNip }
       });
