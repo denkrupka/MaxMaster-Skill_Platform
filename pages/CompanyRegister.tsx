@@ -4,9 +4,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Building2, Search, CheckCircle, Edit3, ArrowRight, ArrowLeft,
   User, Phone, Mail, Briefcase, Users, FileText, Loader2,
-  AlertCircle, Shield, Eye, EyeOff
+  AlertCircle
 } from 'lucide-react';
-import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 // Industry options
 const INDUSTRY_OPTIONS = [
@@ -75,13 +75,9 @@ export const CompanyRegisterPage: React.FC = () => {
     invoiceEmail: '',
     usesDifferentInvoiceEmail: false,
     industry: '',
-    employeeCount: '',
-    password: '',
-    confirmPassword: ''
+    employeeCount: ''
   });
   const [personalErrors, setPersonalErrors] = useState<Record<string, string>>({});
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Success modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -138,6 +134,19 @@ export const CompanyRegisterPage: React.FC = () => {
     setError(null);
 
     try {
+      // Check if company with this NIP already exists in the system
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('tax_id', cleanNip)
+        .maybeSingle();
+
+      if (existingCompany) {
+        setError(`Firma o NIP ${formatNip(cleanNip)} jest już zarejestrowana na portalu MaxMaster. Jeśli potrzebujesz dostępu, skontaktuj się z administratorem firmy.`);
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error: fnError } = await supabase.functions.invoke('search-gus', {
         body: { nip: cleanNip }
       });
@@ -186,16 +195,6 @@ export const CompanyRegisterPage: React.FC = () => {
     if (!personalData.industry) errors.industry = 'Wybierz branżę';
     if (!personalData.employeeCount) errors.employeeCount = 'Wybierz liczbę pracowników';
 
-    if (!personalData.password) {
-      errors.password = 'Hasło jest wymagane';
-    } else if (personalData.password.length < 6) {
-      errors.password = 'Hasło musi mieć minimum 6 znaków';
-    }
-
-    if (personalData.password !== personalData.confirmPassword) {
-      errors.confirmPassword = 'Hasła nie są identyczne';
-    }
-
     setPersonalErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -221,23 +220,11 @@ export const CompanyRegisterPage: React.FC = () => {
         return;
       }
 
-      // Check if company with this NIP already exists
-      const { data: existingCompany } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('tax_id', editableCompanyData.nip)
-        .maybeSingle();
-
-      if (existingCompany) {
-        setError('Firma o tym NIP jest już zarejestrowana w systemie. Skontaktuj się z nami jeśli potrzebujesz dostępu.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 1. Create auth user via Supabase Auth
+      // 1. Create auth user via Supabase Auth (temporary password; user sets real password via email confirmation)
+      const tempPassword = crypto.randomUUID() + '!Aa1';
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: personalData.email.trim().toLowerCase(),
-        password: personalData.password,
+        password: tempPassword,
         options: {
           emailRedirectTo: `${window.location.origin}/#/setup-password`,
           data: {
@@ -928,68 +915,6 @@ export const CompanyRegisterPage: React.FC = () => {
           {personalErrors.employeeCount && <p className="text-xs text-red-500 mt-1 font-medium">{personalErrors.employeeCount}</p>}
         </div>
 
-        {/* Password */}
-        <div className="pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-2 mb-4">
-            <Shield size={16} className="text-blue-600" />
-            <span className="text-sm font-bold text-slate-700">Ustaw hasło do konta</span>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                Hasło
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={personalData.password}
-                  onChange={(e) => {
-                    setPersonalData(prev => ({ ...prev, password: e.target.value }));
-                    setPersonalErrors(prev => ({ ...prev, password: '' }));
-                  }}
-                  placeholder="Minimum 6 znaków"
-                  className={`w-full border-2 ${personalErrors.password ? 'border-red-300 bg-red-50' : 'border-slate-200'} p-3 pr-10 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {personalErrors.password && <p className="text-xs text-red-500 mt-1 font-medium">{personalErrors.password}</p>}
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                Powtórz hasło
-              </label>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={personalData.confirmPassword}
-                  onChange={(e) => {
-                    setPersonalData(prev => ({ ...prev, confirmPassword: e.target.value }));
-                    setPersonalErrors(prev => ({ ...prev, confirmPassword: '' }));
-                  }}
-                  placeholder="Powtórz hasło"
-                  className={`w-full border-2 ${personalErrors.confirmPassword ? 'border-red-300 bg-red-50' : 'border-slate-200'} p-3 pr-10 rounded-xl text-sm focus:border-blue-500 focus:outline-none transition-colors`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-              {personalErrors.confirmPassword && <p className="text-xs text-red-500 mt-1 font-medium">{personalErrors.confirmPassword}</p>}
-            </div>
-          </div>
-        </div>
-
         {/* Action buttons */}
         <div className="flex gap-3 pt-2">
           <button
@@ -1035,7 +960,7 @@ export const CompanyRegisterPage: React.FC = () => {
             <h2 className="text-2xl font-black text-slate-900 mb-2">Potwierdź e-mail</h2>
             <p className="text-slate-500 leading-relaxed">
               Na adres <strong className="text-slate-700">{registeredEmail}</strong> wysłaliśmy
-              link aktywacyjny. Kliknij w link, aby potwierdzić swoje konto.
+              link aktywacyjny. Kliknij w link, aby <strong className="text-slate-700">ustawić hasło</strong> i aktywować swoje konto.
             </p>
           </div>
 
