@@ -194,159 +194,43 @@ export const CompanyRegisterPage: React.FC = () => {
     setError(null);
 
     try {
-      // Check if email already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', personalData.email.trim().toLowerCase())
-        .maybeSingle();
-
-      if (existingUser) {
-        setError('Konto z tym adresem e-mail już istnieje. Zaloguj się lub użyj innego adresu.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 1. Create auth user via Supabase Auth (temporary password; user sets real password via email confirmation)
-      const tempPassword = crypto.randomUUID() + '!Aa1';
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: personalData.email.trim().toLowerCase(),
-        password: tempPassword,
-        options: {
-          emailRedirectTo: `${window.location.origin}/#/setup-password`,
-          data: {
-            first_name: personalData.firstName.trim(),
-            last_name: personalData.lastName.trim()
-          }
-        }
-      });
-
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          setError('Konto z tym adresem e-mail już istnieje.');
-        } else {
-          setError(authError.message);
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      const authUserId = authData.user?.id;
-      if (!authUserId) {
-        setError('Nie udało się utworzyć konta. Spróbuj ponownie.');
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Create company
       const addressStreet = [
         editableCompanyData.ulica,
         editableCompanyData.nrNieruchomosci,
         editableCompanyData.nrLokalu ? `/${editableCompanyData.nrLokalu}` : ''
       ].filter(Boolean).join(' ');
 
-      const { data: newCompany, error: companyError } = await supabase
-        .from('companies')
-        .insert([{
-          name: editableCompanyData.nazwa,
-          legal_name: editableCompanyData.nazwa,
-          tax_id: editableCompanyData.nip,
-          regon: editableCompanyData.regon,
-          address_street: addressStreet,
-          address_city: editableCompanyData.miejscowosc,
-          address_postal_code: editableCompanyData.kodPocztowy,
-          address_country: 'PL',
-          contact_email: personalData.email.trim().toLowerCase(),
-          contact_phone: personalData.phone.replace(/\s/g, ''),
-          billing_email: personalData.usesDifferentInvoiceEmail
+      const { data, error: fnError } = await supabase.functions.invoke('register-company', {
+        body: {
+          companyName: editableCompanyData.nazwa,
+          legalName: editableCompanyData.nazwa,
+          taxId: editableCompanyData.nip,
+          regon: editableCompanyData.regon || null,
+          addressStreet,
+          addressCity: editableCompanyData.miejscowosc,
+          addressPostalCode: editableCompanyData.kodPocztowy,
+          industry: personalData.industry || null,
+          employeeCount: personalData.employeeCount || null,
+          firstName: personalData.firstName.trim(),
+          lastName: personalData.lastName.trim(),
+          position: personalData.position.trim(),
+          phone: personalData.phone.replace(/\s/g, ''),
+          email: personalData.email.trim().toLowerCase(),
+          billingEmail: personalData.usesDifferentInvoiceEmail
             ? personalData.invoiceEmail.trim().toLowerCase()
             : personalData.email.trim().toLowerCase(),
-          industry: personalData.industry,
-          status: 'trial',
-          is_blocked: false,
-          subscription_status: 'trialing',
-          bonus_balance: 0,
-          referred_by_company_id: referralCompanyId || null,
-          slug: editableCompanyData.nip
-        }])
-        .select()
-        .single();
+          referralCompanyId: referralCompanyId || null
+        }
+      });
 
-      if (companyError) {
-        console.error('Company creation error:', companyError);
-        setError('Nie udało się utworzyć firmy. Spróbuj ponownie.');
-        setIsLoading(false);
-        return;
+      if (fnError) {
+        throw new Error('Błąd połączenia z serwerem. Spróbuj ponownie.');
       }
 
-      // 3. Create user record linked to company
-      const { error: userError } = await supabase
-        .from('users')
-        .insert([{
-          id: authUserId,
-          email: personalData.email.trim().toLowerCase(),
-          first_name: personalData.firstName.trim(),
-          last_name: personalData.lastName.trim(),
-          phone: personalData.phone.replace(/\s/g, ''),
-          role: 'company_admin',
-          status: 'active',
-          company_id: newCompany.id,
-          is_global_user: false,
-          position: personalData.position.trim()
-        }]);
-
-      if (userError) {
-        console.error('User creation error:', userError);
-        // Try to clean up company if user creation fails
-        await supabase.from('companies').delete().eq('id', newCompany.id);
-        setError('Nie udało się utworzyć konta użytkownika. Spróbuj ponownie.');
+      if (!data?.success) {
+        setError(data?.error || 'Nie udało się utworzyć konto firmy. Spróbuj ponownie.');
         setIsLoading(false);
         return;
-      }
-
-      // 4. Create CRM company record for sales team
-      const employeeCountNum = personalData.employeeCount
-        ? parseInt(personalData.employeeCount.replace(/[^0-9]/g, '')) || null
-        : null;
-
-      const { data: crmCompany } = await supabase
-        .from('crm_companies')
-        .insert([{
-          name: editableCompanyData.nazwa,
-          legal_name: editableCompanyData.nazwa,
-          tax_id: editableCompanyData.nip,
-          regon: editableCompanyData.regon || null,
-          industry: personalData.industry || null,
-          address_street: addressStreet,
-          address_city: editableCompanyData.miejscowosc,
-          address_postal_code: editableCompanyData.kodPocztowy,
-          address_country: 'PL',
-          employee_count: employeeCountNum,
-          status: 'new',
-          source: referralCompanyId ? 'referral' : 'self_registration',
-          linked_company_id: newCompany.id,
-          subscription_status: 'trialing',
-          notes: referralCompanyName
-            ? `Rejestracja przez polecenie firmy: ${referralCompanyName}`
-            : 'Samodzielna rejestracja przez formularz'
-        }])
-        .select()
-        .single();
-
-      // 5. Create CRM contact for the registered person
-      if (crmCompany) {
-        await supabase
-          .from('crm_contacts')
-          .insert([{
-            crm_company_id: crmCompany.id,
-            first_name: personalData.firstName.trim(),
-            last_name: personalData.lastName.trim(),
-            email: personalData.email.trim().toLowerCase(),
-            phone: personalData.phone.replace(/\s/g, ''),
-            position: personalData.position.trim(),
-            is_decision_maker: true,
-            status: 'active'
-          }]);
       }
 
       // Success!
