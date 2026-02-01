@@ -5,6 +5,7 @@ import {
   Calendar, Users, Clock, AlertCircle, Loader2, Save, Play, Trash2, Filter,
   ChevronDown, ChevronRight, X, TrendingUp, UserCheck, UserX, AlarmClock
 } from 'lucide-react';
+import { CompanyTimesheetsPage } from './Timesheets';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -38,7 +39,7 @@ const MONTHS = [
   'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
 ];
 
-type ReportTab = 'time_salary' | 'attendance' | 'saved';
+type ReportTab = 'time_salary' | 'attendance' | 'timesheet' | 'saved';
 
 // ---------------------------------------------------------------
 // Time & Salary Report
@@ -813,6 +814,7 @@ export const CompanyReportsPage: React.FC = () => {
   const tabs: { key: ReportTab; label: string; icon: React.ReactNode }[] = [
     { key: 'time_salary', label: 'Czas i wynagrodzenie', icon: <BarChart3 className="w-4 h-4" /> },
     { key: 'attendance', label: 'Obecnosc', icon: <PieChartIcon className="w-4 h-4" /> },
+    { key: 'timesheet', label: 'Tabela ewidencji', icon: <FileSpreadsheet className="w-4 h-4" /> },
     { key: 'saved', label: `Zapisane raporty (${savedReports.length})`, icon: <Save className="w-4 h-4" /> }
   ];
 
@@ -861,6 +863,12 @@ export const CompanyReportsPage: React.FC = () => {
           departments={departments}
           onSaveReport={handleSaveReport}
         />
+      )}
+
+      {activeTab === 'timesheet' && companyId && (
+        <div className="-mx-4 lg:-mx-6 -mb-4 lg:-mb-6">
+          <CompanyTimesheetsPage embedded />
+        </div>
       )}
 
       {activeTab === 'saved' && companyId && (

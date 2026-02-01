@@ -264,13 +264,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/hr/employees" icon={Users} label="Pracownicy" />
                  <NavItem to="/company/departments" icon={Building2} label="Obiekty" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <CollapsibleNavGroup groupId="hr-czas-pracy" icon={Clock} label="Czas pracy">
-                   <NavItem to="/company/team-now" icon={Users} label="Zespół teraz" />
-                   <NavItem to="/employee/attendance" icon={Clock} label="Moje godziny" />
-                   <NavItem to="/company/attendance" icon={ClipboardList} label="Obecność" />
-                   <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" />
-                   <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
+                 <CollapsibleNavGroup groupId="hr-obecnosci" icon={ClipboardList} label="Obecności">
+                   <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                   <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                   <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
                  </CollapsibleNavGroup>
+                 <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" />
+                 <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
                  <CollapsibleNavGroup groupId="hr-projekty" icon={FolderKanban} label="Projekty">
                    <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
                    <NavItem to="/company/tasks" icon={ListTodo} label="Zadania" />
@@ -284,7 +284,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                    <NavItem to="/hr/library" icon={BookOpen} label="Baza wiedzy" />
                  </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
-                 <NavItem to="/company/timesheets" icon={FileSpreadsheet} label="Tabele" />
                  <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty HR" />
                  <div className="my-2 border-t border-slate-100"></div>
@@ -300,22 +299,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/company/departments" icon={Building2} label="Obiekty" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Czas pracy</p>
-                 <NavItem to="/company/team-now" icon={Users} label="Zespół teraz" />
-                 <NavItem to="/employee/attendance" icon={Clock} label="Moje godziny" />
-                 <NavItem to="/company/attendance" icon={ClipboardList} label="Obecność" />
-                 <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                 <NavItem to="/company/time-off" icon={CalendarDays} label="Zarządzanie urlopami" />
-                 <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                 <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
+                 <CollapsibleNavGroup groupId="admin-obecnosci" icon={ClipboardList} label="Obecności">
+                   <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                   <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                   <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-urlopy" icon={CalendarDays} label="Urlopy">
+                   <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                   <NavItem to="/company/time-off" icon={CalendarDays} label="Zarządzanie urlopami" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-grafiki" icon={CalendarRange} label="Grafiki">
+                   <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                   <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki zespołu" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-projekty" icon={FolderKanban} label="Projekty">
+                   <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                   <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
+                   <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Projekty</p>
-                 <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
-                 <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
-                 <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
-                 <div className="my-2 border-t border-slate-100"></div>
-                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Raporty</p>
-                 <NavItem to="/company/timesheets" icon={FileSpreadsheet} label="Tabele" />
                  <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
@@ -394,17 +396,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/coordinator/verifications" icon={CheckSquare} label="Weryfikacje Praktyki" />
                     <NavItem to="/coordinator/quality" icon={AlertTriangle} label="Zgłoszenia jakości" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Czas pracy</p>
-                    <NavItem to="/company/team-now" icon={Users} label="Zespół teraz" />
-                    <NavItem to="/employee/attendance" icon={Clock} label="Moje godziny" />
-                    <NavItem to="/company/attendance" icon={ClipboardList} label="Obecność" />
-                    <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                    <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
-                    <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                    <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
-                    <div className="my-2 border-t border-slate-100"></div>
-                    <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
-                    <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
+                    <CollapsibleNavGroup groupId="coordinator-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-grafik" icon={CalendarRange} label="Grafik pracy">
+                      <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                      <NavItem to="/company/schedules" icon={CalendarRange} label="Grafik Zespołu" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-projekty" icon={FolderKanban} label="Projekty">
+                      <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
+                      <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                      <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
+                    </CollapsibleNavGroup>
                     <div className="my-2 border-t border-slate-100"></div>
                     <CollapsibleNavGroup groupId="coordinator-umiejetnosci" icon={Award} label="Umiejętności">
                       <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności i uprawnienia" />
@@ -448,13 +457,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
                     <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    <NavItem to="/company/team-now" icon={Users} label="Zespół teraz" />
-                    <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
-                    <NavItem to="/company/attendance" icon={ClipboardList} label="Obecność" />
-                    <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                    <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
-                    <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                    <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                    <CollapsibleNavGroup groupId="brigadir-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="brigadir-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
                 </>
             )}
 
@@ -470,17 +481,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
                     <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
                     <div className="my-4 border-t border-slate-100"></div>
+                    <CollapsibleNavGroup groupId="brigadir-real-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="brigadir-real-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
                   </>
                 )}
 
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Pracownik</p>
+                {/* --- REGULAR EMPLOYEE (non-brigadir) --- */}
+                {currentUser?.role === Role.EMPLOYEE && (
+                  <>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-4">Pracownik</p>
 
-                <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
-                <div className="my-2 border-t border-slate-100"></div>
-                <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
-                <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                    <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
+                    <div className="my-2 border-t border-slate-100"></div>
+                    <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                    <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                    <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                    <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                  </>
+                )}
                 <div className="my-2 border-t border-slate-100"></div>
                 <CollapsibleNavGroup groupId="employee-umiejetnosci" icon={Award} label="Umiejętności">
                   <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i uprawnienia" />

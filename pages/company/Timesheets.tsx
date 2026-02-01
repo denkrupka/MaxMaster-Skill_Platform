@@ -210,7 +210,7 @@ const EmployeeTimesheetDetail: React.FC<{
 // Main Page
 // ---------------------------------------------------------------
 
-export const CompanyTimesheetsPage: React.FC = () => {
+export const CompanyTimesheetsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
   const { state } = useAppContext();
   const { currentUser, currentCompany, users } = state;
 
@@ -542,14 +542,16 @@ export const CompanyTimesheetsPage: React.FC = () => {
   const yearOptions = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
+    <div className={embedded ? "p-4 lg:p-6" : "p-4 lg:p-6 max-w-[1400px] mx-auto"}>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Karty czasu pracy</h1>
-        <p className="text-slate-500 mt-1">
-          Generuj i zarzadzaj kartami czasu pracy pracownikow
-        </p>
-      </div>
+      {!embedded && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-900">Karty czasu pracy</h1>
+          <p className="text-slate-500 mt-1">
+            Generuj i zarzadzaj kartami czasu pracy pracownikow
+          </p>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
