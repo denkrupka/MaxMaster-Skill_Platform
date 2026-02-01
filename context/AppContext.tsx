@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase, SUPABASE_ANON_KEY } from '../lib/supabase';
 import { sendTemplatedSMS } from '../lib/smsService';
 import { createShortLink } from '../lib/shortLinks';
-import { EMAIL_REDIRECT_URLS, APP_URL } from '../config/app.config';
+import { APP_URL } from '../config/app.config';
 import {
   User, UserSkill, Skill, Test, TestAttempt, SystemConfig,
   AppNotification, NotificationSetting, Position, CandidateHistoryEntry,
@@ -54,7 +54,7 @@ interface AppContextType {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshData: () => Promise<void>;
   loginAsUser: (user: User) => void;
   addUser: (userData: any) => Promise<void>;
@@ -529,9 +529,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // onAuthStateChange will handle refreshData
   };
 
-  const logout = () => {
-    supabase.auth.signOut();
-    setState(prev => ({ ...prev, currentUser: null }));
+  const logout = async () => {
+    setState(prev => ({ ...prev, currentUser: null, currentCompany: null }));
+    await supabase.auth.signOut();
   };
 
   const loginAsUser = (user: User) => {
@@ -540,58 +540,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addUser = async (userData: any) => {
-    // Generate a temporary password for the new user if not provided
-    const generateTemporaryPassword = () => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-      let password = '';
-      const array = new Uint8Array(16);
-      crypto.getRandomValues(array);
-      for (let i = 0; i < 16; i++) {
-        password += chars[array[i] % chars.length];
-      }
-      return password;
-    };
-
     const cleanEmail = userData.email.trim().toLowerCase();
-    const password = userData.password || generateTemporaryPassword();
 
-    // Create user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: password,
-      options: {
-        emailRedirectTo: userData.password ? undefined : EMAIL_REDIRECT_URLS.SETUP_PASSWORD,
-        data: {
-          first_name: userData.first_name,
-          last_name: userData.last_name,
-          phone: userData.phone,
-          role: userData.role
-        }
-      }
+    // Use edge function to create user server-side (prevents session swap on signUp)
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error('No active session. Please log in.');
+    }
+
+    const supabaseUrl = 'https://diytvuczpciikzdhldny.supabase.co';
+    const response = await fetch(`${supabaseUrl}/functions/v1/create-user-admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+        'apikey': SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({
+        email: cleanEmail,
+        password: userData.password || undefined,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        phone: userData.phone,
+        role: userData.role,
+        status: userData.status || UserStatus.ACTIVE,
+        company_id: userData.company_id || state.currentUser?.company_id || null,
+        is_global_user: userData.is_global_user || false
+      })
     });
 
-    if (authError) throw authError;
+    const result = await response.json();
 
-    const authId = authData.user?.id;
-    if (!authId) throw new Error('Failed to create auth user');
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Failed to create user');
+    }
 
-    // Create user in public.users table with the auth ID
-    // Exclude password from userData - store it separately as plain_password for admin reference
-    const { password: _password, ...userDataWithoutPassword } = userData;
-    const { data, error } = await supabase.from('users').insert([{
-      id: authId,
-      ...userDataWithoutPassword,
-      email: cleanEmail,
-      status: UserStatus.ACTIVE,
-      plain_password: password // Store plain password for admin reference
-    }]).select().single();
-
-    if (error) throw error;
-    setState(prev => ({ ...prev, users: [...prev.users, data] }));
+    const createdUser = result.data;
+    setState(prev => ({ ...prev, users: [...prev.users, createdUser] }));
 
     // Auto-grant module access if there are free seats
-    if (data.company_id) {
-      await autoGrantAccessForNewUser(data.id, data.company_id);
+    if (createdUser.company_id) {
+      await autoGrantAccessForNewUser(createdUser.id, createdUser.company_id);
     }
   };
 

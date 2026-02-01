@@ -12,9 +12,9 @@ serve(async (req) => {
   }
 
   try {
+    const body = await req.json()
     const {
       email,
-      password,
       first_name,
       last_name,
       phone,
@@ -22,7 +22,15 @@ serve(async (req) => {
       status,
       company_id,
       is_global_user
-    } = await req.json()
+    } = body
+
+    // Generate a temporary password if none provided
+    const password = body.password || (() => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+      const array = new Uint8Array(16)
+      crypto.getRandomValues(array)
+      return Array.from(array, b => chars[b % chars.length]).join('')
+    })()
 
     console.log('Creating user by admin:', email, 'role:', role)
 
@@ -37,7 +45,7 @@ serve(async (req) => {
       }
     )
 
-    // Verify the requesting user is a superadmin
+    // Verify the requesting user has admin privileges
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       throw new Error('No authorization header')
@@ -50,15 +58,23 @@ serve(async (req) => {
       throw new Error('Invalid token')
     }
 
-    // Check if requesting user is superadmin
+    // Check if requesting user has admin role
     const { data: requestingUserData } = await supabaseAdmin
       .from('users')
-      .select('role')
+      .select('role, company_id')
       .eq('id', requestingUser.id)
       .single()
 
-    if (requestingUserData?.role !== 'superadmin') {
-      throw new Error('Only superadmin can create users')
+    const allowedRoles = ['superadmin', 'admin', 'hr', 'company_admin']
+    if (!allowedRoles.includes(requestingUserData?.role)) {
+      throw new Error('Only admins can create users')
+    }
+
+    // For non-superadmin roles, ensure they can only create users in their own company
+    if (requestingUserData?.role !== 'superadmin' && company_id && requestingUserData?.company_id) {
+      if (company_id !== requestingUserData.company_id) {
+        throw new Error('You can only create users in your own company')
+      }
     }
 
     // 1. Create the auth user with password
