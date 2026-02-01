@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
   Layers, Users, UserPlus, Award, Search, Check, X,
-  ToggleLeft, ToggleRight, Info, Shield, Loader2
+  ToggleLeft, ToggleRight, Info, Shield, Loader2,
+  ClipboardList, CalendarOff, CalendarRange, FolderKanban, BarChart3
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Role, UserStatus } from '../../types';
@@ -17,6 +18,31 @@ const MODULE_INFO: Record<string, { name: string; description: string; icon: Rea
     name: 'Umiejętności',
     description: 'Zarządzanie kompetencjami, szkoleniami i certyfikatami pracowników',
     icon: <Award className="w-5 h-5" />
+  },
+  time_attendance: {
+    name: 'Czas pracy',
+    description: 'Rejestracja czasu pracy, obecność, nadgodziny, wnioski o korekty',
+    icon: <ClipboardList className="w-5 h-5" />
+  },
+  time_off: {
+    name: 'Urlopy i nieobecności',
+    description: 'Zarządzanie urlopami, zwolnieniami, limitami dni wolnych',
+    icon: <CalendarOff className="w-5 h-5" />
+  },
+  work_schedule: {
+    name: 'Grafik pracy',
+    description: 'Planowanie zmian, szablony grafików, przypisania pracowników',
+    icon: <CalendarRange className="w-5 h-5" />
+  },
+  tasks_projects: {
+    name: 'Zadania i projekty',
+    description: 'Zarządzanie zadaniami, projektami, klientami, logowanie czasu',
+    icon: <FolderKanban className="w-5 h-5" />
+  },
+  reports_payroll: {
+    name: 'Raporty i rozliczenia',
+    description: 'Tabele czasu pracy, raporty obecności, rozliczenia wynagrodzeń',
+    icon: <BarChart3 className="w-5 h-5" />
   }
 };
 

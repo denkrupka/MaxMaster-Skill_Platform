@@ -133,12 +133,22 @@ export const COMPANY_SUBSCRIPTION_DISPLAY_COLORS: Record<string, string> = {
 // Module labels
 export const MODULE_LABELS: Record<string, string> = {
   'recruitment': 'Rekrutacja',
-  'skills': 'Umiejętności'
+  'skills': 'Umiejętności',
+  'time_attendance': 'Czas pracy',
+  'time_off': 'Urlopy i nieobecności',
+  'work_schedule': 'Grafik pracy',
+  'tasks_projects': 'Zadania i projekty',
+  'reports_payroll': 'Raporty i rozliczenia'
 };
 
 export const MODULE_DESCRIPTIONS: Record<string, string> = {
   'recruitment': 'Moduł rekrutacji kandydatów i zarządzania okresem próbnym',
-  'skills': 'Moduł zarządzania umiejętnościami i rozwojem pracowników'
+  'skills': 'Moduł zarządzania umiejętnościami i rozwojem pracowników',
+  'time_attendance': 'Rejestracja czasu pracy, obecność, nadgodziny, wnioski o korekty',
+  'time_off': 'Zarządzanie urlopami, zwolnieniami, limitami dni wolnych',
+  'work_schedule': 'Planowanie zmian, szablony grafików, przypisania pracowników',
+  'tasks_projects': 'Zarządzanie zadaniami, projektami, klientami, logowanie czasu',
+  'reports_payroll': 'Tabele czasu pracy, raporty obecności, rozliczenia wynagrodzeń'
 };
 
 // Global roles (users with is_global_user = true)

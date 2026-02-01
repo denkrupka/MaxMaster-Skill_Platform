@@ -6,7 +6,8 @@ import {
     ChevronUp, ChevronDown, Award, HardHat, X, TrendingUp,
     Layers, FileJson, MessageSquare, Tag, GraduationCap, AlertTriangle,
     ChevronRight, ShieldCheck, Info, ShieldAlert as ShieldAlertIcon, Star, Gift, Check, CheckCircle2, Zap, Calendar, MapPin,
-    Users, Search, ToggleLeft, ToggleRight, Loader2, Package, UserPlus
+    Users, Search, ToggleLeft, ToggleRight, Loader2, Package, UserPlus,
+    ClipboardList, CalendarOff, CalendarRange, FolderKanban, BarChart3
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Button } from '../../components/Button';
@@ -25,6 +26,31 @@ const MODULE_INFO: Record<string, { name: string; description: string; icon: Rea
     name: 'Umiejętności',
     description: 'Zarządzanie kompetencjami, szkoleniami i certyfikatami pracowników',
     icon: <Award className="w-5 h-5" />
+  },
+  time_attendance: {
+    name: 'Czas pracy',
+    description: 'Rejestracja czasu pracy, obecność, nadgodziny, wnioski o korekty',
+    icon: <ClipboardList className="w-5 h-5" />
+  },
+  time_off: {
+    name: 'Urlopy i nieobecności',
+    description: 'Zarządzanie urlopami, zwolnieniami, limitami dni wolnych',
+    icon: <CalendarOff className="w-5 h-5" />
+  },
+  work_schedule: {
+    name: 'Grafik pracy',
+    description: 'Planowanie zmian, szablony grafików, przypisania pracowników',
+    icon: <CalendarRange className="w-5 h-5" />
+  },
+  tasks_projects: {
+    name: 'Zadania i projekty',
+    description: 'Zarządzanie zadaniami, projektami, klientami, logowanie czasu',
+    icon: <FolderKanban className="w-5 h-5" />
+  },
+  reports_payroll: {
+    name: 'Raporty i rozliczenia',
+    description: 'Tabele czasu pracy, raporty obecności, rozliczenia wynagrodzeń',
+    icon: <BarChart3 className="w-5 h-5" />
   }
 };
 
