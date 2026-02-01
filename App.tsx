@@ -32,6 +32,20 @@ import { CompanySubscriptionPage } from './pages/company/Subscription';
 import { CompanySettingsPage } from './pages/company/Settings';
 import { CompanyReferralsPage } from './pages/company/Referrals';
 
+// Moniti Integration Pages - Company
+import { DepartmentsPage } from './pages/company/Departments';
+import { DepartmentDetailPage } from './pages/company/DepartmentDetail';
+import { CompanyAttendancePage } from './pages/company/Attendance';
+import { TeamNowPage } from './pages/company/TeamNow';
+import { CompanyTimeOffPage } from './pages/company/TimeOff';
+import { CompanySchedulesPage } from './pages/company/Schedules';
+import { CompanyProjectsPage } from './pages/company/Projects';
+import { CompanyTasksPage } from './pages/company/Tasks';
+import { CompanyCustomersPage } from './pages/company/Customers';
+import { CompanyTimesheetsPage } from './pages/company/Timesheets';
+import { CompanyReportsPage } from './pages/company/Reports';
+import { NotificationsPage } from './pages/company/Notifications';
+
 // Sales Pages
 import { SalesDashboard } from './pages/sales/Dashboard';
 import { SalesPipeline } from './pages/sales/Pipeline';
@@ -82,9 +96,15 @@ import { EmployeePractice } from './pages/employee/Practice';
 import { EmployeeLibrary } from './pages/employee/Library';
 import { EmployeeCareer } from './pages/employee/Career';
 import { EmployeeProfile } from './pages/employee/Profile';
-import { EmployeeSalaryPage } from './pages/employee/Salary'; 
+import { EmployeeSalaryPage } from './pages/employee/Salary';
 import { EmployeeQualityHistory } from './pages/employee/QualityHistory';
 import { EmployeeReferrals } from './pages/employee/Referrals';
+
+// Moniti Integration Pages - Employee
+import { EmployeeAttendancePage } from './pages/employee/Attendance';
+import { EmployeeTimeOffPage } from './pages/employee/TimeOff';
+import { EmployeeSchedulePage } from './pages/employee/Schedule';
+import { EmployeeTasksPage } from './pages/employee/Tasks';
 
 // Trial & Candidate Pages
 import { TrialDashboard } from './pages/trial/Dashboard';
@@ -98,7 +118,7 @@ import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 import { CompanyRegisterPage } from './pages/CompanyRegister';
 
-const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' }) => {
+const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' }) => {
   const { state, getEffectiveRole } = useAppContext();
 
   if (!state.currentUser) {
@@ -406,6 +426,28 @@ export default function App() {
           <Route path="/company/subscription" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySubscriptionPage /></ProtectedRoute>} />
           <Route path="/company/referrals" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanyReferralsPage /></ProtectedRoute>} />
           <Route path="/company/settings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN]}><CompanySettingsPage /></ProtectedRoute>} />
+
+          {/* Moniti Integration Routes - Company */}
+          <Route path="/company/departments" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]}><DepartmentsPage /></ProtectedRoute>} />
+          <Route path="/company/departments/:id" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]}><DepartmentDetailPage /></ProtectedRoute>} />
+          <Route path="/company/team-now" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="time_attendance"><TeamNowPage /></ProtectedRoute>} />
+          <Route path="/company/attendance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="time_attendance"><CompanyAttendancePage /></ProtectedRoute>} />
+          <Route path="/company/time-off" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="time_off"><CompanyTimeOffPage /></ProtectedRoute>} />
+          <Route path="/company/schedules" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="work_schedule"><CompanySchedulesPage /></ProtectedRoute>} />
+          <Route path="/company/projects" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="tasks_projects"><CompanyProjectsPage /></ProtectedRoute>} />
+          <Route path="/company/tasks" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="tasks_projects"><CompanyTasksPage /></ProtectedRoute>} />
+          <Route path="/company/customers" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="tasks_projects"><CompanyCustomersPage /></ProtectedRoute>} />
+          <Route path="/company/timesheets" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="reports_payroll"><CompanyTimesheetsPage /></ProtectedRoute>} />
+          <Route path="/company/reports" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="reports_payroll"><CompanyReportsPage /></ProtectedRoute>} />
+
+          {/* Moniti Integration Routes - Employee (all company roles) */}
+          <Route path="/employee/attendance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="time_attendance"><EmployeeAttendancePage /></ProtectedRoute>} />
+          <Route path="/employee/time-off" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="time_off"><EmployeeTimeOffPage /></ProtectedRoute>} />
+          <Route path="/employee/schedule" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="work_schedule"><EmployeeSchedulePage /></ProtectedRoute>} />
+          <Route path="/employee/tasks" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="tasks_projects"><EmployeeTasksPage /></ProtectedRoute>} />
+
+          {/* Notifications page (all authenticated users) */}
+          <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />
