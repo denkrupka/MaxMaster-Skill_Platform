@@ -1111,20 +1111,53 @@ END $$;
 -- РАЗДЕЛ J: Центр уведомлений (Notification Hub)
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  message TEXT NOT NULL,
-  link TEXT,
-  is_read BOOLEAN DEFAULT false,
-  read_at TIMESTAMPTZ,
-  entity_type TEXT,
-  entity_id UUID,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- If notifications table already exists (from earlier migration), add missing columns
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'notifications') THEN
+    -- Add company_id if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'company_id') THEN
+      ALTER TABLE notifications ADD COLUMN company_id UUID REFERENCES companies(id) ON DELETE CASCADE;
+    END IF;
+    -- Add type if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'type') THEN
+      ALTER TABLE notifications ADD COLUMN type TEXT DEFAULT 'general';
+    END IF;
+    -- Add read_at if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'read_at') THEN
+      ALTER TABLE notifications ADD COLUMN read_at TIMESTAMPTZ;
+    END IF;
+    -- Add entity_type if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'entity_type') THEN
+      ALTER TABLE notifications ADD COLUMN entity_type TEXT;
+    END IF;
+    -- Add entity_id if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'entity_id') THEN
+      ALTER TABLE notifications ADD COLUMN entity_id UUID;
+    END IF;
+    -- Make user_id NOT NULL if it's nullable
+    ALTER TABLE notifications ALTER COLUMN user_id SET NOT NULL;
+    -- Backfill company_id from users table for existing rows
+    UPDATE notifications SET company_id = (SELECT company_id FROM users WHERE users.id = notifications.user_id) WHERE company_id IS NULL;
+    -- Now make company_id NOT NULL
+    ALTER TABLE notifications ALTER COLUMN company_id SET NOT NULL;
+  ELSE
+    -- Create fresh if table doesn't exist
+    CREATE TABLE notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'general',
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      link TEXT,
+      is_read BOOLEAN DEFAULT false,
+      read_at TIMESTAMPTZ,
+      entity_type TEXT,
+      entity_id UUID,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_company ON notifications(company_id, created_at DESC);
