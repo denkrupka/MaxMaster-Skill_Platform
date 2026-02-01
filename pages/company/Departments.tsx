@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Plus, Trash2, Edit, ChevronRight, ChevronDown,
-  Archive, Search, ToggleLeft, ToggleRight, X, AlertCircle, List, GitBranch
+  Archive, Search, ToggleLeft, ToggleRight, X, AlertCircle, List, GitBranch, Pencil, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Department } from '../../types';
@@ -305,11 +305,17 @@ export const DepartmentsPage: React.FC = () => {
   const openCreateModal = (parentId?: string) => {
     setEditingDept(null);
     setForm({ ...EMPTY_FORM, parent_id: parentId || null });
+    setGeoManualEdit(false);
+    setAddressSuggestions([]);
+    setShowSuggestions(false);
     setShowModal(true);
   };
 
   const openEditModal = (dept: DepartmentWithCount) => {
     setEditingDept(dept);
+    setGeoManualEdit(false);
+    setAddressSuggestions([]);
+    setShowSuggestions(false);
     setForm({
       name: dept.name,
       parent_id: dept.parent_id ?? null,
@@ -399,6 +405,80 @@ export const DepartmentsPage: React.FC = () => {
       alert(err.message || 'Nie mozna usunac obiektu. Sprawdz czy nie ma podobiektow lub przypisanych pracownikow.');
     }
   };
+
+  // ------- Address autocomplete (Nominatim) -------
+  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [geoManualEdit, setGeoManualEdit] = useState(false);
+  const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const searchAddress = useCallback(async (query: string) => {
+    if (query.length < 3) { setAddressSuggestions([]); return; }
+    setAddressLoading(true);
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        format: 'json',
+        addressdetails: '1',
+        limit: '5',
+        countrycodes: 'pl',
+        'accept-language': 'pl',
+      });
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        headers: { 'User-Agent': 'MaxMaster-Skill-Platform/1.0' },
+      });
+      const data = await res.json();
+      setAddressSuggestions(data);
+      setShowSuggestions(data.length > 0);
+    } catch (err) {
+      console.error('Nominatim error:', err);
+      setAddressSuggestions([]);
+    } finally {
+      setAddressLoading(false);
+    }
+  }, []);
+
+  const handleStreetInput = (value: string) => {
+    setForm(prev => ({ ...prev, address_street: value }));
+    if (addressDebounceRef.current) clearTimeout(addressDebounceRef.current);
+    addressDebounceRef.current = setTimeout(() => {
+      const fullQuery = [value, form.address_city, form.address_country].filter(Boolean).join(', ');
+      searchAddress(fullQuery);
+    }, 400);
+  };
+
+  const selectSuggestion = (suggestion: any) => {
+    const addr = suggestion.address || {};
+    const street = [addr.road, addr.house_number].filter(Boolean).join(' ');
+    const city = addr.city || addr.town || addr.village || addr.municipality || '';
+    const postcode = addr.postcode || '';
+
+    setForm(prev => ({
+      ...prev,
+      address_street: street || prev.address_street,
+      address_city: city,
+      address_postal_code: postcode,
+      address_country: addr.country || 'Polska',
+      latitude: suggestion.lat || '',
+      longitude: suggestion.lon || '',
+    }));
+    setShowSuggestions(false);
+    setAddressSuggestions([]);
+    setGeoManualEdit(false);
+  };
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // ------- Form helpers -------
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -704,23 +784,54 @@ export const DepartmentsPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Address section */}
+              {/* Address section with autocomplete */}
               <div>
                 <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-slate-500" />
                   Adres
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
+                  <div className="col-span-2 relative" ref={suggestionsRef}>
                     <label className="block text-xs text-slate-500 mb-1">Ulica i numer</label>
-                    <input
-                      type="text"
-                      name="address_street"
-                      value={form.address_street}
-                      onChange={handleFormChange}
-                      placeholder="ul. Przykladowa 10"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address_street"
+                        value={form.address_street}
+                        onChange={e => handleStreetInput(e.target.value)}
+                        onFocus={() => { if (addressSuggestions.length > 0) setShowSuggestions(true); }}
+                        placeholder="Zacznij pisac adres..."
+                        autoComplete="off"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                      {addressLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+                      )}
+                    </div>
+                    {/* Suggestions dropdown */}
+                    {showSuggestions && addressSuggestions.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {addressSuggestions.map((s: any, i: number) => (
+                          <button
+                            key={s.place_id || i}
+                            type="button"
+                            onClick={() => selectSuggestion(s)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-blue-50 transition text-sm border-b border-slate-50 last:border-b-0"
+                          >
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-slate-900 font-medium leading-tight">{s.display_name?.split(',').slice(0, 3).join(',')}</p>
+                                <p className="text-slate-400 text-xs mt-0.5">{s.display_name}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                        <div className="px-3 py-1.5 text-[10px] text-slate-300 text-right">
+                          Powered by OpenStreetMap Nominatim
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Miasto</label>
@@ -758,12 +869,43 @@ export const DepartmentsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Geofence section */}
+              {/* Geofence section — auto-filled from address, editable via button */}
               <div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-emerald-500" />
-                  Geofence
-                </h4>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-500" />
+                    Geofence
+                  </h4>
+                  {!geoManualEdit && (form.latitude || form.longitude) && (
+                    <button
+                      type="button"
+                      onClick={() => setGeoManualEdit(true)}
+                      className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 transition font-medium"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Zmien recznie
+                    </button>
+                  )}
+                  {geoManualEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setGeoManualEdit(false)}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition font-medium"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Zablokuj
+                    </button>
+                  )}
+                </div>
+                {form.latitude && form.longitude && !geoManualEdit && (
+                  <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <MapPin className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-emerald-800">
+                      {parseFloat(form.latitude).toFixed(4)}, {parseFloat(form.longitude).toFixed(4)}
+                    </span>
+                    <span className="text-xs text-emerald-600 ml-auto">Automatycznie z adresu</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs text-slate-500 mb-1">Szerokosc geogr.</label>
@@ -773,7 +915,12 @@ export const DepartmentsPage: React.FC = () => {
                       value={form.latitude}
                       onChange={handleFormChange}
                       placeholder="52.2297"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      readOnly={!geoManualEdit && !!(form.latitude && form.longitude)}
+                      className={`w-full px-3 py-2 border border-slate-200 rounded-lg text-sm ${
+                        !geoManualEdit && form.latitude && form.longitude
+                          ? 'bg-slate-50 text-slate-500 cursor-default'
+                          : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
                     />
                   </div>
                   <div>
@@ -784,7 +931,12 @@ export const DepartmentsPage: React.FC = () => {
                       value={form.longitude}
                       onChange={handleFormChange}
                       placeholder="21.0122"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      readOnly={!geoManualEdit && !!(form.latitude && form.longitude)}
+                      className={`w-full px-3 py-2 border border-slate-200 rounded-lg text-sm ${
+                        !geoManualEdit && form.latitude && form.longitude
+                          ? 'bg-slate-50 text-slate-500 cursor-default'
+                          : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
                     />
                   </div>
                   <div>
@@ -801,7 +953,9 @@ export const DepartmentsPage: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
-                  Uzupelnij wspolrzedne, aby aktywowac geofence dla rejestracji czasu pracy.
+                  {form.latitude && form.longitude
+                    ? 'Wspolrzedne uzupelnione automatycznie na podstawie adresu.'
+                    : 'Wpisz adres powyzej — wspolrzedne uzupelnia sie automatycznie.'}
                 </p>
               </div>
             </div>
