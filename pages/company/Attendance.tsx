@@ -125,7 +125,7 @@ export const CompanyAttendancePage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Poszczaemosc</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Obecności</h1>
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
@@ -277,7 +277,7 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
     }));
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Poszczaemosc');
+    XLSX.utils.book_append_sheet(wb, ws, 'Obecności');
     XLSX.writeFile(wb, `poszczaemosc_${date}.xlsx`);
   };
 

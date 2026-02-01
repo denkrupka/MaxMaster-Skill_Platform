@@ -262,7 +262,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                    <NavItem to="/hr/trial" icon={Clock} label="Okres próbny" />
                  </CollapsibleNavGroup>
                  <NavItem to="/hr/employees" icon={Users} label="Pracownicy" />
-                 <NavItem to="/company/departments" icon={Building2} label="Obiekty" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="hr-obecnosci" icon={ClipboardList} label="Obecności">
                    <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
@@ -393,6 +392,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     </p>
                     <NavItem to="/coordinator/dashboard" icon={LayoutDashboard} label="Dashboard" />
                     <NavItem to="/coordinator/employees" icon={Users} label="Pracownicy" />
+                    <NavItem to="/company/departments" icon={Building2} label="Obiekty" />
                     <NavItem to="/coordinator/verifications" icon={CheckSquare} label="Weryfikacje Praktyki" />
                     <NavItem to="/coordinator/quality" icon={AlertTriangle} label="Zgłoszenia jakości" />
                     <div className="my-2 border-t border-slate-100"></div>

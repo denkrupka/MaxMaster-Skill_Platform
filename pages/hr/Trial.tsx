@@ -335,7 +335,7 @@ export const HRTrialPage = () => {
         if (selectedUser) {
             await updateUser(selectedUser.id, localPersonalData);
             setSelectedUser({ ...selectedUser, ...localPersonalData } as User);
-            alert("Dane osobowе zostały zapisane.");
+            alert("Dane osobowe zostały zapisane.");
         }
     };
 

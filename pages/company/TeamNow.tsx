@@ -408,7 +408,7 @@ export const TeamNowPage: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Команда сейчас</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Kto w pracy</h1>
           <p className="text-slate-500 mt-1">
             Podgląd statusu pracowników w czasie rzeczywistym
           </p>
