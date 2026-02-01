@@ -647,7 +647,7 @@ export const HRCandidatesPage = () => {
                 await logCandidateAction(selectedCandidate.id, 'HR uzupełnił komplet danych (Status -> Dane OK)');
             }
             await updateUser(selectedCandidate.id, dataToSave);
-            triggerNotification('success', 'Zapisano', 'Dane osobowе zostały zaktualizowane.');
+            triggerNotification('success', 'Zapisano', 'Dane osobowe zostały zaktualizowane.');
             setSelectedCandidate({ ...selectedCandidate, ...dataToSave });
         } catch (err) {
             alert('Błąd podczas zapisu danych.');

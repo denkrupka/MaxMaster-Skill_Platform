@@ -398,7 +398,7 @@ export const EmployeeAttendancePage = () => {
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-24">
       {/* ── HEADER ────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Moj raboczij dien</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Moja ewidencja</h1>
         <p className="text-sm text-slate-500">Ewidencja czasu pracy</p>
       </div>
 
