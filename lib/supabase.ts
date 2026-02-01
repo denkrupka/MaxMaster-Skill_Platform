@@ -9,11 +9,20 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const SUPABASE_ANON_KEY = supabaseAnonKey;
 
 // Klient dla standardowych operacji użytkownika
+// IMPORTANT: Using no-op lock to prevent Web Locks API deadlock
+// Known issue: supabase-js v2.39+ uses navigator.locks which can deadlock
+// when async Supabase calls are made inside onAuthStateChange or when
+// multiple operations run concurrently (React 19 + Vite trigger this).
+// See: https://github.com/supabase/supabase-js/issues/1620
+// See: https://github.com/supabase/auth-js/issues/762
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    lock: async (name: string, acquireTimeout: number, fn: () => Promise<any>) => {
+      return await fn()
+    },
   }
 })
 

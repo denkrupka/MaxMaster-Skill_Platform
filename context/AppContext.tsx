@@ -423,30 +423,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth state changed:', event);
 
-      try {
-        if (event === 'SIGNED_IN') {
-          console.log('Handling SIGNED_IN event...');
+      if (event === 'SIGNED_IN') {
+        console.log('Handling SIGNED_IN event...');
 
-          // Skip refreshData if we're still initializing (to prevent duplicate work)
-          if (isInitializingRef.current) {
-            console.log('Skipping SIGNED_IN handler during initialization');
-            return;
-          }
-
-          // Refresh data to get latest state
-          await refreshData();
-          console.log('SIGNED_IN event handled successfully');
-        } else if (event === 'SIGNED_OUT') {
-          console.log('Handling SIGNED_OUT event...');
-          setState(prev => ({ ...prev, currentUser: null }));
+        // Skip refreshData if we're still initializing (to prevent duplicate work)
+        if (isInitializingRef.current) {
+          console.log('Skipping SIGNED_IN handler during initialization');
+          return;
         }
-        // Don't refresh on TOKEN_REFRESHED to avoid unnecessary requests
-      } catch (error) {
-        console.error('Error handling auth state change:', error);
+
+        // IMPORTANT: Defer refreshData to avoid deadlock with Supabase's internal lock.
+        // onAuthStateChange callback runs inside the auth lock context, so making
+        // Supabase calls here would deadlock (they need the same lock).
+        // See: https://github.com/supabase/auth-js/issues/762
+        setTimeout(() => {
+          refreshData().catch(err => console.error('Error refreshing data after SIGNED_IN:', err));
+        }, 0);
+      } else if (event === 'SIGNED_OUT') {
+        console.log('Handling SIGNED_OUT event...');
+        setState(prev => ({ ...prev, currentUser: null, currentCompany: null }));
       }
+      // Don't refresh on TOKEN_REFRESHED to avoid unnecessary requests
     });
 
     return () => {
