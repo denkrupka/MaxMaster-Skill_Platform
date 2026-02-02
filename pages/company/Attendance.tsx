@@ -11,6 +11,7 @@ import {
   Department, User, Role, WorkerDayStatus, ActivityType_TA, DayRequestStatus
 } from '../../types';
 import * as XLSX from 'xlsx';
+import { SectionTabs } from '../../components/SectionTabs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -125,6 +126,7 @@ export const CompanyAttendancePage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1440px] mx-auto">
+      <SectionTabs section="obecnosci" />
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Obecności</h1>
 
       {/* Tab bar */}

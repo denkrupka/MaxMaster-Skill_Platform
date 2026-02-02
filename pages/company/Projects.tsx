@@ -12,6 +12,7 @@ import {
   Project, ProjectTask, ProjectMember, ProjectCustomer, TaskTimeLog,
   TaskAttachment, TaskStatus_Project, TaskPriority, ProjectStatus, User
 } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; text: string }> = {
   active: { label: 'Aktywny', bg: 'bg-green-100', text: 'text-green-700' },
@@ -301,6 +302,7 @@ export const CompanyProjectsPage: React.FC = () => {
   if (!selectedProject) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
+        <SectionTabs section="projekty" />
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div>

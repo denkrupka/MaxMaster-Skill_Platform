@@ -7,6 +7,7 @@ import {
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { ScheduleTemplate, ScheduleAssignment, User, Role, Department } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ export const CompanySchedulesPage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto space-y-6">
+      <SectionTabs section="grafiki" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

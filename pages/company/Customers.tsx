@@ -8,6 +8,7 @@ import {
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { ProjectCustomer, Project } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 const emptyCustomerForm = {
   name: '', email: '', phone: '', address: '', note: '',
@@ -267,6 +268,7 @@ export const CompanyCustomersPage: React.FC = () => {
   // ========== CUSTOMER LIST VIEW ==========
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <SectionTabs section="projekty" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>
