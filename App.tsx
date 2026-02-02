@@ -192,24 +192,28 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
 
     // MODULE ACCESS CHECK for company users
-    // Company admins and superadmins simulating roles bypass module access check
+    // Superadmins and company admins simulating roles bypass module access check entirely
     const isSimulatingRole = state.simulatedRole !== null &&
       (state.currentUser?.role === Role.COMPANY_ADMIN || state.currentUser?.role === Role.SUPERADMIN);
     if (requiredModule && !currentPath.includes('/module-access-denied') && !isSimulatingRole) {
-      // Get user's module access for the required module
-      const userHasModuleAccess = state.moduleUserAccess.some(
-        mua => mua.user_id === state.currentUser?.id &&
-               mua.module_code === requiredModule &&
-               mua.is_enabled
-      );
+      // Step 1: Check if the company has this module active
+      const companyHasModule = companyModules.some(cm => cm.module_code === requiredModule);
 
-      // HR role always needs to check module access for protected routes
-      // Other roles (employee, brigadir, coordinator) also need access
-      if (!userHasModuleAccess) {
-        // Check if the company has the module at all
-        const companyHasModule = companyModules.some(cm => cm.module_code === requiredModule);
+      if (!companyHasModule) {
+        // Company doesn't have this module - block access for everyone
+        return <Navigate to={`/module-access-denied?module=${requiredModule}`} replace />;
+      }
 
-        if (!companyHasModule || !userHasModuleAccess) {
+      // Step 2: Company admins can access any active company module (they manage modules)
+      // Other roles need individual module_user_access grant
+      if (state.currentUser.role !== Role.COMPANY_ADMIN && state.currentUser.role !== Role.SUPERADMIN) {
+        const userHasModuleAccess = state.moduleUserAccess.some(
+          mua => mua.user_id === state.currentUser?.id &&
+                 mua.module_code === requiredModule &&
+                 mua.is_enabled
+        );
+
+        if (!userHasModuleAccess) {
           return <Navigate to={`/module-access-denied?module=${requiredModule}`} replace />;
         }
       }
