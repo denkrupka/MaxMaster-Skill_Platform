@@ -169,30 +169,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
   const isCompanyAdminSimulating = currentUser?.role === Role.COMPANY_ADMIN && simulatedRole !== null;
 
-  // Helper: check if a module is accessible (company has it active + user has access)
-  const activeCompanyModules = useMemo(() => {
-    if (!currentUser?.company_id) return [];
-    return companyModules
-      .filter(cm => cm.company_id === currentUser.company_id && cm.is_active)
-      .map(cm => cm.module_code);
-  }, [companyModules, currentUser?.company_id]);
-
-  const hasModuleAccess = (moduleCode: string): boolean => {
-    // Company must have the module active
-    if (!activeCompanyModules.includes(moduleCode)) return false;
-    // Admins simulating roles or in their own view - just need company module active
-    if (isSuperAdminSimulating || isCompanyAdminSimulating ||
-        currentUser?.role === Role.COMPANY_ADMIN || currentUser?.role === Role.SUPERADMIN) {
-      return true;
-    }
-    // Other roles need individual user access
-    return state.moduleUserAccess.some(
-      mua => mua.user_id === currentUser?.id &&
-             mua.module_code === moduleCode &&
-             mua.is_enabled
-    );
-  };
-
   return (
     <>
       {/* Mobile Overlay */}
@@ -281,47 +257,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  </p>
                  <NavItem to="/hr/dashboard" icon={Layers} label="Dashboard" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('recruitment') && (
-                   <CollapsibleNavGroup groupId="hr-rekrutacja" icon={UserPlus} label="Rekrutacja">
-                     <NavItem to="/hr/candidates" icon={UserPlus} label="Kandydaci" />
-                     <NavItem to="/hr/trial" icon={Clock} label="Okres próbny" />
-                   </CollapsibleNavGroup>
-                 )}
+                 <CollapsibleNavGroup groupId="hr-rekrutacja" icon={UserPlus} label="Rekrutacja">
+                   <NavItem to="/hr/candidates" icon={UserPlus} label="Kandydaci" />
+                   <NavItem to="/hr/trial" icon={Clock} label="Okres próbny" />
+                 </CollapsibleNavGroup>
                  <NavItem to="/hr/employees" icon={Users} label="Pracownicy" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('time_attendance') && (
-                   <CollapsibleNavGroup groupId="hr-obecnosci" icon={ClipboardList} label="Obecności">
-                     <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
-                     <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
-                     <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
-                   </CollapsibleNavGroup>
-                 )}
-                 {hasModuleAccess('time_off') && (
-                   <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" />
-                 )}
-                 {hasModuleAccess('work_schedule') && (
-                   <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
-                 )}
-                 {hasModuleAccess('tasks_projects') && (
-                   <CollapsibleNavGroup groupId="hr-projekty" icon={FolderKanban} label="Projekty">
-                     <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
-                     <NavItem to="/company/tasks" icon={ListTodo} label="Zadania" />
-                     <NavItem to="/company/customers" icon={Building2} label="Klienci" />
-                   </CollapsibleNavGroup>
-                 )}
+                 <CollapsibleNavGroup groupId="hr-obecnosci" icon={ClipboardList} label="Obecności">
+                   <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                   <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                   <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                 </CollapsibleNavGroup>
+                 <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" />
+                 <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki" />
+                 <CollapsibleNavGroup groupId="hr-projekty" icon={FolderKanban} label="Projekty">
+                   <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
+                   <NavItem to="/company/tasks" icon={ListTodo} label="Zadania" />
+                   <NavItem to="/company/customers" icon={Building2} label="Klienci" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('skills') && (
-                   <CollapsibleNavGroup groupId="hr-umiejetnosci" icon={Award} label="Umiejętności">
-                     <NavItem to="/hr/documents" icon={FileText} label="Dokumenty" />
-                     <NavItem to="/hr/tests" icon={FileCheck} label="Testy" />
-                     <NavItem to="/hr/skills" icon={Award} label="Umiejętności" />
-                     <NavItem to="/hr/library" icon={BookOpen} label="Baza wiedzy" />
-                   </CollapsibleNavGroup>
-                 )}
+                 <CollapsibleNavGroup groupId="hr-umiejetnosci" icon={Award} label="Umiejętności">
+                   <NavItem to="/hr/documents" icon={FileText} label="Dokumenty" />
+                   <NavItem to="/hr/tests" icon={FileCheck} label="Testy" />
+                   <NavItem to="/hr/skills" icon={Award} label="Umiejętności" />
+                   <NavItem to="/hr/library" icon={BookOpen} label="Baza wiedzy" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('reports_payroll') && (
-                   <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
-                 )}
+                 <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty HR" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/settings" icon={Settings} label="Ustawienia" />
@@ -336,36 +298,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/users" icon={Users} label="Użytkownicy" />
                  <NavItem to="/company/departments" icon={Building2} label="Obiekty" />
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('time_attendance') && (
-                   <CollapsibleNavGroup groupId="admin-obecnosci" icon={ClipboardList} label="Obecności">
-                     <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
-                     <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
-                     <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
-                   </CollapsibleNavGroup>
-                 )}
-                 {hasModuleAccess('time_off') && (
-                   <CollapsibleNavGroup groupId="admin-urlopy" icon={CalendarDays} label="Urlopy">
-                     <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                     <NavItem to="/company/time-off" icon={CalendarDays} label="Zarządzanie urlopami" />
-                   </CollapsibleNavGroup>
-                 )}
-                 {hasModuleAccess('work_schedule') && (
-                   <CollapsibleNavGroup groupId="admin-grafiki" icon={CalendarRange} label="Grafiki">
-                     <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                     <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki zespołu" />
-                   </CollapsibleNavGroup>
-                 )}
-                 {hasModuleAccess('tasks_projects') && (
-                   <CollapsibleNavGroup groupId="admin-projekty" icon={FolderKanban} label="Projekty">
-                     <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
-                     <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
-                     <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
-                   </CollapsibleNavGroup>
-                 )}
+                 <CollapsibleNavGroup groupId="admin-obecnosci" icon={ClipboardList} label="Obecności">
+                   <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                   <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                   <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-urlopy" icon={CalendarDays} label="Urlopy">
+                   <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                   <NavItem to="/company/time-off" icon={CalendarDays} label="Zarządzanie urlopami" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-grafiki" icon={CalendarRange} label="Grafiki">
+                   <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                   <NavItem to="/company/schedules" icon={CalendarRange} label="Grafiki zespołu" />
+                 </CollapsibleNavGroup>
+                 <CollapsibleNavGroup groupId="admin-projekty" icon={FolderKanban} label="Projekty">
+                   <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                   <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
+                   <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
-                 {hasModuleAccess('reports_payroll') && (
-                   <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
-                 )}
+                 <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
                  <NavItem to="/company/referrals" icon={Gift} label="Program Poleceń" />
@@ -444,39 +396,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/coordinator/verifications" icon={CheckSquare} label="Weryfikacje Praktyki" />
                     <NavItem to="/coordinator/quality" icon={AlertTriangle} label="Zgłoszenia jakości" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    {hasModuleAccess('time_attendance') && (
-                      <CollapsibleNavGroup groupId="coordinator-obecnosci" icon={ClipboardList} label="Obecności">
-                        <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
-                        <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
-                        <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
-                      </CollapsibleNavGroup>
-                    )}
-                    {hasModuleAccess('time_off') && (
-                      <CollapsibleNavGroup groupId="coordinator-urlopy" icon={CalendarDays} label="Urlopy">
-                        <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                        <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
-                      </CollapsibleNavGroup>
-                    )}
-                    {hasModuleAccess('work_schedule') && (
-                      <CollapsibleNavGroup groupId="coordinator-grafik" icon={CalendarRange} label="Grafik pracy">
-                        <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                        <NavItem to="/company/schedules" icon={CalendarRange} label="Grafik Zespołu" />
-                      </CollapsibleNavGroup>
-                    )}
-                    {hasModuleAccess('tasks_projects') && (
-                      <CollapsibleNavGroup groupId="coordinator-projekty" icon={FolderKanban} label="Projekty">
-                        <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
-                        <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
-                        <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
-                      </CollapsibleNavGroup>
-                    )}
+                    <CollapsibleNavGroup groupId="coordinator-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/employee/attendance" icon={Clock} label="Moja ewidencja" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-grafik" icon={CalendarRange} label="Grafik pracy">
+                      <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                      <NavItem to="/company/schedules" icon={CalendarRange} label="Grafik Zespołu" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="coordinator-projekty" icon={FolderKanban} label="Projekty">
+                      <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" />
+                      <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                      <NavItem to="/company/tasks" icon={ListTodo} label="Wszystkie zadania" />
+                    </CollapsibleNavGroup>
                     <div className="my-2 border-t border-slate-100"></div>
-                    {hasModuleAccess('skills') && (
-                      <CollapsibleNavGroup groupId="coordinator-umiejetnosci" icon={Award} label="Umiejętności">
-                        <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności i uprawnienia" />
-                        <NavItem to="/coordinator/library" icon={BookOpen} label="Baza wiedzy" />
-                      </CollapsibleNavGroup>
-                    )}
+                    <CollapsibleNavGroup groupId="coordinator-umiejetnosci" icon={Award} label="Umiejętności">
+                      <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności i uprawnienia" />
+                      <NavItem to="/coordinator/library" icon={BookOpen} label="Baza wiedzy" />
+                    </CollapsibleNavGroup>
                     <NavItem to="/coordinator/profile" icon={User} label="Mój Profil" />
                 </>
             )}
@@ -515,19 +457,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
                     <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    {hasModuleAccess('time_attendance') && (
-                      <CollapsibleNavGroup groupId="brigadir-obecnosci" icon={ClipboardList} label="Obecności">
-                        <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
-                        <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
-                        <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
-                      </CollapsibleNavGroup>
-                    )}
-                    {hasModuleAccess('time_off') && (
-                      <CollapsibleNavGroup groupId="brigadir-urlopy" icon={CalendarDays} label="Urlopy">
-                        <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                        <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
-                      </CollapsibleNavGroup>
-                    )}
+                    <CollapsibleNavGroup groupId="brigadir-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="brigadir-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
                 </>
             )}
 
@@ -543,19 +481,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/brigadir/quality" icon={AlertTriangle} label="Zgłoszenia Jakości" />
                     <NavItem to="/brigadir/team" icon={Users} label="Mój Zespół" />
                     <div className="my-4 border-t border-slate-100"></div>
-                    {hasModuleAccess('time_attendance') && (
-                      <CollapsibleNavGroup groupId="brigadir-real-obecnosci" icon={ClipboardList} label="Obecności">
-                        <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
-                        <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
-                        <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
-                      </CollapsibleNavGroup>
-                    )}
-                    {hasModuleAccess('time_off') && (
-                      <CollapsibleNavGroup groupId="brigadir-real-urlopy" icon={CalendarDays} label="Urlopy">
-                        <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                        <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
-                      </CollapsibleNavGroup>
-                    )}
+                    <CollapsibleNavGroup groupId="brigadir-real-obecnosci" icon={ClipboardList} label="Obecności">
+                      <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                      <NavItem to="/company/team-now" icon={Users} label="Kto w pracy" />
+                      <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" />
+                    </CollapsibleNavGroup>
+                    <CollapsibleNavGroup groupId="brigadir-real-urlopy" icon={CalendarDays} label="Urlopy">
+                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                      <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy zespołu" />
+                    </CollapsibleNavGroup>
                   </>
                 )}
 
@@ -566,28 +500,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
                     <NavItem to="/dashboard" icon={LayoutDashboard} label="Panel Pracownika" />
                     <div className="my-2 border-t border-slate-100"></div>
-                    {hasModuleAccess('time_attendance') && (
-                      <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
-                    )}
-                    {hasModuleAccess('time_off') && (
-                      <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
-                    )}
-                    {hasModuleAccess('work_schedule') && (
-                      <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
-                    )}
-                    {hasModuleAccess('tasks_projects') && (
-                      <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
-                    )}
+                    <NavItem to="/employee/attendance" icon={Clock} label="Czas pracy" />
+                    <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
+                    <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
+                    <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
                   </>
                 )}
                 <div className="my-2 border-t border-slate-100"></div>
-                {hasModuleAccess('skills') && (
-                  <CollapsibleNavGroup groupId="employee-umiejetnosci" icon={Award} label="Umiejętności">
-                    <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i uprawnienia" />
-                    <NavItem to="/dashboard/library" icon={BookOpen} label="Baza wiedzy" />
-                    <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia jakości" />
-                  </CollapsibleNavGroup>
-                )}
+                <CollapsibleNavGroup groupId="employee-umiejetnosci" icon={Award} label="Umiejętności">
+                  <NavItem to="/dashboard/skills" icon={Award} label="Umiejętności i uprawnienia" />
+                  <NavItem to="/dashboard/library" icon={BookOpen} label="Baza wiedzy" />
+                  <NavItem to="/dashboard/quality" icon={AlertTriangle} label="Historia jakości" />
+                </CollapsibleNavGroup>
                 <NavItem to="/dashboard/career" icon={Briefcase} label="Rozwój Zawodowy" />
                 <NavItem to="/dashboard/referrals" icon={UserPlus} label="Zaproś znajomego" />
                 <NavItem to="/dashboard/profile" icon={User} label="Mój Profil" />
