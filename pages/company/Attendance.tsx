@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ClipboardList, Calendar, FileSpreadsheet, Check, X, Edit, Filter,
-  Search, ChevronDown, Clock, AlertCircle
+  Search, ChevronDown, Clock, AlertCircle, FileText
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -11,6 +11,8 @@ import {
   Department, User, Role, WorkerDayStatus, ActivityType_TA, DayRequestStatus
 } from '../../types';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { SectionTabs } from '../../components/SectionTabs';
 
 // ---------------------------------------------------------------------------
@@ -271,8 +273,8 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
       'Imie i nazwisko': `${r.user.first_name ?? ''} ${r.user.last_name ?? ''}`.trim(),
       'Obiekt': r.deptName,
       'Status': STATUS_LABELS[r.wd?.status ?? 'absent'] ?? r.wd?.status ?? 'Nieobecny',
-      'Przyjscie': r.wd?.entries?.[0]?.start_time?.slice(11, 16) ?? '-',
-      'Wyjscie': r.wd?.entries?.[r.wd.entries.length - 1]?.finish_time?.slice(11, 16) ?? '-',
+      'Rozpoczęcie pracy': r.wd?.entries?.[0]?.start_time?.slice(11, 16) ?? '-',
+      'Zakończenie pracy': r.wd?.entries?.[r.wd.entries.length - 1]?.finish_time?.slice(11, 16) ?? '-',
       'Praca': formatMinutes(r.wd?.work_time_minutes ?? 0),
       'Przerwa': formatMinutes(r.wd?.break_time_minutes ?? 0),
       'Nadgodziny': formatMinutes(r.wd?.overtime_minutes ?? 0),
@@ -280,7 +282,45 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Obecności');
-    XLSX.writeFile(wb, `poszczaemosc_${date}.xlsx`);
+    XLSX.writeFile(wb, `obecnosci_${date}.xlsx`);
+  };
+
+  // ---- Export PDF ----
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text(`Podsumowanie dnia - ${date}`, 14, 15);
+    autoTable(doc, {
+      startY: 22,
+      head: [['Imię i nazwisko', 'Obiekt', 'Status', 'Rozpoczęcie pracy', 'Zakończenie pracy', 'Praca', 'Przerwa', 'Nadgodziny']],
+      body: rows.map((r) => [
+        `${r.user.first_name ?? ''} ${r.user.last_name ?? ''}`.trim(),
+        r.deptName || '-',
+        STATUS_LABELS[r.wd?.status ?? 'absent'] ?? r.wd?.status ?? 'Nieobecny',
+        r.wd?.entries?.[0]?.start_time?.slice(11, 16) ?? '-',
+        r.wd?.entries?.[r.wd.entries.length - 1]?.finish_time?.slice(11, 16) ?? '-',
+        formatMinutes(r.wd?.work_time_minutes ?? 0),
+        formatMinutes(r.wd?.break_time_minutes ?? 0),
+        formatMinutes(r.wd?.overtime_minutes ?? 0),
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+    doc.save(`obecnosci_${date}.pdf`);
+  };
+
+  // ---- Toggle day confirmation ----
+  const toggleConfirmation = async (wd: WorkerDay) => {
+    if (!wd.id) return;
+    try {
+      await supabase
+        .from('worker_days')
+        .update({ confirmed: !wd.confirmed, updated_at: new Date().toISOString() })
+        .eq('id', wd.id);
+      fetchDays();
+    } catch (e) {
+      console.error('Error toggling confirmation:', e);
+    }
   };
 
   const toggleStatus = (s: string) => {
@@ -349,6 +389,13 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
           <FileSpreadsheet className="w-4 h-4" />
           Eksport Excel
         </button>
+        <button
+          onClick={exportPDF}
+          className="flex items-center gap-1.5 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-red-700 transition-colors"
+        >
+          <FileText className="w-4 h-4" />
+          Eksport PDF
+        </button>
       </div>
 
       {/* Status filter checkboxes (collapsible) */}
@@ -378,12 +425,12 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
               <th className="px-4 py-3">Imie i nazwisko</th>
               <th className="px-4 py-3">Obiekt</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Przyjscie</th>
-              <th className="px-4 py-3">Wyjscie</th>
+              <th className="px-4 py-3">Rozpoczęcie pracy</th>
+              <th className="px-4 py-3">Zakończenie pracy</th>
               <th className="px-4 py-3">Praca</th>
               <th className="px-4 py-3">Przerwa</th>
               <th className="px-4 py-3">Nadgodziny</th>
-              <th className="px-4 py-3">Akcje</th>
+              <th className="px-4 py-3">Potwierdzenie</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -440,27 +487,24 @@ const DailySummaryTab: React.FC<DailyTabProps> = ({
                     <td className="px-4 py-3 text-gray-600">{formatMinutes(r.wd?.work_time_minutes ?? 0)}</td>
                     <td className="px-4 py-3 text-gray-600">{formatMinutes(r.wd?.break_time_minutes ?? 0)}</td>
                     <td className="px-4 py-3 text-gray-600">{formatMinutes(r.wd?.overtime_minutes ?? 0)}</td>
-                    <td className="px-4 py-3">
-                      {canAccessAll && (
+                    <td className="px-4 py-3 text-center">
+                      {r.wd?.id ? (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditModal({
-                              day: r.wd ?? {
-                                id: '', company_id: companyId, user_id: r.user.id, date,
-                                status: 'absent', confirmed: false, finished: false,
-                                total_time_minutes: 0, work_time_minutes: 0, break_time_minutes: 0,
-                                overtime_minutes: 0, is_business_day: true, is_holiday: false, is_weekend: false,
-                                created_at: '', updated_at: '', entries: [],
-                              } as WorkerDay,
-                              user: r.user,
-                            });
+                            if (r.wd) toggleConfirmation(r.wd);
                           }}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edytuj"
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            r.wd.confirmed
+                              ? 'text-green-600 bg-green-50 hover:bg-green-100'
+                              : 'text-gray-300 hover:text-gray-500 hover:bg-gray-50'
+                          }`}
+                          title={r.wd.confirmed ? 'Potwierdzony — kliknij aby cofnąć' : 'Kliknij aby potwierdzić'}
                         >
-                          <Edit className="w-4 h-4" />
+                          <Check className="w-5 h-5" />
                         </button>
+                      ) : (
+                        <span className="text-gray-300">—</span>
                       )}
                     </td>
                   </tr>
@@ -561,6 +605,31 @@ const PeriodSummaryTab: React.FC<PeriodTabProps> = ({
     }));
   }, [workerDays, users]);
 
+  // ---- Toggle all days confirmation for a user in the period ----
+  const togglePeriodConfirmation = async (userId: string) => {
+    const userDays = workerDays.filter((wd) => wd.user_id === userId && wd.id);
+    if (userDays.length === 0) return;
+    const allConfirmed = userDays.every((wd) => wd.confirmed);
+    const newValue = !allConfirmed;
+    try {
+      for (const wd of userDays) {
+        await supabase
+          .from('worker_days')
+          .update({ confirmed: newValue, updated_at: new Date().toISOString() })
+          .eq('id', wd.id);
+      }
+      fetchPeriod();
+    } catch (e) {
+      console.error('Error toggling period confirmation:', e);
+    }
+  };
+
+  // Check if all days for a user in period are confirmed
+  const isUserPeriodConfirmed = (userId: string): boolean => {
+    const userDays = workerDays.filter((wd) => wd.user_id === userId && wd.id);
+    return userDays.length > 0 && userDays.every((wd) => wd.confirmed);
+  };
+
   const exportExcel = () => {
     const wsData = aggregated.map((r) => ({
       'Imie i nazwisko': `${r.user.first_name ?? ''} ${r.user.last_name ?? ''}`.trim(),
@@ -574,7 +643,29 @@ const PeriodSummaryTab: React.FC<PeriodTabProps> = ({
     const ws = XLSX.utils.json_to_sheet(wsData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Okres');
-    XLSX.writeFile(wb, `poszczaemosc_${startDate}_${endDate}.xlsx`);
+    XLSX.writeFile(wb, `obecnosci_${startDate}_${endDate}.xlsx`);
+  };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(14);
+    doc.text(`Podsumowanie okresu: ${startDate} - ${endDate}`, 14, 15);
+    autoTable(doc, {
+      startY: 22,
+      head: [['Imię i nazwisko', 'Dni robocze', 'Godziny pracy', 'Godziny przerw', 'Nadgodziny', 'Spóźnienia', 'Nieobecności']],
+      body: aggregated.map((r) => [
+        `${r.user.first_name ?? ''} ${r.user.last_name ?? ''}`.trim(),
+        r.agg.workDays,
+        formatMinutes(r.agg.workMinutes),
+        formatMinutes(r.agg.breakMinutes),
+        formatMinutes(r.agg.overtimeMinutes),
+        r.agg.lateCount,
+        r.agg.absentCount,
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+    doc.save(`obecnosci_${startDate}_${endDate}.pdf`);
   };
 
   return (
@@ -605,6 +696,13 @@ const PeriodSummaryTab: React.FC<PeriodTabProps> = ({
           <FileSpreadsheet className="w-4 h-4" />
           Eksport Excel
         </button>
+        <button
+          onClick={exportPDF}
+          className="flex items-center gap-1.5 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-red-700 transition-colors"
+        >
+          <FileText className="w-4 h-4" />
+          Eksport PDF
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
@@ -618,48 +716,65 @@ const PeriodSummaryTab: React.FC<PeriodTabProps> = ({
               <th className="px-4 py-3">Nadgodziny</th>
               <th className="px-4 py-3">Spoznienia</th>
               <th className="px-4 py-3">Nieobecnosci</th>
+              <th className="px-4 py-3">Potwierdzenie</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   <Clock className="w-5 h-5 inline-block animate-spin mr-2" />
                   Ladowanie...
                 </td>
               </tr>
             ) : aggregated.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
                   Brak danych dla wybranego okresu.
                 </td>
               </tr>
             ) : (
-              aggregated.map((r) => (
-                <tr key={r.user.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {r.user.first_name} {r.user.last_name}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{r.agg.workDays}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.workMinutes)}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.breakMinutes)}</td>
-                  <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.overtimeMinutes)}</td>
-                  <td className="px-4 py-3">
-                    {r.agg.lateCount > 0 ? (
-                      <span className="text-yellow-700 font-medium">{r.agg.lateCount}</span>
-                    ) : (
-                      <span className="text-gray-400">0</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {r.agg.absentCount > 0 ? (
-                      <span className="text-red-700 font-medium">{r.agg.absentCount}</span>
-                    ) : (
-                      <span className="text-gray-400">0</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              aggregated.map((r) => {
+                const confirmed = isUserPeriodConfirmed(r.user.id);
+                return (
+                  <tr key={r.user.id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {r.user.first_name} {r.user.last_name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{r.agg.workDays}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.workMinutes)}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.breakMinutes)}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatMinutes(r.agg.overtimeMinutes)}</td>
+                    <td className="px-4 py-3">
+                      {r.agg.lateCount > 0 ? (
+                        <span className="text-yellow-700 font-medium">{r.agg.lateCount}</span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.agg.absentCount > 0 ? (
+                        <span className="text-red-700 font-medium">{r.agg.absentCount}</span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => togglePeriodConfirmation(r.user.id)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          confirmed
+                            ? 'text-green-600 bg-green-50 hover:bg-green-100'
+                            : 'text-gray-300 hover:text-gray-500 hover:bg-gray-50'
+                        }`}
+                        title={confirmed ? 'Potwierdzony — kliknij aby cofnąć' : 'Kliknij aby potwierdzić'}
+                      >
+                        <Check className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -693,6 +808,9 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
     return m;
   }, [users]);
 
+  // Store worker_day data for displaying current entries
+  const [workerDaysMap, setWorkerDaysMap] = useState<Map<string, WorkerDay>>(new Map());
+
   const fetchRequests = useCallback(async () => {
     if (!companyId) return;
     setLoading(true);
@@ -707,6 +825,20 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
       const items = (data as WorkerDayRequest[]) ?? [];
       setRequests(items);
       onCountChange(items.length);
+
+      // Fetch associated worker_days for "Obecne dane"
+      const dayIds = items.map((r) => r.worker_day_id).filter(Boolean) as string[];
+      if (dayIds.length > 0) {
+        const { data: days } = await supabase
+          .from('worker_days')
+          .select('*, entries:worker_day_entries(*, activities:worker_day_activities(*))')
+          .in('id', dayIds);
+        const map = new Map<string, WorkerDay>();
+        (days ?? []).forEach((d: WorkerDay) => map.set(d.id, d));
+        setWorkerDaysMap(map);
+      } else {
+        setWorkerDaysMap(new Map());
+      }
     } catch (e) {
       console.error('Error loading requests:', e);
     } finally {
@@ -800,7 +932,7 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
               <th className="px-4 py-3">Obecne dane</th>
               <th className="px-4 py-3">Wnioskowane dane</th>
               <th className="px-4 py-3">Komentarz</th>
-              <th className="px-4 py-3">Akcje</th>
+              <th className="px-4 py-3">Potwierdzenie</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -821,6 +953,11 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
               requests.map((req) => {
                 const emp = userMap.get(req.user_id);
                 const reqEntries = req.requested_entries ?? [];
+                const existingDay = req.worker_day_id ? workerDaysMap.get(req.worker_day_id) : null;
+                const existingEntries = existingDay?.entries ?? [];
+                const firstStart = existingEntries[0]?.start_time?.slice(11, 16);
+                const lastFinish = existingEntries[existingEntries.length - 1]?.finish_time?.slice(11, 16);
+
                 return (
                   <tr key={req.id} className="hover:bg-blue-50/50 transition-colors">
                     <td className="px-4 py-3">
@@ -835,11 +972,13 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
                       {emp ? `${emp.first_name} ${emp.last_name}` : req.user_id}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{req.date}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">
-                      {req.worker_day_id ? (
-                        <span className="italic">Istniejacy dzien</span>
+                    <td className="px-4 py-3 text-xs">
+                      {existingDay && existingEntries.length > 0 ? (
+                        <span className="font-medium text-gray-700">
+                          {firstStart} - {lastFinish ?? '?'}
+                        </span>
                       ) : (
-                        <span className="italic">Brak wpisu</span>
+                        <span className="font-medium text-red-500">BRAK</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs">
@@ -869,7 +1008,7 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
                           onClick={() => handleAction([req.id], 'approved')}
                           disabled={processing}
                           className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Zatwierdz"
+                          title="Zatwierdź"
                         >
                           <Check className="w-4 h-4" />
                         </button>
@@ -877,7 +1016,7 @@ const ChangeRequestsTab: React.FC<RequestsTabProps> = ({
                           onClick={() => handleAction([req.id], 'rejected')}
                           disabled={processing}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Odrzuc"
+                          title="Odrzuć"
                         >
                           <X className="w-4 h-4" />
                         </button>

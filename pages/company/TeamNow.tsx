@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Clock, Coffee, Briefcase, UserX, Search, Filter, RefreshCw } from 'lucide-react';
+import { Users, Coffee, Briefcase, UserX, Search, Filter, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { WorkerState, WorkerCurrentStatus, Role, Department } from '../../types';
@@ -52,7 +52,7 @@ const STATUS_CONFIG: Record<WorkerCurrentStatus, { label: string; color: string;
     badgeClass: 'bg-purple-100 text-purple-800',
   },
   offline: {
-    label: 'Nie na pracy',
+    label: 'Nieobecni',
     color: 'gray',
     bgClass: 'bg-slate-50 border-slate-200',
     badgeClass: 'bg-slate-100 text-slate-600',
@@ -472,7 +472,7 @@ export const TeamNowPage: React.FC = () => {
             <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
               <UserX className="w-4 h-4 text-slate-500" />
             </div>
-            <span className="text-xs font-medium text-slate-600">Nie na pracy</span>
+            <span className="text-xs font-medium text-slate-600">Nieobecni</span>
           </div>
           <p className="text-2xl font-bold text-slate-700">{statusCounts.offline}</p>
         </div>
@@ -540,7 +540,7 @@ export const TeamNowPage: React.FC = () => {
                 { key: 'working' as WorkerCurrentStatus, label: 'Pracuje', dotClass: 'bg-green-500' },
                 { key: 'on_break' as WorkerCurrentStatus, label: 'Przerwa', dotClass: 'bg-yellow-500' },
                 { key: 'exit_business' as WorkerCurrentStatus, label: 'Wyjście służbowe', dotClass: 'bg-blue-500' },
-                { key: 'offline' as WorkerCurrentStatus, label: 'Nie na pracy', dotClass: 'bg-slate-400' },
+                { key: 'offline' as WorkerCurrentStatus, label: 'Nieobecni', dotClass: 'bg-slate-400' },
               ] as const
             ).map(item => (
               <label
@@ -596,17 +596,14 @@ export const TeamNowPage: React.FC = () => {
                   >
                     Status{getSortIcon('status')}
                   </th>
-                  <th className="text-left py-3 px-4 font-medium text-slate-500">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      Aktywność od
-                    </span>
-                  </th>
                   <th
                     className="text-left py-3 px-4 font-medium text-slate-500 cursor-pointer hover:text-slate-800 select-none"
                     onClick={() => handleSort('work_started_at')}
                   >
                     Rozpoczęcie pracy{getSortIcon('work_started_at')}
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-slate-500">
+                    Zakończenie pracy
                   </th>
                   <th className="text-left py-3 px-4 font-medium text-slate-500">
                     Czas pracy dziś
@@ -670,14 +667,14 @@ export const TeamNowPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Activity started at */}
-                      <td className="py-3 px-4 text-slate-600 tabular-nums">
-                        {formatTime(ws.activity_started_at)}
-                      </td>
-
                       {/* Work start time */}
                       <td className="py-3 px-4 text-slate-600 tabular-nums">
                         {formatTime(ws.work_started_at)}
+                      </td>
+
+                      {/* Work finish time */}
+                      <td className="py-3 px-4 text-slate-600 tabular-nums">
+                        {formatTime(ws.work_finished_at)}
                       </td>
 
                       {/* Work time today (live timer) */}
