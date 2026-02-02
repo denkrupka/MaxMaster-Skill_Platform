@@ -1,6 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { CalendarClock, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  CalendarClock, CalendarRange, ChevronLeft, ChevronRight,
+  List, Grid3X3, Clock
+} from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { ScheduleTemplate, ScheduleAssignment } from '../../types';
@@ -8,7 +11,7 @@ import { SectionTabs } from '../../components/SectionTabs';
 
 type ViewMode = 'weekly' | 'monthly';
 
-const DAY_LABELS_SHORT = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Ndz'];
+const DAY_LABELS_WEEK = ['Pon.', 'Wt.', 'Śr.', 'Czw.', 'Pt.', 'Sob.', 'Niedz.'];
 const MONTH_NAMES = [
   'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
   'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
@@ -16,17 +19,15 @@ const MONTH_NAMES = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Return Monday of the week that contains `date`. */
 const getMonday = (date: Date): Date => {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun
+  const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
   return d;
 };
 
-/** Format Date to YYYY-MM-DD. */
 const toISO = (d: Date): string => {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -34,15 +35,12 @@ const toISO = (d: Date): string => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-/** Get all dates in a given month grouped by weeks (Mon-Sun rows). */
 const getMonthCalendarDates = (year: number, month: number): Date[][] => {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
-
   const startMonday = getMonday(firstDay);
   const weeks: Date[][] = [];
   const cursor = new Date(startMonday);
-
   while (cursor <= lastDay || cursor.getDay() !== 1) {
     const week: Date[] = [];
     for (let i = 0; i < 7; i++) {
@@ -55,7 +53,16 @@ const getMonthCalendarDates = (year: number, month: number): Date[][] => {
   return weeks;
 };
 
-const formatTime = (t: string) => t?.slice(0, 5) || '';
+const formatTime = (t: string | undefined) => t?.slice(0, 5) || '';
+
+const calcShiftHours = (start?: string, end?: string): number => {
+  if (!start || !end) return 0;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  return Math.round(mins / 60 * 10) / 10;
+};
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -86,7 +93,6 @@ export const EmployeeSchedulePage: React.FC = () => {
     [currentDate]
   );
 
-  // Compute date range for data fetching
   const dateRange = useMemo(() => {
     if (viewMode === 'weekly') {
       const end = new Date(weekMonday);
@@ -108,7 +114,6 @@ export const EmployeeSchedulePage: React.FC = () => {
     if (!currentUser || !currentCompany) return;
     setLoading(true);
     try {
-      // Load templates
       const { data: tplData } = await supabase
         .from('schedule_templates')
         .select('*')
@@ -116,7 +121,6 @@ export const EmployeeSchedulePage: React.FC = () => {
         .eq('is_archived', false);
       if (tplData) setTemplates(tplData);
 
-      // Load assignments
       const { data: assignData } = await supabase
         .from('schedule_assignments')
         .select('*, template:schedule_templates(*)')
@@ -126,7 +130,6 @@ export const EmployeeSchedulePage: React.FC = () => {
         .lte('date', dateRange.end);
       if (assignData) setAssignments(assignData);
 
-      // Load approved time-off requests overlapping the range
       const { data: timeOffData } = await supabase
         .from('time_off_requests')
         .select('*, time_off_type:time_off_types(*)')
@@ -189,20 +192,37 @@ export const EmployeeSchedulePage: React.FC = () => {
   const getAssignmentForDate = (date: Date) => assignmentMap[toISO(date)] ?? null;
   const getTimeOffForDate = (date: Date) => timeOffDates[toISO(date)] ?? null;
 
+  // ── Stats ──────────────────────────────────────────────────────────────────
+
+  const totalHours = useMemo(() => {
+    let total = 0;
+    for (const a of assignments) {
+      if (a.template) {
+        total += calcShiftHours(a.template.start_time, a.template.end_time);
+      } else if (a.custom_start_time && a.custom_end_time) {
+        total += calcShiftHours(a.custom_start_time, a.custom_end_time);
+      }
+    }
+    return total;
+  }, [assignments]);
+
+  const totalShifts = assignments.length;
+
   // ── Rendering helpers ──────────────────────────────────────────────────────
 
   const isToday = (d: Date) => toISO(d) === toISO(new Date());
   const isCurrentMonth = (d: Date) => d.getMonth() === currentDate.getMonth();
+  const isWeekend = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
 
-  const renderPeriodLabel = () => {
-    if (viewMode === 'weekly') {
-      const endDate = new Date(weekMonday);
-      endDate.setDate(endDate.getDate() + 6);
-      const startStr = `${weekMonday.getDate()} ${MONTH_NAMES[weekMonday.getMonth()].slice(0, 3)}`;
-      const endStr = `${endDate.getDate()} ${MONTH_NAMES[endDate.getMonth()].slice(0, 3)} ${endDate.getFullYear()}`;
-      return `${startStr} – ${endStr}`;
-    }
+  const periodLabel = useMemo(() => {
     return `${MONTH_NAMES[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  }, [currentDate]);
+
+  const getDayHours = (date: Date): number => {
+    const a = getAssignmentForDate(date);
+    if (!a) return 0;
+    if (a.template) return calcShiftHours(a.template.start_time, a.template.end_time);
+    return calcShiftHours(a.custom_start_time, a.custom_end_time);
   };
 
   const renderCellContent = (date: Date) => {
@@ -210,7 +230,7 @@ export const EmployeeSchedulePage: React.FC = () => {
     if (timeOff) {
       return (
         <div
-          className="rounded-lg px-2 py-1 text-xs font-medium text-white truncate"
+          className="rounded-md px-2 py-1.5 text-xs font-medium text-white truncate"
           style={{ backgroundColor: timeOff.color }}
           title={timeOff.name}
         >
@@ -226,27 +246,22 @@ export const EmployeeSchedulePage: React.FC = () => {
     if (tpl) {
       return (
         <div
-          className="rounded-lg px-2 py-1 text-xs font-medium text-white truncate"
+          className="rounded-md px-2 py-1.5 text-xs font-medium text-white truncate"
           style={{ backgroundColor: tpl.color || '#3b82f6' }}
-          title={`${tpl.name}: ${formatTime(tpl.start_time)} – ${formatTime(tpl.end_time)}`}
+          title={`${tpl.name}: ${formatTime(tpl.start_time)} - ${formatTime(tpl.end_time)}`}
         >
-          <span className="font-semibold">{tpl.name}</span>
-          <br />
-          <span className="opacity-90">{formatTime(tpl.start_time)} – {formatTime(tpl.end_time)}</span>
+          <span className="font-semibold">{formatTime(tpl.start_time)} - {formatTime(tpl.end_time)}</span>
         </div>
       );
     }
 
-    // Custom time (no template)
     if (assignment.custom_start_time && assignment.custom_end_time) {
       return (
         <div
-          className="rounded-lg px-2 py-1 text-xs font-medium text-white bg-gray-600 truncate"
-          title={`Własny czas: ${formatTime(assignment.custom_start_time)} – ${formatTime(assignment.custom_end_time)}`}
+          className="rounded-md px-2 py-1.5 text-xs font-medium text-white bg-gray-600 truncate"
+          title={`${formatTime(assignment.custom_start_time)} - ${formatTime(assignment.custom_end_time)}`}
         >
-          <span className="font-semibold">Własny czas</span>
-          <br />
-          <span className="opacity-90">{formatTime(assignment.custom_start_time)} – {formatTime(assignment.custom_end_time)}</span>
+          <span className="font-semibold">{formatTime(assignment.custom_start_time)} - {formatTime(assignment.custom_end_time)}</span>
         </div>
       );
     }
@@ -261,8 +276,9 @@ export const EmployeeSchedulePage: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-[1200px] mx-auto space-y-4">
       <SectionTabs section="grafiki" />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -273,155 +289,191 @@ export const EmployeeSchedulePage: React.FC = () => {
           <p className="text-gray-500 text-sm mt-1">Twój harmonogram pracy</p>
         </div>
 
-        {/* View toggle */}
-        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => setViewMode('weekly')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'weekly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <CalendarClock className="w-4 h-4" />
-            Tydzień
-          </button>
-          <button
-            onClick={() => setViewMode('monthly')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              viewMode === 'monthly' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <CalendarRange className="w-4 h-4" />
-            Miesiąc
-          </button>
+        {/* Stats */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
+            <Clock className="w-4 h-4 text-blue-600" />
+            <div>
+              <div className="text-xs text-blue-600 font-medium">Godziny</div>
+              <div className="text-sm font-bold text-blue-700">{totalHours}h</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg">
+            <CalendarRange className="w-4 h-4 text-green-600" />
+            <div>
+              <div className="text-xs text-green-600 font-medium">Zmiany</div>
+              <div className="text-sm font-bold text-green-700">{totalShifts}</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-3">
-        <button
-          onClick={navigatePrev}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Poprzedni okres"
-        >
-          <ChevronLeft className="w-5 h-5 text-gray-700" />
-        </button>
-
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-semibold text-gray-900">{renderPeriodLabel()}</span>
-          <button
-            onClick={goToToday}
-            className="text-xs font-medium px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
-          >
-            Dziś
-          </button>
-        </div>
-
-        <button
-          onClick={navigateNext}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          title="Następny okres"
-        >
-          <ChevronRight className="w-5 h-5 text-gray-700" />
-        </button>
-      </div>
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-        </div>
-      )}
-
-      {/* Weekly view */}
-      {!loading && viewMode === 'weekly' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {/* Desktop grid */}
-          <div className="hidden md:grid grid-cols-7 divide-x divide-gray-200 border-b border-gray-200 bg-gray-50">
-            {weekDates.map((date, i) => (
-              <div
-                key={i}
-                className={`px-3 py-2 text-center ${isToday(date) ? 'bg-blue-50' : ''}`}
-              >
-                <div className="text-xs font-medium text-gray-500 uppercase">{DAY_LABELS_SHORT[i]}</div>
-                <div className={`text-lg font-bold ${isToday(date) ? 'text-blue-700' : 'text-gray-900'}`}>
-                  {date.getDate()}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="hidden md:grid grid-cols-7 divide-x divide-gray-100 min-h-[120px]">
-            {weekDates.map((date, i) => (
-              <div
-                key={i}
-                className={`p-2 ${isToday(date) ? 'bg-blue-50/30' : ''}`}
-              >
-                {renderCellContent(date)}
-              </div>
-            ))}
-          </div>
-
-          {/* Mobile list */}
-          <div className="md:hidden divide-y divide-gray-100">
-            {weekDates.map((date, i) => (
-              <div
-                key={i}
-                className={`flex items-start gap-3 p-3 ${isToday(date) ? 'bg-blue-50/50' : ''}`}
-              >
-                <div className="text-center w-12 flex-shrink-0">
-                  <div className="text-xs font-medium text-gray-500 uppercase">{DAY_LABELS_SHORT[i]}</div>
-                  <div className={`text-lg font-bold ${isToday(date) ? 'text-blue-700' : 'text-gray-900'}`}>
-                    {date.getDate()}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  {renderCellContent(date) || (
-                    <span className="text-xs text-gray-400 italic">Brak zmiany</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Monthly view */}
-      {!loading && viewMode === 'monthly' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {/* Header row */}
-          <div className="grid grid-cols-7 divide-x divide-gray-200 border-b border-gray-200 bg-gray-50">
-            {DAY_LABELS_SHORT.map((day) => (
-              <div key={day} className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase">
-                {day}
-              </div>
-            ))}
-          </div>
-          {/* Weeks */}
-          {monthWeeks.map((week, wi) => (
-            <div
-              key={wi}
-              className="grid grid-cols-7 divide-x divide-gray-100 border-b last:border-b-0 border-gray-100"
+      {/* Main card */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {/* Navigation bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={goToToday}
+              className="text-sm font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              {week.map((date, di) => (
-                <div
-                  key={di}
-                  className={`min-h-[80px] md:min-h-[100px] p-1.5 ${
-                    !isCurrentMonth(date) ? 'bg-gray-50/60' : ''
-                  } ${isToday(date) ? 'bg-blue-50/50 ring-1 ring-inset ring-blue-200' : ''}`}
-                >
+              Dzisiaj
+            </button>
+            <button onClick={navigatePrev} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <button onClick={navigateNext} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+            <span className="text-lg font-bold text-gray-900">{periodLabel}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('weekly')}
+                className={`p-1.5 rounded-md transition-colors ${
+                  viewMode === 'weekly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Widok tygodniowy"
+              >
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('monthly')}
+                className={`p-1.5 rounded-md transition-colors ${
+                  viewMode === 'monthly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                }`}
+                title="Widok miesięczny"
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          </div>
+        )}
+
+        {/* Weekly view */}
+        {!loading && viewMode === 'weekly' && (
+          <>
+            {/* Desktop grid */}
+            <div className="hidden md:block">
+              <div className="grid grid-cols-7 divide-x divide-gray-200 border-b border-gray-200">
+                {weekDates.map((date, i) => {
+                  const dayHours = getDayHours(date);
+                  return (
+                    <div
+                      key={i}
+                      className={`px-2 py-2 text-center ${
+                        isToday(date) ? 'bg-gray-900 text-white' : isWeekend(date) ? 'bg-gray-50 text-gray-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-1">
+                          <span className="text-base font-bold">{date.getDate()}</span>
+                          <span className="text-xs font-medium">{DAY_LABELS_WEEK[i]}</span>
+                        </div>
+                        <span className="text-xs font-normal opacity-70">{dayHours > 0 ? `${dayHours}h` : '0h'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-7 divide-x divide-gray-100 min-h-[140px]">
+                {weekDates.map((date, i) => (
                   <div
-                    className={`text-xs mb-1 font-medium ${
-                      !isCurrentMonth(date) ? 'text-gray-400' : isToday(date) ? 'text-blue-700' : 'text-gray-700'
+                    key={i}
+                    className={`p-2 ${
+                      isToday(date) ? 'bg-blue-50/30' : isWeekend(date) ? 'bg-gray-50/50' : ''
                     }`}
                   >
-                    {date.getDate()}
+                    {renderCellContent(date) || (
+                      <div className="text-xs text-gray-300 text-center mt-4">—</div>
+                    )}
                   </div>
-                  {renderCellContent(date)}
+                ))}
+              </div>
+            </div>
+
+            {/* Mobile list */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {weekDates.map((date, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 p-3 ${isToday(date) ? 'bg-blue-50/50' : ''}`}
+                >
+                  <div className="text-center w-12 flex-shrink-0">
+                    <div className="text-xs font-medium text-gray-500 uppercase">{DAY_LABELS_WEEK[i]}</div>
+                    <div className={`text-lg font-bold ${isToday(date) ? 'text-blue-700' : 'text-gray-900'}`}>
+                      {date.getDate()}
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {renderCellContent(date) || (
+                      <span className="text-xs text-gray-400 italic">Brak zmiany</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
-          ))}
-        </div>
-      )}
+          </>
+        )}
+
+        {/* Monthly view */}
+        {!loading && viewMode === 'monthly' && (
+          <div>
+            {/* Header row */}
+            <div className="grid grid-cols-7 divide-x divide-gray-200 border-b border-gray-200">
+              {DAY_LABELS_WEEK.map((day, i) => (
+                <div
+                  key={day}
+                  className={`px-2 py-2 text-center text-sm font-semibold ${
+                    i >= 5 ? 'text-red-500' : 'text-gray-700'
+                  }`}
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+            {/* Weeks */}
+            {monthWeeks.map((week, wi) => (
+              <div
+                key={wi}
+                className="grid grid-cols-7 divide-x divide-gray-100 border-b last:border-b-0 border-gray-100"
+              >
+                {week.map((date, di) => (
+                  <div
+                    key={di}
+                    className={`min-h-[80px] md:min-h-[100px] p-1.5 ${
+                      !isCurrentMonth(date) ? 'bg-gray-50/60' : ''
+                    } ${isWeekend(date) ? 'bg-blue-50/20' : ''} ${
+                      isToday(date) ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : ''
+                    }`}
+                  >
+                    <div
+                      className={`text-sm font-bold mb-1 ${
+                        !isCurrentMonth(date) ? 'text-gray-300' : isToday(date)
+                          ? 'w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center text-xs'
+                          : di >= 5 ? 'text-red-400' : 'text-gray-900'
+                      }`}
+                    >
+                      {date.getDate()}
+                    </div>
+                    {renderCellContent(date)}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       {!loading && (
@@ -435,7 +487,7 @@ export const EmployeeSchedulePage: React.FC = () => {
                   style={{ backgroundColor: tpl.color || '#3b82f6' }}
                 />
                 <span className="text-xs text-gray-600">
-                  {tpl.name} ({formatTime(tpl.start_time)} – {formatTime(tpl.end_time)})
+                  {tpl.name} ({formatTime(tpl.start_time)} - {formatTime(tpl.end_time)})
                 </span>
               </div>
             ))}
