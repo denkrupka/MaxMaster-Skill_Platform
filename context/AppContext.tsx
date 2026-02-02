@@ -531,7 +531,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
     }
 
-    // onAuthStateChange will handle refreshData
+    // Eagerly refresh data so companyModules/moduleUserAccess are available
+    // before ProtectedRoute runs the subscription check.
+    // (onAuthStateChange defers refreshData via setTimeout, which causes a race condition)
+    await refreshData();
   };
 
   const logout = async () => {

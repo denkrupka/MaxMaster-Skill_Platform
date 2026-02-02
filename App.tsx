@@ -131,10 +131,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
   }
 
   // SUBSCRIPTION CHECK for company users (non-global users)
-  // Logic (same as super admin panel):
-  // - BRAK: no active subscription and no demo → show expired pages
-  // - DEMO: has demo modules but no paid subscriptions → allow access
-  // - AKTYWNA: has active paid subscription → allow access
+  // Only show "subscription expired" when status is truly BRAK (no modules at all).
+  // If at least one module is purchased/active → all employees have portal access.
+  // Module-level access is controlled per-user by admin grants (handled below).
   const isGlobalUser = state.currentUser.is_global_user === true;
   const currentPath = window.location.hash.replace('#', '');
 
@@ -154,7 +153,9 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     const isSubscriptionBrak = !hasPaidSubscription && !hasDemoModules;
 
     // If subscription status is BRAK (no active modules at all)
-    if (isSubscriptionBrak) {
+    // Safety: only redirect if companyModules data is loaded (state.companyModules has entries
+    // for ANY company, meaning data was fetched; empty means data may not be loaded yet)
+    if (isSubscriptionBrak && state.companyModules.length > 0) {
       if (state.currentUser.role === Role.COMPANY_ADMIN) {
         // Company admin can access subscription, referrals, and settings pages
         if (!currentPath.includes('/company/subscription') &&
@@ -167,26 +168,6 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
         // Other company users get blocked completely
         if (!currentPath.includes('/subscription-expired-user')) {
           return <Navigate to="/subscription-expired-user" replace />;
-        }
-      }
-    }
-
-    // Module-specific access check for candidates and employees
-    if (state.currentUser.role === Role.CANDIDATE || state.currentUser.role === Role.TRIAL) {
-      // Check if recruitment module has available seats
-      const recruitmentModule = companyModules.find(cm => cm.module_code === 'recruitment');
-      if (!recruitmentModule || recruitmentModule.max_users <= 0) {
-        // Check if user has access to skills module instead
-        const skillsModule = companyModules.find(cm => cm.module_code === 'skills');
-        const userHasSkillsAccess = state.moduleUserAccess.some(
-          mua => mua.user_id === state.currentUser?.id && mua.module_code === 'skills' && mua.is_enabled
-        );
-
-        if (!skillsModule || !userHasSkillsAccess) {
-          // No recruitment module and no skills access - show expired page
-          if (!currentPath.includes('/subscription-expired-user')) {
-            return <Navigate to="/subscription-expired-user" replace />;
-          }
         }
       }
     }
