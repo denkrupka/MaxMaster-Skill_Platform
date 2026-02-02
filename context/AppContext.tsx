@@ -277,7 +277,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           qualityIncidents: incidents || [],
           employeeNotes: notes || [],
           employeeBadges: badges || [],
-          libraryResources: resources || [],
+          libraryResources: (resources || []).map((r: any) => ({
+            ...r,
+            textContent: r.text_content ?? r.textContent ?? '',
+            videoUrl: r.video_url ?? r.videoUrl ?? '',
+            imageUrl: r.image_url ?? r.imageUrl ?? '',
+          })),
           systemConfig: {
               ...DEFAULT_SYSTEM_CONFIG,
               ...(configData?.config_data || {})
