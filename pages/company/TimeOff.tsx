@@ -21,6 +21,7 @@ import {
   TimeOffRequestStatus,
   Role,
 } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -170,6 +171,7 @@ export const CompanyTimeOffPage: React.FC = () => {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-6 pb-24">
+      <SectionTabs section="urlopy" />
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">

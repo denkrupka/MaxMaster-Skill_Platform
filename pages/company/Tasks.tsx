@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import {
   ProjectTask, Project, TaskTimeLog, TaskStatus_Project, TaskPriority
 } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 const STATUS_COLUMNS: { key: TaskStatus_Project; label: string; color: string; icon: React.ReactNode }[] = [
   { key: 'todo', label: 'Do zrobienia', color: 'bg-slate-100 border-slate-300', icon: <ClipboardList className="w-4 h-4 text-slate-500" /> },
@@ -543,6 +544,7 @@ export const CompanyTasksPage: React.FC = () => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <SectionTabs section="projekty" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <div>

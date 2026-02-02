@@ -4,6 +4,7 @@ import { Users, Clock, Coffee, Briefcase, UserX, Search, Filter, RefreshCw } fro
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { WorkerState, WorkerCurrentStatus, Role, Department } from '../../types';
+import { SectionTabs } from '../../components/SectionTabs';
 
 // =====================================================
 // TeamNowPage - Real-time team dashboard
@@ -405,6 +406,7 @@ export const TeamNowPage: React.FC = () => {
 
   return (
     <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
+      <SectionTabs section="obecnosci" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
