@@ -192,11 +192,8 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
     }
 
     // MODULE ACCESS CHECK for company users
-    // Superadmins and company admins simulating roles bypass module access check entirely
-    const isSimulatingRole = state.simulatedRole !== null &&
-      (state.currentUser?.role === Role.COMPANY_ADMIN || state.currentUser?.role === Role.SUPERADMIN);
-    if (requiredModule && !currentPath.includes('/module-access-denied') && !isSimulatingRole) {
-      // Step 1: Check if the company has this module active
+    if (requiredModule && !currentPath.includes('/module-access-denied')) {
+      // Step 1: Check if the company has this module active — applies to ALL roles including simulating admins
       const companyHasModule = companyModules.some(cm => cm.module_code === requiredModule);
 
       if (!companyHasModule) {
@@ -204,9 +201,10 @@ const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout =
         return <Navigate to={`/module-access-denied?module=${requiredModule}`} replace />;
       }
 
-      // Step 2: Company admins can access any active company module (they manage modules)
-      // Other roles need individual module_user_access grant
-      if (state.currentUser.role !== Role.COMPANY_ADMIN && state.currentUser.role !== Role.SUPERADMIN) {
+      // Step 2: User-level access check
+      // Company admins (including when simulating) and superadmins bypass user-level check
+      const isAdminOrSuper = state.currentUser.role === Role.COMPANY_ADMIN || state.currentUser.role === Role.SUPERADMIN;
+      if (!isAdminOrSuper) {
         const userHasModuleAccess = state.moduleUserAccess.some(
           mua => mua.user_id === state.currentUser?.id &&
                  mua.module_code === requiredModule &&
