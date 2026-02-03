@@ -1176,6 +1176,7 @@ export interface ContractorClientContact {
   phone?: string;
   email?: string;
   position?: string;
+  is_main_contact?: boolean;
   created_at: string;
 }
 
@@ -1183,10 +1184,14 @@ export interface ContractorSubcontractor {
   id: string;
   company_id: string;
   name: string;
+  nip?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
   workers_count?: number;
-  email?: string;
-  phone?: string;
   skills?: string;
+  note?: string;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
@@ -1201,5 +1206,6 @@ export interface SubcontractorWorker {
   phone?: string;
   email?: string;
   position?: string;
+  is_main_contact?: boolean;
   created_at: string;
 }
