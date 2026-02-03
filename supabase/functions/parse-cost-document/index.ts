@@ -1,5 +1,5 @@
 // Supabase Edge Function for Cost Document Parsing with Google Gemini AI
-// Extracts invoice data: issuer, NIP, address, amounts, dates, VAT
+// Extracts invoice/document data via OCR using Gemini Vision
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 
@@ -32,7 +32,7 @@ serve(async (req) => {
       );
     }
 
-    const mime = mimeType || 'application/pdf';
+    const detectedMime = mimeType || 'application/pdf';
 
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -45,23 +45,25 @@ serve(async (req) => {
               parts: [
                 {
                   inline_data: {
-                    mime_type: mime,
+                    mime_type: detectedMime,
                     data: fileBase64,
                   },
                 },
                 {
-                  text: `Extract invoice/cost document data from this file. Return a JSON object with these fields:
-- issuer: company name of the document issuer (string)
-- issuer_nip: NIP (tax ID) of the issuer (string, digits only)
-- issuer_address: full address of the issuer (string)
-- document_number: invoice/document number (string)
-- issue_date: date of issue in YYYY-MM-DD format (string)
-- payment_due_date: payment due date in YYYY-MM-DD format (string)
-- value_netto: net value in PLN (number)
-- vat_rate: VAT rate as percentage, e.g. 23 for 23% (number)
-- value_brutto: gross value in PLN (number)
-- category: short category description of what was purchased (string)
-If a field is not found, use empty string for strings or 0 for numbers.`,
+                  text: `Przeanalizuj ten dokument kosztowy (faktura, rachunek, paragon itp.) i wyodrębnij następujące dane. Zwróć JSON z polami:
+- document_type: typ dokumentu (np. "Faktura VAT", "Rachunek", "Paragon", "Nota księgowa", "Umowa")
+- document_number: numer dokumentu
+- issue_date: data wystawienia w formacie YYYY-MM-DD
+- payment_due_date: termin płatności w formacie YYYY-MM-DD
+- issuer: nazwa wystawcy dokumentu (firma/osoba)
+- issuer_nip: NIP wystawcy (sam numer, bez kresek)
+- issuer_address: pełny adres wystawcy
+- value_netto: wartość netto dokumentu jako liczba (bez waluty, separator dziesiętny to kropka)
+- vat_rate: stawka VAT jako liczba procentowa (np. 23 dla 23%)
+- value_brutto: wartość brutto dokumentu jako liczba
+- category: kategoria kosztów (np. "Materiały", "Usługi", "Transport", "Narzędzia", "Wynajem", "Inne")
+
+Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wartości liczbowych.`,
                 },
               ],
             },
@@ -71,18 +73,19 @@ If a field is not found, use empty string for strings or 0 for numbers.`,
             response_schema: {
               type: 'OBJECT',
               properties: {
-                issuer: { type: 'STRING' },
-                issuer_nip: { type: 'STRING' },
-                issuer_address: { type: 'STRING' },
+                document_type: { type: 'STRING' },
                 document_number: { type: 'STRING' },
                 issue_date: { type: 'STRING' },
                 payment_due_date: { type: 'STRING' },
+                issuer: { type: 'STRING' },
+                issuer_nip: { type: 'STRING' },
+                issuer_address: { type: 'STRING' },
                 value_netto: { type: 'NUMBER' },
                 vat_rate: { type: 'NUMBER' },
                 value_brutto: { type: 'NUMBER' },
                 category: { type: 'STRING' },
               },
-              required: ['issuer', 'issuer_nip', 'issuer_address', 'document_number', 'issue_date', 'payment_due_date', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
+              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_address', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
             },
           },
         }),

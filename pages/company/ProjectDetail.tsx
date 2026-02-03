@@ -1,12 +1,13 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ArrowLeft, BarChart3, Calendar, ClipboardList, FileCheck, DollarSign,
   Receipt, Clock, Users, MessageSquare, Paperclip, Loader2, Plus, X,
   Pencil, Trash2, Upload, Download, Eye, Check, XCircle, Search,
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
-  ExternalLink, AlertCircle, Wrench, Tag, Hash, ToggleLeft, ToggleRight,
-  ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud
+  ExternalLink, AlertCircle, Wrench, Tag, Hash, CheckCircle2, FileDown,
+  ScanLine, FileInput, ToggleLeft, ToggleRight,
+  ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud, Filter, Building
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -20,7 +21,10 @@ import {
   ProjectFile, ProjectMemberType, ProjectMemberPaymentType, ProjectMemberStatus,
   ProjectIssueStatus, ProjectTaskBillingType, ProjectTaskWorkerPayment,
   ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact,
-  ContractorClient, ContractorClientContact, ProjectIssueCategory
+  ContractorClient, ContractorClientContact, ProjectIssueCategory,
+  ProjectAttendanceConfirmation, ProjectAttendanceRow,
+  WorkerDay, WorkerDayEntry, ContractorSubcontractor, SubcontractorWorker,
+  Skill, UserSkill
 } from '../../types';
 import { uploadDocument } from '../../lib/supabase';
 
@@ -175,27 +179,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [savingIncome, setSavingIncome] = useState(false);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
 
-  // Cost modal state
-  const [showCostModal, setShowCostModal] = useState(false);
-  const [editingCostId, setEditingCostId] = useState<string | null>(null);
-  const [costForm, setCostForm] = useState({
-    cost_type: 'direct' as 'direct' | 'labor',
-    document_type: 'faktura',
-    document_number: '',
-    issue_date: '',
-    payment_due_date: '',
-    issuer: '',
-    issuer_nip: '',
-    issuer_address: '',
-    vat_rate: 23,
-    value_netto: 0,
-    value_brutto: 0,
-    category: '',
-    payment_status: 'unpaid',
-  });
-  const [savingCost, setSavingCost] = useState(false);
-  const [scanningCost, setScanningCost] = useState(false);
-
   // File preview state
   const [previewFileIndex, setPreviewFileIndex] = useState<number | null>(null);
 
@@ -203,14 +186,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [addMemberType, setAddMemberType] = useState<ProjectMemberType>('employee');
   const [memberSearch, setMemberSearch] = useState('');
-  const [memberForm, setMemberForm] = useState({
-    user_id: '',
-    role: 'member' as 'manager' | 'member',
-    payment_type: 'hourly' as ProjectMemberPaymentType,
-    hourly_rate: '',
-    position: '',
-    member_status: 'assigned' as ProjectMemberStatus,
-  });
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [isManagerChecked, setIsManagerChecked] = useState(false);
+  const [managerUserIds, setManagerUserIds] = useState<string[]>([]);
+  const [memberPaymentType, setMemberPaymentType] = useState<ProjectMemberPaymentType>('hourly');
+  const [memberHourlyRate, setMemberHourlyRate] = useState('');
+  const [skillFilter, setSkillFilter] = useState('');
+  // Subcontractor state
+  const [subcontractors, setSubcontractors] = useState<ContractorSubcontractor[]>([]);
+  const [subcontractorWorkers, setSubcontractorWorkers] = useState<SubcontractorWorker[]>([]);
+  const [selectedSubcontractorId, setSelectedSubcontractorId] = useState<string | null>(null);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
 
   // Issue modals
   const [showAddIssueModal, setShowAddIssueModal] = useState(false);
@@ -264,6 +250,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [editingTask, setEditingTask] = useState<TaskFormState>({ ...emptyTaskForm });
   const [showMembersDropdown, setShowMembersDropdown] = useState(false);
 
+  // Attendance tracking state
+  const [attendanceRows, setAttendanceRows] = useState<ProjectAttendanceRow[]>([]);
+  const [attendanceConfirmations, setAttendanceConfirmations] = useState<ProjectAttendanceConfirmation[]>([]);
+  const [attendanceDateFrom, setAttendanceDateFrom] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [attendanceDateTo, setAttendanceDateTo] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1, 0);
+    return d.toISOString().split('T')[0];
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+
   useEffect(() => {
     if (currentUser && project) loadProjectData();
   }, [currentUser, project?.id]);
@@ -305,6 +306,254 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load attendance data for project members
+  const loadAttendanceData = async () => {
+    if (!currentUser || members.length === 0) {
+      setAttendanceRows([]);
+      return;
+    }
+    setAttendanceLoading(true);
+    try {
+      const memberUserIds = members.filter(m => m.member_status === 'assigned').map(m => m.user_id);
+      if (memberUserIds.length === 0) {
+        setAttendanceRows([]);
+        setAttendanceLoading(false);
+        return;
+      }
+
+      // Load worker_days for project members in date range
+      const [workerDaysRes, entriesRes, confirmationsRes] = await Promise.all([
+        supabase.from('worker_days').select('*')
+          .in('user_id', memberUserIds)
+          .gte('date', attendanceDateFrom)
+          .lte('date', attendanceDateTo)
+          .in('status', ['present', 'late', 'incomplete']),
+        supabase.from('worker_day_entries').select('*')
+          .in('user_id', memberUserIds)
+          .eq('company_id', currentUser.company_id),
+        safeQuery(supabase.from('project_attendance_confirmations').select('*')
+          .eq('project_id', project.id)
+          .gte('date', attendanceDateFrom)
+          .lte('date', attendanceDateTo)),
+      ]);
+
+      const workerDays: WorkerDay[] = workerDaysRes.data || [];
+      const allEntries: WorkerDayEntry[] = entriesRes.data || [];
+      const confirmations: ProjectAttendanceConfirmation[] = confirmationsRes || [];
+      setAttendanceConfirmations(confirmations);
+
+      // Map worker_day entries to attendance rows
+      const rows: ProjectAttendanceRow[] = [];
+
+      for (const wd of workerDays) {
+        const dayEntries = allEntries.filter(e => e.worker_day_id === wd.id);
+        const user = users.find(u => u.id === wd.user_id);
+        const userName = user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
+        const date = new Date(wd.date);
+        const dayOfWeek = date.getDay();
+        const isSaturday = dayOfWeek === 6;
+        const isSunday = dayOfWeek === 0;
+
+        const confirmation = confirmations.find(c => c.user_id === wd.user_id && c.date === wd.date);
+
+        // Find which task this user was working on for this project on this date
+        const userTaskLogs = timeLogs.filter(tl =>
+          tl.user_id === wd.user_id && tl.date === wd.date &&
+          tasks.some(t => t.id === tl.task_id)
+        );
+
+        const taskNames = userTaskLogs.length > 0
+          ? [...new Set(userTaskLogs.map(tl => tasks.find(t => t.id === tl.task_id)?.title || '-'))].join(', ')
+          : '-';
+
+        // Department from entries or project
+        const entryDept = dayEntries.length > 0 && dayEntries[0].department_id
+          ? departments.find(d => d.id === dayEntries[0].department_id)?.name || '-'
+          : getDepartmentName(project.department_id);
+
+        // Get work start/end from entries
+        let workStart: string | undefined;
+        let workEnd: string | undefined;
+        if (dayEntries.length > 0) {
+          const sorted = [...dayEntries].sort((a, b) =>
+            new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+          );
+          workStart = sorted[0].start_time;
+          const lastEntry = sorted[sorted.length - 1];
+          workEnd = lastEntry.finish_time || undefined;
+        }
+
+        const totalHours = wd.work_time_minutes / 60;
+        const overtimeHours = wd.overtime_minutes / 60;
+
+        rows.push({
+          user_id: wd.user_id,
+          user_name: userName,
+          department_name: entryDept,
+          task_name: taskNames,
+          date: wd.date,
+          work_start: workStart,
+          work_end: workEnd,
+          total_hours: totalHours,
+          overtime_hours: overtimeHours,
+          is_saturday: isSaturday,
+          is_sunday: isSunday,
+          client_confirmed: confirmation?.client_confirmed || false,
+          confirmation_id: confirmation?.id,
+        });
+      }
+
+      // Sort by date then by name
+      rows.sort((a, b) => {
+        const dateComp = a.date.localeCompare(b.date);
+        if (dateComp !== 0) return dateComp;
+        return a.user_name.localeCompare(b.user_name);
+      });
+
+      setAttendanceRows(rows);
+    } catch (err) {
+      console.error('Error loading attendance data:', err);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && members.length > 0 && activeTab === 'timeTracking') {
+      loadAttendanceData();
+    }
+  }, [loading, members, activeTab, attendanceDateFrom, attendanceDateTo]);
+
+  const toggleClientConfirmation = async (row: ProjectAttendanceRow) => {
+    if (!currentUser) return;
+    const newConfirmed = !row.client_confirmed;
+    try {
+      if (row.confirmation_id) {
+        await supabase.from('project_attendance_confirmations')
+          .update({
+            client_confirmed: newConfirmed,
+            confirmed_at: newConfirmed ? new Date().toISOString() : null,
+            confirmed_by: newConfirmed ? currentUser.id : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.confirmation_id);
+      } else {
+        await supabase.from('project_attendance_confirmations').insert({
+          project_id: project.id,
+          company_id: currentUser.company_id,
+          user_id: row.user_id,
+          date: row.date,
+          client_confirmed: newConfirmed,
+          confirmed_at: newConfirmed ? new Date().toISOString() : null,
+          confirmed_by: newConfirmed ? currentUser.id : null,
+        });
+      }
+      // Reload attendance data
+      loadAttendanceData();
+    } catch (err) {
+      console.error('Error toggling confirmation:', err);
+    }
+  };
+
+  const formatTime = (isoStr?: string) => {
+    if (!isoStr) return '-';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '-';
+    }
+  };
+
+  const showOvertimeColumns = project.billing_type === 'hourly' && (
+    project.overtime_paid || project.saturday_paid || project.sunday_paid
+  );
+
+  const exportAttendancePDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+
+    // Header
+    doc.setFontSize(16);
+    doc.text('Lista obecnosci', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Projekt: ${project.name}`, 14, 22);
+    doc.text(`Obiekt: ${getDepartmentName(project.department_id)}`, 14, 28);
+    doc.text(`Okres: ${new Date(attendanceDateFrom).toLocaleDateString('pl-PL')} - ${new Date(attendanceDateTo).toLocaleDateString('pl-PL')}`, 14, 34);
+    doc.text(`Wygenerowano: ${new Date().toLocaleDateString('pl-PL')} ${new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}`, 14, 40);
+
+    // Build header row
+    const headRow: string[] = ['Lp.', 'Imie i nazwisko', 'Obiekt', 'Zadanie', 'Data', 'Rozpoczecie pracy', 'Zakonczenie pracy', 'Ilosc godzin'];
+    if (showOvertimeColumns) {
+      if (project.overtime_paid) headRow.push('Nadgodziny');
+      if (project.saturday_paid) headRow.push('Soboty');
+      if (project.sunday_paid) headRow.push('Niedziele');
+    }
+    headRow.push('Potwierdzenie');
+
+    // Build data rows
+    const bodyRows = attendanceRows.map((row, idx) => {
+      const dataRow: string[] = [
+        String(idx + 1),
+        row.user_name,
+        row.department_name,
+        row.task_name,
+        new Date(row.date).toLocaleDateString('pl-PL'),
+        formatTime(row.work_start),
+        formatTime(row.work_end),
+        row.total_hours.toFixed(1),
+      ];
+      if (showOvertimeColumns) {
+        if (project.overtime_paid) dataRow.push(row.overtime_hours > 0 ? row.overtime_hours.toFixed(1) : '-');
+        if (project.saturday_paid) dataRow.push(row.is_saturday ? row.total_hours.toFixed(1) : '-');
+        if (project.sunday_paid) dataRow.push(row.is_sunday ? row.total_hours.toFixed(1) : '-');
+      }
+      dataRow.push(row.client_confirmed ? 'TAK' : '');
+      return dataRow;
+    });
+
+    // Summary row
+    const totalHours = attendanceRows.reduce((s, r) => s + r.total_hours, 0);
+    const totalOvertime = attendanceRows.reduce((s, r) => s + r.overtime_hours, 0);
+    const totalSaturdayHours = attendanceRows.filter(r => r.is_saturday).reduce((s, r) => s + r.total_hours, 0);
+    const totalSundayHours = attendanceRows.filter(r => r.is_sunday).reduce((s, r) => s + r.total_hours, 0);
+
+    const summaryRow: string[] = ['', 'RAZEM', '', '', '', '', '', totalHours.toFixed(1)];
+    if (showOvertimeColumns) {
+      if (project.overtime_paid) summaryRow.push(totalOvertime.toFixed(1));
+      if (project.saturday_paid) summaryRow.push(totalSaturdayHours.toFixed(1));
+      if (project.sunday_paid) summaryRow.push(totalSundayHours.toFixed(1));
+    }
+    summaryRow.push('');
+    bodyRows.push(summaryRow);
+
+    autoTable(doc, {
+      startY: 46,
+      head: [headRow],
+      body: bodyRows,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      didParseCell: (data: any) => {
+        // Bold the summary row
+        if (data.row.index === bodyRows.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [229, 231, 235];
+        }
+      },
+    });
+
+    // Signature fields
+    const finalY = (doc as any).lastAutoTable?.finalY || 180;
+    const sigY = finalY + 20;
+    doc.setFontSize(9);
+    doc.text('Podpis Zleceniodawcy: ___________________________', 14, sigY);
+    doc.text('Podpis Wykonawcy: ___________________________', 160, sigY);
+    doc.text('Data: _______________', 14, sigY + 10);
+    doc.text('Data: _______________', 160, sigY + 10);
+
+    doc.save(`lista_obecnosci_${project.name.replace(/\s+/g, '_')}_${attendanceDateFrom}_${attendanceDateTo}.pdf`);
   };
 
   const getUserName = (userId?: string) => {
@@ -392,35 +641,66 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   });
 
   // ===== MEMBER HANDLERS =====
-  const openAddMemberModal = (type: ProjectMemberType) => {
+  const { skills: allSkills, userSkills: allUserSkills } = state;
+
+  const openAddMemberModal = async (type: ProjectMemberType) => {
     setAddMemberType(type);
     setMemberSearch('');
-    setMemberForm({
-      user_id: '',
-      role: 'member',
-      payment_type: 'hourly',
-      hourly_rate: '',
-      position: '',
-      member_status: 'assigned',
-    });
+    setSelectedUserIds([]);
+    setIsManagerChecked(false);
+    setManagerUserIds([]);
+    setMemberPaymentType('hourly');
+    setMemberHourlyRate('');
+    setSkillFilter('');
+    setSelectedSubcontractorId(null);
+    setSelectedWorkerIds([]);
+    if (type === 'subcontractor') {
+      const { data } = await supabase.from('contractors_subcontractors').select('*').eq('company_id', currentUser!.company_id).eq('is_archived', false);
+      setSubcontractors(data || []);
+      setSubcontractorWorkers([]);
+    }
     setShowAddMemberModal(true);
   };
 
-  const handleAddMember = async () => {
-    if (!currentUser || !memberForm.user_id) return;
-    const { error } = await supabase.from('project_members').insert({
-      project_id: project.id,
-      user_id: memberForm.user_id,
-      role: memberForm.role,
-      member_type: addMemberType,
-      payment_type: memberForm.payment_type,
-      hourly_rate: memberForm.hourly_rate ? parseFloat(memberForm.hourly_rate) : null,
-      position: memberForm.position || null,
-      member_status: memberForm.member_status,
-    });
-    if (!error) {
-      setShowAddMemberModal(false);
-      loadProjectData();
+  const loadSubcontractorWorkers = async (subId: string) => {
+    setSelectedSubcontractorId(subId);
+    setSelectedWorkerIds([]);
+    const { data } = await supabase.from('subcontractor_workers').select('*').eq('subcontractor_id', subId);
+    setSubcontractorWorkers(data || []);
+  };
+
+  const handleAddMembers = async () => {
+    if (!currentUser) return;
+    if (addMemberType === 'employee') {
+      if (selectedUserIds.length === 0) return;
+      const rows = selectedUserIds.map(uid => ({
+        project_id: project.id,
+        user_id: uid,
+        role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
+        member_type: 'employee' as ProjectMemberType,
+        payment_type: memberPaymentType,
+        hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+        member_status: 'assigned' as ProjectMemberStatus,
+      }));
+      const { error } = await supabase.from('project_members').insert(rows);
+      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
+    } else {
+      if (selectedWorkerIds.length === 0) return;
+      const rows = selectedWorkerIds.map(wid => {
+        const worker = subcontractorWorkers.find(w => w.id === wid);
+        return {
+          project_id: project.id,
+          user_id: wid,
+          role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
+          member_type: 'subcontractor' as ProjectMemberType,
+          payment_type: memberPaymentType,
+          hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+          position: worker?.position || null,
+          member_status: 'assigned' as ProjectMemberStatus,
+        };
+      });
+      const { error } = await supabase.from('project_members').insert(rows);
+      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
     }
   };
 
@@ -435,17 +715,47 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!error) loadProjectData();
   };
 
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUserIds(prev => {
+      const next = prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId];
+      // Clean manager selections
+      setManagerUserIds(m => m.filter(id => next.includes(id)));
+      return next;
+    });
+  };
+
+  const toggleWorkerSelection = (workerId: string) => {
+    setSelectedWorkerIds(prev => {
+      const next = prev.includes(workerId) ? prev.filter(id => id !== workerId) : [...prev, workerId];
+      setManagerUserIds(m => m.filter(id => next.includes(id)));
+      return next;
+    });
+  };
+
+  const skillNames = useMemo(() => {
+    const names = new Set<string>();
+    allSkills.forEach(s => { if (s.is_active !== false && !s.is_archived) names.add(s.name_pl); });
+    return Array.from(names).sort();
+  }, [allSkills]);
+
   const filteredUsersForMember = useMemo(() => {
     const existingUserIds = members.map(m => m.user_id);
     return companyUsers.filter(u => {
       if (existingUserIds.includes(u.id)) return false;
       if (memberSearch) {
         const search = memberSearch.toLowerCase();
-        return `${u.first_name} ${u.last_name}`.toLowerCase().includes(search);
+        if (!`${u.first_name} ${u.last_name}`.toLowerCase().includes(search)) return false;
+      }
+      if (skillFilter) {
+        const skillObj = allSkills.find(s => s.name_pl === skillFilter);
+        if (skillObj) {
+          const hasSkill = allUserSkills.some(us => us.user_id === u.id && us.skill_id === skillObj.id && us.status === 'confirmed');
+          if (!hasSkill) return false;
+        }
       }
       return true;
     });
-  }, [companyUsers, members, memberSearch]);
+  }, [companyUsers, members, memberSearch, skillFilter, allSkills, allUserSkills]);
 
   // ===== ISSUE HANDLERS =====
   const resetIssueForm = () => {
@@ -957,22 +1267,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       const taskData: any = {
         project_id: project.id,
         company_id: currentUser.company_id,
-        title: form.name,
-        description: form.description,
+        name: form.name,
+        description: form.description || null,
         billing_type: form.billing_type,
-        status: 'todo' as TaskStatus_Project,
-        priority: 'medium' as TaskPriority,
-        is_archived: false,
+        status: 'todo',
+        priority: 'medium',
         worker_payment_type: form.worker_payment_type,
         worker_rate_per_unit: form.worker_payment_type === 'akord' ? form.worker_rate_per_unit : null,
-        assigned_users: form.assigned_users,
-        assigned_to: form.assigned_users.length > 0 ? form.assigned_users[0] : null,
+        assigned_users: form.assigned_users.length > 0 ? form.assigned_users : null,
         has_start_deadline: form.has_start_deadline,
-        start_date: form.has_start_deadline ? form.start_date || null : null,
-        start_time: form.has_start_deadline ? form.start_time || null : null,
+        start_date: form.has_start_deadline && form.start_date ? form.start_date : null,
+        start_time: form.has_start_deadline && form.start_time ? form.start_time : null,
         has_end_deadline: form.has_end_deadline,
-        due_date: form.has_end_deadline ? form.end_date || null : null,
-        end_time: form.has_end_deadline ? form.end_time || null : null,
+        end_date: form.has_end_deadline && form.end_date ? form.end_date : null,
+        end_time: form.has_end_deadline && form.end_time ? form.end_time : null,
       };
 
       if (form.billing_type === 'ryczalt') {
@@ -996,7 +1304,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           setSelectedTask(data);
         }
       } else {
-        taskData.created_by = currentUser.id;
         const { data } = await supabase.from('project_tasks').insert(taskData).select().single();
         if (data) setTasks(prev => [data, ...prev]);
         setShowAddTask(false);
@@ -1018,7 +1325,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     setSelectedTask(task);
     setTaskDetailTab('edit');
     setEditingTask({
-      name: task.title,
+      name: (task as any).name || task.title,
       billing_type: task.billing_type,
       hourly_value: task.hourly_value || 0,
       quantity: task.quantity || 0,
@@ -1031,7 +1338,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       start_date: task.start_date || '',
       start_time: task.start_time || '',
       has_end_deadline: task.has_end_deadline || false,
-      end_date: task.due_date || '',
+      end_date: (task as any).end_date || task.due_date || '',
       end_time: task.end_time || '',
       description: task.description || '',
     });
@@ -1063,155 +1370,163 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     e.target.value = '';
   };
 
+  const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
+
   const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => (
-    <div className="space-y-4">
-      {/* Nazwa */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Nazwa zadania</label>
-        <input
-          type="text"
-          value={form.name}
-          onChange={e => setForm({ ...form, name: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Nazwa zadania"
-        />
-      </div>
-
-      {/* Billing type toggle */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Forma wynagrodzenia</label>
-        <div className="flex bg-gray-100 rounded-lg p-0.5 w-fit">
-          <button
-            type="button"
-            onClick={() => setForm({ ...form, billing_type: 'ryczalt' })}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              form.billing_type === 'ryczalt' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Ryczałt
-          </button>
-          <button
-            type="button"
-            onClick={() => setForm({ ...form, billing_type: 'hourly' })}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              form.billing_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Roboczogodziny
-          </button>
-        </div>
-      </div>
-
-      {/* Billing fields */}
-      {form.billing_type === 'hourly' ? (
+    <div className="space-y-3">
+      {/* Row 1: Nazwa + Forma wynagrodzenia */}
+      <div className="grid grid-cols-[1fr,auto] gap-3 items-end">
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Wartość (PLN)</label>
+          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Nazwa zadania</label>
           <input
-            type="number"
-            value={form.hourly_value || ''}
-            onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            type="text"
+            value={form.name}
+            onChange={e => setForm({ ...form, name: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Nazwa zadania"
           />
         </div>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Forma wynagrodzenia</label>
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, billing_type: 'ryczalt' })}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                form.billing_type === 'ryczalt' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Ryczałt
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, billing_type: 'hourly' })}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                form.billing_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Roboczogodziny
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: Billing fields */}
+      {form.billing_type === 'hourly' ? (
+        <div className="w-48">
+          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Ilość godzin</label>
+          <div className="relative">
+            <input
+              type="number"
+              value={form.hourly_value || ''}
+              onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm pr-12 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0"
+            />
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">godz.</span>
+          </div>
+        </div>
       ) : (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-4 gap-2">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Ilość</label>
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Ilość</label>
             <input
               type="number"
               value={form.quantity || ''}
               onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Jed. miary</label>
-            <input
-              type="text"
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Jed. miary</label>
+            <select
               value={form.unit}
               onChange={e => setForm({ ...form, unit: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer"
+            >
+              {UNIT_OPTIONS.map(u => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Cena za 1</label>
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Cena jedn.</label>
             <input
               type="number"
               value={form.price_per_unit || ''}
               onChange={e => setForm({ ...form, price_per_unit: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Wartość</label>
-            <input
-              type="text"
-              readOnly
-              value={`${(form.quantity * form.price_per_unit).toLocaleString('pl-PL')} PLN`}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700"
-            />
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Wartość</label>
+            <div className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-gray-50 text-gray-700 font-medium">
+              {(form.quantity * form.price_per_unit).toLocaleString('pl-PL')} PLN
+            </div>
           </div>
         </div>
       )}
 
-      {/* Worker payment type */}
-      <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Forma wynagrodzenia pracownika</label>
-        <div className="flex bg-gray-100 rounded-lg p-0.5 w-fit">
-          <button
-            type="button"
-            onClick={() => setForm({ ...form, worker_payment_type: 'akord' })}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              form.worker_payment_type === 'akord' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Akord
-          </button>
-          <button
-            type="button"
-            onClick={() => setForm({ ...form, worker_payment_type: 'hourly' })}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              form.worker_payment_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Roboczogodziny
-          </button>
+      {/* Row 3: Worker payment + rate inline */}
+      <div className="grid grid-cols-[auto,1fr] gap-3 items-end">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Forma wynagrodzenia pracownika</label>
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, worker_payment_type: 'akord' })}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                form.worker_payment_type === 'akord' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Akord
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, worker_payment_type: 'hourly' })}
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                form.worker_payment_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Roboczogodziny
+            </button>
+          </div>
         </div>
+        {form.worker_payment_type === 'akord' && (
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Wynagrodzenie pracownika (wartość jedn.)</label>
+            <input
+              type="number"
+              value={form.worker_rate_per_unit || ''}
+              onChange={e => setForm({ ...form, worker_rate_per_unit: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="0.00"
+            />
+          </div>
+        )}
       </div>
 
-      {form.worker_payment_type === 'akord' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Wynagrodzenie pracownika za 1</label>
-          <input
-            type="number"
-            value={form.worker_rate_per_unit || ''}
-            onChange={e => setForm({ ...form, worker_rate_per_unit: parseFloat(e.target.value) || 0 })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-      )}
-
-      {/* Assigned users */}
+      {/* Row 4: Assigned users */}
       <div className="relative">
-        <label className="block text-xs font-medium text-gray-700 mb-1">Pracownicy odpowiedzialni</label>
+        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Pracownicy odpowiedzialni</label>
         <button
           type="button"
           onClick={() => setMembersDropdownOpen(!membersDropdownOpen)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-left bg-white flex items-center justify-between focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-left bg-white flex items-center justify-between focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
         >
-          <span className="text-gray-700">
+          <span className={form.assigned_users.length > 0 ? 'text-gray-700' : 'text-gray-400'}>
             {form.assigned_users.length > 0
               ? form.assigned_users.map(id => getUserName(id)).join(', ')
               : 'Wybierz pracowników'}
           </span>
-          <ChevronDown className="w-4 h-4 text-gray-400" />
+          <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
         </button>
         {membersDropdownOpen && (
-          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
             {members.map(m => (
               <label
                 key={m.user_id}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
               >
                 <input
                   type="checkbox"
@@ -1222,84 +1537,84 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                       : form.assigned_users.filter(id => id !== m.user_id);
                     setForm({ ...form, assigned_users: newUsers });
                   }}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
                 />
                 {getUserName(m.user_id)}
               </label>
             ))}
             {members.length === 0 && (
-              <p className="px-3 py-2 text-sm text-gray-400">Brak pracowników w projekcie</p>
+              <p className="px-2.5 py-1.5 text-sm text-gray-400">Brak pracowników w projekcie</p>
             )}
           </div>
         )}
       </div>
 
-      {/* Deadlines */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Row 5: Deadlines inline */}
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 mb-0.5">
             <input
               type="checkbox"
               checked={form.has_start_deadline}
               onChange={e => setForm({ ...form, has_start_deadline: e.target.checked })}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
             />
             Termin rozpoczęcia
           </label>
           {form.has_start_deadline && (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <input
                 type="date"
                 value={form.start_date}
                 onChange={e => setForm({ ...form, start_date: e.target.value })}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
               <input
                 type="time"
                 value={form.start_time}
                 onChange={e => setForm({ ...form, start_time: e.target.value })}
-                className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           )}
         </div>
         <div>
-          <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 mb-0.5">
             <input
               type="checkbox"
               checked={form.has_end_deadline}
               onChange={e => setForm({ ...form, has_end_deadline: e.target.checked })}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
             />
             Termin zakończenia
           </label>
           {form.has_end_deadline && (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <input
                 type="date"
                 value={form.end_date}
                 onChange={e => setForm({ ...form, end_date: e.target.value })}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
               <input
                 type="time"
                 value={form.end_time}
                 onChange={e => setForm({ ...form, end_time: e.target.value })}
-                className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           )}
         </div>
       </div>
 
-      {/* Description */}
+      {/* Row 6: Description */}
       <div>
-        <label className="block text-xs font-medium text-gray-700 mb-1">Opis zadania</label>
+        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Opis zadania</label>
         <textarea
           value={form.description}
           onChange={e => setForm({ ...form, description: e.target.value })}
-          rows={3}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+          rows={2}
+          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
           placeholder="Opis zadania..."
         />
       </div>
@@ -1343,12 +1658,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                   onClick={() => openTaskDetail(task)}
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{task.title}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{(task as any).name || task.title}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {task.due_date ? new Date(task.due_date).toLocaleDateString('pl-PL') : '-'}
+                    {((task as any).end_date || task.due_date) ? new Date((task as any).end_date || task.due_date!).toLocaleDateString('pl-PL') : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                     {task.total_value ? `${task.total_value.toLocaleString('pl-PL')} PLN` :
@@ -1364,26 +1679,26 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {/* Add Task Modal */}
       {showAddTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowAddTask(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Dodaj zadanie</h2>
-              <button onClick={() => setShowAddTask(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
-                <X className="w-5 h-5" />
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Dodaj zadanie</h2>
+              <button onClick={() => setShowAddTask(false)} className="p-0.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-6">
+            <div className="px-5 py-4">
               {renderTaskFormFields(taskForm, setTaskForm, addTaskMembersDropdown, setAddTaskMembersDropdown)}
             </div>
-            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
-              <button onClick={() => setShowAddTask(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100">
+              <button onClick={() => setShowAddTask(false)} className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
                 Anuluj
               </button>
               <button
                 onClick={() => handleSaveTask(false)}
                 disabled={savingTask || !taskForm.name.trim()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {savingTask && <Loader2 className="w-4 h-4 animate-spin" />}
+                {savingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Dodaj
               </button>
             </div>
@@ -1394,16 +1709,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {/* Task Detail Modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">{selectedTask.title}</h2>
-              <button onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
-                <X className="w-5 h-5" />
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
+              <button onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }} className="p-0.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Detail tabs */}
-            <div className="border-b border-gray-200 px-6">
+            <div className="border-b border-gray-200 px-5">
               <div className="flex gap-0">
                 {[
                   { key: 'edit' as const, label: 'Edytuj' },
@@ -1413,7 +1728,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <button
                     key={t.key}
                     onClick={() => setTaskDetailTab(t.key)}
-                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                       taskDetailTab === t.key
                         ? 'border-blue-600 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -1425,17 +1740,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="px-5 py-4">
               {taskDetailTab === 'edit' && (
                 <>
                   {renderTaskFormFields(editingTask, setEditingTask, editTaskMembersDropdown, setEditTaskMembersDropdown)}
-                  <div className="flex justify-end mt-4">
+                  <div className="flex justify-end mt-3">
                     <button
                       onClick={() => handleSaveTask(true)}
                       disabled={savingTask || !editingTask.name.trim()}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50"
                     >
-                      {savingTask && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {savingTask && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       Zapisz zmiany
                     </button>
                   </div>
@@ -1990,134 +2305,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     }
   };
 
-  // Cost modal helpers
-  const openCreateCostModal = () => {
-    setEditingCostId(null);
-    setCostForm({
-      cost_type: 'direct',
-      document_type: 'faktura',
-      document_number: '',
-      issue_date: new Date().toISOString().split('T')[0],
-      payment_due_date: '',
-      issuer: '',
-      issuer_nip: '',
-      issuer_address: '',
-      vat_rate: 23,
-      value_netto: 0,
-      value_brutto: 0,
-      category: '',
-      payment_status: 'unpaid',
-    });
-    setShowCostModal(true);
-  };
-
-  const openEditCostModal = (c: ProjectCost) => {
-    setEditingCostId(c.id);
-    setCostForm({
-      cost_type: c.cost_type,
-      document_type: c.document_type || 'faktura',
-      document_number: c.document_number || '',
-      issue_date: c.issue_date ? c.issue_date.split('T')[0] : '',
-      payment_due_date: c.payment_due_date ? c.payment_due_date.split('T')[0] : '',
-      issuer: c.issuer || '',
-      issuer_nip: c.issuer_nip || '',
-      issuer_address: c.issuer_address || '',
-      vat_rate: c.vat_rate || 23,
-      value_netto: c.value_netto,
-      value_brutto: c.value_brutto || 0,
-      category: c.category || '',
-      payment_status: c.payment_status || 'unpaid',
-    });
-    setShowCostModal(true);
-  };
-
-  const handleCostVatChange = (netto: number, vat: number) => {
-    const brutto = Math.round(netto * (1 + vat / 100) * 100) / 100;
-    setCostForm(f => ({ ...f, value_netto: netto, vat_rate: vat, value_brutto: brutto }));
-  };
-
-  const handleScanCostDocument = async (file: File) => {
-    setScanningCost(true);
-    try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(',')[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const { data, error } = await supabase.functions.invoke('parse-cost-document', {
-        body: { fileBase64: base64, mimeType: file.type },
-      });
-
-      if (error) throw error;
-      if (data?.data) {
-        const d = data.data;
-        const netto = d.value_netto || 0;
-        const vat = d.vat_rate || 23;
-        const brutto = d.value_brutto || Math.round(netto * (1 + vat / 100) * 100) / 100;
-        setCostForm(f => ({
-          ...f,
-          issuer: d.issuer || f.issuer,
-          issuer_nip: d.issuer_nip || f.issuer_nip,
-          issuer_address: d.issuer_address || f.issuer_address,
-          document_number: d.document_number || f.document_number,
-          issue_date: d.issue_date || f.issue_date,
-          payment_due_date: d.payment_due_date || f.payment_due_date,
-          value_netto: netto,
-          vat_rate: vat,
-          value_brutto: brutto,
-          category: d.category || f.category,
-        }));
-      }
-    } catch (err) {
-      console.error('Error scanning cost document:', err);
-    } finally {
-      setScanningCost(false);
-    }
-  };
-
-  const saveCost = async () => {
-    if (!currentUser) return;
-    setSavingCost(true);
-    try {
-      const payload: any = {
-        project_id: project.id,
-        company_id: currentUser.company_id,
-        cost_type: costForm.cost_type,
-        document_type: costForm.document_type,
-        document_number: costForm.document_number,
-        issue_date: costForm.issue_date || null,
-        payment_due_date: costForm.payment_due_date || null,
-        issuer: costForm.issuer,
-        issuer_nip: costForm.issuer_nip || null,
-        issuer_address: costForm.issuer_address || null,
-        vat_rate: costForm.vat_rate || null,
-        value_netto: costForm.value_netto,
-        value_brutto: costForm.value_brutto || null,
-        category: costForm.category || null,
-        payment_status: costForm.payment_status,
-      };
-      if (editingCostId) {
-        const { error } = await supabase.from('project_costs').update(payload).eq('id', editingCostId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('project_costs').insert(payload);
-        if (error) throw error;
-      }
-      setShowCostModal(false);
-      setEditingCostId(null);
-      loadProjectData();
-    } catch (err) {
-      console.error('Error saving cost:', err);
-    } finally {
-      setSavingCost(false);
-    }
-  };
-
   const renderIncome = () => (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -2174,110 +2361,1011 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     </div>
   );
 
-  const renderCosts = () => (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-500 uppercase font-medium">Koszty bezpośrednie netto</p>
-            <p className="text-lg font-bold text-gray-900 mt-1">{totalDirectCosts.toLocaleString('pl-PL')} PLN</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-500 uppercase font-medium">Koszty robocizny netto</p>
-            <p className="text-lg font-bold text-gray-900 mt-1">{totalLaborCosts.toLocaleString('pl-PL')} PLN</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-500 uppercase font-medium">Razem netto</p>
-            <p className="text-lg font-bold text-gray-900 mt-1">{totalCosts.toLocaleString('pl-PL')} PLN</p>
+  // ─── Costs Tab State ───
+  const [costSubTab, setCostSubTab] = useState<'direct' | 'labor'>('direct');
+  const [costMonth, setCostMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [showCostMethodModal, setShowCostMethodModal] = useState(false);
+  const [showCostFormModal, setShowCostFormModal] = useState(false);
+  const [isScanningDocument, setIsScanningDocument] = useState(false);
+  const costFileInputRef = useRef<HTMLInputElement>(null);
+  const [costFormData, setCostFormData] = useState({
+    document_type: '',
+    document_number: '',
+    issue_date: '',
+    payment_due_date: '',
+    issuer: '',
+    issuer_nip: '',
+    issuer_address: '',
+    value_netto: '',
+    vat_rate: '23',
+    value_brutto: '',
+    category: '',
+    payment_status: 'Nieopłacone',
+  });
+  const [editingCostId, setEditingCostId] = useState<string | null>(null);
+  const [savingCost, setSavingCost] = useState(false);
+
+  // Payment status options with ability to add custom ones
+  const DEFAULT_PAYMENT_STATUSES = ['Nieopłacone', 'Opłacone', 'Częściowo opłacone', 'Przeterminowane'];
+  const [customPaymentStatuses, setCustomPaymentStatuses] = useState<string[]>([]);
+  const [showAddStatusInput, setShowAddStatusInput] = useState(false);
+  const [newStatusValue, setNewStatusValue] = useState('');
+  const allPaymentStatuses = [...DEFAULT_PAYMENT_STATUSES, ...customPaymentStatuses];
+
+  const COST_CATEGORIES = ['Materiały', 'Usługi', 'Transport', 'Narzędzia', 'Wynajem', 'Podwykonawcy', 'Inne'];
+  const DOCUMENT_TYPES = ['Faktura VAT', 'Rachunek', 'Paragon', 'Nota księgowa', 'Umowa', 'Inne'];
+
+  const resetCostForm = () => {
+    setCostFormData({
+      document_type: '',
+      document_number: '',
+      issue_date: '',
+      payment_due_date: '',
+      issuer: '',
+      issuer_nip: '',
+      issuer_address: '',
+      value_netto: '',
+      vat_rate: '23',
+      value_brutto: '',
+      category: '',
+      payment_status: 'Nieopłacone',
+    });
+    setEditingCostId(null);
+  };
+
+  const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanningDocument(true);
+    setShowCostMethodModal(false);
+
+    try {
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.readAsDataURL(file);
+      });
+      const base64Data = await base64Promise;
+
+      const { data, error } = await supabase.functions.invoke('parse-cost-document', {
+        body: {
+          fileBase64: base64Data,
+          mimeType: file.type || 'application/pdf',
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to parse document');
+
+      const result = data.data;
+      const netto = result.value_netto || 0;
+      const vat = result.vat_rate || 23;
+      const brutto = result.value_brutto || Math.round(netto * (1 + vat / 100) * 100) / 100;
+      setCostFormData({
+        document_type: result.document_type || '',
+        document_number: result.document_number || '',
+        issue_date: result.issue_date || '',
+        payment_due_date: result.payment_due_date || '',
+        issuer: result.issuer || '',
+        issuer_nip: result.issuer_nip || '',
+        issuer_address: result.issuer_address || '',
+        value_netto: netto ? String(netto) : '',
+        vat_rate: String(vat),
+        value_brutto: brutto ? String(brutto) : '',
+        category: result.category || '',
+        payment_status: 'Nieopłacone',
+      });
+      setShowCostFormModal(true);
+    } catch (err) {
+      console.error('Document scan error:', err);
+      setCostFormData(prev => ({ ...prev }));
+      setShowCostFormModal(true);
+    } finally {
+      setIsScanningDocument(false);
+      if (costFileInputRef.current) costFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveCost = async () => {
+    if (!currentUser || !costFormData.document_number || !costFormData.value_netto) return;
+    setSavingCost(true);
+    try {
+      const payload = {
+        project_id: project.id,
+        company_id: currentUser.company_id,
+        cost_type: 'direct' as const,
+        document_type: costFormData.document_type || null,
+        document_number: costFormData.document_number,
+        issue_date: costFormData.issue_date || null,
+        payment_due_date: costFormData.payment_due_date || null,
+        issuer: costFormData.issuer || null,
+        issuer_nip: costFormData.issuer_nip || null,
+        issuer_address: costFormData.issuer_address || null,
+        value_netto: parseFloat(costFormData.value_netto) || 0,
+        vat_rate: parseFloat(costFormData.vat_rate) || null,
+        value_brutto: parseFloat(costFormData.value_brutto) || null,
+        category: costFormData.category || null,
+        payment_status: costFormData.payment_status || 'Nieopłacone',
+      };
+
+      if (editingCostId) {
+        const { error } = await supabase.from('project_costs').update(payload).eq('id', editingCostId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('project_costs').insert(payload);
+        if (error) throw error;
+      }
+
+      await loadProjectData();
+      setShowCostFormModal(false);
+      resetCostForm();
+    } catch (err) {
+      console.error('Error saving cost:', err);
+    } finally {
+      setSavingCost(false);
+    }
+  };
+
+  const handleDeleteCost = async (costId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten koszt?')) return;
+    try {
+      const { error } = await supabase.from('project_costs').delete().eq('id', costId);
+      if (error) throw error;
+      await loadProjectData();
+    } catch (err) {
+      console.error('Error deleting cost:', err);
+    }
+  };
+
+  const handleEditCost = (cost: ProjectCost) => {
+    setCostFormData({
+      document_type: cost.document_type || '',
+      document_number: cost.document_number || '',
+      issue_date: cost.issue_date || '',
+      payment_due_date: cost.payment_due_date || '',
+      issuer: cost.issuer || '',
+      issuer_nip: cost.issuer_nip || '',
+      issuer_address: cost.issuer_address || '',
+      value_netto: String(cost.value_netto || 0),
+      vat_rate: String(cost.vat_rate || 23),
+      value_brutto: String(cost.value_brutto || 0),
+      category: cost.category || '',
+      payment_status: cost.payment_status || 'Nieopłacone',
+    });
+    setEditingCostId(cost.id);
+    setShowCostFormModal(true);
+  };
+
+  const addCustomPaymentStatus = () => {
+    const trimmed = newStatusValue.trim();
+    if (trimmed && !allPaymentStatuses.includes(trimmed)) {
+      setCustomPaymentStatuses(prev => [...prev, trimmed]);
+      setCostFormData(prev => ({ ...prev, payment_status: trimmed }));
+    }
+    setNewStatusValue('');
+    setShowAddStatusInput(false);
+  };
+
+  // Month navigation helpers
+  const navigateMonth = (dir: number) => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setCostMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  const monthLabel = (() => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const months = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+    return `${months[m - 1]} ${y}`;
+  })();
+
+  // Filter direct costs by selected month
+  const filteredDirectCosts = costs.filter(c => {
+    if (c.cost_type !== 'direct') return false;
+    if (!c.issue_date) return false;
+    const d = new Date(c.issue_date);
+    const [y, m] = costMonth.split('-').map(Number);
+    return d.getFullYear() === y && d.getMonth() + 1 === m;
+  });
+
+  const filteredDirectCostsTotal = filteredDirectCosts.reduce((s, c) => s + (c.value_netto || 0), 0);
+
+  // Labor costs calculations
+  const laborCostsForMonth = useMemo(() => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+
+    // Get project member IDs and their payment types/rates
+    const memberMap = new Map<string, { payment_type: string; hourly_rate: number }>();
+    members.forEach(mem => {
+      memberMap.set(mem.user_id, {
+        payment_type: mem.payment_type || 'hourly',
+        hourly_rate: mem.hourly_rate || 0,
+      });
+    });
+
+    const memberUserIds = Array.from(memberMap.keys());
+
+    // Filter time logs for this project's tasks in the selected month
+    const projectTaskIds = tasks.map(t => t.id);
+    const monthTimeLogs = timeLogs.filter(tl => {
+      if (!projectTaskIds.includes(tl.task_id)) return false;
+      if (!memberUserIds.includes(tl.user_id)) return false;
+      return tl.date >= monthStart && tl.date <= monthEnd;
+    });
+
+    // Split by payment type
+    let hourlyMinutes = 0;
+    let hourlyValue = 0;
+    let akordMinutes = 0;
+    let akordValue = 0;
+
+    monthTimeLogs.forEach(tl => {
+      const memInfo = memberMap.get(tl.user_id);
+      if (!memInfo) return;
+      const hours = (tl.minutes || 0) / 60;
+
+      if (memInfo.payment_type === 'akord') {
+        akordMinutes += tl.minutes || 0;
+        // For akord, get value from task definition
+        const task = tasks.find(t => t.id === tl.task_id);
+        if (task && task.worker_payment_type === 'akord' && task.worker_rate_per_unit) {
+          akordValue += hours * (task.worker_rate_per_unit || 0);
+        } else {
+          akordValue += hours * memInfo.hourly_rate;
+        }
+      } else {
+        hourlyMinutes += tl.minutes || 0;
+        hourlyValue += hours * memInfo.hourly_rate;
+      }
+    });
+
+    return { hourlyMinutes, hourlyValue, akordMinutes, akordValue };
+  }, [costMonth, members, tasks, timeLogs]);
+
+  // ─── Cost Method Modal (Scan vs Manual) ───
+  const renderCostMethodModal = () => {
+    if (!showCostMethodModal && !isScanningDocument) return null;
+
+    if (isScanningDocument) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-4">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            <p className="text-sm font-medium text-gray-700">Skanowanie dokumentu...</p>
+            <p className="text-xs text-gray-400">AI analizuje dane z dokumentu</p>
           </div>
         </div>
-      </div>
-      <div className="flex justify-end">
-        <button onClick={openCreateCostModal} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
-          <Plus className="w-4 h-4" /> Dodaj koszt
-        </button>
-      </div>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {costs.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Brak kosztów</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Dokument</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wystawca</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">NIP</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Netto</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">VAT</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Brutto</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {costs.map(c => (
-                <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => openEditCostModal(c)}>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                      c.cost_type === 'direct' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {c.cost_type === 'direct' ? 'Bezpośredni' : 'Robocizna'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{c.document_number || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.issuer || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.issuer_nip || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.category || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
-                  <td className="px-4 py-3 text-sm text-gray-600 text-right">{c.vat_rate != null ? `${c.vat_rate}%` : '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{c.value_brutto ? `${c.value_brutto.toLocaleString('pl-PL')} PLN` : '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+      );
+    }
 
-  const renderTimeTracking = () => {
-    const projectTaskIds = tasks.map(t => t.id);
-    const projectTimeLogs = timeLogs.filter(tl => projectTaskIds.includes(tl.task_id));
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {projectTimeLogs.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Brak wpisów ewidencji czasu</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pracownik</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Czas (min)</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Opis</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectTimeLogs.map(tl => (
-                <tr key={tl.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{getUserName(tl.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{tasks.find(t => t.id === tl.task_id)?.title || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{new Date(tl.date).toLocaleDateString('pl-PL')}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{tl.minutes}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{tl.description || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowCostMethodModal(false)} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">Dodaj koszt</h2>
+            <button onClick={() => setShowCostMethodModal(false)} className="p-1 rounded hover:bg-gray-100">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-gray-500">Wybierz sposób dodania kosztu:</p>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => costFileInputRef.current?.click()}
+                className="flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <ScanLine className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Skanuj dokument</p>
+                  <p className="text-xs text-gray-500">AI wyciągnie dane z faktury/rachunku (OCR)</p>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setShowCostMethodModal(false);
+                  resetCostForm();
+                  setShowCostFormModal(true);
+                }}
+                className="flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <FileInput className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Wprowadź ręcznie</p>
+                  <p className="text-xs text-gray-500">Wypełnij formularz samodzielnie</p>
+                </div>
+              </button>
+            </div>
+          </div>
+          <input
+            ref={costFileInputRef}
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleScanDocument}
+          />
+        </div>
       </div>
     );
   };
 
-  const renderMembers = () => (
+  // ─── Cost Form Modal ───
+  const renderCostFormModal = () => {
+    if (!showCostFormModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => { setShowCostFormModal(false); resetCostForm(); }} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">
+              {editingCostId ? 'Edytuj koszt' : 'Nowy koszt bezpośredni'}
+            </h2>
+            <button onClick={() => { setShowCostFormModal(false); resetCostForm(); }} className="p-1 rounded hover:bg-gray-100">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            {/* Document type */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Typ dokumentu</label>
+              <select
+                value={costFormData.document_type}
+                onChange={e => setCostFormData(prev => ({ ...prev, document_type: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Wybierz typ...</option>
+                {DOCUMENT_TYPES.map(dt => (
+                  <option key={dt} value={dt}>{dt}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Document number */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nr dokumentu *</label>
+              <input
+                type="text"
+                value={costFormData.document_number}
+                onChange={e => setCostFormData(prev => ({ ...prev, document_number: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="np. FV/2026/01/001"
+              />
+            </div>
+
+            {/* Dates row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data wystawienia</label>
+                <input
+                  type="date"
+                  value={costFormData.issue_date}
+                  onChange={e => setCostFormData(prev => ({ ...prev, issue_date: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Termin płatności</label>
+                <input
+                  type="date"
+                  value={costFormData.payment_due_date}
+                  onChange={e => setCostFormData(prev => ({ ...prev, payment_due_date: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Issuer */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Wystawca dokumentu</label>
+              <input
+                type="text"
+                value={costFormData.issuer}
+                onChange={e => setCostFormData(prev => ({ ...prev, issuer: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Nazwa firmy lub osoby"
+              />
+            </div>
+
+            {/* Issuer NIP */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">NIP wystawcy</label>
+              <input
+                type="text"
+                value={costFormData.issuer_nip || ''}
+                onChange={e => setCostFormData(prev => ({ ...prev, issuer_nip: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="0000000000"
+              />
+            </div>
+
+            {/* Issuer address */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Adres wystawcy</label>
+              <input
+                type="text"
+                value={costFormData.issuer_address || ''}
+                onChange={e => setCostFormData(prev => ({ ...prev, issuer_address: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="ul. Przykładowa 1, 00-000 Warszawa"
+              />
+            </div>
+
+            {/* Netto + VAT + Brutto */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Wartość netto (PLN) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={costFormData.value_netto}
+                  onChange={e => {
+                    const netto = Number(e.target.value);
+                    const vat = Number(costFormData.vat_rate) || 23;
+                    const brutto = Math.round(netto * (1 + vat / 100) * 100) / 100;
+                    setCostFormData(prev => ({ ...prev, value_netto: e.target.value, value_brutto: String(brutto) }));
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Stawka VAT</label>
+                <select
+                  value={costFormData.vat_rate || '23'}
+                  onChange={e => {
+                    const vat = Number(e.target.value);
+                    const netto = Number(costFormData.value_netto) || 0;
+                    const brutto = Math.round(netto * (1 + vat / 100) * 100) / 100;
+                    setCostFormData(prev => ({ ...prev, vat_rate: e.target.value, value_brutto: String(brutto) }));
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="0">0%</option>
+                  <option value="5">5%</option>
+                  <option value="8">8%</option>
+                  <option value="23">23%</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Wartość brutto</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={costFormData.value_brutto || ''}
+                  readOnly
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
+                />
+              </div>
+            </div>
+
+            {/* Category */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Kategoria</label>
+              <select
+                value={costFormData.category}
+                onChange={e => setCostFormData(prev => ({ ...prev, category: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Wybierz kategorię...</option>
+                {COST_CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Payment status with add-new */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Status opłaty</label>
+              <div className="flex gap-2">
+                <select
+                  value={costFormData.payment_status}
+                  onChange={e => setCostFormData(prev => ({ ...prev, payment_status: e.target.value }))}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {allPaymentStatuses.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStatusInput(!showAddStatusInput)}
+                  className="px-2 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                  title="Dodaj nowy status"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              {showAddStatusInput && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    value={newStatusValue}
+                    onChange={e => setNewStatusValue(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addCustomPaymentStatus()}
+                    placeholder="Nazwa nowego statusu"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={addCustomPaymentStatus}
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Dodaj
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-5 py-3 border-t border-gray-200">
+            <button
+              onClick={() => { setShowCostFormModal(false); resetCostForm(); }}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveCost}
+              disabled={savingCost || !costFormData.document_number || !costFormData.value_netto}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {savingCost && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editingCostId ? 'Zapisz zmiany' : 'Dodaj koszt'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCosts = () => (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase font-medium">Koszty bezpośrednie netto</p>
+          <p className="text-lg font-bold text-gray-900 mt-1">{totalDirectCosts.toLocaleString('pl-PL')} PLN</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase font-medium">Koszty robocizny netto</p>
+          <p className="text-lg font-bold text-gray-900 mt-1">{totalLaborCosts.toLocaleString('pl-PL')} PLN</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase font-medium">Razem netto</p>
+          <p className="text-lg font-bold text-gray-900 mt-1">{totalCosts.toLocaleString('pl-PL')} PLN</p>
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-0 border-b border-gray-200">
+        <button
+          onClick={() => setCostSubTab('direct')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            costSubTab === 'direct'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          Koszty bezpośrednie
+        </button>
+        <button
+          onClick={() => setCostSubTab('labor')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            costSubTab === 'labor'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          Koszty robocizny
+        </button>
+      </div>
+
+      {/* Direct Costs Sub-tab */}
+      {costSubTab === 'direct' && (
+        <div className="space-y-4">
+          {/* Header: month selector + add button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">{monthLabel}</span>
+              <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">
+                Suma: <span className="font-semibold text-gray-900">{filteredDirectCostsTotal.toLocaleString('pl-PL')} PLN</span>
+              </span>
+              <button
+                onClick={() => setShowCostMethodModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj koszt
+              </button>
+            </div>
+          </div>
+
+          {/* Direct costs list */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            {filteredDirectCosts.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Brak kosztów bezpośrednich w wybranym miesiącu</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nr dokumentu</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data wystawienia</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin płatności</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wystawca</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">NIP</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Netto</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">VAT</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Brutto</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status opłaty</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDirectCosts.map(c => (
+                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.document_number || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.payment_due_date ? new Date(c.payment_due_date).toLocaleDateString('pl-PL') : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.issuer || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.issuer_nip || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 text-right">{c.vat_rate != null ? `${c.vat_rate}%` : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right">{c.value_brutto ? `${c.value_brutto.toLocaleString('pl-PL')} PLN` : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.category || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          c.payment_status === 'Opłacone' || c.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                          c.payment_status === 'Przeterminowane' ? 'bg-red-100 text-red-700' :
+                          c.payment_status === 'Częściowo opłacone' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {c.payment_status || 'Nieopłacone'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEditCost(c)}
+                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                            title="Edytuj"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCost(c.id)}
+                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
+                            title="Usuń"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Labor Costs Sub-tab */}
+      {costSubTab === 'labor' && (
+        <div className="space-y-4">
+          {/* Month selector */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">{monthLabel}</span>
+            <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Labor costs summary */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ wynagrodzenia</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ilość roboczogodzin</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość (PLN)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Godzinowe</span>
+                      <span className="text-sm text-gray-700">Wynagrodzenie roboczogodzinowe</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                    {(laborCostsForMonth.hourlyMinutes / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {laborCostsForMonth.hourlyValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Akord</span>
+                      <span className="text-sm text-gray-700">Wynagrodzenie akordowe</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                    {(laborCostsForMonth.akordMinutes / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {laborCostsForMonth.akordValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+                <tr className="bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-700">Razem</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {((laborCostsForMonth.hourlyMinutes + laborCostsForMonth.akordMinutes) / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {(laborCostsForMonth.hourlyValue + laborCostsForMonth.akordValue).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Info note */}
+          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-700">
+              Koszty robocizny są obliczane automatycznie na podstawie zalogowanych godzin pracy i stawek przypisanych pracownikom w projekcie.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      {renderCostMethodModal()}
+      {renderCostFormModal()}
+    </div>
+  );
+
+  const renderTimeTracking = () => {
+    const totalHours = attendanceRows.reduce((s, r) => s + r.total_hours, 0);
+    const totalOvertime = attendanceRows.reduce((s, r) => s + r.overtime_hours, 0);
+    const totalSaturdayHours = attendanceRows.filter(r => r.is_saturday).reduce((s, r) => s + r.total_hours, 0);
+    const totalSundayHours = attendanceRows.filter(r => r.is_sunday).reduce((s, r) => s + r.total_hours, 0);
+    const confirmedCount = attendanceRows.filter(r => r.client_confirmed).length;
+
+    return (
+      <div className="space-y-4">
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 uppercase font-medium">Razem godzin</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{totalHours.toFixed(1)} godz.</p>
+          </div>
+          {showOvertimeColumns && project.overtime_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Nadgodziny</p>
+              <p className="text-xl font-bold text-orange-600 mt-1">{totalOvertime.toFixed(1)} godz.</p>
+            </div>
+          )}
+          {showOvertimeColumns && project.saturday_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Soboty</p>
+              <p className="text-xl font-bold text-blue-600 mt-1">{totalSaturdayHours.toFixed(1)} godz.</p>
+            </div>
+          )}
+          {showOvertimeColumns && project.sunday_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Niedziele</p>
+              <p className="text-xl font-bold text-purple-600 mt-1">{totalSundayHours.toFixed(1)} godz.</p>
+            </div>
+          )}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 uppercase font-medium">Potwierdzone</p>
+            <p className="text-xl font-bold text-green-600 mt-1">{confirmedCount} / {attendanceRows.length}</p>
+          </div>
+        </div>
+
+        {/* Filters and actions bar */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-600">Od:</label>
+              <input
+                type="date"
+                value={attendanceDateFrom}
+                onChange={e => setAttendanceDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-600">Do:</label>
+              <input
+                type="date"
+                value={attendanceDateTo}
+                onChange={e => setAttendanceDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={exportAttendancePDF}
+              disabled={attendanceRows.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <FileDown className="w-4 h-4" />
+              Pobierz PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Attendance table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          {attendanceLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+              <span className="ml-2 text-sm text-gray-500">Wczytywanie listy obecności...</span>
+            </div>
+          ) : attendanceRows.length === 0 ? (
+            <div className="text-center py-12">
+              <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-400">Brak wpisów obecności w wybranym okresie</p>
+              <p className="text-xs text-gray-300 mt-1">Lista wypełnia się automatycznie na podstawie ewidencji pracowników przypisanych do projektu</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-8">Lp.</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Imię i nazwisko</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Obiekt</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rozpoczęcie pracy</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zakończenie pracy</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ilość godzin</th>
+                  {showOvertimeColumns && project.overtime_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nadgodziny</th>
+                  )}
+                  {showOvertimeColumns && project.saturday_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Soboty</th>
+                  )}
+                  {showOvertimeColumns && project.sunday_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Niedziele</th>
+                  )}
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Potwierdzenie Zleceniodawcy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceRows.map((row, idx) => (
+                  <tr
+                    key={`${row.user_id}-${row.date}`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${
+                      row.is_saturday ? 'bg-blue-50/30' : row.is_sunday ? 'bg-purple-50/30' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.user_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{row.department_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={row.task_name}>{row.task_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {new Date(row.date).toLocaleDateString('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatTime(row.work_start)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatTime(row.work_end)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{row.total_hours.toFixed(1)}</td>
+                    {showOvertimeColumns && project.overtime_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.overtime_hours > 0 ? (
+                          <span className="text-orange-600">{row.overtime_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    {showOvertimeColumns && project.saturday_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.is_saturday ? (
+                          <span className="text-blue-600">{row.total_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    {showOvertimeColumns && project.sunday_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.is_sunday ? (
+                          <span className="text-purple-600">{row.total_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleClientConfirmation(row)}
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-lg border transition-colors ${
+                          row.client_confirmed
+                            ? 'bg-green-100 border-green-300 text-green-600 hover:bg-green-200'
+                            : 'bg-white border-gray-300 text-gray-300 hover:border-gray-400 hover:text-gray-400'
+                        }`}
+                        title={row.client_confirmed ? 'Potwierdzone przez zleceniodawcę' : 'Kliknij aby potwierdzić'}
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 border-t-2 border-gray-300">
+                  <td className="px-4 py-3 text-sm font-bold text-gray-700" colSpan={7}>RAZEM</td>
+                  <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right">{totalHours.toFixed(1)}</td>
+                  {showOvertimeColumns && project.overtime_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-orange-600 text-right">{totalOvertime.toFixed(1)}</td>
+                  )}
+                  {showOvertimeColumns && project.saturday_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-blue-600 text-right">{totalSaturdayHours.toFixed(1)}</td>
+                  )}
+                  {showOvertimeColumns && project.sunday_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-purple-600 text-right">{totalSundayHours.toFixed(1)}</td>
+                  )}
+                  <td className="px-4 py-3 text-sm font-bold text-green-600 text-center">{confirmedCount} / {attendanceRows.length}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMembers = () => {
+    const currentSelectedItems = addMemberType === 'employee' ? selectedUserIds : selectedWorkerIds;
+    const getSelectedName = (id: string) => {
+      if (addMemberType === 'employee') {
+        const u = companyUsers.find(u => u.id === id);
+        return u ? `${u.first_name} ${u.last_name}` : id;
+      } else {
+        const w = subcontractorWorkers.find(w => w.id === id);
+        return w ? `${w.first_name} ${w.last_name}` : id;
+      }
+    };
+
+    return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <button onClick={() => openAddMemberModal('employee')} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
@@ -2303,10 +3391,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {members.map(m => (
+              {members.map(m => {
+                const user = users.find(u => u.id === m.user_id);
+                return (
                 <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{getUserName(m.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{m.position || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{user?.target_position || m.position || '-'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${m.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                       {m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
@@ -2332,80 +3422,199 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Add Member Modal */}
       {showAddMemberModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">{addMemberType === 'employee' ? 'Dodaj pracownika' : 'Dodaj podwykonawcę'}</h3>
               <button onClick={() => setShowAddMemberModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Wyszukaj pracownika</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj po imieniu lub nazwisku..."
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+
+              {/* --- EMPLOYEE MODE --- */}
+              {addMemberType === 'employee' && (<>
+                {/* Search + Skill filter */}
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj po imieniu lub nazwisku..."
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                  </div>
+                  <select value={skillFilter} onChange={e => setSkillFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 max-w-[180px]">
+                    <option value="">Wszystkie umiejętności</option>
+                    {skillNames.map(sn => <option key={sn} value={sn}>{sn}</option>)}
+                  </select>
                 </div>
-              </div>
-              <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
-                {filteredUsersForMember.length === 0 ? (
-                  <p className="text-sm text-gray-400 p-3 text-center">Brak dostępnych pracowników</p>
-                ) : (
-                  filteredUsersForMember.map(u => (
-                    <button key={u.id} onClick={() => setMemberForm(prev => ({ ...prev, user_id: u.id }))}
-                      className={`w-full text-left px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 ${memberForm.user_id === u.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
-                      {u.first_name} {u.last_name}
-                      {u.target_position && <span className="text-gray-400 ml-2">({u.target_position})</span>}
-                    </button>
-                  ))
+
+                {/* Employee list - multi-select checkboxes */}
+                <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {filteredUsersForMember.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-3 text-center">Brak dostępnych pracowników</p>
+                  ) : (
+                    filteredUsersForMember.map(u => (
+                      <label key={u.id}
+                        className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer ${selectedUserIds.includes(u.id) ? 'bg-blue-50' : ''}`}>
+                        <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={() => toggleUserSelection(u.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="font-medium text-gray-900">{u.first_name} {u.last_name}</span>
+                        {u.target_position && <span className="text-gray-400 text-xs">— {u.target_position}</span>}
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                {/* Selected count */}
+                {selectedUserIds.length > 0 && (
+                  <p className="text-sm text-blue-600 font-medium">Wybrano: {selectedUserIds.length} {selectedUserIds.length === 1 ? 'pracownika' : 'pracowników'}</p>
                 )}
-              </div>
-              {memberForm.user_id && (<>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stanowisko</label>
-                  <input type="text" value={memberForm.position} onChange={e => setMemberForm(prev => ({ ...prev, position: e.target.value }))} placeholder="np. Murarz, Elektryk..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </>)}
+
+              {/* --- SUBCONTRACTOR MODE --- */}
+              {addMemberType === 'subcontractor' && (<>
+                {!selectedSubcontractorId ? (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj podwykonawcy..."
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                    <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto">
+                      {subcontractors.filter(s => !memberSearch || s.name.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
+                        <p className="text-sm text-gray-400 p-3 text-center">Brak podwykonawców</p>
+                      ) : (
+                        subcontractors.filter(s => !memberSearch || s.name.toLowerCase().includes(memberSearch.toLowerCase())).map(sub => (
+                          <button key={sub.id} onClick={() => { loadSubcontractorWorkers(sub.id); setMemberSearch(''); }}
+                            className="w-full text-left px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                            <div className="flex items-center gap-2">
+                              <Building className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{sub.name}</p>
+                                {sub.nip && <p className="text-xs text-gray-400">NIP: {sub.nip}</p>}
+                                {sub.skills && <p className="text-xs text-gray-500 mt-0.5">{sub.skills}</p>}
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Back to companies */}
+                    <button onClick={() => { setSelectedSubcontractorId(null); setSelectedWorkerIds([]); setManagerUserIds([]); }}
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+                      <ChevronLeft className="w-4 h-4" /> Powrót do listy firm
+                    </button>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {subcontractors.find(s => s.id === selectedSubcontractorId)?.name}
+                      </p>
+                    </div>
+
+                    {/* Search workers */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj pracownika..."
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+
+                    {/* Workers list - multi-select */}
+                    <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                      {subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
+                        <p className="text-sm text-gray-400 p-3 text-center">Brak pracowników podwykonawcy</p>
+                      ) : (
+                        subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).map(w => (
+                          <label key={w.id}
+                            className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer ${selectedWorkerIds.includes(w.id) ? 'bg-blue-50' : ''}`}>
+                            <input type="checkbox" checked={selectedWorkerIds.includes(w.id)} onChange={() => toggleWorkerSelection(w.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            <span className="font-medium text-gray-900">{w.first_name} {w.last_name}</span>
+                            {w.position && <span className="text-gray-400 text-xs">— {w.position}</span>}
+                          </label>
+                        ))
+                      )}
+                    </div>
+
+                    {selectedWorkerIds.length > 0 && (
+                      <p className="text-sm text-blue-600 font-medium">Wybrano: {selectedWorkerIds.length} {selectedWorkerIds.length === 1 ? 'pracownika' : 'pracowników'}</p>
+                    )}
+                  </>
+                )}
+              </>)}
+
+              {/* --- COMMON OPTIONS (when items are selected) --- */}
+              {currentSelectedItems.length > 0 && (<>
+                {/* Manager checkbox */}
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={isManagerChecked} onChange={e => {
+                      setIsManagerChecked(e.target.checked);
+                      if (e.target.checked && currentSelectedItems.length === 1) {
+                        setManagerUserIds([currentSelectedItems[0]]);
+                      } else if (!e.target.checked) {
+                        setManagerUserIds([]);
+                      }
+                    }} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span className="text-sm font-medium text-gray-700">Kierownik zespołu</span>
+                  </label>
+
+                  {/* If manager checked and multiple selected - show picker */}
+                  {isManagerChecked && currentSelectedItems.length > 1 && (
+                    <div className="mt-2 border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
+                      <p className="text-xs text-gray-500 px-3 pt-2 pb-1">Wybierz kierownika(-ów) zespołu:</p>
+                      {currentSelectedItems.map(id => (
+                        <label key={id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={managerUserIds.includes(id)}
+                            onChange={() => setManagerUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-700">{getSelectedName(id)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Payment type */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rola</label>
-                    <select value={memberForm.role} onChange={e => setMemberForm(prev => ({ ...prev, role: e.target.value as 'manager' | 'member' }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                      <option value="member">Członek</option><option value="manager">Kierownik</option>
-                    </select>
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Forma wynagrodzenia</label>
-                    <select value={memberForm.payment_type} onChange={e => setMemberForm(prev => ({ ...prev, payment_type: e.target.value as ProjectMemberPaymentType }))}
+                    <select value={memberPaymentType} onChange={e => setMemberPaymentType(e.target.value as ProjectMemberPaymentType)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                       <option value="hourly">Stawka godzinowa</option><option value="akord">Akord</option>
                     </select>
                   </div>
+                  {memberPaymentType === 'hourly' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stawka (zł/godz.)</label>
+                      <input type="number" value={memberHourlyRate} onChange={e => setMemberHourlyRate(e.target.value)} placeholder="0.00"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
                 </div>
-                {memberForm.payment_type === 'hourly' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stawka (zł/godz.)</label>
-                    <input type="number" value={memberForm.hourly_rate} onChange={e => setMemberForm(prev => ({ ...prev, hourly_rate: e.target.value }))} placeholder="0.00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-                  </div>
-                )}
               </>)}
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
               <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
-              <button onClick={handleAddMember} disabled={!memberForm.user_id} className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Dodaj</button>
+              <button onClick={handleAddMembers} disabled={currentSelectedItems.length === 0}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                Dodaj ({currentSelectedItems.length})
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderIssues = () => (
     <div className="space-y-4">
@@ -3198,147 +4407,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
                   {savingIncome ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (editingIncomeId ? 'Zapisz zmiany' : 'Zapisz przychód')}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Cost Modal ===== */}
-      {showCostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => { setShowCostModal(false); setEditingCostId(null); }} />
-          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white z-10 flex justify-between items-center px-5 py-3 border-b">
-              <h2 className="text-base font-semibold">{editingCostId ? 'Edytuj koszt' : 'Nowy koszt'}</h2>
-              <button onClick={() => { setShowCostModal(false); setEditingCostId(null); }}><X className="w-4 h-4 text-gray-400 hover:text-gray-600" /></button>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              {/* OCR Scan */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Skanuj dokument (OCR)</label>
-                <label className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg cursor-pointer ${scanningCost ? 'bg-gray-300 text-gray-500' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
-                  {scanningCost ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                  {scanningCost ? 'Skanowanie...' : 'Wybierz plik do skanowania'}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" disabled={scanningCost}
-                    onChange={e => { if (e.target.files?.[0]) handleScanCostDocument(e.target.files[0]); e.target.value = ''; }} />
-                </label>
-              </div>
-
-              {/* Cost type */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Typ kosztu</label>
-                <select value={costForm.cost_type} onChange={e => setCostForm(f => ({ ...f, cost_type: e.target.value as 'direct' | 'labor' }))}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="direct">Bezpośredni</option>
-                  <option value="labor">Robocizna</option>
-                </select>
-              </div>
-
-              {/* Document type */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Typ dokumentu</label>
-                <select value={costForm.document_type} onChange={e => setCostForm(f => ({ ...f, document_type: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="faktura">Faktura</option>
-                  <option value="paragon">Paragon</option>
-                  <option value="rachunek">Rachunek</option>
-                  <option value="nota_ksiegowa">Nota księgowa</option>
-                  <option value="inny">Inny</option>
-                </select>
-              </div>
-
-              {/* Document number */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Nr dokumentu</label>
-                <input type="text" value={costForm.document_number} onChange={e => setCostForm(f => ({ ...f, document_number: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              {/* Issuer */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Wystawca dokumentu</label>
-                <input type="text" value={costForm.issuer} onChange={e => setCostForm(f => ({ ...f, issuer: e.target.value }))}
-                  placeholder="Nazwa firmy" className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              {/* Issuer NIP */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">NIP wystawcy</label>
-                <input type="text" value={costForm.issuer_nip} onChange={e => setCostForm(f => ({ ...f, issuer_nip: e.target.value }))}
-                  placeholder="0000000000" className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              {/* Issuer address */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Adres wystawcy</label>
-                <input type="text" value={costForm.issuer_address} onChange={e => setCostForm(f => ({ ...f, issuer_address: e.target.value }))}
-                  placeholder="ul. Przykładowa 1, 00-000 Warszawa" className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-0.5">Data wystawienia</label>
-                  <input type="date" value={costForm.issue_date} onChange={e => setCostForm(f => ({ ...f, issue_date: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-0.5">Termin płatności</label>
-                  <input type="date" value={costForm.payment_due_date} onChange={e => setCostForm(f => ({ ...f, payment_due_date: e.target.value }))}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
-
-              {/* Netto + VAT + Brutto */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-0.5">Wartość netto</label>
-                  <input type="number" min="0" step="0.01" value={costForm.value_netto || ''}
-                    onChange={e => handleCostVatChange(Number(e.target.value), costForm.vat_rate)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-0.5">Stawka VAT</label>
-                  <select value={costForm.vat_rate} onChange={e => handleCostVatChange(costForm.value_netto, Number(e.target.value))}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                    <option value={0}>0%</option>
-                    <option value={5}>5%</option>
-                    <option value={8}>8%</option>
-                    <option value={23}>23%</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-0.5">Wartość brutto</label>
-                  <input type="number" min="0" step="0.01" value={costForm.value_brutto || ''} readOnly
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-gray-50 text-gray-600" />
-                </div>
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Kategoria</label>
-                <input type="text" value={costForm.category} onChange={e => setCostForm(f => ({ ...f, category: e.target.value }))}
-                  placeholder="np. Materiały budowlane" className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              {/* Payment status */}
-              <div>
-                <label className="block text-xs font-medium text-slate-500 mb-0.5">Status płatności</label>
-                <select value={costForm.payment_status} onChange={e => setCostForm(f => ({ ...f, payment_status: e.target.value }))}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="unpaid">Nieopłacone</option>
-                  <option value="paid">Opłacone</option>
-                </select>
-              </div>
-
-              {/* Actions */}
-              <div className="flex justify-end gap-2 pt-2">
-                <button onClick={() => { setShowCostModal(false); setEditingCostId(null); }} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
-                <button onClick={saveCost} disabled={savingCost || !costForm.document_number}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                  {savingCost ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (editingCostId ? 'Zapisz zmiany' : 'Dodaj koszt')}
                 </button>
               </div>
             </div>
