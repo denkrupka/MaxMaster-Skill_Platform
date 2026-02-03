@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, X, Search, Pencil, Trash2, Loader2,
   Building2, Users, Phone, Mail, UserPlus,
-  Check, ChevronDown, SearchCheck, AlertCircle
+  Check, ChevronDown, SearchCheck, AlertCircle, Star
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -24,24 +24,26 @@ const SUBCONTRACTOR_SKILL_OPTIONS = Object.values(SkillCategory).map(val => ({
 
 const emptyClientForm = {
   name: '', nip: '', address_street: '', address_city: '',
-  address_postal_code: '', address_country: 'PL', email: '', phone: '', note: '',
+  address_postal_code: '', address_country: 'PL', note: '',
 };
 
 const emptyContactForm = {
-  first_name: '', last_name: '', phone: '', email: '', position: '',
+  first_name: '', last_name: '', phone: '', email: '', position: '', is_main_contact: false,
 };
 
 const emptySubcontractorForm = {
-  name: '', workers_count: 0, email: '', phone: '', skills: '' as string,
+  name: '', nip: '', address_street: '', address_city: '',
+  address_postal_code: '', address_country: 'PL', note: '',
+  workers_count: 0, skills: '' as string,
 };
 
 const emptyWorkerForm = {
-  first_name: '', last_name: '', phone: '', email: '', position: '',
+  first_name: '', last_name: '', phone: '', email: '', position: '', is_main_contact: false,
 };
 
 // --- Validation ---
 const isValidEmail = (email: string): boolean => {
-  if (!email) return true; // empty is ok
+  if (!email) return true;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 };
 
@@ -52,21 +54,15 @@ const isValidPhone = (phone: string): boolean => {
 };
 
 const formatPhone = (value: string): string => {
-  // Strip non-digits except leading +
   const hasPlus = value.startsWith('+');
   let digits = value.replace(/\D/g, '');
-
-  // If user typed + at start, keep it and format
   if (hasPlus) {
-    // +48 format
     if (digits.length <= 2) return '+' + digits;
-    const cc = digits.slice(0, 2); // country code
+    const cc = digits.slice(0, 2);
     const rest = digits.slice(2);
     const parts = rest.match(/.{1,3}/g) || [];
     return '+' + cc + ' ' + parts.join(' ');
   }
-
-  // No +, just format digits
   if (digits.length <= 3) return digits;
   const parts = digits.match(/.{1,3}/g) || [];
   return parts.join(' ');
@@ -84,6 +80,10 @@ const formatPostalCode = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 5);
   if (digits.length <= 2) return digits;
   return digits.slice(0, 2) + '-' + digits.slice(2);
+};
+
+const formatEmail = (value: string): string => {
+  return value.replace(/\s/g, '').toLowerCase();
 };
 
 // Shared input class
@@ -118,10 +118,20 @@ export const ContractorsPage: React.FC = () => {
   const [showAddContact, setShowAddContact] = useState(false);
   const [contactForm, setContactForm] = useState(emptyContactForm);
   const [savingContact, setSavingContact] = useState(false);
+  const [contactFormErrors, setContactFormErrors] = useState<Record<string, string>>({});
 
-  // NIP lookup
+  // NIP lookup (shared for both clients and subs)
   const [nipLoading, setNipLoading] = useState(false);
   const [nipError, setNipError] = useState('');
+
+  // Invite modal
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteTarget, setInviteTarget] = useState<{ companyName: string; firstName: string; lastName: string; phone: string; type: 'client' | 'sub' } | null>(null);
+  const [inviting, setInviting] = useState(false);
+
+  // Main contacts cache for table display
+  const [clientMainContacts, setClientMainContacts] = useState<Record<string, ContractorClientContact>>({});
+  const [subMainContacts, setSubMainContacts] = useState<Record<string, SubcontractorWorker>>({});
 
   // --- Subcontractors state ---
   const [subcontractors, setSubcontractors] = useState<ContractorSubcontractor[]>([]);
@@ -132,12 +142,18 @@ export const ContractorsPage: React.FC = () => {
   const [savingSub, setSavingSub] = useState(false);
   const [subFormErrors, setSubFormErrors] = useState<Record<string, string>>({});
 
+  // Sub NIP lookup
+  const [subNipLoading, setSubNipLoading] = useState(false);
+  const [subNipError, setSubNipError] = useState('');
+
   // Subcontractor detail modal
   const [selectedSub, setSelectedSub] = useState<ContractorSubcontractor | null>(null);
+  const [subDetailTab, setSubDetailTab] = useState<'dane' | 'przedstawiciele' | 'notatka'>('dane');
   const [subWorkers, setSubWorkers] = useState<SubcontractorWorker[]>([]);
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [workerForm, setWorkerForm] = useState(emptyWorkerForm);
   const [savingWorker, setSavingWorker] = useState(false);
+  const [workerFormErrors, setWorkerFormErrors] = useState<Record<string, string>>({});
 
   // Skills dropdown
   const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
@@ -178,12 +194,24 @@ export const ContractorsPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [clientsRes, subsRes] = await Promise.all([
+      const [clientsRes, subsRes, mainContactsRes, mainWorkersRes] = await Promise.all([
         supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).order('name'),
         supabase.from('contractors_subcontractors').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).order('name'),
+        supabase.from('contractor_client_contacts').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
+        supabase.from('subcontractor_workers').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
       ]);
       if (clientsRes.data) setClients(clientsRes.data);
       if (subsRes.data) setSubcontractors(subsRes.data);
+      if (mainContactsRes.data) {
+        const map: Record<string, ContractorClientContact> = {};
+        mainContactsRes.data.forEach((c: ContractorClientContact) => { map[c.client_id] = c; });
+        setClientMainContacts(map);
+      }
+      if (mainWorkersRes.data) {
+        const map: Record<string, SubcontractorWorker> = {};
+        mainWorkersRes.data.forEach((w: SubcontractorWorker) => { map[w.subcontractor_id] = w; });
+        setSubMainContacts(map);
+      }
     } catch (err) {
       console.error('Error loading contractors:', err);
     } finally {
@@ -201,18 +229,39 @@ export const ContractorsPage: React.FC = () => {
     if (data) setSubWorkers(data);
   };
 
+  const refreshMainContacts = async () => {
+    if (!currentUser) return;
+    const [mainContactsRes, mainWorkersRes] = await Promise.all([
+      supabase.from('contractor_client_contacts').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
+      supabase.from('subcontractor_workers').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
+    ]);
+    if (mainContactsRes.data) {
+      const map: Record<string, ContractorClientContact> = {};
+      mainContactsRes.data.forEach((c: ContractorClientContact) => { map[c.client_id] = c; });
+      setClientMainContacts(map);
+    }
+    if (mainWorkersRes.data) {
+      const map: Record<string, SubcontractorWorker> = {};
+      mainWorkersRes.data.forEach((w: SubcontractorWorker) => { map[w.subcontractor_id] = w; });
+      setSubMainContacts(map);
+    }
+  };
+
   // ============================================================
   // NIP LOOKUP (Biała Lista VAT - MF API)
   // ============================================================
 
-  const lookupNip = async () => {
-    const rawNip = clientForm.nip.replace(/\D/g, '');
+  const lookupNip = async (formType: 'client' | 'sub') => {
+    const nip = formType === 'client' ? clientForm.nip : subForm.nip;
+    const rawNip = nip.replace(/\D/g, '');
     if (rawNip.length !== 10) {
-      setNipError('NIP musi mieć 10 cyfr');
+      if (formType === 'client') setNipError('NIP musi mieć 10 cyfr');
+      else setSubNipError('NIP musi mieć 10 cyfr');
       return;
     }
-    setNipLoading(true);
-    setNipError('');
+    if (formType === 'client') { setNipLoading(true); setNipError(''); }
+    else { setSubNipLoading(true); setSubNipError(''); }
+
     try {
       const today = new Date().toISOString().slice(0, 10);
       const res = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${rawNip}?date=${today}`);
@@ -220,7 +269,6 @@ export const ContractorsPage: React.FC = () => {
       if (json.result?.subject) {
         const s = json.result.subject;
         const fullAddress = s.residenceAddress || s.workingAddress || '';
-        // Parse address: usually "ulica, kod miasto"
         let street = '', city = '', postal = '';
         const parts = fullAddress.split(',').map((p: string) => p.trim());
         if (parts.length >= 2) {
@@ -236,20 +284,68 @@ export const ContractorsPage: React.FC = () => {
         } else if (parts.length === 1) {
           city = parts[0];
         }
-        setClientForm(prev => ({
-          ...prev,
-          name: s.name || prev.name,
-          address_street: street || prev.address_street,
-          address_city: city || prev.address_city,
-          address_postal_code: postal || prev.address_postal_code,
-        }));
+
+        if (formType === 'client') {
+          setClientForm(prev => ({
+            ...prev,
+            name: s.name || prev.name,
+            address_street: street || prev.address_street,
+            address_city: city || prev.address_city,
+            address_postal_code: postal || prev.address_postal_code,
+          }));
+        } else {
+          setSubForm(prev => ({
+            ...prev,
+            name: s.name || prev.name,
+            address_street: street || prev.address_street,
+            address_city: city || prev.address_city,
+            address_postal_code: postal || prev.address_postal_code,
+          }));
+        }
       } else {
-        setNipError('Nie znaleziono podmiotu');
+        if (formType === 'client') setNipError('Nie znaleziono podmiotu');
+        else setSubNipError('Nie znaleziono podmiotu');
       }
     } catch {
-      setNipError('Błąd połączenia z API');
+      if (formType === 'client') setNipError('Błąd połączenia z API');
+      else setSubNipError('Błąd połączenia z API');
     } finally {
-      setNipLoading(false);
+      if (formType === 'client') setNipLoading(false);
+      else setSubNipLoading(false);
+    }
+  };
+
+  // ============================================================
+  // INVITE MODAL (SMS invitation)
+  // ============================================================
+
+  const handleInvite = async () => {
+    if (!inviteTarget || !currentUser) return;
+    setInviting(true);
+    try {
+      // Call edge function to send SMS invitation
+      const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+      await fetch(`${supabaseUrl}/functions/v1/invite-representative`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          phone: inviteTarget.phone,
+          first_name: inviteTarget.firstName,
+          last_name: inviteTarget.lastName,
+          company_name: inviteTarget.companyName,
+          role: 'Client',
+          inviting_company_id: currentUser.company_id,
+        }),
+      });
+    } catch (err) {
+      console.error('Error sending invite:', err);
+    } finally {
+      setInviting(false);
+      setShowInviteModal(false);
+      setInviteTarget(null);
     }
   };
 
@@ -270,8 +366,7 @@ export const ContractorsPage: React.FC = () => {
     setClientForm({
       name: client.name, nip: client.nip || '', address_street: client.address_street || '',
       address_city: client.address_city || '', address_postal_code: client.address_postal_code || '',
-      address_country: client.address_country || 'PL', email: client.email || '',
-      phone: client.phone || '', note: client.note || '',
+      address_country: client.address_country || 'PL', note: client.note || '',
     });
     setClientFormErrors({});
     setNipError('');
@@ -281,8 +376,6 @@ export const ContractorsPage: React.FC = () => {
   const validateClientForm = (): boolean => {
     const errors: Record<string, string> = {};
     if (!clientForm.name.trim()) errors.name = 'Wymagane';
-    if (clientForm.email && !isValidEmail(clientForm.email)) errors.email = 'Nieprawidłowy email';
-    if (clientForm.phone && !isValidPhone(clientForm.phone)) errors.phone = 'Min. 9 cyfr';
     setClientFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -320,17 +413,51 @@ export const ContractorsPage: React.FC = () => {
   };
 
   // ============================================================
-  // CLIENT CONTACTS CRUD
+  // CLIENT CONTACTS (PRZEDSTAWICIELE) CRUD
   // ============================================================
 
+  const validateContactForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!contactForm.first_name.trim()) errors.first_name = 'Wymagane';
+    if (!contactForm.last_name.trim()) errors.last_name = 'Wymagane';
+    if (!contactForm.phone.trim()) errors.phone = 'Wymagane';
+    else if (!isValidPhone(contactForm.phone)) errors.phone = 'Min. 9 cyfr';
+    if (!contactForm.email.trim()) errors.email = 'Wymagane';
+    else if (!isValidEmail(contactForm.email)) errors.email = 'Nieprawidłowy email';
+    setContactFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const saveContact = async () => {
-    if (!currentUser || !selectedClient || !contactForm.first_name.trim() || !contactForm.last_name.trim()) return;
+    if (!currentUser || !selectedClient || !validateContactForm()) return;
     setSavingContact(true);
     try {
+      // If marking as main contact, unset previous main
+      if (contactForm.is_main_contact) {
+        await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('client_id', selectedClient.id).eq('is_main_contact', true);
+      }
       const payload = { ...contactForm, client_id: selectedClient.id, company_id: currentUser.company_id };
       const { data } = await supabase.from('contractor_client_contacts').insert(payload).select().single();
-      if (data) setClientContacts(prev => [...prev, data]);
+      if (data) {
+        setClientContacts(prev => {
+          if (contactForm.is_main_contact) {
+            return [...prev.map(c => ({ ...c, is_main_contact: false })), data];
+          }
+          return [...prev, data];
+        });
+        // Show invite modal
+        setInviteTarget({
+          companyName: selectedClient.name,
+          firstName: contactForm.first_name,
+          lastName: contactForm.last_name,
+          phone: contactForm.phone,
+          type: 'client',
+        });
+        setShowInviteModal(true);
+        await refreshMainContacts();
+      }
       setContactForm(emptyContactForm);
+      setContactFormErrors({});
       setShowAddContact(false);
     } catch (err) {
       console.error('Error saving contact:', err);
@@ -339,9 +466,25 @@ export const ContractorsPage: React.FC = () => {
     }
   };
 
+  const toggleMainContact = async (contact: ContractorClientContact) => {
+    if (!selectedClient) return;
+    if (contact.is_main_contact) {
+      // Unset
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('id', contact.id);
+      setClientContacts(prev => prev.map(c => c.id === contact.id ? { ...c, is_main_contact: false } : c));
+    } else {
+      // Set this as main, unset others
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('client_id', selectedClient.id).eq('is_main_contact', true);
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: true }).eq('id', contact.id);
+      setClientContacts(prev => prev.map(c => ({ ...c, is_main_contact: c.id === contact.id })));
+    }
+    await refreshMainContacts();
+  };
+
   const deleteContact = async (id: string) => {
     await supabase.from('contractor_client_contacts').delete().eq('id', id);
     setClientContacts(prev => prev.filter(c => c.id !== id));
+    await refreshMainContacts();
   };
 
   const saveClientNote = async (note: string) => {
@@ -359,24 +502,26 @@ export const ContractorsPage: React.FC = () => {
     setEditingSub(null);
     setSubForm(emptySubcontractorForm);
     setSubFormErrors({});
+    setSubNipError('');
     setShowSubModal(true);
   };
 
   const openEditSub = (sub: ContractorSubcontractor) => {
     setEditingSub(sub);
     setSubForm({
-      name: sub.name, workers_count: sub.workers_count || 0,
-      email: sub.email || '', phone: sub.phone || '', skills: sub.skills || '',
+      name: sub.name, nip: sub.nip || '',
+      address_street: sub.address_street || '', address_city: sub.address_city || '',
+      address_postal_code: sub.address_postal_code || '', address_country: sub.address_country || 'PL',
+      note: sub.note || '', workers_count: sub.workers_count || 0, skills: sub.skills || '',
     });
     setSubFormErrors({});
+    setSubNipError('');
     setShowSubModal(true);
   };
 
   const validateSubForm = (): boolean => {
     const errors: Record<string, string> = {};
     if (!subForm.name.trim()) errors.name = 'Wymagane';
-    if (subForm.email && !isValidEmail(subForm.email)) errors.email = 'Nieprawidłowy email';
-    if (subForm.phone && !isValidPhone(subForm.phone)) errors.phone = 'Min. 9 cyfr';
     setSubFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -409,21 +554,56 @@ export const ContractorsPage: React.FC = () => {
 
   const openSubDetail = (sub: ContractorSubcontractor) => {
     setSelectedSub(sub);
+    setSubDetailTab('dane');
     loadSubWorkers(sub.id);
   };
 
   // ============================================================
-  // SUBCONTRACTOR WORKERS CRUD
+  // SUBCONTRACTOR WORKERS (PRZEDSTAWICIELE) CRUD
   // ============================================================
 
+  const validateWorkerForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!workerForm.first_name.trim()) errors.first_name = 'Wymagane';
+    if (!workerForm.last_name.trim()) errors.last_name = 'Wymagane';
+    if (!workerForm.phone.trim()) errors.phone = 'Wymagane';
+    else if (!isValidPhone(workerForm.phone)) errors.phone = 'Min. 9 cyfr';
+    if (!workerForm.email.trim()) errors.email = 'Wymagane';
+    else if (!isValidEmail(workerForm.email)) errors.email = 'Nieprawidłowy email';
+    setWorkerFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const saveWorker = async () => {
-    if (!currentUser || !selectedSub || !workerForm.first_name.trim() || !workerForm.last_name.trim()) return;
+    if (!currentUser || !selectedSub || !validateWorkerForm()) return;
     setSavingWorker(true);
     try {
+      // If marking as main contact, unset previous main
+      if (workerForm.is_main_contact) {
+        await supabase.from('subcontractor_workers').update({ is_main_contact: false }).eq('subcontractor_id', selectedSub.id).eq('is_main_contact', true);
+      }
       const payload = { ...workerForm, subcontractor_id: selectedSub.id, company_id: currentUser.company_id };
       const { data } = await supabase.from('subcontractor_workers').insert(payload).select().single();
-      if (data) setSubWorkers(prev => [...prev, data]);
+      if (data) {
+        setSubWorkers(prev => {
+          if (workerForm.is_main_contact) {
+            return [...prev.map(w => ({ ...w, is_main_contact: false })), data];
+          }
+          return [...prev, data];
+        });
+        // Show invite modal
+        setInviteTarget({
+          companyName: selectedSub.name,
+          firstName: workerForm.first_name,
+          lastName: workerForm.last_name,
+          phone: workerForm.phone,
+          type: 'sub',
+        });
+        setShowInviteModal(true);
+        await refreshMainContacts();
+      }
       setWorkerForm(emptyWorkerForm);
+      setWorkerFormErrors({});
       setShowAddWorker(false);
     } catch (err) {
       console.error('Error saving worker:', err);
@@ -432,9 +612,30 @@ export const ContractorsPage: React.FC = () => {
     }
   };
 
+  const toggleMainWorker = async (worker: SubcontractorWorker) => {
+    if (!selectedSub) return;
+    if (worker.is_main_contact) {
+      await supabase.from('subcontractor_workers').update({ is_main_contact: false }).eq('id', worker.id);
+      setSubWorkers(prev => prev.map(w => w.id === worker.id ? { ...w, is_main_contact: false } : w));
+    } else {
+      await supabase.from('subcontractor_workers').update({ is_main_contact: false }).eq('subcontractor_id', selectedSub.id).eq('is_main_contact', true);
+      await supabase.from('subcontractor_workers').update({ is_main_contact: true }).eq('id', worker.id);
+      setSubWorkers(prev => prev.map(w => ({ ...w, is_main_contact: w.id === worker.id })));
+    }
+    await refreshMainContacts();
+  };
+
   const deleteWorker = async (id: string) => {
     await supabase.from('subcontractor_workers').delete().eq('id', id);
     setSubWorkers(prev => prev.filter(w => w.id !== id));
+    await refreshMainContacts();
+  };
+
+  const saveSubNote = async (note: string) => {
+    if (!selectedSub) return;
+    await supabase.from('contractors_subcontractors').update({ note, updated_at: new Date().toISOString() }).eq('id', selectedSub.id);
+    setSelectedSub({ ...selectedSub, note });
+    setSubcontractors(prev => prev.map(s => s.id === selectedSub.id ? { ...s, note } : s));
   };
 
   // ============================================================
@@ -443,13 +644,12 @@ export const ContractorsPage: React.FC = () => {
 
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(clientSearch.toLowerCase()) ||
     (c.nip || '').replace(/\D/g, '').includes(clientSearch.replace(/\D/g, ''))
   );
 
   const filteredSubs = subcontractors.filter(s =>
     s.name.toLowerCase().includes(subSearch.toLowerCase()) ||
-    (s.email || '').toLowerCase().includes(subSearch.toLowerCase()) ||
+    (s.nip || '').replace(/\D/g, '').includes(subSearch.replace(/\D/g, '')) ||
     (s.skills || '').toLowerCase().includes(subSearch.toLowerCase())
   );
 
@@ -495,7 +695,7 @@ export const ContractorsPage: React.FC = () => {
           <div className="flex items-center justify-between mb-4 gap-4">
             <div className="relative flex-1 max-w-md">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Szukaj po nazwie, email lub NIP..."
+              <input type="text" placeholder="Szukaj po nazwie lub NIP..."
                 value={clientSearch} onChange={e => setClientSearch(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
@@ -510,6 +710,8 @@ export const ContractorsPage: React.FC = () => {
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nazwa firmy</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIP</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Imię i nazwisko</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Stanowisko</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Telefon</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
@@ -517,28 +719,33 @@ export const ContractorsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredClients.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-12 text-slate-400">Brak klientów</td></tr>
-                ) : filteredClients.map(client => (
-                  <tr key={client.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openClientDetail(client)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <Building2 size={16} className="text-slate-400" />
-                        <span className="font-medium text-slate-800">{client.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-500 font-mono">{client.nip || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{client.email || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{client.phone || '—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end space-x-1">
-                        <button onClick={e => { e.stopPropagation(); openEditClient(client); }}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
-                        <button onClick={e => { e.stopPropagation(); deleteClient(client.id); }}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={7} className="text-center py-12 text-slate-400">Brak klientów</td></tr>
+                ) : filteredClients.map(client => {
+                  const mc = clientMainContacts[client.id];
+                  return (
+                    <tr key={client.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openClientDetail(client)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <Building2 size={16} className="text-slate-400" />
+                          <span className="font-medium text-slate-800">{client.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500 font-mono">{client.nip || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mc ? `${mc.first_name} ${mc.last_name}` : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.position || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.email || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.phone || '—'}</td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <button onClick={e => { e.stopPropagation(); openEditClient(client); }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
+                          <button onClick={e => { e.stopPropagation(); deleteClient(client.id); }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -565,7 +772,8 @@ export const ContractorsPage: React.FC = () => {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nazwa firmy</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Pracownicy</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Imię i nazwisko</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Stanowisko</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Telefon</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Umiejętności</th>
@@ -574,40 +782,44 @@ export const ContractorsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredSubs.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-12 text-slate-400">Brak podwykonawców</td></tr>
-                ) : filteredSubs.map(sub => (
-                  <tr key={sub.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openSubDetail(sub)}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <Users size={16} className="text-slate-400" />
-                        <span className="font-medium text-slate-800">{sub.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{sub.workers_count || 0}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{sub.email || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{sub.phone || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[250px]">
-                      {sub.skills ? (
-                        <div className="flex flex-wrap gap-1">
-                          {sub.skills.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3).map(skill => (
-                            <span key={skill} className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">{skill}</span>
-                          ))}
-                          {sub.skills.split(',').filter(s => s.trim()).length > 3 && (
-                            <span className="inline-block text-xs text-slate-400">+{sub.skills.split(',').filter(s => s.trim()).length - 3}</span>
-                          )}
+                  <tr><td colSpan={7} className="text-center py-12 text-slate-400">Brak podwykonawców</td></tr>
+                ) : filteredSubs.map(sub => {
+                  const mw = subMainContacts[sub.id];
+                  return (
+                    <tr key={sub.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openSubDetail(sub)}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <Users size={16} className="text-slate-400" />
+                          <span className="font-medium text-slate-800">{sub.name}</span>
                         </div>
-                      ) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end space-x-1">
-                        <button onClick={e => { e.stopPropagation(); openEditSub(sub); }}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
-                        <button onClick={e => { e.stopPropagation(); deleteSub(sub.id); }}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mw ? `${mw.first_name} ${mw.last_name}` : '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.position || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.email || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.phone || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 max-w-[250px]">
+                        {sub.skills ? (
+                          <div className="flex flex-wrap gap-1">
+                            {sub.skills.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3).map(skill => (
+                              <span key={skill} className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">{skill}</span>
+                            ))}
+                            {sub.skills.split(',').filter(s => s.trim()).length > 3 && (
+                              <span className="inline-block text-xs text-slate-400">+{sub.skills.split(',').filter(s => s.trim()).length - 3}</span>
+                            )}
+                          </div>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <button onClick={e => { e.stopPropagation(); openEditSub(sub); }}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
+                          <button onClick={e => { e.stopPropagation(); deleteSub(sub.id); }}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -615,7 +827,7 @@ export const ContractorsPage: React.FC = () => {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: CREATE/EDIT CLIENT (compact) */}
+      {/* MODAL: CREATE/EDIT CLIENT (compact, no email/phone) */}
       {/* ============================================================ */}
       {showClientModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowClientModal(false)}>
@@ -641,7 +853,7 @@ export const ContractorsPage: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={lookupNip}
+                    onClick={() => lookupNip('client')}
                     disabled={nipLoading}
                     className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50 border border-emerald-200 whitespace-nowrap"
                     title="Pobierz dane z GUS"
@@ -693,28 +905,6 @@ export const ContractorsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email + Telefon */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={labelCls}>Email</label>
-                  <input type="email" value={clientForm.email}
-                    onChange={e => { setClientForm({ ...clientForm, email: e.target.value }); setClientFormErrors(prev => ({ ...prev, email: '' })); }}
-                    onBlur={() => { if (clientForm.email && !isValidEmail(clientForm.email)) setClientFormErrors(prev => ({ ...prev, email: 'Nieprawidłowy email' })); }}
-                    className={clientFormErrors.email ? inputErrCls : inputCls}
-                    placeholder="email@firma.pl" />
-                  {clientFormErrors.email && <p className="text-xs text-red-500 mt-0.5">{clientFormErrors.email}</p>}
-                </div>
-                <div>
-                  <label className={labelCls}>Telefon</label>
-                  <input type="tel" value={clientForm.phone}
-                    onChange={e => { setClientForm({ ...clientForm, phone: formatPhone(e.target.value) }); setClientFormErrors(prev => ({ ...prev, phone: '' })); }}
-                    onBlur={() => { if (clientForm.phone && !isValidPhone(clientForm.phone)) setClientFormErrors(prev => ({ ...prev, phone: 'Min. 9 cyfr' })); }}
-                    className={clientFormErrors.phone ? inputErrCls : inputCls}
-                    placeholder="+48 000 000 000" />
-                  {clientFormErrors.phone && <p className="text-xs text-red-500 mt-0.5">{clientFormErrors.phone}</p>}
-                </div>
-              </div>
-
               {/* Notatka */}
               <div>
                 <label className={labelCls}>Notatka wewnętrzna</label>
@@ -738,7 +928,7 @@ export const ContractorsPage: React.FC = () => {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: CLIENT DETAIL (tabs: dane, kontakty, notatka) */}
+      {/* MODAL: CLIENT DETAIL (tabs: dane, przedstawiciele, notatka) */}
       {/* ============================================================ */}
       {selectedClient && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSelectedClient(null)}>
@@ -760,13 +950,13 @@ export const ContractorsPage: React.FC = () => {
                     clientDetailTab === tab ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
                   }`}
                 >
-                  {tab === 'dane' ? 'Dane firmy' : tab === 'kontakty' ? 'Osoby kontaktowe' : 'Notatka'}
+                  {tab === 'dane' ? 'Dane firmy' : tab === 'kontakty' ? 'Przedstawiciele firmy' : 'Notatka'}
                 </button>
               ))}
             </div>
 
             <div className="px-5 py-4 overflow-y-auto flex-1">
-              {/* Tab: Dane firmy */}
+              {/* Tab: Dane firmy (no email/phone) */}
               {clientDetailTab === 'dane' && (
                 <div className="space-y-2">
                   <InfoRow label="Nazwa" value={selectedClient.name} />
@@ -775,17 +965,15 @@ export const ContractorsPage: React.FC = () => {
                   <InfoRow label="Miasto" value={selectedClient.address_city} />
                   <InfoRow label="Kod pocztowy" value={selectedClient.address_postal_code} />
                   <InfoRow label="Kraj" value={selectedClient.address_country} />
-                  <InfoRow label="Email" value={selectedClient.email} icon={<Mail size={13} className="text-slate-400" />} />
-                  <InfoRow label="Telefon" value={selectedClient.phone} icon={<Phone size={13} className="text-slate-400" />} />
                 </div>
               )}
 
-              {/* Tab: Osoby kontaktowe */}
+              {/* Tab: Przedstawiciele firmy */}
               {clientDetailTab === 'kontakty' && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-slate-500">{clientContacts.length} osób kontaktowych</span>
-                    <button onClick={() => { setContactForm(emptyContactForm); setShowAddContact(true); }}
+                    <span className="text-xs font-medium text-slate-500">{clientContacts.length} przedstawicieli</span>
+                    <button onClick={() => { setContactForm(emptyContactForm); setContactFormErrors({}); setShowAddContact(true); }}
                       className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
                       <UserPlus size={14} /><span>Dodaj</span>
                     </button>
@@ -794,28 +982,50 @@ export const ContractorsPage: React.FC = () => {
                   {showAddContact && (
                     <div className="bg-blue-50/70 rounded-lg p-3 mb-3 space-y-2 border border-blue-100">
                       <div className="grid grid-cols-2 gap-2">
-                        <input type="text" value={contactForm.first_name} onChange={e => setContactForm({ ...contactForm, first_name: e.target.value })}
-                          className={inputCls} placeholder="Imię *" />
-                        <input type="text" value={contactForm.last_name} onChange={e => setContactForm({ ...contactForm, last_name: e.target.value })}
-                          className={inputCls} placeholder="Nazwisko *" />
+                        <div>
+                          <input type="text" value={contactForm.first_name} onChange={e => setContactForm({ ...contactForm, first_name: e.target.value })}
+                            className={contactFormErrors.first_name ? inputErrCls : inputCls} placeholder="Imię *" />
+                          {contactFormErrors.first_name && <p className="text-xs text-red-500 mt-0.5">{contactFormErrors.first_name}</p>}
+                        </div>
+                        <div>
+                          <input type="text" value={contactForm.last_name} onChange={e => setContactForm({ ...contactForm, last_name: e.target.value })}
+                            className={contactFormErrors.last_name ? inputErrCls : inputCls} placeholder="Nazwisko *" />
+                          {contactFormErrors.last_name && <p className="text-xs text-red-500 mt-0.5">{contactFormErrors.last_name}</p>}
+                        </div>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        <input type="tel" value={contactForm.phone}
-                          onChange={e => setContactForm({ ...contactForm, phone: formatPhone(e.target.value) })}
-                          className={inputCls} placeholder="+48 ..." />
-                        <input type="email" value={contactForm.email}
-                          onChange={e => setContactForm({ ...contactForm, email: e.target.value })}
-                          className={inputCls} placeholder="Email" />
+                        <div>
+                          <input type="tel" value={contactForm.phone}
+                            onChange={e => setContactForm({ ...contactForm, phone: formatPhone(e.target.value) })}
+                            className={contactFormErrors.phone ? inputErrCls : inputCls} placeholder="+48 ... *" />
+                          {contactFormErrors.phone && <p className="text-xs text-red-500 mt-0.5">{contactFormErrors.phone}</p>}
+                        </div>
+                        <div>
+                          <input type="email" value={contactForm.email}
+                            onChange={e => setContactForm({ ...contactForm, email: formatEmail(e.target.value) })}
+                            className={contactFormErrors.email ? inputErrCls : inputCls} placeholder="Email *" />
+                          {contactFormErrors.email && <p className="text-xs text-red-500 mt-0.5">{contactFormErrors.email}</p>}
+                        </div>
                         <input type="text" value={contactForm.position} onChange={e => setContactForm({ ...contactForm, position: e.target.value })}
                           className={inputCls} placeholder="Stanowisko" />
                       </div>
-                      <div className="flex justify-end space-x-2">
-                        <button onClick={() => setShowAddContact(false)} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
-                        <button onClick={saveContact} disabled={savingContact || !contactForm.first_name.trim() || !contactForm.last_name.trim()}
-                          className="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center space-x-1">
-                          {savingContact && <Loader2 size={12} className="animate-spin" />}
-                          <span>Dodaj</span>
-                        </button>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input type="checkbox" checked={contactForm.is_main_contact}
+                            onChange={e => setContactForm({ ...contactForm, is_main_contact: e.target.checked })}
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+                          <span className="text-xs font-medium text-slate-600 flex items-center space-x-1">
+                            <Star size={12} className="text-amber-500" /><span>Główny kontakt</span>
+                          </span>
+                        </label>
+                        <div className="flex space-x-2">
+                          <button onClick={() => { setShowAddContact(false); setContactFormErrors({}); }} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
+                          <button onClick={saveContact} disabled={savingContact}
+                            className="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center space-x-1">
+                            {savingContact && <Loader2 size={12} className="animate-spin" />}
+                            <span>Dodaj</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -823,22 +1033,36 @@ export const ContractorsPage: React.FC = () => {
                   <div className="space-y-1.5">
                     {clientContacts.map(contact => (
                       <div key={contact.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="font-medium text-sm text-slate-800">{contact.first_name} {contact.last_name}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium text-sm text-slate-800">{contact.first_name} {contact.last_name}</p>
+                            {contact.is_main_contact && (
+                              <span className="inline-flex items-center space-x-0.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                                <Star size={10} /><span>Główny</span>
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
                             {contact.position && <span className="text-blue-600">{contact.position}</span>}
                             {contact.phone && <span className="flex items-center space-x-1"><Phone size={11} /><span>{contact.phone}</span></span>}
                             {contact.email && <span className="flex items-center space-x-1"><Mail size={11} /><span>{contact.email}</span></span>}
                           </div>
                         </div>
-                        <button onClick={() => deleteContact(contact.id)}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button onClick={() => toggleMainContact(contact)}
+                            title={contact.is_main_contact ? 'Usuń jako główny kontakt' : 'Ustaw jako główny kontakt'}
+                            className={`p-1 rounded-lg transition-colors ${contact.is_main_contact ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-300 hover:text-amber-500 hover:bg-amber-50'}`}>
+                            <Star size={14} />
+                          </button>
+                          <button onClick={() => deleteContact(contact.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     {clientContacts.length === 0 && !showAddContact && (
-                      <p className="text-center text-xs text-slate-400 py-6">Brak osób kontaktowych</p>
+                      <p className="text-center text-xs text-slate-400 py-6">Brak przedstawicieli firmy</p>
                     )}
                   </div>
                 </div>
@@ -863,7 +1087,7 @@ export const ContractorsPage: React.FC = () => {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: CREATE/EDIT SUBCONTRACTOR (compact) */}
+      {/* MODAL: CREATE/EDIT SUBCONTRACTOR (with NIP/GUS, address, no email/phone) */}
       {/* ============================================================ */}
       {showSubModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowSubModal(false)}>
@@ -876,6 +1100,32 @@ export const ContractorsPage: React.FC = () => {
 
             {/* Body */}
             <div className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              {/* NIP + GUS lookup */}
+              <div>
+                <label className={labelCls}>NIP</label>
+                <div className="flex space-x-2">
+                  <input type="text"
+                    value={subForm.nip}
+                    onChange={e => setSubForm({ ...subForm, nip: formatNip(e.target.value) })}
+                    className={`flex-1 ${inputCls}`}
+                    placeholder="000-000-00-00"
+                    maxLength={13}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => lookupNip('sub')}
+                    disabled={subNipLoading}
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50 border border-emerald-200 whitespace-nowrap"
+                    title="Pobierz dane z GUS"
+                  >
+                    {subNipLoading ? <Loader2 size={14} className="animate-spin" /> : <SearchCheck size={14} />}
+                    <span>GUS</span>
+                  </button>
+                </div>
+                {subNipError && <p className="text-xs text-red-500 mt-0.5 flex items-center space-x-1"><AlertCircle size={12} /><span>{subNipError}</span></p>}
+              </div>
+
+              {/* Nazwa firmy */}
               <div>
                 <label className={labelCls}>Nazwa firmy *</label>
                 <input type="text" value={subForm.name}
@@ -885,32 +1135,42 @@ export const ContractorsPage: React.FC = () => {
                 {subFormErrors.name && <p className="text-xs text-red-500 mt-0.5">{subFormErrors.name}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={labelCls}>Ilość pracowników</label>
-                  <input type="number" min={0} value={subForm.workers_count}
-                    onChange={e => setSubForm({ ...subForm, workers_count: parseInt(e.target.value) || 0 })}
-                    className={inputCls} />
+              {/* Adres: ulica */}
+              <div>
+                <label className={labelCls}>Ulica</label>
+                <input type="text" value={subForm.address_street}
+                  onChange={e => setSubForm({ ...subForm, address_street: e.target.value })}
+                  className={inputCls} placeholder="Ulica i numer" />
+              </div>
+
+              {/* Miasto + Kod + Kraj */}
+              <div className="grid grid-cols-5 gap-2">
+                <div className="col-span-2">
+                  <label className={labelCls}>Miasto</label>
+                  <input type="text" value={subForm.address_city}
+                    onChange={e => setSubForm({ ...subForm, address_city: e.target.value })}
+                    className={inputCls} placeholder="Miasto" />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelCls}>Kod pocztowy</label>
+                  <input type="text" value={subForm.address_postal_code}
+                    onChange={e => setSubForm({ ...subForm, address_postal_code: formatPostalCode(e.target.value) })}
+                    className={inputCls} placeholder="00-000" maxLength={6} />
                 </div>
                 <div>
-                  <label className={labelCls}>Telefon</label>
-                  <input type="tel" value={subForm.phone}
-                    onChange={e => { setSubForm({ ...subForm, phone: formatPhone(e.target.value) }); setSubFormErrors(prev => ({ ...prev, phone: '' })); }}
-                    onBlur={() => { if (subForm.phone && !isValidPhone(subForm.phone)) setSubFormErrors(prev => ({ ...prev, phone: 'Min. 9 cyfr' })); }}
-                    className={subFormErrors.phone ? inputErrCls : inputCls}
-                    placeholder="+48 000 000 000" />
-                  {subFormErrors.phone && <p className="text-xs text-red-500 mt-0.5">{subFormErrors.phone}</p>}
+                  <label className={labelCls}>Kraj</label>
+                  <input type="text" value={subForm.address_country}
+                    onChange={e => setSubForm({ ...subForm, address_country: e.target.value.toUpperCase().slice(0, 2) })}
+                    className={inputCls} placeholder="PL" maxLength={2} />
                 </div>
               </div>
 
+              {/* Ilość pracowników */}
               <div>
-                <label className={labelCls}>Email</label>
-                <input type="email" value={subForm.email}
-                  onChange={e => { setSubForm({ ...subForm, email: e.target.value }); setSubFormErrors(prev => ({ ...prev, email: '' })); }}
-                  onBlur={() => { if (subForm.email && !isValidEmail(subForm.email)) setSubFormErrors(prev => ({ ...prev, email: 'Nieprawidłowy email' })); }}
-                  className={subFormErrors.email ? inputErrCls : inputCls}
-                  placeholder="email@podwykonawca.pl" />
-                {subFormErrors.email && <p className="text-xs text-red-500 mt-0.5">{subFormErrors.email}</p>}
+                <label className={labelCls}>Ilość pracowników</label>
+                <input type="number" min={0} value={subForm.workers_count}
+                  onChange={e => setSubForm({ ...subForm, workers_count: parseInt(e.target.value) || 0 })}
+                  className={inputCls} />
               </div>
 
               {/* Skills multi-select */}
@@ -956,6 +1216,14 @@ export const ContractorsPage: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Notatka */}
+              <div>
+                <label className={labelCls}>Notatka wewnętrzna</label>
+                <textarea value={subForm.note}
+                  onChange={e => setSubForm({ ...subForm, note: e.target.value })}
+                  rows={2} className={inputCls} placeholder="Notatka..." />
+              </div>
             </div>
 
             {/* Footer */}
@@ -972,7 +1240,7 @@ export const ContractorsPage: React.FC = () => {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL: SUBCONTRACTOR DETAIL (workers) */}
+      {/* MODAL: SUBCONTRACTOR DETAIL (tabs: dane, przedstawiciele, notatka) */}
       {/* ============================================================ */}
       {selectedSub && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSelectedSub(null)}>
@@ -981,81 +1249,189 @@ export const ContractorsPage: React.FC = () => {
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
               <div className="min-w-0">
                 <h2 className="text-base font-bold text-slate-800 truncate">{selectedSub.name}</h2>
-                <div className="flex items-center flex-wrap gap-x-3 text-xs text-slate-500 mt-0.5">
-                  {selectedSub.email && <span className="flex items-center space-x-1"><Mail size={11} /><span>{selectedSub.email}</span></span>}
-                  {selectedSub.phone && <span className="flex items-center space-x-1"><Phone size={11} /><span>{selectedSub.phone}</span></span>}
-                  {selectedSub.workers_count != null && <span>{selectedSub.workers_count} pracow.</span>}
-                </div>
-                {selectedSub.skills && (
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {selectedSub.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
-                      <span key={skill} className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{skill}</span>
-                    ))}
-                  </div>
-                )}
+                {selectedSub.nip && <p className="text-xs text-slate-500 font-mono">NIP: {selectedSub.nip}</p>}
               </div>
               <button onClick={() => setSelectedSub(null)} className="text-slate-400 hover:text-slate-600 p-1 shrink-0"><X size={18} /></button>
             </div>
 
-            <div className="px-5 py-4 overflow-y-auto flex-1">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pracownicy ({subWorkers.length})</h3>
-                <button onClick={() => { setWorkerForm(emptyWorkerForm); setShowAddWorker(true); }}
-                  className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                  <UserPlus size={14} /><span>Dodaj pracownika</span>
+            {/* Detail tabs */}
+            <div className="flex space-x-1 bg-slate-100 mx-4 mt-3 rounded-lg p-0.5 shrink-0">
+              {(['dane', 'przedstawiciele', 'notatka'] as const).map(tab => (
+                <button key={tab} onClick={() => setSubDetailTab(tab)}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    subDetailTab === tab ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                  }`}
+                >
+                  {tab === 'dane' ? 'Dane firmy' : tab === 'przedstawiciele' ? 'Przedstawiciele firmy' : 'Notatka'}
                 </button>
-              </div>
+              ))}
+            </div>
 
-              {showAddWorker && (
-                <div className="bg-blue-50/70 rounded-lg p-3 mb-3 space-y-2 border border-blue-100">
-                  <div className="grid grid-cols-2 gap-2">
-                    <input type="text" value={workerForm.first_name} onChange={e => setWorkerForm({ ...workerForm, first_name: e.target.value })}
-                      className={inputCls} placeholder="Imię *" />
-                    <input type="text" value={workerForm.last_name} onChange={e => setWorkerForm({ ...workerForm, last_name: e.target.value })}
-                      className={inputCls} placeholder="Nazwisko *" />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <input type="tel" value={workerForm.phone}
-                      onChange={e => setWorkerForm({ ...workerForm, phone: formatPhone(e.target.value) })}
-                      className={inputCls} placeholder="+48 ..." />
-                    <input type="email" value={workerForm.email}
-                      onChange={e => setWorkerForm({ ...workerForm, email: e.target.value })}
-                      className={inputCls} placeholder="Email" />
-                    <input type="text" value={workerForm.position} onChange={e => setWorkerForm({ ...workerForm, position: e.target.value })}
-                      className={inputCls} placeholder="Stanowisko" />
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <button onClick={() => setShowAddWorker(false)} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
-                    <button onClick={saveWorker} disabled={savingWorker || !workerForm.first_name.trim() || !workerForm.last_name.trim()}
-                      className="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center space-x-1">
-                      {savingWorker && <Loader2 size={12} className="animate-spin" />}
-                      <span>Dodaj</span>
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              {/* Tab: Dane firmy */}
+              {subDetailTab === 'dane' && (
+                <div className="space-y-2">
+                  <InfoRow label="Nazwa" value={selectedSub.name} />
+                  <InfoRow label="NIP" value={selectedSub.nip} />
+                  <InfoRow label="Ulica" value={selectedSub.address_street} />
+                  <InfoRow label="Miasto" value={selectedSub.address_city} />
+                  <InfoRow label="Kod pocztowy" value={selectedSub.address_postal_code} />
+                  <InfoRow label="Kraj" value={selectedSub.address_country} />
+                  {selectedSub.skills && (
+                    <div className="flex items-center py-1.5 border-b border-slate-50 last:border-0">
+                      <span className="text-xs font-medium text-slate-400 w-28 shrink-0">Umiejętności</span>
+                      <div className="flex flex-wrap gap-1">
+                        {selectedSub.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                          <span key={skill} className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">{skill}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab: Przedstawiciele firmy */}
+              {subDetailTab === 'przedstawiciele' && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-medium text-slate-500">{subWorkers.length} przedstawicieli</span>
+                    <button onClick={() => { setWorkerForm(emptyWorkerForm); setWorkerFormErrors({}); setShowAddWorker(true); }}
+                      className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      <UserPlus size={14} /><span>Dodaj</span>
                     </button>
+                  </div>
+
+                  {showAddWorker && (
+                    <div className="bg-blue-50/70 rounded-lg p-3 mb-3 space-y-2 border border-blue-100">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <input type="text" value={workerForm.first_name} onChange={e => setWorkerForm({ ...workerForm, first_name: e.target.value })}
+                            className={workerFormErrors.first_name ? inputErrCls : inputCls} placeholder="Imię *" />
+                          {workerFormErrors.first_name && <p className="text-xs text-red-500 mt-0.5">{workerFormErrors.first_name}</p>}
+                        </div>
+                        <div>
+                          <input type="text" value={workerForm.last_name} onChange={e => setWorkerForm({ ...workerForm, last_name: e.target.value })}
+                            className={workerFormErrors.last_name ? inputErrCls : inputCls} placeholder="Nazwisko *" />
+                          {workerFormErrors.last_name && <p className="text-xs text-red-500 mt-0.5">{workerFormErrors.last_name}</p>}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <input type="tel" value={workerForm.phone}
+                            onChange={e => setWorkerForm({ ...workerForm, phone: formatPhone(e.target.value) })}
+                            className={workerFormErrors.phone ? inputErrCls : inputCls} placeholder="+48 ... *" />
+                          {workerFormErrors.phone && <p className="text-xs text-red-500 mt-0.5">{workerFormErrors.phone}</p>}
+                        </div>
+                        <div>
+                          <input type="email" value={workerForm.email}
+                            onChange={e => setWorkerForm({ ...workerForm, email: formatEmail(e.target.value) })}
+                            className={workerFormErrors.email ? inputErrCls : inputCls} placeholder="Email *" />
+                          {workerFormErrors.email && <p className="text-xs text-red-500 mt-0.5">{workerFormErrors.email}</p>}
+                        </div>
+                        <input type="text" value={workerForm.position} onChange={e => setWorkerForm({ ...workerForm, position: e.target.value })}
+                          className={inputCls} placeholder="Stanowisko" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input type="checkbox" checked={workerForm.is_main_contact}
+                            onChange={e => setWorkerForm({ ...workerForm, is_main_contact: e.target.checked })}
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+                          <span className="text-xs font-medium text-slate-600 flex items-center space-x-1">
+                            <Star size={12} className="text-amber-500" /><span>Główny kontakt</span>
+                          </span>
+                        </label>
+                        <div className="flex space-x-2">
+                          <button onClick={() => { setShowAddWorker(false); setWorkerFormErrors({}); }} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
+                          <button onClick={saveWorker} disabled={savingWorker}
+                            className="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center space-x-1">
+                            {savingWorker && <Loader2 size={12} className="animate-spin" />}
+                            <span>Dodaj</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    {subWorkers.map(worker => (
+                      <div key={worker.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium text-sm text-slate-800">{worker.first_name} {worker.last_name}</p>
+                            {worker.is_main_contact && (
+                              <span className="inline-flex items-center space-x-0.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                                <Star size={10} /><span>Główny</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+                            {worker.position && <span className="text-blue-600">{worker.position}</span>}
+                            {worker.phone && <span className="flex items-center space-x-1"><Phone size={11} /><span>{worker.phone}</span></span>}
+                            {worker.email && <span className="flex items-center space-x-1"><Mail size={11} /><span>{worker.email}</span></span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button onClick={() => toggleMainWorker(worker)}
+                            title={worker.is_main_contact ? 'Usuń jako główny kontakt' : 'Ustaw jako główny kontakt'}
+                            className={`p-1 rounded-lg transition-colors ${worker.is_main_contact ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-300 hover:text-amber-500 hover:bg-amber-50'}`}>
+                            <Star size={14} />
+                          </button>
+                          <button onClick={() => deleteWorker(worker.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {subWorkers.length === 0 && !showAddWorker && (
+                      <p className="text-center text-xs text-slate-400 py-6">Brak przedstawicieli firmy</p>
+                    )}
                   </div>
                 </div>
               )}
 
-              <div className="space-y-1.5">
-                {subWorkers.map(worker => (
-                  <div key={worker.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm text-slate-800">{worker.first_name} {worker.last_name}</p>
-                      <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
-                        {worker.position && <span className="text-blue-600">{worker.position}</span>}
-                        {worker.phone && <span className="flex items-center space-x-1"><Phone size={11} /><span>{worker.phone}</span></span>}
-                        {worker.email && <span className="flex items-center space-x-1"><Mail size={11} /><span>{worker.email}</span></span>}
-                      </div>
-                    </div>
-                    <button onClick={() => deleteWorker(worker.id)}
-                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-                {subWorkers.length === 0 && !showAddWorker && (
-                  <p className="text-center text-xs text-slate-400 py-6">Brak pracowników</p>
-                )}
-              </div>
+              {/* Tab: Notatka */}
+              {subDetailTab === 'notatka' && (
+                <div>
+                  <textarea
+                    defaultValue={selectedSub.note || ''}
+                    onBlur={e => saveSubNote(e.target.value)}
+                    rows={6}
+                    className={inputCls}
+                    placeholder="Wpisz notatki wewnętrzne dotyczące tego podwykonawcy..."
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Zapisuje się automatycznie po opuszczeniu pola.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: INVITE REPRESENTATIVE */}
+      {/* ============================================================ */}
+      {showInviteModal && inviteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => { setShowInviteModal(false); setInviteTarget(null); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4">
+              <h3 className="text-base font-bold text-slate-800 mb-3">Zaproszenie do portalu</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Zaprosić przedstawiciela firmy <strong>{inviteTarget.companyName}</strong>,{' '}
+                Pana/Panią <strong>{inviteTarget.firstName} {inviteTarget.lastName}</strong> do portalu?
+              </p>
+              <p className="text-xs text-slate-400 mt-2">
+                Na numer {inviteTarget.phone} zostanie wysłany SMS z linkiem do rejestracji.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
+              <button onClick={() => { setShowInviteModal(false); setInviteTarget(null); }}
+                className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Nie</button>
+              <button onClick={handleInvite} disabled={inviting}
+                className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-1.5">
+                {inviting && <Loader2 size={14} className="animate-spin" />}
+                <span>Tak</span>
+              </button>
             </div>
           </div>
         </div>
