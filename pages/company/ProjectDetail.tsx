@@ -5,8 +5,10 @@ import {
   Receipt, Clock, Users, MessageSquare, Paperclip, Loader2, Plus, X,
   Pencil, Trash2, Upload, Download, Eye, Check, XCircle, Search,
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
-  ExternalLink, AlertCircle, Wrench, Tag, Hash
+  ExternalLink, AlertCircle, Wrench, Tag, Hash, CheckCircle2, FileDown
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -17,7 +19,8 @@ import {
   ProjectFile, ProjectMemberType, ProjectMemberPaymentType, ProjectMemberStatus,
   ProjectIssueStatus, ProjectTaskBillingType, ProjectTaskWorkerPayment,
   ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact,
-  ContractorClient
+  ContractorClient, ProjectAttendanceConfirmation, ProjectAttendanceRow,
+  WorkerDay, WorkerDayEntry
 } from '../../types';
 
 const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; text: string }> = {
@@ -83,6 +86,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [issues, setIssues] = useState<ProjectIssue[]>([]);
   const [files, setFiles] = useState<ProjectFile[]>([]);
 
+  // Attendance tracking state
+  const [attendanceRows, setAttendanceRows] = useState<ProjectAttendanceRow[]>([]);
+  const [attendanceConfirmations, setAttendanceConfirmations] = useState<ProjectAttendanceConfirmation[]>([]);
+  const [attendanceDateFrom, setAttendanceDateFrom] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [attendanceDateTo, setAttendanceDateTo] = useState<string>(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1, 0);
+    return d.toISOString().split('T')[0];
+  });
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+
   useEffect(() => {
     if (currentUser && project) loadProjectData();
   }, [currentUser, project?.id]);
@@ -118,6 +136,254 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load attendance data for project members
+  const loadAttendanceData = async () => {
+    if (!currentUser || members.length === 0) {
+      setAttendanceRows([]);
+      return;
+    }
+    setAttendanceLoading(true);
+    try {
+      const memberUserIds = members.filter(m => m.member_status === 'assigned').map(m => m.user_id);
+      if (memberUserIds.length === 0) {
+        setAttendanceRows([]);
+        setAttendanceLoading(false);
+        return;
+      }
+
+      // Load worker_days for project members in date range
+      const [workerDaysRes, entriesRes, confirmationsRes] = await Promise.all([
+        supabase.from('worker_days').select('*')
+          .in('user_id', memberUserIds)
+          .gte('date', attendanceDateFrom)
+          .lte('date', attendanceDateTo)
+          .in('status', ['present', 'late', 'incomplete']),
+        supabase.from('worker_day_entries').select('*')
+          .in('user_id', memberUserIds)
+          .eq('company_id', currentUser.company_id),
+        safeQuery(supabase.from('project_attendance_confirmations').select('*')
+          .eq('project_id', project.id)
+          .gte('date', attendanceDateFrom)
+          .lte('date', attendanceDateTo)),
+      ]);
+
+      const workerDays: WorkerDay[] = workerDaysRes.data || [];
+      const allEntries: WorkerDayEntry[] = entriesRes.data || [];
+      const confirmations: ProjectAttendanceConfirmation[] = confirmationsRes || [];
+      setAttendanceConfirmations(confirmations);
+
+      // Map worker_day entries to attendance rows
+      const rows: ProjectAttendanceRow[] = [];
+
+      for (const wd of workerDays) {
+        const dayEntries = allEntries.filter(e => e.worker_day_id === wd.id);
+        const user = users.find(u => u.id === wd.user_id);
+        const userName = user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
+        const date = new Date(wd.date);
+        const dayOfWeek = date.getDay();
+        const isSaturday = dayOfWeek === 6;
+        const isSunday = dayOfWeek === 0;
+
+        const confirmation = confirmations.find(c => c.user_id === wd.user_id && c.date === wd.date);
+
+        // Find which task this user was working on for this project on this date
+        const userTaskLogs = timeLogs.filter(tl =>
+          tl.user_id === wd.user_id && tl.date === wd.date &&
+          tasks.some(t => t.id === tl.task_id)
+        );
+
+        const taskNames = userTaskLogs.length > 0
+          ? [...new Set(userTaskLogs.map(tl => tasks.find(t => t.id === tl.task_id)?.title || '-'))].join(', ')
+          : '-';
+
+        // Department from entries or project
+        const entryDept = dayEntries.length > 0 && dayEntries[0].department_id
+          ? departments.find(d => d.id === dayEntries[0].department_id)?.name || '-'
+          : getDepartmentName(project.department_id);
+
+        // Get work start/end from entries
+        let workStart: string | undefined;
+        let workEnd: string | undefined;
+        if (dayEntries.length > 0) {
+          const sorted = [...dayEntries].sort((a, b) =>
+            new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+          );
+          workStart = sorted[0].start_time;
+          const lastEntry = sorted[sorted.length - 1];
+          workEnd = lastEntry.finish_time || undefined;
+        }
+
+        const totalHours = wd.work_time_minutes / 60;
+        const overtimeHours = wd.overtime_minutes / 60;
+
+        rows.push({
+          user_id: wd.user_id,
+          user_name: userName,
+          department_name: entryDept,
+          task_name: taskNames,
+          date: wd.date,
+          work_start: workStart,
+          work_end: workEnd,
+          total_hours: totalHours,
+          overtime_hours: overtimeHours,
+          is_saturday: isSaturday,
+          is_sunday: isSunday,
+          client_confirmed: confirmation?.client_confirmed || false,
+          confirmation_id: confirmation?.id,
+        });
+      }
+
+      // Sort by date then by name
+      rows.sort((a, b) => {
+        const dateComp = a.date.localeCompare(b.date);
+        if (dateComp !== 0) return dateComp;
+        return a.user_name.localeCompare(b.user_name);
+      });
+
+      setAttendanceRows(rows);
+    } catch (err) {
+      console.error('Error loading attendance data:', err);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!loading && members.length > 0 && activeTab === 'timeTracking') {
+      loadAttendanceData();
+    }
+  }, [loading, members, activeTab, attendanceDateFrom, attendanceDateTo]);
+
+  const toggleClientConfirmation = async (row: ProjectAttendanceRow) => {
+    if (!currentUser) return;
+    const newConfirmed = !row.client_confirmed;
+    try {
+      if (row.confirmation_id) {
+        await supabase.from('project_attendance_confirmations')
+          .update({
+            client_confirmed: newConfirmed,
+            confirmed_at: newConfirmed ? new Date().toISOString() : null,
+            confirmed_by: newConfirmed ? currentUser.id : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', row.confirmation_id);
+      } else {
+        await supabase.from('project_attendance_confirmations').insert({
+          project_id: project.id,
+          company_id: currentUser.company_id,
+          user_id: row.user_id,
+          date: row.date,
+          client_confirmed: newConfirmed,
+          confirmed_at: newConfirmed ? new Date().toISOString() : null,
+          confirmed_by: newConfirmed ? currentUser.id : null,
+        });
+      }
+      // Reload attendance data
+      loadAttendanceData();
+    } catch (err) {
+      console.error('Error toggling confirmation:', err);
+    }
+  };
+
+  const formatTime = (isoStr?: string) => {
+    if (!isoStr) return '-';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '-';
+    }
+  };
+
+  const showOvertimeColumns = project.billing_type === 'hourly' && (
+    project.overtime_paid || project.saturday_paid || project.sunday_paid
+  );
+
+  const exportAttendancePDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+
+    // Header
+    doc.setFontSize(16);
+    doc.text('Lista obecnosci', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Projekt: ${project.name}`, 14, 22);
+    doc.text(`Obiekt: ${getDepartmentName(project.department_id)}`, 14, 28);
+    doc.text(`Okres: ${new Date(attendanceDateFrom).toLocaleDateString('pl-PL')} - ${new Date(attendanceDateTo).toLocaleDateString('pl-PL')}`, 14, 34);
+    doc.text(`Wygenerowano: ${new Date().toLocaleDateString('pl-PL')} ${new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}`, 14, 40);
+
+    // Build header row
+    const headRow: string[] = ['Lp.', 'Imie i nazwisko', 'Obiekt', 'Zadanie', 'Data', 'Rozpoczecie pracy', 'Zakonczenie pracy', 'Ilosc godzin'];
+    if (showOvertimeColumns) {
+      if (project.overtime_paid) headRow.push('Nadgodziny');
+      if (project.saturday_paid) headRow.push('Soboty');
+      if (project.sunday_paid) headRow.push('Niedziele');
+    }
+    headRow.push('Potwierdzenie');
+
+    // Build data rows
+    const bodyRows = attendanceRows.map((row, idx) => {
+      const dataRow: string[] = [
+        String(idx + 1),
+        row.user_name,
+        row.department_name,
+        row.task_name,
+        new Date(row.date).toLocaleDateString('pl-PL'),
+        formatTime(row.work_start),
+        formatTime(row.work_end),
+        row.total_hours.toFixed(1),
+      ];
+      if (showOvertimeColumns) {
+        if (project.overtime_paid) dataRow.push(row.overtime_hours > 0 ? row.overtime_hours.toFixed(1) : '-');
+        if (project.saturday_paid) dataRow.push(row.is_saturday ? row.total_hours.toFixed(1) : '-');
+        if (project.sunday_paid) dataRow.push(row.is_sunday ? row.total_hours.toFixed(1) : '-');
+      }
+      dataRow.push(row.client_confirmed ? 'TAK' : '');
+      return dataRow;
+    });
+
+    // Summary row
+    const totalHours = attendanceRows.reduce((s, r) => s + r.total_hours, 0);
+    const totalOvertime = attendanceRows.reduce((s, r) => s + r.overtime_hours, 0);
+    const totalSaturdayHours = attendanceRows.filter(r => r.is_saturday).reduce((s, r) => s + r.total_hours, 0);
+    const totalSundayHours = attendanceRows.filter(r => r.is_sunday).reduce((s, r) => s + r.total_hours, 0);
+
+    const summaryRow: string[] = ['', 'RAZEM', '', '', '', '', '', totalHours.toFixed(1)];
+    if (showOvertimeColumns) {
+      if (project.overtime_paid) summaryRow.push(totalOvertime.toFixed(1));
+      if (project.saturday_paid) summaryRow.push(totalSaturdayHours.toFixed(1));
+      if (project.sunday_paid) summaryRow.push(totalSundayHours.toFixed(1));
+    }
+    summaryRow.push('');
+    bodyRows.push(summaryRow);
+
+    autoTable(doc, {
+      startY: 46,
+      head: [headRow],
+      body: bodyRows,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      didParseCell: (data: any) => {
+        // Bold the summary row
+        if (data.row.index === bodyRows.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [229, 231, 235];
+        }
+      },
+    });
+
+    // Signature fields
+    const finalY = (doc as any).lastAutoTable?.finalY || 180;
+    const sigY = finalY + 20;
+    doc.setFontSize(9);
+    doc.text('Podpis Zleceniodawcy: ___________________________', 14, sigY);
+    doc.text('Podpis Wykonawcy: ___________________________', 160, sigY);
+    doc.text('Data: _______________', 14, sigY + 10);
+    doc.text('Data: _______________', 160, sigY + 10);
+
+    doc.save(`lista_obecnosci_${project.name.replace(/\s+/g, '_')}_${attendanceDateFrom}_${attendanceDateTo}.pdf`);
   };
 
   const getUserName = (userId?: string) => {
@@ -468,36 +734,194 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   );
 
   const renderTimeTracking = () => {
-    const projectTaskIds = tasks.map(t => t.id);
-    const projectTimeLogs = timeLogs.filter(tl => projectTaskIds.includes(tl.task_id));
+    const totalHours = attendanceRows.reduce((s, r) => s + r.total_hours, 0);
+    const totalOvertime = attendanceRows.reduce((s, r) => s + r.overtime_hours, 0);
+    const totalSaturdayHours = attendanceRows.filter(r => r.is_saturday).reduce((s, r) => s + r.total_hours, 0);
+    const totalSundayHours = attendanceRows.filter(r => r.is_sunday).reduce((s, r) => s + r.total_hours, 0);
+    const confirmedCount = attendanceRows.filter(r => r.client_confirmed).length;
+
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {projectTimeLogs.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Brak wpisów ewidencji czasu</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pracownik</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Czas (min)</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Opis</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectTimeLogs.map(tl => (
-                <tr key={tl.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-900">{getUserName(tl.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{tasks.find(t => t.id === tl.task_id)?.title || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{new Date(tl.date).toLocaleDateString('pl-PL')}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{tl.minutes}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{tl.description || '-'}</td>
+      <div className="space-y-4">
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 uppercase font-medium">Razem godzin</p>
+            <p className="text-xl font-bold text-gray-900 mt-1">{totalHours.toFixed(1)} godz.</p>
+          </div>
+          {showOvertimeColumns && project.overtime_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Nadgodziny</p>
+              <p className="text-xl font-bold text-orange-600 mt-1">{totalOvertime.toFixed(1)} godz.</p>
+            </div>
+          )}
+          {showOvertimeColumns && project.saturday_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Soboty</p>
+              <p className="text-xl font-bold text-blue-600 mt-1">{totalSaturdayHours.toFixed(1)} godz.</p>
+            </div>
+          )}
+          {showOvertimeColumns && project.sunday_paid && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase font-medium">Niedziele</p>
+              <p className="text-xl font-bold text-purple-600 mt-1">{totalSundayHours.toFixed(1)} godz.</p>
+            </div>
+          )}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 uppercase font-medium">Potwierdzone</p>
+            <p className="text-xl font-bold text-green-600 mt-1">{confirmedCount} / {attendanceRows.length}</p>
+          </div>
+        </div>
+
+        {/* Filters and actions bar */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-600">Od:</label>
+              <input
+                type="date"
+                value={attendanceDateFrom}
+                onChange={e => setAttendanceDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-600">Do:</label>
+              <input
+                type="date"
+                value={attendanceDateTo}
+                onChange={e => setAttendanceDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+              />
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={exportAttendancePDF}
+              disabled={attendanceRows.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <FileDown className="w-4 h-4" />
+              Pobierz PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Attendance table */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          {attendanceLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+              <span className="ml-2 text-sm text-gray-500">Wczytywanie listy obecności...</span>
+            </div>
+          ) : attendanceRows.length === 0 ? (
+            <div className="text-center py-12">
+              <Clock className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm text-gray-400">Brak wpisów obecności w wybranym okresie</p>
+              <p className="text-xs text-gray-300 mt-1">Lista wypełnia się automatycznie na podstawie ewidencji pracowników przypisanych do projektu</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase w-8">Lp.</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Imię i nazwisko</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Obiekt</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rozpoczęcie pracy</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zakończenie pracy</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ilość godzin</th>
+                  {showOvertimeColumns && project.overtime_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nadgodziny</th>
+                  )}
+                  {showOvertimeColumns && project.saturday_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Soboty</th>
+                  )}
+                  {showOvertimeColumns && project.sunday_paid && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Niedziele</th>
+                  )}
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Potwierdzenie Zleceniodawcy</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {attendanceRows.map((row, idx) => (
+                  <tr
+                    key={`${row.user_id}-${row.date}`}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${
+                      row.is_saturday ? 'bg-blue-50/30' : row.is_sunday ? 'bg-purple-50/30' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-400">{idx + 1}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.user_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{row.department_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 max-w-[200px] truncate" title={row.task_name}>{row.task_name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {new Date(row.date).toLocaleDateString('pl-PL', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatTime(row.work_start)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{formatTime(row.work_end)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{row.total_hours.toFixed(1)}</td>
+                    {showOvertimeColumns && project.overtime_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.overtime_hours > 0 ? (
+                          <span className="text-orange-600">{row.overtime_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    {showOvertimeColumns && project.saturday_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.is_saturday ? (
+                          <span className="text-blue-600">{row.total_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    {showOvertimeColumns && project.sunday_paid && (
+                      <td className="px-4 py-3 text-sm text-right font-medium">
+                        {row.is_sunday ? (
+                          <span className="text-purple-600">{row.total_hours.toFixed(1)}</span>
+                        ) : (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => toggleClientConfirmation(row)}
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-lg border transition-colors ${
+                          row.client_confirmed
+                            ? 'bg-green-100 border-green-300 text-green-600 hover:bg-green-200'
+                            : 'bg-white border-gray-300 text-gray-300 hover:border-gray-400 hover:text-gray-400'
+                        }`}
+                        title={row.client_confirmed ? 'Potwierdzone przez zleceniodawcę' : 'Kliknij aby potwierdzić'}
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 border-t-2 border-gray-300">
+                  <td className="px-4 py-3 text-sm font-bold text-gray-700" colSpan={7}>RAZEM</td>
+                  <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right">{totalHours.toFixed(1)}</td>
+                  {showOvertimeColumns && project.overtime_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-orange-600 text-right">{totalOvertime.toFixed(1)}</td>
+                  )}
+                  {showOvertimeColumns && project.saturday_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-blue-600 text-right">{totalSaturdayHours.toFixed(1)}</td>
+                  )}
+                  {showOvertimeColumns && project.sunday_paid && (
+                    <td className="px-4 py-3 text-sm font-bold text-purple-600 text-right">{totalSundayHours.toFixed(1)}</td>
+                  )}
+                  <td className="px-4 py-3 text-sm font-bold text-green-600 text-center">{confirmedCount} / {attendanceRows.length}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
       </div>
     );
   };
