@@ -596,22 +596,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       const taskData: any = {
         project_id: project.id,
         company_id: currentUser.company_id,
-        title: form.name,
-        description: form.description,
+        name: form.name,
+        description: form.description || null,
         billing_type: form.billing_type,
-        status: 'todo' as TaskStatus_Project,
-        priority: 'medium' as TaskPriority,
-        is_archived: false,
+        status: 'todo',
+        priority: 'medium',
         worker_payment_type: form.worker_payment_type,
         worker_rate_per_unit: form.worker_payment_type === 'akord' ? form.worker_rate_per_unit : null,
-        assigned_users: form.assigned_users,
-        assigned_to: form.assigned_users.length > 0 ? form.assigned_users[0] : null,
+        assigned_users: form.assigned_users.length > 0 ? form.assigned_users : null,
         has_start_deadline: form.has_start_deadline,
-        start_date: form.has_start_deadline ? form.start_date || null : null,
-        start_time: form.has_start_deadline ? form.start_time || null : null,
+        start_date: form.has_start_deadline && form.start_date ? form.start_date : null,
+        start_time: form.has_start_deadline && form.start_time ? form.start_time : null,
         has_end_deadline: form.has_end_deadline,
-        due_date: form.has_end_deadline ? form.end_date || null : null,
-        end_time: form.has_end_deadline ? form.end_time || null : null,
+        end_date: form.has_end_deadline && form.end_date ? form.end_date : null,
+        end_time: form.has_end_deadline && form.end_time ? form.end_time : null,
       };
 
       if (form.billing_type === 'ryczalt') {
@@ -635,7 +633,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           setSelectedTask(data);
         }
       } else {
-        taskData.created_by = currentUser.id;
         const { data } = await supabase.from('project_tasks').insert(taskData).select().single();
         if (data) setTasks(prev => [data, ...prev]);
         setShowAddTask(false);
@@ -657,7 +654,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     setSelectedTask(task);
     setTaskDetailTab('edit');
     setEditingTask({
-      name: task.title,
+      name: (task as any).name || task.title,
       billing_type: task.billing_type,
       hourly_value: task.hourly_value || 0,
       quantity: task.quantity || 0,
@@ -670,7 +667,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       start_date: task.start_date || '',
       start_time: task.start_time || '',
       has_end_deadline: task.has_end_deadline || false,
-      end_date: task.due_date || '',
+      end_date: (task as any).end_date || task.due_date || '',
       end_time: task.end_time || '',
       description: task.description || '',
     });
@@ -990,12 +987,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                   onClick={() => openTaskDetail(task)}
                 >
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{task.title}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{(task as any).name || task.title}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {task.due_date ? new Date(task.due_date).toLocaleDateString('pl-PL') : '-'}
+                    {((task as any).end_date || task.due_date) ? new Date((task as any).end_date || task.due_date!).toLocaleDateString('pl-PL') : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                     {task.total_value ? `${task.total_value.toLocaleString('pl-PL')} PLN` :
@@ -1043,7 +1040,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">{selectedTask.title}</h2>
+              <h2 className="text-base font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
               <button onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }} className="p-0.5 rounded-lg hover:bg-gray-100 text-gray-400">
                 <X className="w-4 h-4" />
               </button>
@@ -1299,7 +1296,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               {projectTimeLogs.map(tl => (
                 <tr key={tl.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm text-gray-900">{getUserName(tl.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{tasks.find(t => t.id === tl.task_id)?.title || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{(() => { const t = tasks.find(t => t.id === tl.task_id); return t ? ((t as any).name || t.title) : '-'; })()}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{new Date(tl.date).toLocaleDateString('pl-PL')}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">{tl.minutes}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{tl.description || '-'}</td>
