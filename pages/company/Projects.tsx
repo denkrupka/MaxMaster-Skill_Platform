@@ -142,22 +142,28 @@ export const CompanyProjectsPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [projRes, custRes, ccRes, deptRes, costsRes, incomeRes, membersRes] = await Promise.all([
+      // Core queries (tables that always exist)
+      const [projRes, custRes, ccRes, deptRes] = await Promise.all([
         supabase.from('projects').select('*').eq('company_id', currentUser.company_id).order('created_at', { ascending: false }),
         supabase.from('project_customers').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
         supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
         supabase.from('departments').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
-        supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id),
-        supabase.from('project_income').select('*').eq('company_id', currentUser.company_id),
-        supabase.from('project_members').select('*').eq('company_id', currentUser.company_id),
       ]);
       if (projRes.data) setProjects(projRes.data);
       if (custRes.data) setCustomers(custRes.data);
       if (ccRes.data) setContractorClients(ccRes.data);
       if (deptRes.data) setDepartments(deptRes.data);
-      if (costsRes.data) setProjectCosts(costsRes.data);
-      if (incomeRes.data) setProjectIncome(incomeRes.data);
-      if (membersRes.data) setProjectMembers(membersRes.data);
+
+      // Extended queries (tables/columns from migrations - may not exist yet, ignore errors)
+      const companyProjectIds = new Set((projRes.data || []).map((p: any) => p.id));
+      const [costsRes, incomeRes, membersRes] = await Promise.all([
+        supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id).then(r => r.data || []).catch(() => []),
+        supabase.from('project_income').select('*').eq('company_id', currentUser.company_id).then(r => r.data || []).catch(() => []),
+        supabase.from('project_members').select('*').then(r => r.data || []).catch(() => []),
+      ]);
+      setProjectCosts(costsRes as ProjectCost[]);
+      setProjectIncome(incomeRes as ProjectIncome[]);
+      setProjectMembers((membersRes as ProjectMember[]).filter((m: any) => companyProjectIds.has(m.project_id)));
     } catch (err) {
       console.error('Error loading projects:', err);
     } finally {
@@ -247,88 +253,88 @@ export const CompanyProjectsPage: React.FC = () => {
       // Determine if customer_id is from project_customers (FK safe) or contractors_clients
       const selectedCustomerId = projectForm.customer_id || null;
       const isProjectCustomer = selectedCustomerId ? customers.some(c => c.id === selectedCustomerId) : false;
+      const isContractorClient = selectedCustomerId && !isProjectCustomer;
 
-      // Core fields that always exist in the projects table
-      const corePayload: any = {
+      // Build full payload with all fields
+      const payload: any = {
         company_id: currentUser.company_id,
         name: nameToUse.trim(),
         description: projectForm.description.trim() || null,
-        // Only set customer_id if it's a valid project_customers reference (FK constraint)
         customer_id: isProjectCustomer ? selectedCustomerId : null,
         status: projectForm.status,
         color: projectForm.color,
-        budget_hours: projectForm.billing_type === 'ryczalt' && projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null,
-        budget_amount: projectForm.billing_type === 'ryczalt' && projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null,
         start_date: projectForm.start_date || null,
         end_date: projectForm.end_date || null,
         updated_at: new Date().toISOString(),
-      };
-
-      // Extended fields from migrations that may not exist yet
-      const isContractorClient = selectedCustomerId && !isProjectCustomer;
-      const extendedFields: any = {
+        // Extended fields (may not exist in DB yet)
         name_mode: projectForm.name_mode,
         department_id: projectForm.department_id || null,
         billing_type: projectForm.billing_type,
-        // Store contractor client reference (separate from FK-constrained customer_id)
-        ...(isContractorClient ? { contractor_client_id: selectedCustomerId } : { contractor_client_id: null }),
+        contractor_client_id: isContractorClient ? selectedCustomerId : null,
       };
 
       if (projectForm.billing_type === 'ryczalt') {
-        extendedFields.hourly_rate = null;
-        extendedFields.overtime_paid = false;
-        extendedFields.saturday_paid = false;
-        extendedFields.sunday_paid = false;
-        extendedFields.night_paid = false;
-        extendedFields.travel_paid = false;
+        payload.budget_hours = projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null;
+        payload.budget_amount = projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null;
+        payload.hourly_rate = null;
+        payload.overtime_paid = false;
+        payload.saturday_paid = false;
+        payload.sunday_paid = false;
+        payload.night_paid = false;
+        payload.travel_paid = false;
       } else {
-        extendedFields.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
-        extendedFields.overtime_paid = hourlySettings.overtime_paid;
-        extendedFields.overtime_rate = hourlySettings.overtime_rate ? parseFloat(hourlySettings.overtime_rate) : null;
-        extendedFields.overtime_base_hours = hourlySettings.overtime_base_hours ? parseFloat(hourlySettings.overtime_base_hours) : null;
-        extendedFields.saturday_paid = hourlySettings.saturday_paid;
-        extendedFields.saturday_rate = hourlySettings.saturday_rate ? parseFloat(hourlySettings.saturday_rate) : null;
-        extendedFields.saturday_hours = hourlySettings.saturday_hours ? parseFloat(hourlySettings.saturday_hours) : null;
-        extendedFields.sunday_paid = hourlySettings.sunday_paid;
-        extendedFields.sunday_rate = hourlySettings.sunday_rate ? parseFloat(hourlySettings.sunday_rate) : null;
-        extendedFields.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
-        extendedFields.night_paid = hourlySettings.night_paid;
-        extendedFields.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
-        extendedFields.travel_paid = hourlySettings.travel_paid;
-        extendedFields.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
-        extendedFields.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
-        extendedFields.budget_hours = null;
-        extendedFields.budget_amount = null;
+        payload.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
+        payload.budget_hours = null;
+        payload.budget_amount = null;
+        payload.overtime_paid = hourlySettings.overtime_paid;
+        payload.overtime_rate = hourlySettings.overtime_rate ? parseFloat(hourlySettings.overtime_rate) : null;
+        payload.overtime_base_hours = hourlySettings.overtime_base_hours ? parseFloat(hourlySettings.overtime_base_hours) : null;
+        payload.saturday_paid = hourlySettings.saturday_paid;
+        payload.saturday_rate = hourlySettings.saturday_rate ? parseFloat(hourlySettings.saturday_rate) : null;
+        payload.saturday_hours = hourlySettings.saturday_hours ? parseFloat(hourlySettings.saturday_hours) : null;
+        payload.sunday_paid = hourlySettings.sunday_paid;
+        payload.sunday_rate = hourlySettings.sunday_rate ? parseFloat(hourlySettings.sunday_rate) : null;
+        payload.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
+        payload.night_paid = hourlySettings.night_paid;
+        payload.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
+        payload.night_start_hour = hourlySettings.night_start_hour ? parseInt(hourlySettings.night_start_hour.split(':')[0], 10) : null;
+        payload.night_end_hour = hourlySettings.night_end_hour ? parseInt(hourlySettings.night_end_hour.split(':')[0], 10) : null;
+        payload.travel_paid = hourlySettings.travel_paid;
+        payload.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
+        payload.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
       }
 
-      // Night hour fields (separate migration)
-      const nightFields: any = {};
-      if (projectForm.billing_type === 'hourly') {
-        nightFields.night_start_hour = hourlySettings.night_start_hour ? parseInt(hourlySettings.night_start_hour.split(':')[0], 10) : null;
-        nightFields.night_end_hour = hourlySettings.night_end_hour ? parseInt(hourlySettings.night_end_hour.split(':')[0], 10) : null;
-      }
-
-      // Try full payload first, then progressively strip fields on error
-      const fullPayload = { ...corePayload, ...extendedFields, ...nightFields };
-      const fallback1 = { ...corePayload, ...extendedFields };
-      const fallback2 = { ...corePayload };
-
-      const payloads = [fullPayload, fallback1, fallback2];
-
+      // Dynamically retry, removing missing columns detected from error messages
       let resultData: any = null;
       let lastError: any = null;
+      const removedCols: string[] = [];
 
-      for (const payload of payloads) {
-        if (editingProject) {
-          const { data, error } = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
-          if (!error && data) { resultData = data; break; }
-          lastError = error;
-          console.warn('Save attempt failed, retrying with fewer fields:', error?.message);
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const { data, error } = editingProject
+          ? await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single()
+          : await supabase.from('projects').insert(payload).select().single();
+
+        if (!error && data) {
+          resultData = data;
+          break;
+        }
+
+        // Parse error to find missing column name
+        const colMatch = error?.message?.match(/Could not find the '(\w+)' column/);
+        const fkMatch = error?.message?.match(/violates foreign key constraint/);
+
+        if (colMatch) {
+          const col = colMatch[1];
+          delete payload[col];
+          removedCols.push(col);
+        } else if (fkMatch && payload.customer_id) {
+          // FK constraint violation - clear customer_id
+          payload.customer_id = null;
+          removedCols.push('customer_id(FK)');
         } else {
-          const { data, error } = await supabase.from('projects').insert(payload).select().single();
-          if (!error && data) { resultData = data; break; }
+          // Unknown error, stop retrying
           lastError = error;
-          console.warn('Save attempt failed, retrying with fewer fields:', error?.message);
+          break;
         }
       }
 
@@ -339,9 +345,12 @@ export const CompanyProjectsPage: React.FC = () => {
         } else {
           setProjects(prev => [resultData, ...prev]);
         }
+        if (removedCols.length > 0) {
+          console.warn('Saved with missing columns (run migrations to fix):', removedCols);
+        }
         setState(prev => ({ ...prev, toast: { title: 'Sukces', message: editingProject ? 'Projekt został zaktualizowany' : 'Projekt został utworzony' } }));
       } else {
-        console.error('All save attempts failed:', lastError);
+        console.error('Save failed:', lastError);
         setState(prev => ({ ...prev, toast: { title: 'Błąd', message: editingProject ? 'Nie udało się zaktualizować projektu' : 'Nie udało się utworzyć projektu' } }));
       }
 
