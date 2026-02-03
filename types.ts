@@ -1194,6 +1194,10 @@ export interface ProjectCost {
   issue_date?: string;
   payment_due_date?: string;
   issuer?: string;
+  issuer_nip?: string;
+  issuer_address?: string;
+  vat_rate?: number;
+  value_brutto?: number;
   value_netto: number;
   category?: string;
   payment_status?: string;

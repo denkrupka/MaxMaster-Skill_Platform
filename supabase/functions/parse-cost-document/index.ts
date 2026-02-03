@@ -56,7 +56,11 @@ serve(async (req) => {
 - issue_date: data wystawienia w formacie YYYY-MM-DD
 - payment_due_date: termin płatności w formacie YYYY-MM-DD
 - issuer: nazwa wystawcy dokumentu (firma/osoba)
+- issuer_nip: NIP wystawcy (sam numer, bez kresek)
+- issuer_address: pełny adres wystawcy
 - value_netto: wartość netto dokumentu jako liczba (bez waluty, separator dziesiętny to kropka)
+- vat_rate: stawka VAT jako liczba procentowa (np. 23 dla 23%)
+- value_brutto: wartość brutto dokumentu jako liczba
 - category: kategoria kosztów (np. "Materiały", "Usługi", "Transport", "Narzędzia", "Wynajem", "Inne")
 
 Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wartości liczbowych.`,
@@ -74,10 +78,14 @@ Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wart
                 issue_date: { type: 'STRING' },
                 payment_due_date: { type: 'STRING' },
                 issuer: { type: 'STRING' },
+                issuer_nip: { type: 'STRING' },
+                issuer_address: { type: 'STRING' },
                 value_netto: { type: 'NUMBER' },
+                vat_rate: { type: 'NUMBER' },
+                value_brutto: { type: 'NUMBER' },
                 category: { type: 'STRING' },
               },
-              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'value_netto', 'category'],
+              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_address', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
             },
           },
         }),
