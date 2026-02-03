@@ -611,8 +611,8 @@ export const EmployeeAttendancePage = () => {
                 <tr className="bg-slate-50 text-left text-xs font-bold text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3">Data</th>
                   <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 hidden sm:table-cell">Przyjscie</th>
-                  <th className="px-4 py-3 hidden sm:table-cell">Wyjscie</th>
+                  <th className="px-4 py-3 hidden sm:table-cell">Rozpoczęcie pracy</th>
+                  <th className="px-4 py-3 hidden sm:table-cell">Zakończenie pracy</th>
                   <th className="px-4 py-3">Praca</th>
                   <th className="px-4 py-3 hidden md:table-cell">Przerwa</th>
                   <th className="px-4 py-3 hidden md:table-cell">Nadgodziny</th>
@@ -837,7 +837,7 @@ export const EmployeeAttendancePage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
-                  Proponowane przyjscie
+                  Proponowane rozpoczęcie
                 </label>
                 <input
                   type="time"
@@ -848,7 +848,7 @@ export const EmployeeAttendancePage = () => {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">
-                  Proponowane wyjscie
+                  Proponowane zakończenie
                 </label>
                 <input
                   type="time"
