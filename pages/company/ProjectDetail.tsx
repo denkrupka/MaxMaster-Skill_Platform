@@ -1818,51 +1818,300 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const generateProtocolPDF = (p: ProjectProtocol) => {
     const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const ml = 14; // margin left
+    const mr = pw - 14; // margin right
+    const totalPages = 3;
 
-    doc.setFontSize(16);
-    doc.text('PROTOKÓŁ ODBIORU ROBÓT', pageWidth / 2, 20, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.text(`Nr protokołu: ${p.protocol_number}`, 14, 35);
-    doc.text(`Typ: ${p.protocol_type === 'standard' ? 'Roboty zgodnie z umową' : 'Prace dodatkowe'}`, 14, 42);
-    doc.text(`Projekt: ${project.name}`, 14, 49);
-    doc.text(`Klient: ${getCustomerName(project.contractor_client_id || project.customer_id)}`, 14, 56);
-    if (p.period_from || p.period_to) {
-      doc.text(`Okres wykonania robót: ${p.period_from ? new Date(p.period_from).toLocaleDateString('pl-PL') : '-'} – ${p.period_to ? new Date(p.period_to).toLocaleDateString('pl-PL') : '-'}`, 14, 63);
-    }
-    if (p.invoice_number) {
-      doc.text(`Nr faktury bieżącej: ${p.invoice_number}`, 14, 70);
-    }
-    doc.text(`Zaawansowanie: ${p.advancement_percent}%`, 14, 77);
-    doc.text(`Wartość robót: ${p.total_value.toLocaleString('pl-PL')} PLN netto`, 14, 84);
-    doc.text(`Przedstawiciel klienta: ${getContactName(p.client_representative_id)}`, 14, 91);
-
+    const company = state.currentCompany;
+    const client = contractorClients.find(c => c.id === project.contractor_client_id);
     const tasksArr = (p.tasks_data || []) as ProjectProtocolTask[];
-    if (tasksArr.length > 0) {
-      autoTable(doc, {
-        startY: 100,
-        head: [['Lp.', 'Nazwa zadania', 'Wartość (PLN)', '% Wykonania']],
-        body: tasksArr.map((t, i) => [
-          String(i + 1),
-          t.name,
-          t.value.toLocaleString('pl-PL'),
-          `${t.completion_percent}%`,
-        ]),
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [59, 130, 246] },
-      });
+
+    // Calculate cumulative advancement from previous protocols
+    const previousProtocols = protocols.filter(pp => pp.id !== p.id && new Date(pp.created_at) < new Date(p.created_at));
+    const previousTotalValue = previousProtocols.reduce((s, pp) => s + (pp.total_value || 0), 0);
+    const cumulativeValue = previousTotalValue + p.total_value;
+    const budgetAmount = project.budget_amount || 0;
+    const currentPct = budgetAmount > 0 ? ((p.total_value / budgetAmount) * 100).toFixed(1) : '0';
+    const cumulativePct = budgetAmount > 0 ? ((cumulativeValue / budgetAmount) * 100).toFixed(1) : '0';
+
+    const formatDatePL = (d?: string) => d ? new Date(d).toLocaleDateString('pl-PL') : '';
+    const periodTo = p.period_to ? formatDatePL(p.period_to) : formatDatePL(p.created_at);
+
+    const drawFooter = (pageNum: number) => {
+      doc.setFontSize(8);
+      doc.text(`Strona ${pageNum} z ${totalPages}`, pw / 2, ph - 10, { align: 'center' });
+    };
+
+    const drawSignatures = (y: number) => {
+      doc.setFontSize(9);
+      doc.line(ml, y, ml + 60, y);
+      doc.text('Zamawiajacy:', ml, y + 5);
+      doc.line(mr - 60, y, mr, y);
+      doc.text('Wykonawca:', mr - 60, y + 5);
+    };
+
+    // =============================================
+    // PAGE 1 - Czesc Nr.1 - PROTOKOL ODBIORU ROBOT
+    // =============================================
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`PROTOKOL ODBIORU ROBOT NR ${p.protocol_number}`, pw / 2, 20, { align: 'center' });
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Czesc Nr.1', mr, 28, { align: 'right' });
+
+    let y = 36;
+    doc.setFontSize(9);
+    doc.text(`W dniu ${periodTo} r. Komisja Odbiorowa zlozoна z przedstawicieli Zamawiajacego i Wykonawcy`, ml, y);
+    y += 5;
+    doc.text('przeprowadzila inspekcje w celu odbioru robot.', ml, y);
+
+    y += 10;
+    // Zamawiajacy / Wykonawca columns
+    doc.setFont('helvetica', 'bold');
+    doc.text('Zamawiajacy:', ml, y);
+    doc.text('Wykonawca:', pw / 2 + 10, y);
+    doc.setFont('helvetica', 'normal');
+
+    y += 5;
+    const clientName = client?.name || getCustomerName(project.contractor_client_id || project.customer_id);
+    const clientLines = [
+      clientName,
+      [client?.address_postal_code, client?.address_city].filter(Boolean).join(' '),
+      client?.address_street || '',
+      client?.nip ? `NIP: ${client.nip}` : '',
+    ].filter(Boolean);
+
+    const companyLines = [
+      company?.legal_name || company?.name || '',
+      [company?.address_postal_code, company?.address_city].filter(Boolean).join(' '),
+      company?.address_street || '',
+      company?.tax_id ? `NIP: ${company.tax_id}` : '',
+    ].filter(Boolean);
+
+    const maxLines = Math.max(clientLines.length, companyLines.length);
+    for (let i = 0; i < maxLines; i++) {
+      if (clientLines[i]) doc.text(clientLines[i], ml, y);
+      if (companyLines[i]) doc.text(companyLines[i], pw / 2 + 10, y);
+      y += 4.5;
     }
 
-    const finalY = (doc as any).lastAutoTable?.finalY || 110;
-    doc.setFontSize(10);
-    doc.text(`Akceptacja: ${p.accepted ? 'TAK' : 'NIE'}`, 14, finalY + 15);
-    doc.text(`Data wystawienia: ${new Date(p.created_at).toLocaleDateString('pl-PL')}`, 14, finalY + 22);
+    y += 6;
+    doc.setFontSize(9);
+    doc.text(`Nazwa obiektu: "${project.name}"`, ml, y);
+    y += 5;
+    if (dept) {
+      const addrParts = [dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ');
+      if (addrParts) { doc.text(`Adres obiektu: ${addrParts}`, ml, y); y += 5; }
+      if (dept.kod_obiektu) { doc.text(`Kod Obiektu: ${dept.kod_obiektu}`, ml, y); y += 5; }
+    }
+    doc.text(`Wynagrodzenia Umowne (netto zl): ${budgetAmount.toLocaleString('pl-PL')} zl`, ml, y);
+    y += 8;
 
-    doc.line(14, finalY + 45, 80, finalY + 45);
-    doc.text('Podpis wykonawcy', 14, finalY + 50);
-    doc.line(pageWidth - 80, finalY + 45, pageWidth - 14, finalY + 45);
-    doc.text('Podpis klienta', pageWidth - 80, finalY + 50);
+    // Main table - summary of protocol value
+    autoTable(doc, {
+      startY: y,
+      head: [['lp.', 'Numer faktury biezacej', 'Wartosc odebranych robot\ndo zafakturowania w okresie\nrozliczeniowym zl. netto', 'Zaawansowanie procentowe\nodebranych robot w okresie\nrozliczeniowym\n(% od Wynagrodzenia)', 'Zaawansowanie procentowe\nrazem z poprzednimi\nprotokolami\n(% od Wynagrodzenia)']],
+      body: [
+        ['1', p.invoice_number || '', `${p.total_value.toLocaleString('pl-PL')}`, `${currentPct}%`, `${cumulativePct}%`],
+      ],
+      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0] },
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { halign: 'center' },
+      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 35 } },
+      theme: 'grid',
+      margin: { left: ml, right: 14 },
+    });
+
+    y = (doc as any).lastAutoTable?.finalY || y + 30;
+    y += 6;
+
+    doc.setFontSize(9);
+    const robotType = p.protocol_type === 'standard' ? 'Roboty zgodnie z umowa' : 'Prace dodatkowe';
+    doc.text(`Okreslenie rodzaju robot: `, ml, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(robotType, ml + doc.getTextWidth('Okreslenie rodzaju robot: '), y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+    doc.text(`Wykaz odebranych robot: Zalacznik Nr.1 do protokolu`, ml, y);
+    y += 5;
+    if (p.period_from) {
+      doc.text(`Data wykonania uslugi: ${formatDatePL(p.period_from)}r`, ml, y); y += 5;
+    }
+    doc.text(`Data dokonania odbioru: ${periodTo}r`, ml, y);
+    y += 8;
+
+    // Commission decision checkboxes
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Komisja postanowila**:', ml, y);
+    doc.setFont('helvetica', 'normal');
+    y += 5;
+
+    // Checkbox 1 - checked if accepted
+    const cbSize = 3.5;
+    doc.rect(ml, y - 2.8, cbSize, cbSize);
+    if (p.accepted) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('X', ml + 0.7, y);
+      doc.setFont('helvetica', 'normal');
+    }
+    const cb1Text = 'Dokonac odbior robot z wykazu co zatwierdzone zostalo zlozонуми podpisami czlonkow';
+    doc.text(cb1Text, ml + 5, y);
+    y += 4;
+    doc.text('komisji ze strony Zamawiajacego i Wykonawcy.', ml + 5, y);
+    y += 6;
+
+    // Checkbox 2
+    doc.rect(ml, y - 2.8, cbSize, cbSize);
+    const cb2Text = 'Dokonac odbior robot z wykazu, uwzgledniajac opisane usterki w liscie usterek bez';
+    doc.text(cb2Text, ml + 5, y);
+    y += 4;
+    doc.text('wymagalnosci poprawy tych usterek przez Wykonawce, co zatwierdzone zostalo zlozонуми', ml + 5, y);
+    y += 4;
+    doc.text('podpisami czlonkow komisji ze strony Zamawiajacego i Wykonawcy.', ml + 5, y);
+    y += 6;
+
+    // Checkbox 3
+    doc.rect(ml, y - 2.8, cbSize, cbSize);
+    const cb3Text = 'Nie dokonywac odbioru robot ze wzgledu na usterki, z wyznaczeniem dodatkowego';
+    doc.text(cb3Text, ml + 5, y);
+    y += 4;
+    doc.text('terminu na ponowny odbior (lista usterek oraz nowy termin inspekcji w celu odbioru robot zostaly', ml + 5, y);
+    y += 4;
+    doc.text('wskazane w czesci Nr. 2 danego protokolu), co zatwierdzone zostalo zlozонуми podpisami', ml + 5, y);
+    y += 4;
+    doc.text('czlonkow komisji ze strony Zamawiajacego i Wykonawcy.', ml + 5, y);
+
+    y += 12;
+    drawSignatures(y);
+    drawFooter(1);
+
+    // =============================================
+    // PAGE 2 - Czesc Nr.2 - Lista usterek
+    // =============================================
+    doc.addPage();
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Czesc Nr.2***', mr, 18, { align: 'right' });
+
+    y = 28;
+    doc.text('Ze wzgledu na znaczne usterki ktore zostaly wykryte podczas przeprowadzenia inspekcji w celu', ml, y);
+    y += 5;
+    doc.text('odbioru robot, komisja odbiorowa wyznacza nowy termin przeprowadzenia inspekcji w celu', ml, y);
+    y += 5;
+    doc.text('odbioru robot — _______________', ml, y);
+    y += 10;
+    doc.text('Wykonawca oswiadcza, ze dokona naprawy / wymiany / remontu usterek wskazanych w liscie', ml, y);
+    y += 5;
+    doc.text('usterek do ww. terminu.', ml, y);
+
+    y += 12;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Lista usterek', pw / 2, y, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    y += 6;
+
+    // Defects table (empty template)
+    autoTable(doc, {
+      startY: y,
+      head: [['Budynek', 'Klatka', 'Pietro', 'Pomieszczenie', 'Przedmiot', 'Opis Usterki']],
+      body: Array.from({ length: 10 }, () => ['', '', '', '', '', '']),
+      styles: { fontSize: 7, cellPadding: 4, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 8 },
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
+      theme: 'grid',
+      margin: { left: ml, right: 14 },
+      columnStyles: { 5: { cellWidth: 55 } },
+    });
+
+    y = (doc as any).lastAutoTable?.finalY || y + 100;
+    y += 15;
+    drawSignatures(y);
+
+    // Footer notes
+    doc.setFontSize(6);
+    doc.text('*Nie potrzebne skreslić', ml, ph - 25);
+    doc.text('**Nalezy wyznaczyc jeden wariant – wpisujac X', ml, ph - 21);
+    doc.text('***Wypelnia sie tylko w przypadku jesli komisja postanowila nie dokonywac odbioru robot, lub dokonac odbioru – uwzgledniajac', ml, ph - 17);
+    doc.text('opisane usterki w liscie usterek bez wymagalnosci poprawy tych usterek przez Wykonawce', ml, ph - 13);
+
+    drawFooter(2);
+
+    // Add attachment reference
+    doc.setFontSize(8);
+    doc.text(`Zalacznik Nr.1 do protokolu Nr ${p.protocol_number}`, pw / 2, ph - 14, { align: 'center' });
+
+    // =============================================
+    // PAGE 3 - Wykaz odebranych robot (tasks list)
+    // =============================================
+    doc.addPage();
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Wykaz odebranych robot', pw / 2, 20, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+
+    // Calculate per-task cumulative percentages
+    const prevTasksMap = new Map<string, number>();
+    previousProtocols.forEach(pp => {
+      const ppTasks = (pp.tasks_data || []) as ProjectProtocolTask[];
+      ppTasks.forEach(pt => {
+        prevTasksMap.set(pt.task_id, (prevTasksMap.get(pt.task_id) || 0) + pt.completion_percent);
+      });
+    });
+
+    const taskRows = tasksArr.map((t, i) => {
+      const prevPct = prevTasksMap.get(t.task_id) || 0;
+      const cumulTaskPct = Math.min(prevPct + t.completion_percent, 100);
+      return [
+        String(i + 1),
+        t.name,
+        t.value.toLocaleString('pl-PL'),
+        `${t.completion_percent}%`,
+        `${cumulTaskPct}%`,
+        '', // Uwagi (remarks)
+      ];
+    });
+
+    // Fill empty rows to have at least 8 rows
+    while (taskRows.length < 8) {
+      taskRows.push(['', '', '', '', '', '']);
+    }
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Nr', 'Nazwa', 'Wartosc', 'Zaawansowanie\nprocentowe\nw okresie\nrozliczeniowym\n(% od\nWynagrodzenia)', 'Zaawansowanie\nprocentowe\nrazem z\npoprzednimi\nprotokolami\n(% od\nWynagrodzenia)', 'Uwagi']],
+      body: taskRows,
+      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 10 },
+      headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', valign: 'middle' },
+      bodyStyles: { valign: 'middle' },
+      columnStyles: {
+        0: { cellWidth: 12, halign: 'center' },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 25, halign: 'right' },
+        3: { cellWidth: 30, halign: 'center' },
+        4: { cellWidth: 30, halign: 'center' },
+        5: { cellWidth: 35 },
+      },
+      theme: 'grid',
+      margin: { left: ml, right: 14 },
+    });
+
+    y = (doc as any).lastAutoTable?.finalY || 120;
+    y += 12;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Wartosc sumaryczna odebranych robot: ${p.total_value.toLocaleString('pl-PL')} zl netto`, ml, y);
+    doc.setFont('helvetica', 'normal');
+
+    y += 15;
+    drawSignatures(y);
+    drawFooter(3);
 
     doc.save(`protokol_${p.protocol_number.replace(/\//g, '-')}.pdf`);
   };
