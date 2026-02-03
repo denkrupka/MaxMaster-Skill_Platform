@@ -1041,6 +1041,8 @@ export interface Project {
   night_paid?: boolean;
   night_rate?: number;
   night_hours?: number;
+  night_start_hour?: number;
+  night_end_hour?: number;
   travel_paid?: boolean;
   travel_rate?: number;
   travel_hours?: number;
