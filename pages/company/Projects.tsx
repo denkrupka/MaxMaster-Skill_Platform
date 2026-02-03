@@ -1,18 +1,28 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Plus, X, Search, FolderKanban, Users, Clock, FileText, Pencil, Trash2,
   Calendar, DollarSign, LayoutGrid, List, ChevronRight, Loader2, Eye,
   Play, CheckCircle2, ClipboardList, ArrowRight, Timer, UserPlus, UserMinus,
-  Download, Tag, AlertCircle, BarChart3, Briefcase
+  Download, Tag, AlertCircle, BarChart3, Briefcase, Filter, ArrowLeft,
+  Settings, ChevronDown, ExternalLink, Building2, MapPin, TrendingUp,
+  Receipt, Wrench, FileCheck, Shield, Paperclip, MessageSquare, Upload,
+  Check, XCircle, RefreshCw, Printer, Hash, ToggleLeft, ToggleRight,
+  Home, ChevronsRight
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
   Project, ProjectTask, ProjectMember, ProjectCustomer, TaskTimeLog,
-  TaskAttachment, TaskStatus_Project, TaskPriority, ProjectStatus, User
+  TaskAttachment, TaskStatus_Project, TaskPriority, ProjectStatus, User,
+  Department, ProjectBillingType, ProjectNameMode, ProjectProtocol,
+  ProjectIncome, ProjectCost, ProjectScheduleEntry, ProjectIssue,
+  ProjectFile, ProjectMemberType, ProjectMemberPaymentType, ProjectMemberStatus,
+  ProjectIssueStatus, ProjectTaskBillingType, ProjectTaskWorkerPayment,
+  ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact
 } from '../../types';
 import { SectionTabs } from '../../components/SectionTabs';
+import { ProjectDetailPage } from './ProjectDetail';
 
 const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; text: string }> = {
   active: { label: 'Aktywny', bg: 'bg-green-100', text: 'text-green-700' },
@@ -21,41 +31,46 @@ const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; 
   on_hold: { label: 'Wstrzymany', bg: 'bg-amber-100', text: 'text-amber-700' },
 };
 
-const TASK_STATUS_LABELS: Record<TaskStatus_Project, string> = {
-  todo: 'Do zrobienia',
-  in_progress: 'W trakcie',
-  review: 'Do przeglądu',
-  done: 'Gotowe',
-  cancelled: 'Anulowane',
-};
-
-const PRIORITY_CONFIG: Record<TaskPriority, { label: string; bg: string; text: string }> = {
-  low: { label: 'Niski', bg: 'bg-gray-100', text: 'text-gray-600' },
-  medium: { label: 'Średni', bg: 'bg-blue-100', text: 'text-blue-700' },
-  high: { label: 'Wysoki', bg: 'bg-orange-100', text: 'text-orange-700' },
-  urgent: { label: 'Pilny', bg: 'bg-red-100', text: 'text-red-700' },
-};
-
-const STATUS_COLUMNS: { key: TaskStatus_Project; label: string; color: string }[] = [
-  { key: 'todo', label: 'Do zrobienia', color: 'bg-slate-100 border-slate-300' },
-  { key: 'in_progress', label: 'W trakcie', color: 'bg-blue-50 border-blue-300' },
-  { key: 'review', label: 'Do przeglądu', color: 'bg-amber-50 border-amber-300' },
-  { key: 'done', label: 'Gotowe', color: 'bg-green-50 border-green-300' },
-];
-
 const COLOR_OPTIONS = [
   '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
   '#EC4899', '#06B6D4', '#F97316', '#6366F1', '#14B8A6',
 ];
 
-const emptyProjectForm = {
-  name: '', description: '', customer_id: '', status: 'active' as ProjectStatus,
-  color: '#3B82F6', budget_hours: '', budget_amount: '', start_date: '', end_date: '',
+interface HourlySettings {
+  overtime_paid: boolean;
+  overtime_rate: string;
+  overtime_base_hours: string;
+  saturday_paid: boolean;
+  saturday_rate: string;
+  saturday_hours: string;
+  sunday_paid: boolean;
+  sunday_rate: string;
+  sunday_hours: string;
+  night_paid: boolean;
+  night_rate: string;
+  night_hours: string;
+  travel_paid: boolean;
+  travel_rate: string;
+  travel_hours: string;
+}
+
+const emptyHourlySettings: HourlySettings = {
+  overtime_paid: false, overtime_rate: '', overtime_base_hours: '8',
+  saturday_paid: false, saturday_rate: '', saturday_hours: '8',
+  sunday_paid: false, sunday_rate: '', sunday_hours: '8',
+  night_paid: false, night_rate: '', night_hours: '8',
+  travel_paid: false, travel_rate: '', travel_hours: '1',
 };
 
-const emptyTaskForm = {
-  title: '', description: '', assigned_to: '', priority: 'medium' as TaskPriority,
-  due_date: '', estimated_hours: '', tags: '',
+const emptyProjectForm = {
+  name: '', description: '', customer_id: '', department_id: '',
+  name_mode: 'custom' as ProjectNameMode,
+  status: 'active' as ProjectStatus,
+  color: '#3B82F6',
+  billing_type: 'ryczalt' as ProjectBillingType,
+  budget_hours: '', budget_amount: '',
+  hourly_rate: '',
+  start_date: '', end_date: '',
 };
 
 export const CompanyProjectsPage: React.FC = () => {
@@ -64,35 +79,26 @@ export const CompanyProjectsPage: React.FC = () => {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<ProjectCustomer[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('active');
+
+  // Project costs for list columns
+  const [projectCosts, setProjectCosts] = useState<ProjectCost[]>([]);
+  const [projectIncome, setProjectIncome] = useState<ProjectIncome[]>([]);
+  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
 
   // Create / Edit project modal
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectForm, setProjectForm] = useState(emptyProjectForm);
+  const [hourlySettings, setHourlySettings] = useState<HourlySettings>(emptyHourlySettings);
+  const [showHourlySettingsModal, setShowHourlySettingsModal] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
 
   // Project detail view
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<'info' | 'tasks' | 'time' | 'files'>('info');
-
-  // Project detail data
-  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
-  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([]);
-  const [projectTimeLogs, setProjectTimeLogs] = useState<TaskTimeLog[]>([]);
-  const [projectAttachments, setProjectAttachments] = useState<TaskAttachment[]>([]);
-  const [taskViewMode, setTaskViewMode] = useState<'kanban' | 'list'>('list');
-
-  // Add member
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [newMemberUserId, setNewMemberUserId] = useState('');
-  const [newMemberRole, setNewMemberRole] = useState<'manager' | 'member'>('member');
-
-  // Create task in project
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [taskForm, setTaskForm] = useState(emptyTaskForm);
-  const [savingTask, setSavingTask] = useState(false);
 
   const companyUsers = useMemo(() =>
     users.filter(u => u.company_id === currentUser?.company_id && u.status === 'active'),
@@ -107,12 +113,20 @@ export const CompanyProjectsPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [projRes, custRes] = await Promise.all([
+      const [projRes, custRes, deptRes, costsRes, incomeRes, membersRes] = await Promise.all([
         supabase.from('projects').select('*').eq('company_id', currentUser.company_id).order('created_at', { ascending: false }),
         supabase.from('project_customers').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('departments').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id),
+        supabase.from('project_income').select('*').eq('company_id', currentUser.company_id),
+        supabase.from('project_members').select('*').eq('company_id', currentUser.company_id),
       ]);
       if (projRes.data) setProjects(projRes.data);
       if (custRes.data) setCustomers(custRes.data);
+      if (deptRes.data) setDepartments(deptRes.data);
+      if (costsRes.data) setProjectCosts(costsRes.data);
+      if (incomeRes.data) setProjectIncome(incomeRes.data);
+      if (membersRes.data) setProjectMembers(membersRes.data);
     } catch (err) {
       console.error('Error loading projects:', err);
     } finally {
@@ -120,28 +134,10 @@ export const CompanyProjectsPage: React.FC = () => {
     }
   };
 
-  const loadProjectDetails = async (project: Project) => {
-    const [membersRes, tasksRes, timeRes, attachRes] = await Promise.all([
-      supabase.from('project_members').select('*').eq('project_id', project.id),
-      supabase.from('project_tasks').select('*').eq('project_id', project.id).eq('is_archived', false).order('created_at', { ascending: false }),
-      supabase.from('task_time_logs').select('*, project_tasks!inner(project_id)').eq('project_tasks.project_id', project.id),
-      supabase.from('task_attachments').select('*, project_tasks!inner(project_id)').eq('project_tasks.project_id', project.id),
-    ]);
-    if (membersRes.data) setProjectMembers(membersRes.data);
-    if (tasksRes.data) setProjectTasks(tasksRes.data);
-    if (timeRes.data) setProjectTimeLogs(timeRes.data);
-    if (attachRes.data) setProjectAttachments(attachRes.data);
-  };
-
-  const openProjectDetail = (project: Project) => {
-    setSelectedProject(project);
-    setActiveTab('info');
-    loadProjectDetails(project);
-  };
-
   const openCreateModal = () => {
     setEditingProject(null);
     setProjectForm(emptyProjectForm);
+    setHourlySettings(emptyHourlySettings);
     setShowProjectModal(true);
   };
 
@@ -151,33 +147,109 @@ export const CompanyProjectsPage: React.FC = () => {
       name: project.name,
       description: project.description || '',
       customer_id: project.customer_id || '',
+      department_id: project.department_id || '',
+      name_mode: project.name_mode || 'custom',
       status: project.status,
       color: project.color || '#3B82F6',
+      billing_type: project.billing_type || 'ryczalt',
       budget_hours: project.budget_hours?.toString() || '',
       budget_amount: project.budget_amount?.toString() || '',
+      hourly_rate: project.hourly_rate?.toString() || '',
       start_date: project.start_date || '',
       end_date: project.end_date || '',
+    });
+    setHourlySettings({
+      overtime_paid: project.overtime_paid || false,
+      overtime_rate: project.overtime_rate?.toString() || '',
+      overtime_base_hours: project.overtime_base_hours?.toString() || '8',
+      saturday_paid: project.saturday_paid || false,
+      saturday_rate: project.saturday_rate?.toString() || '',
+      saturday_hours: project.saturday_hours?.toString() || '8',
+      sunday_paid: project.sunday_paid || false,
+      sunday_rate: project.sunday_rate?.toString() || '',
+      sunday_hours: project.sunday_hours?.toString() || '8',
+      night_paid: project.night_paid || false,
+      night_rate: project.night_rate?.toString() || '',
+      night_hours: project.night_hours?.toString() || '8',
+      travel_paid: project.travel_paid || false,
+      travel_rate: project.travel_rate?.toString() || '',
+      travel_hours: project.travel_hours?.toString() || '1',
     });
     setShowProjectModal(true);
   };
 
+  const handleDepartmentChange = (deptId: string) => {
+    setProjectForm(prev => ({ ...prev, department_id: deptId }));
+    if (deptId) {
+      const dept = departments.find(d => d.id === deptId);
+      if (dept) {
+        setProjectForm(prev => ({
+          ...prev,
+          department_id: deptId,
+          name: prev.name_mode === 'object' ? dept.name : prev.name,
+        }));
+        // Auto-fill customer: find if any existing project with this department has a customer,
+        // or check if there's a customer matching the department name
+        // For now, we keep the customer_id as-is; it shows in the info panel below
+      }
+    }
+  };
+
   const saveProject = async () => {
-    if (!currentUser || !projectForm.name.trim()) return;
+    if (!currentUser) return;
+    const nameToUse = projectForm.name_mode === 'object'
+      ? departments.find(d => d.id === projectForm.department_id)?.name || projectForm.name
+      : projectForm.name;
+    if (!nameToUse.trim()) return;
+
     setSavingProject(true);
     try {
       const payload: any = {
         company_id: currentUser.company_id,
-        name: projectForm.name.trim(),
+        name: nameToUse.trim(),
+        name_mode: projectForm.name_mode,
         description: projectForm.description.trim() || null,
         customer_id: projectForm.customer_id || null,
+        department_id: projectForm.department_id || null,
         status: projectForm.status,
         color: projectForm.color,
-        budget_hours: projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null,
-        budget_amount: projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null,
+        billing_type: projectForm.billing_type,
         start_date: projectForm.start_date || null,
         end_date: projectForm.end_date || null,
         updated_at: new Date().toISOString(),
       };
+
+      if (projectForm.billing_type === 'ryczalt') {
+        payload.budget_hours = projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null;
+        payload.budget_amount = projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null;
+        // Clear hourly fields
+        payload.hourly_rate = null;
+        payload.overtime_paid = false;
+        payload.saturday_paid = false;
+        payload.sunday_paid = false;
+        payload.night_paid = false;
+        payload.travel_paid = false;
+      } else {
+        payload.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
+        payload.overtime_paid = hourlySettings.overtime_paid;
+        payload.overtime_rate = hourlySettings.overtime_rate ? parseFloat(hourlySettings.overtime_rate) : null;
+        payload.overtime_base_hours = hourlySettings.overtime_base_hours ? parseFloat(hourlySettings.overtime_base_hours) : null;
+        payload.saturday_paid = hourlySettings.saturday_paid;
+        payload.saturday_rate = hourlySettings.saturday_rate ? parseFloat(hourlySettings.saturday_rate) : null;
+        payload.saturday_hours = hourlySettings.saturday_hours ? parseFloat(hourlySettings.saturday_hours) : null;
+        payload.sunday_paid = hourlySettings.sunday_paid;
+        payload.sunday_rate = hourlySettings.sunday_rate ? parseFloat(hourlySettings.sunday_rate) : null;
+        payload.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
+        payload.night_paid = hourlySettings.night_paid;
+        payload.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
+        payload.night_hours = hourlySettings.night_hours ? parseFloat(hourlySettings.night_hours) : null;
+        payload.travel_paid = hourlySettings.travel_paid;
+        payload.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
+        payload.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
+        // Clear ryczalt fields
+        payload.budget_hours = null;
+        payload.budget_amount = null;
+      }
 
       if (editingProject) {
         const { data, error } = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
@@ -202,73 +274,13 @@ export const CompanyProjectsPage: React.FC = () => {
   };
 
   const deleteProject = async (projectId: string) => {
-    if (!confirm('Czy na pewno chcesz usunąć ten projekt? Wszystkie powiązane zadania zostaną również usunięte.')) return;
+    if (!confirm('Czy na pewno chcesz usunąć ten projekt? Wszystkie powiązane dane zostaną również usunięte.')) return;
     const { error } = await supabase.from('projects').delete().eq('id', projectId);
     if (!error) {
       setProjects(prev => prev.filter(p => p.id !== projectId));
       if (selectedProject?.id === projectId) setSelectedProject(null);
       setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został usunięty' } }));
     }
-  };
-
-  const addMember = async () => {
-    if (!selectedProject || !newMemberUserId) return;
-    const exists = projectMembers.find(m => m.user_id === newMemberUserId);
-    if (exists) return;
-    const { data, error } = await supabase.from('project_members').insert({
-      project_id: selectedProject.id,
-      user_id: newMemberUserId,
-      role: newMemberRole,
-    }).select().single();
-    if (!error && data) {
-      setProjectMembers(prev => [...prev, data]);
-      setNewMemberUserId('');
-      setShowAddMember(false);
-    }
-  };
-
-  const removeMember = async (memberId: string) => {
-    const { error } = await supabase.from('project_members').delete().eq('id', memberId);
-    if (!error) setProjectMembers(prev => prev.filter(m => m.id !== memberId));
-  };
-
-  const createTask = async () => {
-    if (!currentUser || !selectedProject || !taskForm.title.trim()) return;
-    setSavingTask(true);
-    try {
-      const { data, error } = await supabase.from('project_tasks').insert({
-        company_id: currentUser.company_id,
-        project_id: selectedProject.id,
-        title: taskForm.title.trim(),
-        description: taskForm.description.trim() || null,
-        assigned_to: taskForm.assigned_to || null,
-        priority: taskForm.priority,
-        status: 'todo' as TaskStatus_Project,
-        due_date: taskForm.due_date || null,
-        estimated_hours: taskForm.estimated_hours ? parseFloat(taskForm.estimated_hours) : null,
-        tags: taskForm.tags ? taskForm.tags.split(',').map(t => t.trim()).filter(Boolean) : null,
-        is_archived: false,
-        created_by: currentUser.id,
-      }).select().single();
-      if (!error && data) {
-        setProjectTasks(prev => [data, ...prev]);
-        setTaskForm(emptyTaskForm);
-        setShowTaskModal(false);
-        setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Zadanie zostało utworzone' } }));
-      }
-    } catch (err) {
-      console.error('Error creating task:', err);
-    } finally {
-      setSavingTask(false);
-    }
-  };
-
-  const changeTaskStatus = async (taskId: string, newStatus: TaskStatus_Project) => {
-    const updates: any = { status: newStatus, updated_at: new Date().toISOString() };
-    if (newStatus === 'done') updates.completed_at = new Date().toISOString();
-    else updates.completed_at = null;
-    const { error } = await supabase.from('project_tasks').update(updates).eq('id', taskId);
-    if (!error) setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
   };
 
   const getUserName = (userId?: string) => {
@@ -282,44 +294,113 @@ export const CompanyProjectsPage: React.FC = () => {
     return customers.find(c => c.id === customerId)?.name || '-';
   };
 
-  const filteredProjects = useMemo(() => {
-    if (!search) return projects;
-    const s = search.toLowerCase();
-    return projects.filter(p =>
-      p.name.toLowerCase().includes(s) ||
-      getCustomerName(p.customer_id).toLowerCase().includes(s)
-    );
-  }, [projects, search, customers]);
-
-  const getTaskProgress = (project: Project) => {
-    // approximate from loaded data; real calculation in detail view
-    return null;
+  const getDepartmentName = (deptId?: string) => {
+    if (!deptId) return '-';
+    return departments.find(d => d.id === deptId)?.name || '-';
   };
+
+  // Calculate budget display for list
+  const getBudgetDisplay = (project: Project) => {
+    if (project.billing_type === 'ryczalt' || !project.billing_type) {
+      if (!project.budget_amount) return '-';
+      const totalInvoiced = projectIncome
+        .filter(i => i.project_id === project.id)
+        .reduce((s, i) => s + (i.value || 0), 0);
+      const percent = project.budget_amount > 0 ? Math.min((totalInvoiced / project.budget_amount) * 100, 100) : 0;
+      return { type: 'bar' as const, total: project.budget_amount, used: totalInvoiced, percent };
+    } else {
+      // Hourly - calculate earned amount based on confirmed hours
+      // Formula: weekday_hours * rate + saturday_hours * saturday_rate + sunday_hours * sunday_rate
+      const earnedFromIncome = projectIncome
+        .filter(i => i.project_id === project.id)
+        .reduce((s, i) => s + (i.value || 0), 0);
+      const rate = project.hourly_rate || 0;
+      return {
+        type: 'hourly' as const,
+        rate,
+        earned: earnedFromIncome,
+        saturdayRate: project.saturday_paid ? (project.saturday_rate || 0) : 0,
+        sundayRate: project.sunday_paid ? (project.sunday_rate || 0) : 0,
+      };
+    }
+  };
+
+  // Calculate direct costs for a project
+  const getDirectCosts = (projectId: string) => {
+    return projectCosts.filter(c => c.project_id === projectId && c.cost_type === 'direct').reduce((s, c) => s + (c.value_netto || 0), 0);
+  };
+
+  // Calculate labor costs (simplified)
+  const getLaborCosts = (projectId: string) => {
+    return projectCosts.filter(c => c.project_id === projectId && c.cost_type === 'labor').reduce((s, c) => s + (c.value_netto || 0), 0);
+  };
+
+  // Calculate profit
+  const getProfit = (project: Project) => {
+    const budget = project.billing_type === 'ryczalt' ? (project.budget_amount || 0) : 0;
+    const directCosts = getDirectCosts(project.id);
+    const laborCosts = getLaborCosts(project.id);
+    return budget - directCosts - laborCosts;
+  };
+
+  const filteredProjects = useMemo(() => {
+    let list = projects;
+    if (statusFilter !== 'all') {
+      list = list.filter(p => p.status === statusFilter);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(s) ||
+        getCustomerName(p.customer_id).toLowerCase().includes(s)
+      );
+    }
+    return list;
+  }, [projects, search, customers, statusFilter]);
 
   if (!currentUser) return null;
 
-  // ========== PROJECT LIST VIEW ==========
-  if (!selectedProject) {
+  // ========== PROJECT DETAIL VIEW ==========
+  if (selectedProject) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
-        <SectionTabs section="projekty" />
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Projekty</h1>
-            <p className="text-sm text-gray-500 mt-1">{projects.length} projektów w firmie</p>
-          </div>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Nowy projekt
-          </button>
-        </div>
+      <ProjectDetailPage
+        project={selectedProject}
+        projects={projects}
+        customers={customers}
+        departments={departments}
+        companyUsers={companyUsers}
+        users={users}
+        onBack={() => { setSelectedProject(null); loadData(); }}
+        onEditProject={openEditModal}
+        onUpdateProject={(updated) => {
+          setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
+          setSelectedProject(updated);
+        }}
+      />
+    );
+  }
 
-        {/* Search */}
-        <div className="relative mb-6">
+  // ========== PROJECT LIST VIEW ==========
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Projekty</h1>
+          <p className="text-sm text-gray-500 mt-1">{filteredProjects.length} z {projects.length} projektów</p>
+        </div>
+        <button
+          onClick={openCreateModal}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        >
+          <Plus className="w-4 h-4" />
+          Nowy projekt
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
@@ -329,36 +410,69 @@ export const CompanyProjectsPage: React.FC = () => {
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          {([
+            { key: 'active', label: 'Aktywne' },
+            { key: 'on_hold', label: 'Wstrzymane' },
+            { key: 'completed', label: 'Zakończone' },
+            { key: 'archived', label: 'Archiwum' },
+            { key: 'all', label: 'Wszystkie' },
+          ] as { key: ProjectStatus | 'all'; label: string }[]).map(f => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                statusFilter === f.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {/* Table */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Klient</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Budżet</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProjects.map(project => (
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Klient</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase min-w-[180px]">Budżet</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Koszty bezpośrednie netto</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Koszty robocizny netto</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zysk netto</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProjects.map(project => {
+                const budgetInfo = getBudgetDisplay(project);
+                const directCosts = getDirectCosts(project.id);
+                const laborCosts = getLaborCosts(project.id);
+                const profit = getProfit(project);
+                return (
                   <tr
                     key={project.id}
                     className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => openProjectDetail(project)}
+                    onClick={() => setSelectedProject(project)}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: project.color || '#3B82F6' }} />
-                        <span className="text-sm font-medium text-gray-900">{project.name}</span>
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{project.name}</span>
+                          <span className="ml-2 text-xs text-gray-400">
+                            {project.billing_type === 'hourly' ? 'RG' : 'Ryczałt'}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(project.customer_id)}</td>
@@ -368,8 +482,41 @@ export const CompanyProjectsPage: React.FC = () => {
                         return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>;
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {project.budget_amount ? `${project.budget_amount.toLocaleString('pl-PL')} PLN` : project.budget_hours ? `${project.budget_hours}h` : '-'}
+                    <td className="px-4 py-3">
+                      {budgetInfo && typeof budgetInfo === 'object' && budgetInfo.type === 'bar' ? (
+                        <div>
+                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                            <span>{budgetInfo.used.toLocaleString('pl-PL')} PLN</span>
+                            <span>{budgetInfo.total.toLocaleString('pl-PL')} PLN netto</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${budgetInfo.percent > 90 ? 'bg-red-500' : budgetInfo.percent > 70 ? 'bg-amber-500' : 'bg-blue-500'}`}
+                              style={{ width: `${budgetInfo.percent}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : budgetInfo && typeof budgetInfo === 'object' && budgetInfo.type === 'hourly' ? (
+                        <div className="text-sm">
+                          <div className="text-gray-900 font-medium">{budgetInfo.earned > 0 ? `${budgetInfo.earned.toLocaleString('pl-PL')} PLN netto` : '-'}</div>
+                          <div className="text-xs text-gray-400">{budgetInfo.rate} PLN/godz. netto</div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-600">
+                      {directCosts > 0 ? `${directCosts.toLocaleString('pl-PL')} PLN` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-600">
+                      {laborCosts > 0 ? `${laborCosts.toLocaleString('pl-PL')} PLN` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right font-medium">
+                      <span className={profit >= 0 ? 'text-green-600' : 'text-red-600'}>
+                        {project.billing_type === 'ryczalt' && project.budget_amount
+                          ? `${profit.toLocaleString('pl-PL')} PLN`
+                          : '-'}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {project.end_date ? new Date(project.end_date).toLocaleDateString('pl-PL') : '-'}
@@ -393,33 +540,58 @@ export const CompanyProjectsPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
-                {filteredProjects.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12 text-gray-400">
-                      {search ? 'Brak wyników wyszukiwania' : 'Brak projektów. Utwórz pierwszy projekt.'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                );
+              })}
+              {filteredProjects.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="text-center py-12 text-gray-400">
+                    {search ? 'Brak wyników wyszukiwania' : 'Brak projektów. Utwórz pierwszy projekt.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-        {/* Create / Edit Project Modal */}
-        {showProjectModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setShowProjectModal(false)} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {editingProject ? 'Edytuj projekt' : 'Nowy projekt'}
-                </h2>
-                <button onClick={() => setShowProjectModal(false)} className="p-1 rounded hover:bg-gray-100">
-                  <X className="w-5 h-5 text-gray-500" />
-                </button>
+      {/* Create / Edit Project Modal */}
+      {showProjectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowProjectModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {editingProject ? 'Edytuj projekt' : 'Nowy projekt'}
+              </h2>
+              <button onClick={() => setShowProjectModal(false)} className="p-1 rounded hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {/* Name mode toggle */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">Źródło nazwy</label>
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 w-fit">
+                  <button
+                    onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                    }`}
+                  >
+                    Nazwa własna
+                  </button>
+                  <button
+                    onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                    }`}
+                  >
+                    Wybrać obiekt
+                  </button>
+                </div>
               </div>
-              <div className="space-y-4">
+
+              {projectForm.name_mode === 'custom' ? (
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Nazwa projektu *</label>
                   <input
@@ -430,683 +602,58 @@ export const CompanyProjectsPage: React.FC = () => {
                     placeholder="Nazwa projektu"
                   />
                 </div>
+              ) : (
                 <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Opis</label>
-                  <textarea
-                    value={projectForm.description}
-                    onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))}
-                    rows={3}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="Opis projektu..."
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Klient</label>
-                  <select
-                    value={projectForm.customer_id}
-                    onChange={(e) => setProjectForm(prev => ({ ...prev, customer_id: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Brak klienta --</option>
-                    {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Status</label>
+                  <label className="text-sm font-medium text-gray-700 block mb-1">Wybierz obiekt *</label>
+                  <div className="flex gap-2">
                     <select
-                      value={projectForm.status}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      value={projectForm.department_id}
+                      onChange={(e) => handleDepartmentChange(e.target.value)}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                     >
-                      {Object.entries(PROJECT_STATUS_CONFIG).map(([key, cfg]) => (
-                        <option key={key} value={key}>{cfg.label}</option>
+                      <option value="">-- Wybierz obiekt --</option>
+                      {departments.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} {d.kod_obiektu ? `(${d.kod_obiektu})` : ''}
+                        </option>
                       ))}
                     </select>
+                    <a
+                      href="#/company/departments"
+                      className="inline-flex items-center gap-1 px-3 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50"
+                    >
+                      <Plus className="w-4 h-4" /> Nowy
+                    </a>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Kolor</label>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {COLOR_OPTIONS.map(color => (
-                        <button
-                          key={color}
-                          onClick={() => setProjectForm(prev => ({ ...prev, color }))}
-                          className={`w-6 h-6 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-gray-800 scale-110' : 'border-transparent'}`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                  {projectForm.department_id && (() => {
+                    const dept = departments.find(d => d.id === projectForm.department_id);
+                    if (!dept) return null;
+                    return (
+                      <div className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 space-y-1">
+                        {dept.kod_obiektu && <p><span className="font-medium">Kod budowy:</span> {dept.kod_obiektu}</p>}
+                        {dept.rodzaj && <p><span className="font-medium">Rodzaj:</span> {dept.rodzaj}</p>}
+                        {dept.typ && <p><span className="font-medium">Typ:</span> {dept.typ}</p>}
+                        {(dept.address_street || dept.address_city) && (
+                          <p><span className="font-medium">Adres:</span> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Budżet godzin</label>
-                    <input
-                      type="number"
-                      value={projectForm.budget_hours}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="np. 100"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Budżet (PLN)</label>
-                    <input
-                      type="number"
-                      value={projectForm.budget_amount}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="np. 50000"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Data rozpoczęcia</label>
-                    <input
-                      type="date"
-                      value={projectForm.start_date}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Data zakończenia</label>
-                    <input
-                      type="date"
-                      value={projectForm.end_date}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => setShowProjectModal(false)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  Anuluj
-                </button>
-                <button
-                  onClick={saveProject}
-                  disabled={savingProject || !projectForm.name.trim()}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {savingProject && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingProject ? 'Zapisz zmiany' : 'Utwórz projekt'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ========== PROJECT DETAIL VIEW ==========
-  const totalLoggedMinutes = projectTimeLogs.reduce((s, l) => s + l.minutes, 0);
-  const totalLoggedHours = Math.round(totalLoggedMinutes / 60 * 10) / 10;
-  const doneCount = projectTasks.filter(t => t.status === 'done').length;
-  const progressPercent = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
-
-  // Group time logs by user
-  const timeByUser = useMemo(() => {
-    const map: Record<string, number> = {};
-    projectTimeLogs.forEach(log => {
-      map[log.user_id] = (map[log.user_id] || 0) + log.minutes;
-    });
-    return Object.entries(map).map(([userId, minutes]) => ({ userId, minutes })).sort((a, b) => b.minutes - a.minutes);
-  }, [projectTimeLogs]);
-
-  // Group time logs by task
-  const timeByTask = useMemo(() => {
-    const map: Record<string, number> = {};
-    projectTimeLogs.forEach(log => {
-      map[log.task_id] = (map[log.task_id] || 0) + log.minutes;
-    });
-    return Object.entries(map).map(([taskId, minutes]) => ({
-      taskId,
-      minutes,
-      taskName: projectTasks.find(t => t.id === taskId)?.title || 'Nieznane zadanie'
-    })).sort((a, b) => b.minutes - a.minutes);
-  }, [projectTimeLogs, projectTasks]);
-
-  return (
-    <div className="p-6 max-w-7xl mx-auto">
-      {/* Back + Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => setSelectedProject(null)}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-        >
-          <ChevronRight className="w-5 h-5 rotate-180" />
-        </button>
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: selectedProject.color || '#3B82F6' }} />
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{selectedProject.name}</h1>
-            <p className="text-sm text-gray-500">
-              {getCustomerName(selectedProject.customer_id)}
-              {selectedProject.customer_id ? ' | ' : ''}
-              {PROJECT_STATUS_CONFIG[selectedProject.status].label}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => openEditModal(selectedProject)}
-          className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          <Pencil className="w-4 h-4" /> Edytuj
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">Postęp projektu</span>
-          <span className="text-sm font-medium text-gray-900">{progressPercent}%</span>
-        </div>
-        <div className="w-full bg-gray-100 rounded-full h-2.5">
-          <div className="bg-blue-600 h-2.5 rounded-full transition-all" style={{ width: `${progressPercent}%` }} />
-        </div>
-        <div className="flex items-center gap-6 mt-3 text-xs text-gray-500">
-          <span>{projectTasks.length} zadań łącznie</span>
-          <span>{doneCount} zakończonych</span>
-          <span>{totalLoggedHours}h zalogowanych</span>
-          {selectedProject.budget_hours && (
-            <span>Budżet: {selectedProject.budget_hours}h</span>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6">
-        {[
-          { key: 'info', label: 'O projekcie', icon: <Briefcase className="w-4 h-4" /> },
-          { key: 'tasks', label: 'Zadania', icon: <ClipboardList className="w-4 h-4" /> },
-          { key: 'time', label: 'Czas', icon: <Clock className="w-4 h-4" /> },
-          { key: 'files', label: 'Pliki', icon: <FileText className="w-4 h-4" /> },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab: Info */}
-      {activeTab === 'info' && (
-        <div className="space-y-6">
-          {selectedProject.description && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Opis</h3>
-              <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedProject.description}</p>
-            </div>
-          )}
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Szczegóły</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <span className="text-xs text-gray-500">Klient</span>
-                <p className="text-sm font-medium text-gray-800 mt-0.5">{getCustomerName(selectedProject.customer_id) || '-'}</p>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500">Budżet godzin</span>
-                <p className="text-sm font-medium text-gray-800 mt-0.5">{selectedProject.budget_hours ? `${selectedProject.budget_hours}h` : '-'}</p>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500">Budżet kwotowy</span>
-                <p className="text-sm font-medium text-gray-800 mt-0.5">{selectedProject.budget_amount ? `${selectedProject.budget_amount.toLocaleString('pl-PL')} PLN` : '-'}</p>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500">Okres</span>
-                <p className="text-sm font-medium text-gray-800 mt-0.5">
-                  {selectedProject.start_date ? new Date(selectedProject.start_date).toLocaleDateString('pl-PL') : '?'}
-                  {' - '}
-                  {selectedProject.end_date ? new Date(selectedProject.end_date).toLocaleDateString('pl-PL') : '?'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Members */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700">Członkowie projektu ({projectMembers.length})</h3>
-              <button
-                onClick={() => setShowAddMember(!showAddMember)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800"
-              >
-                <UserPlus className="w-3.5 h-3.5" /> Dodaj
-              </button>
-            </div>
-
-            {showAddMember && (
-              <div className="flex items-end gap-2 mb-4 p-3 bg-blue-50 rounded-lg">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-600 block mb-1">Pracownik</label>
-                  <select
-                    value={newMemberUserId}
-                    onChange={(e) => setNewMemberUserId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    <option value="">-- Wybierz --</option>
-                    {companyUsers.filter(u => !projectMembers.find(m => m.user_id === u.id)).map(u => (
-                      <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-600 block mb-1">Rola</label>
-                  <select
-                    value={newMemberRole}
-                    onChange={(e) => setNewMemberRole(e.target.value as 'manager' | 'member')}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
-                  >
-                    <option value="member">Członek</option>
-                    <option value="manager">Kierownik</option>
-                  </select>
-                </div>
-                <button
-                  onClick={addMember}
-                  disabled={!newMemberUserId}
-                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  Dodaj
-                </button>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {projectMembers.map(member => (
-                <div key={member.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                      {getUserName(member.user_id).split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-800">{getUserName(member.user_id)}</span>
-                      <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${member.role === 'manager' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {member.role === 'manager' ? 'Kierownik' : 'Członek'}
-                      </span>
-                    </div>
-                  </div>
-                  <button onClick={() => removeMember(member.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">
-                    <UserMinus className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              {projectMembers.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">Brak członków projektu</p>
               )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Tab: Tasks */}
-      {activeTab === 'tasks' && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
-                <button
-                  onClick={() => setTaskViewMode('list')}
-                  className={`px-3 py-1.5 rounded-md text-sm ${taskViewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setTaskViewMode('kanban')}
-                  className={`px-3 py-1.5 rounded-md text-sm ${taskViewMode === 'kanban' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={() => { setTaskForm(emptyTaskForm); setShowTaskModal(true); }}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" /> Nowe zadanie
-            </button>
-          </div>
-
-          {taskViewMode === 'kanban' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {STATUS_COLUMNS.map(col => {
-                const columnTasks = projectTasks.filter(t => t.status === col.key);
-                return (
-                  <div key={col.key} className={`rounded-xl border-2 ${col.color} p-3 min-h-[200px]`}>
-                    <div className="flex items-center justify-between mb-3 px-1">
-                      <h3 className="font-semibold text-sm text-gray-700">{col.label}</h3>
-                      <span className="text-xs bg-white rounded-full px-2 py-0.5 text-gray-500 font-medium">{columnTasks.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {columnTasks.map(task => (
-                        <div key={task.id} className="bg-white rounded-lg border border-gray-200 p-3 group relative">
-                          <h4 className="text-sm font-medium text-gray-900 mb-1">{task.title}</h4>
-                          <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                            <span className={`px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[task.priority].bg} ${PRIORITY_CONFIG[task.priority].text}`}>
-                              {PRIORITY_CONFIG[task.priority].label}
-                            </span>
-                            {task.assigned_to && <span>{getUserName(task.assigned_to)}</span>}
-                            {task.due_date && <span>{new Date(task.due_date).toLocaleDateString('pl-PL')}</span>}
-                          </div>
-                          <select
-                            value={task.status}
-                            onChange={(e) => changeTaskStatus(task.id, e.target.value as TaskStatus_Project)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-xs border border-gray-200 rounded px-1 py-0.5 bg-white"
-                          >
-                            {STATUS_COLUMNS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Przypisany</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Priorytet</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Godziny</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {projectTasks.map(task => (
-                    <tr key={task.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{task.title}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{getUserName(task.assigned_to)}</td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={task.status}
-                          onChange={(e) => changeTaskStatus(task.id, e.target.value as TaskStatus_Project)}
-                          className="text-sm border border-gray-200 rounded px-2 py-1"
-                        >
-                          {STATUS_COLUMNS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${PRIORITY_CONFIG[task.priority].bg} ${PRIORITY_CONFIG[task.priority].text}`}>
-                          {PRIORITY_CONFIG[task.priority].label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {task.due_date ? new Date(task.due_date).toLocaleDateString('pl-PL') : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {task.estimated_hours ? `${task.estimated_hours}h` : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                  {projectTasks.length === 0 && (
-                    <tr><td colSpan={6} className="text-center py-12 text-gray-400">Brak zadań w projekcie</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Create Task Modal */}
-          {showTaskModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/30" onClick={() => setShowTaskModal(false)} />
-              <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900">Nowe zadanie</h2>
-                  <button onClick={() => setShowTaskModal(false)} className="p-1 rounded hover:bg-gray-100">
-                    <X className="w-5 h-5 text-gray-500" />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Tytuł *</label>
-                    <input
-                      type="text"
-                      value={taskForm.title}
-                      onChange={(e) => setTaskForm(prev => ({ ...prev, title: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Opis</label>
-                    <textarea
-                      value={taskForm.description}
-                      onChange={(e) => setTaskForm(prev => ({ ...prev, description: e.target.value }))}
-                      rows={3}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">Przypisz do</label>
-                      <select
-                        value={taskForm.assigned_to}
-                        onChange={(e) => setTaskForm(prev => ({ ...prev, assigned_to: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">-- Nieprzypisany --</option>
-                        {companyUsers.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">Priorytet</label>
-                      <select
-                        value={taskForm.priority}
-                        onChange={(e) => setTaskForm(prev => ({ ...prev, priority: e.target.value as TaskPriority }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      >
-                        {Object.entries(PRIORITY_CONFIG).map(([key, cfg]) => (
-                          <option key={key} value={key}>{cfg.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">Termin</label>
-                      <input
-                        type="date"
-                        value={taskForm.due_date}
-                        onChange={(e) => setTaskForm(prev => ({ ...prev, due_date: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 block mb-1">Szacowane godziny</label>
-                      <input
-                        type="number"
-                        value={taskForm.estimated_hours}
-                        onChange={(e) => setTaskForm(prev => ({ ...prev, estimated_hours: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Tagi (oddzielone przecinkami)</label>
-                    <input
-                      type="text"
-                      value={taskForm.tags}
-                      onChange={(e) => setTaskForm(prev => ({ ...prev, tags: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="np. frontend, pilne, design"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-                  <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                    Anuluj
-                  </button>
-                  <button
-                    onClick={createTask}
-                    disabled={savingTask || !taskForm.title.trim()}
-                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {savingTask && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Utwórz zadanie
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tab: Time */}
-      {activeTab === 'time' && (
-        <div className="space-y-6">
-          {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <Clock className="w-4 h-4 text-blue-500" />
-                <span className="text-xs text-gray-500 uppercase font-medium">Zalogowany czas</span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{totalLoggedHours}h</p>
-            </div>
-            {selectedProject.budget_hours && (
-              <>
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Timer className="w-4 h-4 text-green-500" />
-                    <span className="text-xs text-gray-500 uppercase font-medium">Budżet godzin</span>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900">{selectedProject.budget_hours}h</p>
-                </div>
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-center gap-2 mb-1">
-                    <BarChart3 className="w-4 h-4 text-amber-500" />
-                    <span className="text-xs text-gray-500 uppercase font-medium">Wykorzystanie</span>
-                  </div>
-                  <p className={`text-2xl font-bold ${totalLoggedHours > selectedProject.budget_hours ? 'text-red-600' : 'text-gray-900'}`}>
-                    {Math.round((totalLoggedHours / selectedProject.budget_hours) * 100)}%
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* By Employee */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Czas wg pracownika</h3>
-            <div className="space-y-3">
-              {timeByUser.map(item => (
-                <div key={item.userId} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">{getUserName(item.userId)}</span>
-                  <div className="flex items-center gap-3">
-                    <div className="w-32 bg-gray-100 rounded-full h-2">
-                      <div
-                        className="bg-blue-500 h-2 rounded-full"
-                        style={{ width: `${totalLoggedMinutes > 0 ? Math.round((item.minutes / totalLoggedMinutes) * 100) : 0}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium text-gray-900 w-16 text-right">{Math.round(item.minutes / 60 * 10) / 10}h</span>
-                  </div>
-                </div>
-              ))}
-              {timeByUser.length === 0 && <p className="text-sm text-gray-400 text-center">Brak wpisów czasu</p>}
-            </div>
-          </div>
-
-          {/* By Task */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Czas wg zadania</h3>
-            <div className="space-y-3">
-              {timeByTask.map(item => (
-                <div key={item.taskId} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700 truncate flex-1 mr-4">{item.taskName}</span>
-                  <span className="text-sm font-medium text-gray-900">{Math.round(item.minutes / 60 * 10) / 10}h</span>
-                </div>
-              ))}
-              {timeByTask.length === 0 && <p className="text-sm text-gray-400 text-center">Brak wpisów czasu</p>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Files */}
-      {activeTab === 'files' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Załączniki zadań ({projectAttachments.length})</h3>
-          {projectAttachments.length > 0 ? (
-            <div className="space-y-2">
-              {projectAttachments.map(att => (
-                <div key={att.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-4 h-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{att.file_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {att.file_size ? `${(att.file_size / 1024).toFixed(1)} KB` : ''}
-                        {att.uploaded_by ? ` | ${getUserName(att.uploaded_by)}` : ''}
-                        {' | '}{new Date(att.created_at).toLocaleDateString('pl-PL')}
-                      </p>
-                    </div>
-                  </div>
-                  <a
-                    href={att.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-500"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400 text-center py-8">Brak załączników</p>
-          )}
-        </div>
-      )}
-
-      {/* Project Create/Edit Modal (shared) */}
-      {showProjectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setShowProjectModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editingProject ? 'Edytuj projekt' : 'Nowy projekt'}
-              </h2>
-              <button onClick={() => setShowProjectModal(false)} className="p-1 rounded hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Nazwa projektu *</label>
-                <input
-                  type="text"
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Opis</label>
                 <textarea
                   value={projectForm.description}
                   onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))}
-                  rows={3}
+                  rows={2}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="Opis projektu..."
                 />
               </div>
+
+              {/* Customer - auto-fill from department if object mode */}
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">Klient</label>
                 <select
@@ -1118,6 +665,7 @@ export const CompanyProjectsPage: React.FC = () => {
                   {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Status</label>
@@ -1145,36 +693,267 @@ export const CompanyProjectsPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Budżet godzin</label>
-                  <input type="number" value={projectForm.budget_hours} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Budżet (PLN)</label>
-                  <input type="number" value={projectForm.budget_amount} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+
+              {/* Billing type toggle */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-2">Forma wynagrodzenia</label>
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 w-fit">
+                  <button
+                    onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                    }`}
+                  >
+                    Ryczałt
+                  </button>
+                  <button
+                    onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                    }`}
+                  >
+                    Roboczogodziny
+                  </button>
                 </div>
               </div>
+
+              {projectForm.billing_type === 'ryczalt' ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Budżet godzin</label>
+                    <input
+                      type="number"
+                      value={projectForm.budget_hours}
+                      onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      placeholder="np. 100"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 block mb-1">Budżet netto (PLN)</label>
+                    <input
+                      type="number"
+                      value={projectForm.budget_amount}
+                      onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                      placeholder="np. 50000"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-end gap-4">
+                    <div className="flex-1">
+                      <label className="text-sm font-medium text-gray-700 block mb-1">Stawka roboczogodzinowa netto (PLN)</label>
+                      <input
+                        type="number"
+                        value={projectForm.hourly_rate}
+                        onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                        placeholder="np. 65"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setShowHourlySettingsModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Ustawienia dodatkowe
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Data rozpoczęcia</label>
-                  <input type="date" value={projectForm.start_date} onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="date"
+                    value={projectForm.start_date}
+                    onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Data zakończenia</label>
-                  <input type="date" value={projectForm.end_date} onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="date"
+                    value={projectForm.end_date}
+                    onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-              <button onClick={() => setShowProjectModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Anuluj</button>
+              <button
+                onClick={() => setShowProjectModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Anuluj
+              </button>
               <button
                 onClick={saveProject}
-                disabled={savingProject || !projectForm.name.trim()}
+                disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {savingProject && <Loader2 className="w-4 h-4 animate-spin" />}
                 {editingProject ? 'Zapisz zmiany' : 'Utwórz projekt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hourly Settings Modal */}
+      {showHourlySettingsModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setShowHourlySettingsModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900">Ustawienia dodatkowe stawek</h2>
+              <button onClick={() => setShowHourlySettingsModal(false)} className="p-1 rounded hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {/* Workday rate */}
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <label className="text-sm font-medium text-gray-700 block mb-1">Stawka za dni robocze netto (PLN/godz.)</label>
+                <input
+                  type="number"
+                  value={projectForm.hourly_rate}
+                  onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Overtime */}
+              <div className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Nadgodziny dodatkowo płatne</span>
+                  <button onClick={() => setHourlySettings(prev => ({ ...prev, overtime_paid: !prev.overtime_paid }))}>
+                    {hourlySettings.overtime_paid
+                      ? <ToggleRight className="w-8 h-5 text-blue-600" />
+                      : <ToggleLeft className="w-8 h-5 text-gray-400" />}
+                  </button>
+                </div>
+                {hourlySettings.overtime_paid && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Stawka za nadgodziny netto</label>
+                      <input type="number" value={hourlySettings.overtime_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Ilość godzin podstawowych dziennie</label>
+                      <input type="number" value={hourlySettings.overtime_base_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_base_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Saturday */}
+              <div className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Soboty dodatkowo płatne</span>
+                  <button onClick={() => setHourlySettings(prev => ({ ...prev, saturday_paid: !prev.saturday_paid }))}>
+                    {hourlySettings.saturday_paid
+                      ? <ToggleRight className="w-8 h-5 text-blue-600" />
+                      : <ToggleLeft className="w-8 h-5 text-gray-400" />}
+                  </button>
+                </div>
+                {hourlySettings.saturday_paid && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Stawka za soboty netto</label>
+                      <input type="number" value={hourlySettings.saturday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Ilość godzin pracy w soboty</label>
+                      <input type="number" value={hourlySettings.saturday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Sunday */}
+              <div className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Niedziele dodatkowo płatne</span>
+                  <button onClick={() => setHourlySettings(prev => ({ ...prev, sunday_paid: !prev.sunday_paid }))}>
+                    {hourlySettings.sunday_paid
+                      ? <ToggleRight className="w-8 h-5 text-blue-600" />
+                      : <ToggleLeft className="w-8 h-5 text-gray-400" />}
+                  </button>
+                </div>
+                {hourlySettings.sunday_paid && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Stawka za niedziele netto</label>
+                      <input type="number" value={hourlySettings.sunday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Ilość godzin pracy w niedziele</label>
+                      <input type="number" value={hourlySettings.sunday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Night */}
+              <div className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Prace w nocy dodatkowo płatne</span>
+                  <button onClick={() => setHourlySettings(prev => ({ ...prev, night_paid: !prev.night_paid }))}>
+                    {hourlySettings.night_paid
+                      ? <ToggleRight className="w-8 h-5 text-blue-600" />
+                      : <ToggleLeft className="w-8 h-5 text-gray-400" />}
+                  </button>
+                </div>
+                {hourlySettings.night_paid && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Stawka za prace nocne netto</label>
+                      <input type="number" value={hourlySettings.night_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Ilość godzin pracy w nocy</label>
+                      <input type="number" value={hourlySettings.night_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Travel */}
+              <div className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Dojazd dodatkowo płatny</span>
+                  <button onClick={() => setHourlySettings(prev => ({ ...prev, travel_paid: !prev.travel_paid }))}>
+                    {hourlySettings.travel_paid
+                      ? <ToggleRight className="w-8 h-5 text-blue-600" />
+                      : <ToggleLeft className="w-8 h-5 text-gray-400" />}
+                  </button>
+                </div>
+                {hourlySettings.travel_paid && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="text-xs text-gray-500">Stawka za czas dojazdu netto</label>
+                      <input type="number" value={hourlySettings.travel_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500">Szacowana ilość godzin dojazdu</label>
+                      <input type="number" value={hourlySettings.travel_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowHourlySettingsModal(false)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Gotowe
               </button>
             </div>
           </div>

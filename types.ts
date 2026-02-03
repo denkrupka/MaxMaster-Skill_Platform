@@ -737,7 +737,6 @@ export interface Department {
   name: string;
   label?: string;
   parent_id?: string | null;
-  client_id?: string | null;
   rodzaj?: string | null;
   typ?: string | null;
   kod_obiektu?: string | null;
@@ -979,6 +978,14 @@ export interface ScheduleAssignment {
 export type ProjectStatus = 'active' | 'completed' | 'archived' | 'on_hold';
 export type TaskStatus_Project = 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type ProjectBillingType = 'ryczalt' | 'hourly';
+export type ProjectNameMode = 'custom' | 'object';
+export type ProjectMemberPaymentType = 'hourly' | 'akord';
+export type ProjectMemberStatus = 'assigned' | 'unassigned' | 'temporarily_unassigned';
+export type ProjectMemberType = 'employee' | 'subcontractor';
+export type ProjectIssueStatus = 'new' | 'in_progress' | 'completed' | 'cancelled';
+export type ProjectTaskBillingType = 'ryczalt' | 'hourly';
+export type ProjectTaskWorkerPayment = 'akord' | 'hourly';
 
 export interface ProjectCustomer {
   id: string;
@@ -988,26 +995,60 @@ export interface ProjectCustomer {
   phone?: string;
   address?: string;
   note?: string;
+  contact_persons?: ProjectCustomerContact[];
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectCustomerContact {
+  id: string;
+  customer_id: string;
+  first_name: string;
+  last_name: string;
+  position?: string;
+  phone?: string;
+  email?: string;
 }
 
 export interface Project {
   id: string;
   company_id: string;
   customer_id?: string;
+  department_id?: string;
   name: string;
+  name_mode: ProjectNameMode;
   description?: string;
   status: ProjectStatus;
   color: string;
+  billing_type: ProjectBillingType;
+  // Ryczalt fields
   budget_hours?: number;
   budget_amount?: number;
+  // Hourly fields
+  hourly_rate?: number;
+  // Hourly - additional settings
+  overtime_paid?: boolean;
+  overtime_rate?: number;
+  overtime_base_hours?: number;
+  saturday_paid?: boolean;
+  saturday_rate?: number;
+  saturday_hours?: number;
+  sunday_paid?: boolean;
+  sunday_rate?: number;
+  sunday_hours?: number;
+  night_paid?: boolean;
+  night_rate?: number;
+  night_hours?: number;
+  travel_paid?: boolean;
+  travel_rate?: number;
+  travel_hours?: number;
   start_date?: string;
   end_date?: string;
   created_at: string;
   updated_at: string;
   customer?: ProjectCustomer;
+  department?: Department;
   members?: ProjectMember[];
   tasks_count?: number;
   logged_hours?: number;
@@ -1018,6 +1059,10 @@ export interface ProjectMember {
   project_id: string;
   user_id: string;
   role: 'manager' | 'member';
+  member_type: ProjectMemberType;
+  payment_type: ProjectMemberPaymentType;
+  hourly_rate?: number;
+  member_status: ProjectMemberStatus;
   added_at: string;
   user?: User;
 }
@@ -1030,9 +1075,26 @@ export interface ProjectTask {
   description?: string;
   status: TaskStatus_Project;
   priority: TaskPriority;
+  billing_type: ProjectTaskBillingType;
+  // For hourly billing
+  hourly_value?: number;
+  // For ryczalt billing
+  quantity?: number;
+  unit?: string;
+  price_per_unit?: number;
+  total_value?: number;
+  // Worker payment
+  worker_payment_type: ProjectTaskWorkerPayment;
+  worker_rate_per_unit?: number;
+  assigned_users?: string[];
   assigned_to?: string;
   created_by?: string;
+  has_start_deadline?: boolean;
+  start_date?: string;
+  start_time?: string;
+  has_end_deadline?: boolean;
   due_date?: string;
+  end_time?: string;
   estimated_hours?: number;
   tags?: string[];
   is_archived: boolean;
@@ -1066,6 +1128,114 @@ export interface TaskAttachment {
   file_name: string;
   file_size?: number;
   uploaded_by?: string;
+  created_at: string;
+}
+
+export interface ProjectProtocol {
+  id: string;
+  project_id: string;
+  company_id: string;
+  protocol_number: string;
+  protocol_type: 'standard' | 'additional';
+  advancement_percent: number;
+  period_from?: string;
+  period_to?: string;
+  total_value: number;
+  invoice_number?: string;
+  client_representative_id?: string;
+  tasks_data: ProjectProtocolTask[];
+  accepted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectProtocolTask {
+  task_id: string;
+  name: string;
+  value: number;
+  completion_percent: number;
+}
+
+export interface ProjectIncome {
+  id: string;
+  project_id: string;
+  company_id: string;
+  document_type: 'faktura' | 'paragon' | 'nota_odsetkowa' | 'nota_ksiegowa' | 'faktura_zaliczkowa';
+  document_number: string;
+  issue_date: string;
+  payment_due_date: string;
+  value: number;
+  basis_id?: string;
+  basis_type?: 'protocol' | 'timesheet';
+  payment_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectCost {
+  id: string;
+  project_id: string;
+  company_id: string;
+  cost_type: 'direct' | 'labor';
+  document_type?: string;
+  document_number?: string;
+  issue_date?: string;
+  payment_due_date?: string;
+  issuer?: string;
+  value_netto: number;
+  category?: string;
+  payment_status?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectScheduleEntry {
+  id: string;
+  project_id: string;
+  company_id: string;
+  year: number;
+  month: number;
+  planned_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectIssue {
+  id: string;
+  project_id: string;
+  company_id: string;
+  name: string;
+  reporter_id: string;
+  reporter_company?: string;
+  task_id?: string;
+  category?: string;
+  status: ProjectIssueStatus;
+  description?: string;
+  accepted: boolean;
+  history?: ProjectIssueHistoryEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectIssueHistoryEntry {
+  id: string;
+  issue_id: string;
+  user_id: string;
+  action: string;
+  description?: string;
+  file_urls?: string[];
+  created_at: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  project_id: string;
+  company_id: string;
+  name: string;
+  file_type: string;
+  file_url: string;
+  file_size?: number;
+  uploaded_by: string;
   created_at: string;
 }
 
@@ -1144,69 +1314,5 @@ export interface NotificationHub {
   read_at?: string;
   entity_type?: string;
   entity_id?: string;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------
-// Contractors
-// ---------------------------------------------------------------
-
-export interface ContractorClient {
-  id: string;
-  company_id: string;
-  name: string;
-  nip?: string;
-  address_street?: string;
-  address_city?: string;
-  address_postal_code?: string;
-  address_country?: string;
-  email?: string;
-  phone?: string;
-  note?: string;
-  is_archived: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ContractorClientContact {
-  id: string;
-  client_id: string;
-  company_id: string;
-  first_name: string;
-  last_name: string;
-  phone?: string;
-  email?: string;
-  position?: string;
-  is_main_contact?: boolean;
-  created_at: string;
-}
-
-export interface ContractorSubcontractor {
-  id: string;
-  company_id: string;
-  name: string;
-  nip?: string;
-  address_street?: string;
-  address_city?: string;
-  address_postal_code?: string;
-  address_country?: string;
-  workers_count?: number;
-  skills?: string;
-  note?: string;
-  is_archived: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SubcontractorWorker {
-  id: string;
-  subcontractor_id: string;
-  company_id: string;
-  first_name: string;
-  last_name: string;
-  phone?: string;
-  email?: string;
-  position?: string;
-  is_main_contact?: boolean;
   created_at: string;
 }
