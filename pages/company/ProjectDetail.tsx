@@ -87,30 +87,32 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (currentUser && project) loadProjectData();
   }, [currentUser, project?.id]);
 
+  const safeQuery = (promise: Promise<any>) => promise.then(r => r.data || []).catch(() => []);
+
   const loadProjectData = async () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [tasksRes, membersRes, timeLogsRes, protocolsRes, incomeRes, costsRes, scheduleRes, issuesRes, filesRes] = await Promise.all([
-        supabase.from('project_tasks').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
-        supabase.from('project_members').select('*').eq('project_id', project.id),
-        supabase.from('task_time_logs').select('*').eq('company_id', currentUser.company_id),
-        supabase.from('project_protocols').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
-        supabase.from('project_income').select('*').eq('project_id', project.id).order('issue_date', { ascending: false }),
-        supabase.from('project_costs').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
-        supabase.from('project_schedule').select('*').eq('project_id', project.id).order('year').order('month'),
-        supabase.from('project_issues').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
-        supabase.from('project_files').select('*').eq('project_id', project.id).order('created_at', { ascending: false }),
+      const [tasks, members, timeLogs, protocols, income, costs, schedule, issues, files] = await Promise.all([
+        safeQuery(supabase.from('project_tasks').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
+        safeQuery(supabase.from('project_members').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('task_time_logs').select('*').eq('company_id', currentUser.company_id)),
+        safeQuery(supabase.from('project_protocols').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
+        safeQuery(supabase.from('project_income').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('project_costs').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('project_schedule').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('project_issues').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('project_files').select('*').eq('project_id', project.id)),
       ]);
-      if (tasksRes.data) setTasks(tasksRes.data);
-      if (membersRes.data) setMembers(membersRes.data);
-      if (timeLogsRes.data) setTimeLogs(timeLogsRes.data);
-      if (protocolsRes.data) setProtocols(protocolsRes.data);
-      if (incomeRes.data) setIncome(incomeRes.data);
-      if (costsRes.data) setCosts(costsRes.data);
-      if (scheduleRes.data) setSchedule(scheduleRes.data);
-      if (issuesRes.data) setIssues(issuesRes.data);
-      if (filesRes.data) setFiles(filesRes.data);
+      setTasks(tasks);
+      setMembers(members);
+      setTimeLogs(timeLogs);
+      setProtocols(protocols);
+      setIncome(income);
+      setCosts(costs);
+      setSchedule(schedule);
+      setIssues(issues);
+      setFiles(files);
     } catch (err) {
       console.error('Error loading project data:', err);
     } finally {
