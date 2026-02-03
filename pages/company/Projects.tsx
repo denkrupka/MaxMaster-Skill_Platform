@@ -176,10 +176,12 @@ export const CompanyProjectsPage: React.FC = () => {
 
   const openEditModal = (project: Project) => {
     setEditingProject(project);
+    // Use contractor_client_id if set, otherwise fall back to customer_id
+    const clientId = project.contractor_client_id || project.customer_id || '';
     setProjectForm({
       name: project.name,
       description: project.description || '',
-      customer_id: project.customer_id || '',
+      customer_id: clientId,
       department_id: project.department_id || '',
       name_mode: project.name_mode || 'custom',
       status: project.status,
@@ -242,95 +244,111 @@ export const CompanyProjectsPage: React.FC = () => {
 
     setSavingProject(true);
     try {
-      const payload: any = {
+      // Determine if customer_id is from project_customers (FK safe) or contractors_clients
+      const selectedCustomerId = projectForm.customer_id || null;
+      const isProjectCustomer = selectedCustomerId ? customers.some(c => c.id === selectedCustomerId) : false;
+
+      // Core fields that always exist in the projects table
+      const corePayload: any = {
         company_id: currentUser.company_id,
         name: nameToUse.trim(),
-        name_mode: projectForm.name_mode,
         description: projectForm.description.trim() || null,
-        customer_id: projectForm.customer_id || null,
-        department_id: projectForm.department_id || null,
+        // Only set customer_id if it's a valid project_customers reference (FK constraint)
+        customer_id: isProjectCustomer ? selectedCustomerId : null,
         status: projectForm.status,
         color: projectForm.color,
-        billing_type: projectForm.billing_type,
+        budget_hours: projectForm.billing_type === 'ryczalt' && projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null,
+        budget_amount: projectForm.billing_type === 'ryczalt' && projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null,
         start_date: projectForm.start_date || null,
         end_date: projectForm.end_date || null,
         updated_at: new Date().toISOString(),
       };
 
+      // Extended fields from migrations that may not exist yet
+      const isContractorClient = selectedCustomerId && !isProjectCustomer;
+      const extendedFields: any = {
+        name_mode: projectForm.name_mode,
+        department_id: projectForm.department_id || null,
+        billing_type: projectForm.billing_type,
+        // Store contractor client reference (separate from FK-constrained customer_id)
+        ...(isContractorClient ? { contractor_client_id: selectedCustomerId } : { contractor_client_id: null }),
+      };
+
       if (projectForm.billing_type === 'ryczalt') {
-        payload.budget_hours = projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null;
-        payload.budget_amount = projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null;
-        // Clear hourly fields
-        payload.hourly_rate = null;
-        payload.overtime_paid = false;
-        payload.saturday_paid = false;
-        payload.sunday_paid = false;
-        payload.night_paid = false;
-        payload.travel_paid = false;
+        extendedFields.hourly_rate = null;
+        extendedFields.overtime_paid = false;
+        extendedFields.saturday_paid = false;
+        extendedFields.sunday_paid = false;
+        extendedFields.night_paid = false;
+        extendedFields.travel_paid = false;
       } else {
-        payload.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
-        payload.overtime_paid = hourlySettings.overtime_paid;
-        payload.overtime_rate = hourlySettings.overtime_rate ? parseFloat(hourlySettings.overtime_rate) : null;
-        payload.overtime_base_hours = hourlySettings.overtime_base_hours ? parseFloat(hourlySettings.overtime_base_hours) : null;
-        payload.saturday_paid = hourlySettings.saturday_paid;
-        payload.saturday_rate = hourlySettings.saturday_rate ? parseFloat(hourlySettings.saturday_rate) : null;
-        payload.saturday_hours = hourlySettings.saturday_hours ? parseFloat(hourlySettings.saturday_hours) : null;
-        payload.sunday_paid = hourlySettings.sunday_paid;
-        payload.sunday_rate = hourlySettings.sunday_rate ? parseFloat(hourlySettings.sunday_rate) : null;
-        payload.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
-        payload.night_paid = hourlySettings.night_paid;
-        payload.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
-        payload.night_start_hour = hourlySettings.night_start_hour ? parseInt(hourlySettings.night_start_hour.split(':')[0], 10) : null;
-        payload.night_end_hour = hourlySettings.night_end_hour ? parseInt(hourlySettings.night_end_hour.split(':')[0], 10) : null;
-        payload.travel_paid = hourlySettings.travel_paid;
-        payload.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
-        payload.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
-        // Clear ryczalt fields
-        payload.budget_hours = null;
-        payload.budget_amount = null;
+        extendedFields.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
+        extendedFields.overtime_paid = hourlySettings.overtime_paid;
+        extendedFields.overtime_rate = hourlySettings.overtime_rate ? parseFloat(hourlySettings.overtime_rate) : null;
+        extendedFields.overtime_base_hours = hourlySettings.overtime_base_hours ? parseFloat(hourlySettings.overtime_base_hours) : null;
+        extendedFields.saturday_paid = hourlySettings.saturday_paid;
+        extendedFields.saturday_rate = hourlySettings.saturday_rate ? parseFloat(hourlySettings.saturday_rate) : null;
+        extendedFields.saturday_hours = hourlySettings.saturday_hours ? parseFloat(hourlySettings.saturday_hours) : null;
+        extendedFields.sunday_paid = hourlySettings.sunday_paid;
+        extendedFields.sunday_rate = hourlySettings.sunday_rate ? parseFloat(hourlySettings.sunday_rate) : null;
+        extendedFields.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
+        extendedFields.night_paid = hourlySettings.night_paid;
+        extendedFields.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
+        extendedFields.travel_paid = hourlySettings.travel_paid;
+        extendedFields.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
+        extendedFields.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
+        extendedFields.budget_hours = null;
+        extendedFields.budget_amount = null;
       }
 
-      if (editingProject) {
-        const { data, error } = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
-        if (error) {
-          console.error('Error updating project:', error);
-          // Retry without potentially missing columns
-          delete payload.night_start_hour;
-          delete payload.night_end_hour;
-          const retry = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
-          if (!retry.error && retry.data) {
-            setProjects(prev => prev.map(p => p.id === retry.data.id ? retry.data : p));
-            if (selectedProject?.id === retry.data.id) setSelectedProject(retry.data);
-            setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został zaktualizowany' } }));
-          } else {
-            setState(prev => ({ ...prev, toast: { title: 'Błąd', message: 'Nie udało się zaktualizować projektu' } }));
-          }
-        } else if (data) {
-          setProjects(prev => prev.map(p => p.id === data.id ? data : p));
-          if (selectedProject?.id === data.id) setSelectedProject(data);
-          setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został zaktualizowany' } }));
-        }
-      } else {
-        const { data, error } = await supabase.from('projects').insert(payload).select().single();
-        if (error) {
-          console.error('Error creating project:', error);
-          delete payload.night_start_hour;
-          delete payload.night_end_hour;
-          const retry = await supabase.from('projects').insert(payload).select().single();
-          if (!retry.error && retry.data) {
-            setProjects(prev => [retry.data, ...prev]);
-            setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został utworzony' } }));
-          } else {
-            setState(prev => ({ ...prev, toast: { title: 'Błąd', message: 'Nie udało się utworzyć projektu' } }));
-          }
-        } else if (data) {
-          setProjects(prev => [data, ...prev]);
-          setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został utworzony' } }));
+      // Night hour fields (separate migration)
+      const nightFields: any = {};
+      if (projectForm.billing_type === 'hourly') {
+        nightFields.night_start_hour = hourlySettings.night_start_hour ? parseInt(hourlySettings.night_start_hour.split(':')[0], 10) : null;
+        nightFields.night_end_hour = hourlySettings.night_end_hour ? parseInt(hourlySettings.night_end_hour.split(':')[0], 10) : null;
+      }
+
+      // Try full payload first, then progressively strip fields on error
+      const fullPayload = { ...corePayload, ...extendedFields, ...nightFields };
+      const fallback1 = { ...corePayload, ...extendedFields };
+      const fallback2 = { ...corePayload };
+
+      const payloads = [fullPayload, fallback1, fallback2];
+
+      let resultData: any = null;
+      let lastError: any = null;
+
+      for (const payload of payloads) {
+        if (editingProject) {
+          const { data, error } = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
+          if (!error && data) { resultData = data; break; }
+          lastError = error;
+          console.warn('Save attempt failed, retrying with fewer fields:', error?.message);
+        } else {
+          const { data, error } = await supabase.from('projects').insert(payload).select().single();
+          if (!error && data) { resultData = data; break; }
+          lastError = error;
+          console.warn('Save attempt failed, retrying with fewer fields:', error?.message);
         }
       }
+
+      if (resultData) {
+        if (editingProject) {
+          setProjects(prev => prev.map(p => p.id === resultData.id ? resultData : p));
+          if (selectedProject?.id === resultData.id) setSelectedProject(resultData);
+        } else {
+          setProjects(prev => [resultData, ...prev]);
+        }
+        setState(prev => ({ ...prev, toast: { title: 'Sukces', message: editingProject ? 'Projekt został zaktualizowany' : 'Projekt został utworzony' } }));
+      } else {
+        console.error('All save attempts failed:', lastError);
+        setState(prev => ({ ...prev, toast: { title: 'Błąd', message: editingProject ? 'Nie udało się zaktualizować projektu' : 'Nie udało się utworzyć projektu' } }));
+      }
+
       setShowProjectModal(false);
     } catch (err) {
       console.error('Error saving project:', err);
+      setState(prev => ({ ...prev, toast: { title: 'Błąd', message: 'Wystąpił nieoczekiwany błąd' } }));
     } finally {
       setSavingProject(false);
     }
@@ -418,7 +436,7 @@ export const CompanyProjectsPage: React.FC = () => {
       const s = search.toLowerCase();
       list = list.filter(p =>
         p.name.toLowerCase().includes(s) ||
-        getCustomerName(p.customer_id).toLowerCase().includes(s)
+        getCustomerName(p.contractor_client_id || p.customer_id).toLowerCase().includes(s)
       );
     }
     return list;
@@ -835,7 +853,7 @@ export const CompanyProjectsPage: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(project.customer_id)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{getCustomerName(project.contractor_client_id || project.customer_id)}</td>
                     <td className="px-4 py-3">
                       {(() => {
                         const cfg = PROJECT_STATUS_CONFIG[project.status];

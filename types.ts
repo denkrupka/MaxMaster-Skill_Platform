@@ -1043,6 +1043,7 @@ export interface Project {
   night_hours?: number;
   night_start_hour?: number;
   night_end_hour?: number;
+  contractor_client_id?: string;
   travel_paid?: boolean;
   travel_rate?: number;
   travel_hours?: number;
