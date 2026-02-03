@@ -737,6 +737,9 @@ export interface Department {
   name: string;
   label?: string;
   parent_id?: string | null;
+  rodzaj?: string | null;
+  typ?: string | null;
+  kod_obiektu?: string | null;
   address_street?: string;
   address_city?: string;
   address_postal_code?: string;
@@ -897,20 +900,6 @@ export interface TimeOffType {
   display_order: number;
   created_at: string;
   updated_at: string;
-  // Extended fields
-  shortcut?: string;
-  is_subtype?: boolean;
-  parent_type_id?: string;
-  pay_rate?: number;
-  limit_days?: number;
-  is_limited?: boolean;
-  count_holidays?: boolean;
-  count_weekends?: boolean;
-  carry_over?: boolean;
-  require_advance?: boolean;
-  auto_approve?: boolean;
-  default_comment?: string;
-  is_daily?: boolean;
 }
 
 export interface TimeOffLimit {
@@ -922,7 +911,6 @@ export interface TimeOffLimit {
   total_days: number;
   used_days: number;
   carried_over_days: number;
-  is_enabled?: boolean;
   created_at: string;
   updated_at: string;
   time_off_type?: TimeOffType;
