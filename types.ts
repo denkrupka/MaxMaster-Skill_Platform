@@ -737,6 +737,7 @@ export interface Department {
   name: string;
   label?: string;
   parent_id?: string | null;
+  client_id?: string | null;
   rodzaj?: string | null;
   typ?: string | null;
   kod_obiektu?: string | null;
@@ -1314,5 +1315,69 @@ export interface NotificationHub {
   read_at?: string;
   entity_type?: string;
   entity_id?: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------
+// Contractors
+// ---------------------------------------------------------------
+
+export interface ContractorClient {
+  id: string;
+  company_id: string;
+  name: string;
+  nip?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+  email?: string;
+  phone?: string;
+  note?: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractorClientContact {
+  id: string;
+  client_id: string;
+  company_id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  position?: string;
+  is_main_contact?: boolean;
+  created_at: string;
+}
+
+export interface ContractorSubcontractor {
+  id: string;
+  company_id: string;
+  name: string;
+  nip?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+  workers_count?: number;
+  skills?: string;
+  note?: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubcontractorWorker {
+  id: string;
+  subcontractor_id: string;
+  company_id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  position?: string;
+  is_main_contact?: boolean;
   created_at: string;
 }
