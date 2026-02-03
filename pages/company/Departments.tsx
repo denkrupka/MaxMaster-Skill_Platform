@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Plus, Trash2, Edit, ChevronRight, ChevronDown,
   Archive, Search, ToggleLeft, ToggleRight, X, AlertCircle, List, GitBranch, Pencil, Loader2,
-  Tag, Hash, ChevronUp
+  Tag, Hash, ChevronUp, Handshake
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Department } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { ContractorsPage } from './Contractors';
 
 // ---------------------------------------------------------------
 // Types
@@ -336,6 +337,9 @@ export const DepartmentsPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentCompany } = state;
   const navigate = useNavigate();
+
+  // Top-level tab
+  const [activeTopTab, setActiveTopTab] = useState<'obiekty' | 'kontrahenci'>('obiekty');
 
   // Data
   const [departments, setDepartments] = useState<DepartmentWithCount[]>([]);
@@ -677,6 +681,33 @@ export const DepartmentsPage: React.FC = () => {
 
   return (
     <div className="p-4 lg:p-6">
+      {/* Top-level tabs: Obiekty | Kontrahenci */}
+      <div className="flex space-x-1 bg-slate-100 rounded-xl p-1 mb-6">
+        <button
+          onClick={() => setActiveTopTab('obiekty')}
+          className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            activeTopTab === 'obiekty' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>Obiekty</span>
+        </button>
+        <button
+          onClick={() => setActiveTopTab('kontrahenci')}
+          className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            activeTopTab === 'kontrahenci' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          <Handshake className="w-4 h-4" />
+          <span>Kontrahenci</span>
+        </button>
+      </div>
+
+      {/* Tab: Kontrahenci */}
+      {activeTopTab === 'kontrahenci' && <ContractorsPage />}
+
+      {/* Tab: Obiekty */}
+      {activeTopTab === 'obiekty' && (<>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <div>
@@ -1218,6 +1249,7 @@ export const DepartmentsPage: React.FC = () => {
           </div>
         </div>
       )}
+      </>)}
     </div>
   );
 };
