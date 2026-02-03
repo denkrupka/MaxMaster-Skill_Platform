@@ -955,13 +955,14 @@ export const ContractorsPage: React.FC = () => {
                   <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Stanowisko</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Email</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Telefon</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Pracownicy</th>
                   <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Umiejętności</th>
                   <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredSubs.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">Brak podwykonawców</td></tr>
+                  <tr><td colSpan={9} className="text-center py-12 text-slate-400 text-sm">Brak podwykonawców</td></tr>
                 ) : filteredSubs.map(sub => {
                   const mw = subMainContacts[sub.id];
                   return (
@@ -977,6 +978,7 @@ export const ContractorsPage: React.FC = () => {
                       <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.position || '—'}</td>
                       <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.email || '—'}</td>
                       <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.phone || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{sub.workers_count || '—'}</td>
                       <td className="px-3 py-2 text-slate-600 max-w-[180px]">
                         {sub.skills ? (
                           <div className="flex flex-wrap gap-0.5">
