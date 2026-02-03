@@ -1067,8 +1067,16 @@ export interface ProjectMember {
   payment_type: ProjectMemberPaymentType;
   hourly_rate?: number;
   member_status: ProjectMemberStatus;
+  position?: string;
   added_at: string;
   user?: User;
+}
+
+export interface ProjectIssueCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface ProjectTask {
