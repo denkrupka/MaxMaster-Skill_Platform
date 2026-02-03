@@ -188,7 +188,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
           <h3 className="text-sm font-semibold text-gray-900">Informacje o projekcie</h3>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-gray-500">Klient</span><span className="text-gray-900">{getCustomerName(project.customer_id)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Klient</span><span className="text-gray-900">{getCustomerName(project.contractor_client_id || project.customer_id)}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Obiekt</span><span className="text-gray-900">{getDepartmentName(project.department_id)}</span></div>
             {dept?.kod_obiektu && <div className="flex justify-between"><span className="text-gray-500">Kod budowy</span><span className="text-gray-900">{dept.kod_obiektu}</span></div>}
             {dept?.rodzaj && <div className="flex justify-between"><span className="text-gray-500">Rodzaj</span><span className="text-gray-900">{dept.rodzaj}</span></div>}
@@ -665,7 +665,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </span>
           </div>
           <p className="text-sm text-gray-500 mt-0.5 ml-7">
-            {getCustomerName(project.customer_id)}
+            {getCustomerName(project.contractor_client_id || project.customer_id)}
             {project.department_id ? ` / ${getDepartmentName(project.department_id)}` : ''}
           </p>
         </div>

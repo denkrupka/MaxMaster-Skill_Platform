@@ -24,7 +24,8 @@ ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS night_hours NUMERIC(6,2),
   ADD COLUMN IF NOT EXISTS travel_paid BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS travel_rate NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS travel_hours NUMERIC(6,2);
+  ADD COLUMN IF NOT EXISTS travel_hours NUMERIC(6,2),
+  ADD COLUMN IF NOT EXISTS contractor_client_id UUID REFERENCES contractors_clients(id) ON DELETE SET NULL;
 
 -- 2. Extend project_members table
 ALTER TABLE project_members
