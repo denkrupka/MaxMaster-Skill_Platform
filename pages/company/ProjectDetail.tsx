@@ -6,7 +6,7 @@ import {
   Pencil, Trash2, Upload, Download, Eye, Check, XCircle, Search,
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
   ExternalLink, AlertCircle, Wrench, Tag, Hash, ChevronLeft, ChevronRight,
-  Save
+  Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -18,8 +18,9 @@ import {
   ProjectFile, ProjectMemberType, ProjectMemberPaymentType, ProjectMemberStatus,
   ProjectIssueStatus, ProjectTaskBillingType, ProjectTaskWorkerPayment,
   ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact,
-  ContractorClient
+  ContractorClient, ProjectIssueCategory
 } from '../../types';
+import { uploadDocument } from '../../lib/supabase';
 
 const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; text: string }> = {
   active: { label: 'Aktywny', bg: 'bg-green-100', text: 'text-green-700' },
@@ -137,6 +138,48 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [schedule, setSchedule] = useState<ProjectScheduleEntry[]>([]);
   const [issues, setIssues] = useState<ProjectIssue[]>([]);
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [issueCategories, setIssueCategories] = useState<ProjectIssueCategory[]>([]);
+  const [issueHistory, setIssueHistory] = useState<ProjectIssueHistoryEntry[]>([]);
+
+  // Member modals
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMemberType, setAddMemberType] = useState<ProjectMemberType>('employee');
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberForm, setMemberForm] = useState({
+    user_id: '',
+    role: 'member' as 'manager' | 'member',
+    payment_type: 'hourly' as ProjectMemberPaymentType,
+    hourly_rate: '',
+    position: '',
+    member_status: 'assigned' as ProjectMemberStatus,
+  });
+
+  // Issue modals
+  const [showAddIssueModal, setShowAddIssueModal] = useState(false);
+  const [showIssueDetailModal, setShowIssueDetailModal] = useState(false);
+  const [selectedIssue, setSelectedIssue] = useState<ProjectIssue | null>(null);
+  const [editingIssue, setEditingIssue] = useState<ProjectIssue | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [issueForm, setIssueForm] = useState({
+    name: '',
+    reporter_company: '',
+    category: '',
+    description: '',
+    file_urls: [] as string[],
+  });
+  const [issueFiles, setIssueFiles] = useState<File[]>([]);
+  const [issueHistoryText, setIssueHistoryText] = useState('');
+  const [issueHistoryFiles, setIssueHistoryFiles] = useState<File[]>([]);
+
+  // Attachment modals
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const ACCEPTED_EXTENSIONS = ['.jpg', '.png', '.pdf', '.dwg', '.xls', '.xlsx', '.doc', '.docx', '.mov', '.mp4'];
+  const ACCEPTED_MIME_TYPES = 'image/jpeg,image/png,application/pdf,.dwg,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,video/quicktime,video/mp4';
 
   // Summary mode: 'month' or 'all'
   const [summaryMode, setSummaryMode] = useState<'month' | 'all'>('month');
@@ -173,7 +216,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [tasks, members, timeLogs, protocols, income, costs, schedule, issues, files] = await Promise.all([
+      const [tasks, members, timeLogs, protocols, income, costs, schedule, issues, files, categories] = await Promise.all([
         safeQuery(supabase.from('project_tasks').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
         safeQuery(supabase.from('project_members').select('*').eq('project_id', project.id)),
         safeQuery(supabase.from('task_time_logs').select('*').eq('company_id', currentUser.company_id)),
@@ -181,8 +224,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         safeQuery(supabase.from('project_income').select('*').eq('project_id', project.id)),
         safeQuery(supabase.from('project_costs').select('*').eq('project_id', project.id)),
         safeQuery(supabase.from('project_schedule').select('*').eq('project_id', project.id)),
-        safeQuery(supabase.from('project_issues').select('*').eq('project_id', project.id)),
-        safeQuery(supabase.from('project_files').select('*').eq('project_id', project.id)),
+        safeQuery(supabase.from('project_issues').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
+        safeQuery(supabase.from('project_files').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
+        safeQuery(supabase.from('project_issue_categories').select('*').eq('company_id', currentUser.company_id).order('name')),
       ]);
       setTasks(tasks);
       setMembers(members);
@@ -193,6 +237,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       setSchedule(schedule);
       setIssues(issues);
       setFiles(files);
+      setIssueCategories(categories);
     } catch (err) {
       console.error('Error loading project data:', err);
     } finally {
@@ -283,6 +328,260 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (t.onlyRyczalt && project.billing_type !== 'ryczalt') return false;
     return true;
   });
+
+  // ===== MEMBER HANDLERS =====
+  const openAddMemberModal = (type: ProjectMemberType) => {
+    setAddMemberType(type);
+    setMemberSearch('');
+    setMemberForm({
+      user_id: '',
+      role: 'member',
+      payment_type: 'hourly',
+      hourly_rate: '',
+      position: '',
+      member_status: 'assigned',
+    });
+    setShowAddMemberModal(true);
+  };
+
+  const handleAddMember = async () => {
+    if (!currentUser || !memberForm.user_id) return;
+    const { error } = await supabase.from('project_members').insert({
+      project_id: project.id,
+      user_id: memberForm.user_id,
+      role: memberForm.role,
+      member_type: addMemberType,
+      payment_type: memberForm.payment_type,
+      hourly_rate: memberForm.hourly_rate ? parseFloat(memberForm.hourly_rate) : null,
+      position: memberForm.position || null,
+      member_status: memberForm.member_status,
+    });
+    if (!error) {
+      setShowAddMemberModal(false);
+      loadProjectData();
+    }
+  };
+
+  const handleUpdateMemberStatus = async (memberId: string, newStatus: ProjectMemberStatus) => {
+    const { error } = await supabase.from('project_members').update({ member_status: newStatus }).eq('id', memberId);
+    if (!error) loadProjectData();
+  };
+
+  const handleDeleteMember = async (memberId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć tego pracownika z projektu?')) return;
+    const { error } = await supabase.from('project_members').delete().eq('id', memberId);
+    if (!error) loadProjectData();
+  };
+
+  const filteredUsersForMember = useMemo(() => {
+    const existingUserIds = members.map(m => m.user_id);
+    return companyUsers.filter(u => {
+      if (existingUserIds.includes(u.id)) return false;
+      if (memberSearch) {
+        const search = memberSearch.toLowerCase();
+        return `${u.first_name} ${u.last_name}`.toLowerCase().includes(search);
+      }
+      return true;
+    });
+  }, [companyUsers, members, memberSearch]);
+
+  // ===== ISSUE HANDLERS =====
+  const resetIssueForm = () => {
+    setIssueForm({ name: '', reporter_company: '', category: '', description: '', file_urls: [] });
+    setIssueFiles([]);
+    setEditingIssue(null);
+  };
+
+  const openAddIssueModal = () => {
+    resetIssueForm();
+    setShowAddIssueModal(true);
+  };
+
+  const openEditIssueModal = (issue: ProjectIssue) => {
+    setEditingIssue(issue);
+    setIssueForm({
+      name: issue.name,
+      reporter_company: issue.reporter_company || '',
+      category: issue.category || '',
+      description: issue.description || '',
+      file_urls: issue.file_urls || [],
+    });
+    setIssueFiles([]);
+    setShowAddIssueModal(true);
+  };
+
+  const handleSaveIssue = async () => {
+    if (!currentUser || !issueForm.name) return;
+    const uploadedUrls: string[] = [...issueForm.file_urls];
+    for (const file of issueFiles) {
+      const url = await uploadDocument(file, currentUser.id);
+      if (url) uploadedUrls.push(url);
+    }
+    if (editingIssue) {
+      const { error } = await supabase.from('project_issues').update({
+        name: issueForm.name,
+        reporter_company: issueForm.reporter_company || null,
+        category: issueForm.category || null,
+        description: issueForm.description || null,
+        file_urls: uploadedUrls.length > 0 ? uploadedUrls : null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editingIssue.id);
+      if (!error) { setShowAddIssueModal(false); resetIssueForm(); loadProjectData(); }
+    } else {
+      const { error } = await supabase.from('project_issues').insert({
+        project_id: project.id,
+        company_id: currentUser.company_id,
+        name: issueForm.name,
+        reporter_id: currentUser.id,
+        reporter_company: issueForm.reporter_company || null,
+        category: issueForm.category || null,
+        status: 'new',
+        description: issueForm.description || null,
+        accepted: false,
+        file_urls: uploadedUrls.length > 0 ? uploadedUrls : null,
+      });
+      if (!error) { setShowAddIssueModal(false); resetIssueForm(); loadProjectData(); }
+    }
+  };
+
+  const handleChangeIssueStatus = async (issueId: string, newStatus: ProjectIssueStatus) => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('project_issues').update({
+      status: newStatus, updated_at: new Date().toISOString(),
+    }).eq('id', issueId);
+    if (!error) {
+      await supabase.from('project_issue_history').insert({
+        issue_id: issueId, user_id: currentUser.id,
+        action: `Zmiana statusu na: ${newStatus === 'new' ? 'Nowe' : newStatus === 'in_progress' ? 'W trakcie' : newStatus === 'completed' ? 'Zakończone' : 'Anulowane'}`,
+      });
+      loadProjectData();
+      if (selectedIssue?.id === issueId) {
+        setSelectedIssue({ ...selectedIssue, status: newStatus });
+        loadIssueHistory(issueId);
+      }
+    }
+  };
+
+  const handleToggleIssueAccepted = async (issueId: string, accepted: boolean) => {
+    if (!currentUser) return;
+    const { error } = await supabase.from('project_issues').update({
+      accepted, updated_at: new Date().toISOString(),
+    }).eq('id', issueId);
+    if (!error) {
+      await supabase.from('project_issue_history').insert({
+        issue_id: issueId, user_id: currentUser.id,
+        action: accepted ? 'Zaakceptowano poprawkę' : 'Cofnięto akceptację',
+      });
+      loadProjectData();
+    }
+  };
+
+  const loadIssueHistory = async (issueId: string) => {
+    const { data } = await supabase.from('project_issue_history').select('*').eq('issue_id', issueId).order('created_at', { ascending: true });
+    setIssueHistory(data || []);
+  };
+
+  const openIssueDetail = async (issue: ProjectIssue) => {
+    setSelectedIssue(issue);
+    setIssueHistoryText('');
+    setIssueHistoryFiles([]);
+    await loadIssueHistory(issue.id);
+    setShowIssueDetailModal(true);
+  };
+
+  const handleAddIssueHistoryEntry = async () => {
+    if (!currentUser || !selectedIssue || (!issueHistoryText && issueHistoryFiles.length === 0)) return;
+    const fileUrls: string[] = [];
+    for (const file of issueHistoryFiles) {
+      const url = await uploadDocument(file, currentUser.id);
+      if (url) fileUrls.push(url);
+    }
+    const { error } = await supabase.from('project_issue_history').insert({
+      issue_id: selectedIssue.id, user_id: currentUser.id, action: 'Komentarz',
+      description: issueHistoryText || null, file_urls: fileUrls.length > 0 ? fileUrls : null,
+    });
+    if (!error) { setIssueHistoryText(''); setIssueHistoryFiles([]); loadIssueHistory(selectedIssue.id); }
+  };
+
+  const handleAddCategory = async () => {
+    if (!currentUser || !newCategoryName.trim()) return;
+    const { data, error } = await supabase.from('project_issue_categories').insert({
+      company_id: currentUser.company_id, name: newCategoryName.trim(),
+    }).select().single();
+    if (!error && data) {
+      setIssueCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setIssueForm(prev => ({ ...prev, category: data.name }));
+      setNewCategoryName(''); setShowNewCategoryInput(false);
+    }
+  };
+
+  const handleCreateTaskFromIssue = async () => {
+    if (!currentUser || !selectedIssue) return;
+    const { data, error } = await supabase.from('project_tasks').insert({
+      project_id: project.id, company_id: currentUser.company_id,
+      name: `Zgłoszenie: ${selectedIssue.name}`, description: selectedIssue.description || '',
+      status: 'todo', priority: 'medium', billing_type: project.billing_type || 'ryczalt', worker_payment_type: 'hourly',
+    }).select().single();
+    if (!error && data) {
+      await supabase.from('project_issues').update({ task_id: data.id, updated_at: new Date().toISOString() }).eq('id', selectedIssue.id);
+      await supabase.from('project_issue_history').insert({ issue_id: selectedIssue.id, user_id: currentUser.id, action: `Utworzono zadanie: ${data.name}` });
+      loadProjectData(); loadIssueHistory(selectedIssue.id);
+      setSelectedIssue({ ...selectedIssue, task_id: data.id });
+    }
+  };
+
+  // ===== ATTACHMENT HANDLERS =====
+  const isFileAccepted = (file: File): boolean => {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    return ACCEPTED_EXTENSIONS.includes(ext);
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false);
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(isFileAccepted);
+    setUploadFiles(prev => [...prev, ...droppedFiles]);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files).filter(isFileAccepted);
+      setUploadFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  const handleUploadFiles = async () => {
+    if (!currentUser || uploadFiles.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of uploadFiles) {
+        const url = await uploadDocument(file, currentUser.id);
+        if (url) {
+          const ext = file.name.split('.').pop()?.toLowerCase() || '';
+          await supabase.from('project_files').insert({
+            project_id: project.id, company_id: currentUser.company_id,
+            name: file.name, file_type: ext, file_url: url, file_size: file.size, uploaded_by: currentUser.id,
+          });
+        }
+      }
+      setUploadFiles([]); setShowUploadModal(false); loadProjectData();
+    } finally { setUploading(false); }
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten załącznik?')) return;
+    const { error } = await supabase.from('project_files').delete().eq('id', fileId);
+    if (!error) loadProjectData();
+  };
+
+  const getFileIcon = (fileType: string) => {
+    const type = fileType.toLowerCase();
+    if (['jpg', 'jpeg', 'png'].includes(type)) return <Image className="w-4 h-4 text-green-500" />;
+    if (['pdf'].includes(type)) return <FileText className="w-4 h-4 text-red-500" />;
+    if (['doc', 'docx'].includes(type)) return <FileText className="w-4 h-4 text-blue-500" />;
+    if (['xls', 'xlsx'].includes(type)) return <FileText className="w-4 h-4 text-green-600" />;
+    if (['mov', 'mp4'].includes(type)) return <File className="w-4 h-4 text-purple-500" />;
+    return <File className="w-4 h-4 text-gray-500" />;
+  };
 
   // =========== SUMMARY TAB ===========
   const renderSummary = () => {
@@ -1305,120 +1604,479 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   };
 
   const renderMembers = () => (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-      {members.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-8">Brak przypisanych pracowników</p>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pracownik</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rola</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rozliczenie</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stawka netto</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map(m => (
-              <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{getUserName(m.user_id)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{m.role === 'manager' ? 'Kierownik' : 'Członek'}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{m.payment_type === 'hourly' ? 'Godzinowe' : 'Akord'}</td>
-                <td className="px-4 py-3 text-sm text-gray-900 text-right">{m.hourly_rate ? `${m.hourly_rate} PLN/godz.` : '-'}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    m.member_status === 'assigned' ? 'bg-green-100 text-green-700' :
-                    m.member_status === 'temporarily_unassigned' ? 'bg-amber-100 text-amber-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {m.member_status === 'assigned' ? 'Przypisany' :
-                     m.member_status === 'temporarily_unassigned' ? 'Tymczasowo nieprzypisany' : 'Nieprzypisany'}
-                  </span>
-                </td>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button onClick={() => openAddMemberModal('employee')} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+          <UserPlus className="w-4 h-4" /> Dodaj pracownika
+        </button>
+        <button onClick={() => openAddMemberModal('subcontractor')} className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700">
+          <HardHat className="w-4 h-4" /> Dodaj podwykonawcę
+        </button>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        {members.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">Brak przypisanych pracowników</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Imię i nazwisko</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Stanowisko</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Forma wynagrodzenia</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {members.map(m => (
+                <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{getUserName(m.user_id)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{m.position || '-'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${m.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {m.payment_type === 'hourly' ? `Stawka: ${m.hourly_rate || 0} zł/godz.` : 'Akord'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <select value={m.member_status} onChange={e => handleUpdateMemberStatus(m.id, e.target.value as ProjectMemberStatus)}
+                      className={`text-xs font-medium rounded px-2 py-1 border-0 cursor-pointer ${
+                        m.member_status === 'assigned' ? 'bg-green-100 text-green-700' :
+                        m.member_status === 'temporarily_unassigned' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                      <option value="assigned">Dopisany do projektu</option>
+                      <option value="unassigned">Odpisany od projektu</option>
+                      <option value="temporarily_unassigned">Czasowo odpisany</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => handleDeleteMember(m.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Usuń z projektu">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {showAddMemberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">{addMemberType === 'employee' ? 'Dodaj pracownika' : 'Dodaj podwykonawcę'}</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Wyszukaj pracownika</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj po imieniu lub nazwisku..."
+                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+                {filteredUsersForMember.length === 0 ? (
+                  <p className="text-sm text-gray-400 p-3 text-center">Brak dostępnych pracowników</p>
+                ) : (
+                  filteredUsersForMember.map(u => (
+                    <button key={u.id} onClick={() => setMemberForm(prev => ({ ...prev, user_id: u.id }))}
+                      className={`w-full text-left px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 ${memberForm.user_id === u.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
+                      {u.first_name} {u.last_name}
+                      {u.target_position && <span className="text-gray-400 ml-2">({u.target_position})</span>}
+                    </button>
+                  ))
+                )}
+              </div>
+              {memberForm.user_id && (<>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stanowisko</label>
+                  <input type="text" value={memberForm.position} onChange={e => setMemberForm(prev => ({ ...prev, position: e.target.value }))} placeholder="np. Murarz, Elektryk..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rola</label>
+                    <select value={memberForm.role} onChange={e => setMemberForm(prev => ({ ...prev, role: e.target.value as 'manager' | 'member' }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                      <option value="member">Członek</option><option value="manager">Kierownik</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Forma wynagrodzenia</label>
+                    <select value={memberForm.payment_type} onChange={e => setMemberForm(prev => ({ ...prev, payment_type: e.target.value as ProjectMemberPaymentType }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                      <option value="hourly">Stawka godzinowa</option><option value="akord">Akord</option>
+                    </select>
+                  </div>
+                </div>
+                {memberForm.payment_type === 'hourly' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stawka (zł/godz.)</label>
+                    <input type="number" value={memberForm.hourly_rate} onChange={e => setMemberForm(prev => ({ ...prev, hourly_rate: e.target.value }))} placeholder="0.00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                  </div>
+                )}
+              </>)}
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
+              <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
+              <button onClick={handleAddMember} disabled={!memberForm.user_id} className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Dodaj</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 
   const renderIssues = () => (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-      {issues.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-8">Brak zgłoszeń</p>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zgłaszający</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-            </tr>
-          </thead>
-          <tbody>
-            {issues.map(iss => (
-              <tr key={iss.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{iss.name}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{iss.category || '-'}</td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                    iss.status === 'completed' ? 'bg-green-100 text-green-700' :
-                    iss.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                    iss.status === 'cancelled' ? 'bg-red-100 text-red-700' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {iss.status === 'new' ? 'Nowe' :
-                     iss.status === 'in_progress' ? 'W trakcie' :
-                     iss.status === 'completed' ? 'Zakończone' : 'Anulowane'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{getUserName(iss.reporter_id)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{new Date(iss.created_at).toLocaleDateString('pl-PL')}</td>
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button onClick={openAddIssueModal} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+          <Plus className="w-4 h-4" /> Dodaj zgłoszenie
+        </button>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        {issues.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">Brak zgłoszeń</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zgłaszający</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Firma</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Zadanie</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akceptacja</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {issues.map(iss => (
+                <tr key={iss.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => openIssueDetail(iss)}>
+                  <td className="px-4 py-3 text-sm font-medium text-blue-600 hover:text-blue-800">{iss.name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getUserName(iss.reporter_id)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{iss.reporter_company || '-'}</td>
+                  <td className="px-4 py-3 text-sm">
+                    {iss.task_id ? (
+                      <button onClick={e => { e.stopPropagation(); setActiveTab('tasks'); }} className="text-blue-600 hover:text-blue-800 inline-flex items-center gap-1">
+                        <ExternalLink className="w-3 h-3" /> {tasks.find(t => t.id === iss.task_id)?.name || 'Zadanie'}
+                      </button>
+                    ) : <span className="text-gray-400">-</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{iss.category || '-'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      iss.status === 'completed' ? 'bg-green-100 text-green-700' : iss.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                      iss.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {iss.status === 'new' ? 'Nowe' : iss.status === 'in_progress' ? 'W trakcie' : iss.status === 'completed' ? 'Zakończone' : 'Anulowane'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => handleToggleIssueAccepted(iss.id, !iss.accepted)}
+                      className={`p-1 rounded ${iss.accepted ? 'text-green-600' : 'text-gray-300 hover:text-gray-500'}`}
+                      title={iss.accepted ? 'Zaakceptowano' : 'Nie zaakceptowano'}>
+                      <CheckCircle className="w-5 h-5" />
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => openEditIssueModal(iss)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors" title="Edytuj">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {/* Add/Edit Issue Modal */}
+      {showAddIssueModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">{editingIssue ? 'Edytuj zgłoszenie' : 'Dodaj zgłoszenie'}</h3>
+              <button onClick={() => { setShowAddIssueModal(false); resetIssueForm(); }} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nazwa *</label>
+                <input type="text" value={issueForm.name} onChange={e => setIssueForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Nazwa zgłoszenia"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Firma zgłaszająca</label>
+                <input type="text" value={issueForm.reporter_company} onChange={e => setIssueForm(prev => ({ ...prev, reporter_company: e.target.value }))} placeholder="Nazwa firmy"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kategoria</label>
+                <div className="flex gap-2">
+                  <select value={issueForm.category} onChange={e => setIssueForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">-- Wybierz kategorię --</option>
+                    {issueCategories.map(cat => (<option key={cat.id} value={cat.name}>{cat.name}</option>))}
+                  </select>
+                  <button onClick={() => setShowNewCategoryInput(!showNewCategoryInput)} className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50" title="Dodaj nową kategorię">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                {showNewCategoryInput && (
+                  <div className="flex gap-2 mt-2">
+                    <input type="text" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} placeholder="Nowa kategoria..."
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onKeyDown={e => e.key === 'Enter' && handleAddCategory()} />
+                    <button onClick={handleAddCategory} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Dodaj</button>
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Opis</label>
+                <textarea value={issueForm.description} onChange={e => setIssueForm(prev => ({ ...prev, description: e.target.value }))} rows={4} placeholder="Opis zgłoszenia - co należy wykonać..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Załączniki</label>
+                <input type="file" multiple onChange={e => { if (e.target.files) setIssueFiles(prev => [...prev, ...Array.from(e.target.files!)]); }}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                {issueFiles.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {issueFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                        <span>{f.name}</span>
+                        <button onClick={() => setIssueFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {issueForm.file_urls.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {issueForm.file_urls.map((url, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 truncate">{url.split('/').pop()}</a>
+                        <button onClick={() => setIssueForm(prev => ({ ...prev, file_urls: prev.file_urls.filter((_, idx) => idx !== i) }))} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
+              <button onClick={() => { setShowAddIssueModal(false); resetIssueForm(); }} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
+              <button onClick={handleSaveIssue} disabled={!issueForm.name} className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                {editingIssue ? 'Zapisz' : 'Dodaj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Issue Detail Modal */}
+      {showIssueDetailModal && selectedIssue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{selectedIssue.name}</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Zgłosił: {getUserName(selectedIssue.reporter_id)} | {new Date(selectedIssue.created_at).toLocaleString('pl-PL')}
+                  {selectedIssue.reporter_company && ` | ${selectedIssue.reporter_company}`}
+                </p>
+              </div>
+              <button onClick={() => setShowIssueDetailModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-gray-500">Status:</span>
+                {(['new', 'in_progress', 'completed', 'cancelled'] as ProjectIssueStatus[]).map(st => (
+                  <button key={st} onClick={() => handleChangeIssueStatus(selectedIssue.id, st)}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                      selectedIssue.status === st
+                        ? (st === 'new' ? 'bg-amber-200 text-amber-800' : st === 'in_progress' ? 'bg-blue-200 text-blue-800' :
+                           st === 'completed' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800')
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}>
+                    {st === 'new' ? 'Nowe' : st === 'in_progress' ? 'W trakcie' : st === 'completed' ? 'Zakończone' : 'Anulowane'}
+                  </button>
+                ))}
+              </div>
+              {selectedIssue.description && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-1">Opis - co należy wykonać</h4>
+                  <p className="text-sm text-gray-600 whitespace-pre-wrap">{selectedIssue.description}</p>
+                </div>
+              )}
+              {selectedIssue.file_urls && selectedIssue.file_urls.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Załączniki zgłoszenia</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedIssue.file_urls.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm hover:bg-blue-100">
+                        <Paperclip className="w-3 h-3" /> {url.split('/').pop()?.substring(0, 30)}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!selectedIssue.task_id ? (
+                <button onClick={handleCreateTaskFromIssue} className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700">
+                  <ClipboardList className="w-4 h-4" /> Utwórz zadanie
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle className="w-4 h-4" /> Powiązane zadanie: {tasks.find(t => t.id === selectedIssue.task_id)?.name || 'Zadanie'}
+                </div>
+              )}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Historia zgłoszenia</h4>
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0"><MessageSquare className="w-4 h-4 text-blue-600" /></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900"><span className="font-medium">{getUserName(selectedIssue.reporter_id)}</span><span className="text-gray-500"> utworzył zgłoszenie</span></p>
+                      <p className="text-xs text-gray-400">{new Date(selectedIssue.created_at).toLocaleString('pl-PL')}</p>
+                    </div>
+                  </div>
+                  {issueHistory.map(entry => (
+                    <div key={entry.id} className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0"><MessageSquare className="w-4 h-4 text-gray-500" /></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900"><span className="font-medium">{getUserName(entry.user_id)}</span><span className="text-gray-500"> - {entry.action}</span></p>
+                        {entry.description && <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{entry.description}</p>}
+                        {entry.file_urls && entry.file_urls.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {entry.file_urls.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-blue-600 rounded text-xs hover:bg-gray-200">
+                                <Paperclip className="w-3 h-3" /> {url.split('/').pop()?.substring(0, 20)}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-400 mt-0.5">{new Date(entry.created_at).toLocaleString('pl-PL')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 border-t border-gray-200 pt-4">
+                  <textarea value={issueHistoryText} onChange={e => setIssueHistoryText(e.target.value)} rows={2} placeholder="Dodaj komentarz..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                  <div className="flex items-center justify-between mt-2">
+                    <input type="file" multiple onChange={e => { if (e.target.files) setIssueHistoryFiles(Array.from(e.target.files)); }} className="text-xs text-gray-500" />
+                    <button onClick={handleAddIssueHistoryEntry} disabled={!issueHistoryText && issueHistoryFiles.length === 0}
+                      className="px-4 py-1.5 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Wyślij</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 
   const renderAttachments = () => (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-      {files.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-8">Brak załączników</p>
-      ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Dodał</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-              <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Rozmiar</th>
-            </tr>
-          </thead>
-          <tbody>
-            {files.map(f => (
-              <tr key={f.id} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:text-blue-800">
-                    {f.name}
-                  </a>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-600">{f.file_type}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{getUserName(f.uploaded_by)}</td>
-                <td className="px-4 py-3 text-sm text-gray-600">{new Date(f.created_at).toLocaleDateString('pl-PL')}</td>
-                <td className="px-4 py-3 text-sm text-gray-600 text-right">{f.file_size ? `${(f.file_size / 1024).toFixed(0)} KB` : '-'}</td>
+    <div className="space-y-4">
+      <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-white'}`}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
+        onDrop={e => { handleFileDrop(e); setShowUploadModal(true); }}>
+        <UploadCloud className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+        <p className="text-sm text-gray-600 mb-1">Przeciągnij i upuść plik, który chcesz dodać do tego projektu</p>
+        <p className="text-xs text-gray-400 mb-3">lub kliknij w przycisk poniżej i wybierz plik ze swojego komputera</p>
+        <button onClick={() => { setUploadFiles([]); setShowUploadModal(true); }} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+          <Upload className="w-4 h-4" /> Dodaj załącznik
+        </button>
+        <p className="text-xs text-gray-400 mt-3">Akceptowane pliki: .jpg, .png, .pdf, .dwg, .xls, .xlsx, .doc, .docx, .mov, .mp4</p>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        {files.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">Brak załączników</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Dodano przez</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data dodania</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Podgląd</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Pobierz</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Usuń</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {files.map(f => (
+                <tr key={f.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">{getFileIcon(f.file_type)}<span className="text-sm font-medium text-gray-900">{f.name}</span></div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600 uppercase">{f.file_type}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getUserName(f.uploaded_by)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{new Date(f.created_at).toLocaleDateString('pl-PL')}</td>
+                  <td className="px-4 py-3 text-center">
+                    <a href={f.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center p-1.5 text-gray-400 hover:text-blue-600 transition-colors" title="Podgląd"><Eye className="w-4 h-4" /></a>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <a href={f.file_url} download={f.name} className="inline-flex items-center justify-center p-1.5 text-gray-400 hover:text-green-600 transition-colors" title="Pobierz"><Download className="w-4 h-4" /></a>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => handleDeleteFile(f.id)} className="inline-flex items-center justify-center p-1.5 text-gray-400 hover:text-red-600 transition-colors" title="Usuń"><Trash2 className="w-4 h-4" /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Dodaj załączniki</h3>
+              <button onClick={() => { setShowUploadModal(false); setUploadFiles([]); }} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={handleFileDrop}>
+                <UploadCloud className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">Przeciągnij pliki tutaj lub</p>
+                <label className="mt-2 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer">
+                  <Upload className="w-4 h-4" /> Wybierz pliki
+                  <input type="file" multiple accept={ACCEPTED_MIME_TYPES} onChange={handleFileSelect} className="hidden" />
+                </label>
+                <p className="text-xs text-gray-400 mt-2">.jpg, .png, .pdf, .dwg, .xls, .xlsx, .doc, .docx, .mov, .mp4</p>
+              </div>
+              {uploadFiles.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-700">Wybrane pliki ({uploadFiles.length}):</p>
+                  {uploadFiles.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {getFileIcon(f.name.split('.').pop() || '')}
+                        <span className="text-sm text-gray-700 truncate">{f.name}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                      </div>
+                      <button onClick={() => setUploadFiles(prev => prev.filter((_, idx) => idx !== i))} className="p-1 text-gray-400 hover:text-red-600"><X className="w-3 h-3" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
+              <button onClick={() => { setShowUploadModal(false); setUploadFiles([]); }} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
+              <button onClick={handleUploadFiles} disabled={uploadFiles.length === 0 || uploading}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {uploading ? 'Przesyłanie...' : `Prześlij (${uploadFiles.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
