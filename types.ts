@@ -1224,6 +1224,7 @@ export interface ProjectIssue {
   status: ProjectIssueStatus;
   description?: string;
   accepted: boolean;
+  file_urls?: string[];
   history?: ProjectIssueHistoryEntry[];
   created_at: string;
   updated_at: string;
