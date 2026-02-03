@@ -737,6 +737,7 @@ export interface Department {
   name: string;
   label?: string;
   parent_id?: string | null;
+  client_id?: string | null;
   rodzaj?: string | null;
   typ?: string | null;
   kod_obiektu?: string | null;
