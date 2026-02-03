@@ -7,7 +7,7 @@ import {
   Tag, Hash, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { Department } from '../../types';
+import { Department, ContractorClient } from '../../types';
 import { supabase } from '../../lib/supabase';
 
 // ---------------------------------------------------------------
@@ -22,6 +22,7 @@ interface DepartmentWithCount extends Department {
 interface DepartmentFormData {
   name: string;
   parent_id: string | null;
+  client_id: string | null;
   rodzaj: string;
   typ: string;
   kod_obiektu: string;
@@ -38,6 +39,7 @@ interface DepartmentFormData {
 const EMPTY_FORM: DepartmentFormData = {
   name: '',
   parent_id: null,
+  client_id: null,
   rodzaj: '',
   typ: '',
   kod_obiektu: '',
@@ -357,6 +359,12 @@ export const DepartmentsPage: React.FC = () => {
   const [rodzajOptions, setRodzajOptions] = useState<string[]>([]);
   const [typOptions, setTypOptions] = useState<string[]>([]);
 
+  // Clients for selector
+  const [clients, setClients] = useState<ContractorClient[]>([]);
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
+
   // ------- Data loading -------
   const loadDepartments = useCallback(async () => {
     if (!currentCompany) return;
@@ -397,10 +405,51 @@ export const DepartmentsPage: React.FC = () => {
     }
   }, [currentCompany]);
 
+  const loadClients = useCallback(async () => {
+    if (!currentCompany) return;
+    try {
+      const { data } = await supabase
+        .from('contractors_clients')
+        .select('*')
+        .eq('company_id', currentCompany.id)
+        .eq('is_archived', false)
+        .order('name');
+      if (data) setClients(data);
+    } catch (err) {
+      console.error('Error loading clients:', err);
+    }
+  }, [currentCompany]);
+
   useEffect(() => {
     loadDepartments();
     loadRodzajTypOptions();
-  }, [loadDepartments, loadRodzajTypOptions]);
+    loadClients();
+  }, [loadDepartments, loadRodzajTypOptions, loadClients]);
+
+  // Close client dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
+        setShowClientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    const term = clientSearchTerm.toLowerCase().trim();
+    if (!term) return clients;
+    return clients.filter(c =>
+      c.name.toLowerCase().includes(term) ||
+      (c.nip || '').replace(/\D/g, '').includes(term.replace(/\D/g, ''))
+    );
+  }, [clients, clientSearchTerm]);
+
+  const selectedClient = useMemo(() => {
+    if (!form.client_id) return null;
+    return clients.find(c => c.id === form.client_id) || null;
+  }, [form.client_id, clients]);
 
   // ------- Tree building -------
   const visibleDepartments = useMemo(() => {
@@ -441,6 +490,8 @@ export const DepartmentsPage: React.FC = () => {
     setGeoManualEdit(false);
     setAddressSuggestions([]);
     setShowSuggestions(false);
+    setClientSearchTerm('');
+    setShowClientDropdown(false);
     setShowModal(true);
   };
 
@@ -449,9 +500,12 @@ export const DepartmentsPage: React.FC = () => {
     setGeoManualEdit(false);
     setAddressSuggestions([]);
     setShowSuggestions(false);
+    setClientSearchTerm('');
+    setShowClientDropdown(false);
     setForm({
       name: dept.name,
       parent_id: dept.parent_id ?? null,
+      client_id: dept.client_id ?? null,
       rodzaj: dept.rodzaj || '',
       typ: dept.typ || '',
       kod_obiektu: dept.kod_obiektu || '',
@@ -481,6 +535,7 @@ export const DepartmentsPage: React.FC = () => {
       company_id: currentCompany.id,
       name: form.name.trim(),
       parent_id: form.parent_id || null,
+      client_id: form.client_id || null,
       rodzaj: form.rodzaj.trim() || null,
       typ: form.typ.trim() || null,
       kod_obiektu: kodValue || null,
@@ -806,7 +861,7 @@ export const DepartmentsPage: React.FC = () => {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kod</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Rodzaj</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Typ</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Obiekt nadrzedny</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Klient</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Miasto</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Pracownicy</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Geofence</th>
@@ -816,8 +871,8 @@ export const DepartmentsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {flatList.map(({ node, depth }) => {
-                  const parentName = node.parent_id
-                    ? departments.find(d => d.id === node.parent_id)?.name || '—'
+                  const clientName = node.client_id
+                    ? clients.find(c => c.id === node.client_id)?.name || '—'
                     : '—';
                   return (
                     <tr key={node.id} className={`hover:bg-slate-50 ${node.is_archived ? 'opacity-60' : ''}`}>
@@ -842,7 +897,7 @@ export const DepartmentsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{node.rodzaj || '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{node.typ || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{parentName}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{clientName}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{node.address_city || '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center gap-1 text-sm text-slate-600">
@@ -942,20 +997,47 @@ export const DepartmentsPage: React.FC = () => {
                 />
               </div>
 
-              {/* Parent */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Obiekt nadrzedny</label>
-                <select
-                  name="parent_id"
-                  value={form.parent_id || ''}
-                  onChange={e => setForm(prev => ({ ...prev, parent_id: e.target.value || null }))}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">— Brak (obiekt glowny) —</option>
-                  {parentOptions.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
+              {/* Client selector */}
+              <div ref={clientDropdownRef} className="relative">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
+                {selectedClient ? (
+                  <div className="flex items-center justify-between w-full px-3 py-2 border border-slate-200 rounded-lg bg-white">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{selectedClient.name}</p>
+                      {selectedClient.nip && <p className="text-xs text-slate-400 font-mono">{selectedClient.nip}</p>}
+                    </div>
+                    <button type="button" onClick={() => { setForm(prev => ({ ...prev, client_id: null })); setClientSearchTerm(''); }}
+                      className="p-0.5 text-slate-400 hover:text-red-500 shrink-0 ml-2"><X size={16} /></button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={clientSearchTerm}
+                        onChange={e => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }}
+                        onFocus={() => setShowClientDropdown(true)}
+                        placeholder="Szukaj klienta po nazwie lub NIP..."
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      />
+                    </div>
+                    {showClientDropdown && (
+                      <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {filteredClients.length === 0 ? (
+                          <p className="px-3 py-3 text-xs text-slate-400 text-center">Brak klientów</p>
+                        ) : filteredClients.map(client => (
+                          <button key={client.id} type="button"
+                            onClick={() => { setForm(prev => ({ ...prev, client_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0">
+                            <p className="text-sm font-medium text-slate-800 truncate">{client.name}</p>
+                            {client.nip && <p className="text-xs text-slate-400 font-mono">{client.nip}</p>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Rodzaj & Typ */}
