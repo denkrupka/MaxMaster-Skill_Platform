@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ArrowLeft, BarChart3, Calendar, ClipboardList, FileCheck, DollarSign,
   Receipt, Clock, Users, MessageSquare, Paperclip, Loader2, Plus, X,
   Pencil, Trash2, Upload, Download, Eye, Check, XCircle, Search,
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
-  ExternalLink, AlertCircle, Wrench, Tag, Hash, ToggleLeft, ToggleRight,
+  ExternalLink, AlertCircle, Wrench, Tag, Hash, ScanLine, FileInput, ToggleLeft, ToggleRight,
   ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud
 } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -1803,8 +1803,503 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     </div>
   );
 
+  // ─── Costs Tab State ───
+  const [costSubTab, setCostSubTab] = useState<'direct' | 'labor'>('direct');
+  const [costMonth, setCostMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [showCostMethodModal, setShowCostMethodModal] = useState(false);
+  const [showCostFormModal, setShowCostFormModal] = useState(false);
+  const [isScanningDocument, setIsScanningDocument] = useState(false);
+  const costFileInputRef = useRef<HTMLInputElement>(null);
+  const [costFormData, setCostFormData] = useState({
+    document_type: '',
+    document_number: '',
+    issue_date: '',
+    payment_due_date: '',
+    issuer: '',
+    value_netto: '',
+    category: '',
+    payment_status: 'Nieopłacone',
+  });
+  const [editingCostId, setEditingCostId] = useState<string | null>(null);
+  const [savingCost, setSavingCost] = useState(false);
+
+  // Payment status options with ability to add custom ones
+  const DEFAULT_PAYMENT_STATUSES = ['Nieopłacone', 'Opłacone', 'Częściowo opłacone', 'Przeterminowane'];
+  const [customPaymentStatuses, setCustomPaymentStatuses] = useState<string[]>([]);
+  const [showAddStatusInput, setShowAddStatusInput] = useState(false);
+  const [newStatusValue, setNewStatusValue] = useState('');
+  const allPaymentStatuses = [...DEFAULT_PAYMENT_STATUSES, ...customPaymentStatuses];
+
+  const COST_CATEGORIES = ['Materiały', 'Usługi', 'Transport', 'Narzędzia', 'Wynajem', 'Podwykonawcy', 'Inne'];
+  const DOCUMENT_TYPES = ['Faktura VAT', 'Rachunek', 'Paragon', 'Nota księgowa', 'Umowa', 'Inne'];
+
+  const resetCostForm = () => {
+    setCostFormData({
+      document_type: '',
+      document_number: '',
+      issue_date: '',
+      payment_due_date: '',
+      issuer: '',
+      value_netto: '',
+      category: '',
+      payment_status: 'Nieopłacone',
+    });
+    setEditingCostId(null);
+  };
+
+  const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanningDocument(true);
+    setShowCostMethodModal(false);
+
+    try {
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.readAsDataURL(file);
+      });
+      const base64Data = await base64Promise;
+
+      const { data, error } = await supabase.functions.invoke('parse-cost-document', {
+        body: {
+          fileBase64: base64Data,
+          mimeType: file.type || 'application/pdf',
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to parse document');
+
+      const result = data.data;
+      setCostFormData({
+        document_type: result.document_type || '',
+        document_number: result.document_number || '',
+        issue_date: result.issue_date || '',
+        payment_due_date: result.payment_due_date || '',
+        issuer: result.issuer || '',
+        value_netto: result.value_netto ? String(result.value_netto) : '',
+        category: result.category || '',
+        payment_status: 'Nieopłacone',
+      });
+      setShowCostFormModal(true);
+    } catch (err) {
+      console.error('Document scan error:', err);
+      setCostFormData(prev => ({ ...prev }));
+      setShowCostFormModal(true);
+    } finally {
+      setIsScanningDocument(false);
+      if (costFileInputRef.current) costFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveCost = async () => {
+    if (!currentUser || !costFormData.document_number || !costFormData.value_netto) return;
+    setSavingCost(true);
+    try {
+      const payload = {
+        project_id: project.id,
+        company_id: currentUser.company_id,
+        cost_type: 'direct' as const,
+        document_type: costFormData.document_type || null,
+        document_number: costFormData.document_number,
+        issue_date: costFormData.issue_date || null,
+        payment_due_date: costFormData.payment_due_date || null,
+        issuer: costFormData.issuer || null,
+        value_netto: parseFloat(costFormData.value_netto) || 0,
+        category: costFormData.category || null,
+        payment_status: costFormData.payment_status || 'Nieopłacone',
+      };
+
+      if (editingCostId) {
+        const { error } = await supabase.from('project_costs').update(payload).eq('id', editingCostId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('project_costs').insert(payload);
+        if (error) throw error;
+      }
+
+      await loadProjectData();
+      setShowCostFormModal(false);
+      resetCostForm();
+    } catch (err) {
+      console.error('Error saving cost:', err);
+    } finally {
+      setSavingCost(false);
+    }
+  };
+
+  const handleDeleteCost = async (costId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten koszt?')) return;
+    try {
+      const { error } = await supabase.from('project_costs').delete().eq('id', costId);
+      if (error) throw error;
+      await loadProjectData();
+    } catch (err) {
+      console.error('Error deleting cost:', err);
+    }
+  };
+
+  const handleEditCost = (cost: ProjectCost) => {
+    setCostFormData({
+      document_type: cost.document_type || '',
+      document_number: cost.document_number || '',
+      issue_date: cost.issue_date || '',
+      payment_due_date: cost.payment_due_date || '',
+      issuer: cost.issuer || '',
+      value_netto: String(cost.value_netto || 0),
+      category: cost.category || '',
+      payment_status: cost.payment_status || 'Nieopłacone',
+    });
+    setEditingCostId(cost.id);
+    setShowCostFormModal(true);
+  };
+
+  const addCustomPaymentStatus = () => {
+    const trimmed = newStatusValue.trim();
+    if (trimmed && !allPaymentStatuses.includes(trimmed)) {
+      setCustomPaymentStatuses(prev => [...prev, trimmed]);
+      setCostFormData(prev => ({ ...prev, payment_status: trimmed }));
+    }
+    setNewStatusValue('');
+    setShowAddStatusInput(false);
+  };
+
+  // Month navigation helpers
+  const navigateMonth = (dir: number) => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + dir, 1);
+    setCostMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+
+  const monthLabel = (() => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const months = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'];
+    return `${months[m - 1]} ${y}`;
+  })();
+
+  // Filter direct costs by selected month
+  const filteredDirectCosts = costs.filter(c => {
+    if (c.cost_type !== 'direct') return false;
+    if (!c.issue_date) return false;
+    const d = new Date(c.issue_date);
+    const [y, m] = costMonth.split('-').map(Number);
+    return d.getFullYear() === y && d.getMonth() + 1 === m;
+  });
+
+  const filteredDirectCostsTotal = filteredDirectCosts.reduce((s, c) => s + (c.value_netto || 0), 0);
+
+  // Labor costs calculations
+  const laborCostsForMonth = useMemo(() => {
+    const [y, m] = costMonth.split('-').map(Number);
+    const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthEnd = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+
+    // Get project member IDs and their payment types/rates
+    const memberMap = new Map<string, { payment_type: string; hourly_rate: number }>();
+    members.forEach(mem => {
+      memberMap.set(mem.user_id, {
+        payment_type: mem.payment_type || 'hourly',
+        hourly_rate: mem.hourly_rate || 0,
+      });
+    });
+
+    const memberUserIds = Array.from(memberMap.keys());
+
+    // Filter time logs for this project's tasks in the selected month
+    const projectTaskIds = tasks.map(t => t.id);
+    const monthTimeLogs = timeLogs.filter(tl => {
+      if (!projectTaskIds.includes(tl.task_id)) return false;
+      if (!memberUserIds.includes(tl.user_id)) return false;
+      return tl.date >= monthStart && tl.date <= monthEnd;
+    });
+
+    // Split by payment type
+    let hourlyMinutes = 0;
+    let hourlyValue = 0;
+    let akordMinutes = 0;
+    let akordValue = 0;
+
+    monthTimeLogs.forEach(tl => {
+      const memInfo = memberMap.get(tl.user_id);
+      if (!memInfo) return;
+      const hours = (tl.minutes || 0) / 60;
+
+      if (memInfo.payment_type === 'akord') {
+        akordMinutes += tl.minutes || 0;
+        // For akord, get value from task definition
+        const task = tasks.find(t => t.id === tl.task_id);
+        if (task && task.worker_payment_type === 'akord' && task.worker_rate_per_unit) {
+          akordValue += hours * (task.worker_rate_per_unit || 0);
+        } else {
+          akordValue += hours * memInfo.hourly_rate;
+        }
+      } else {
+        hourlyMinutes += tl.minutes || 0;
+        hourlyValue += hours * memInfo.hourly_rate;
+      }
+    });
+
+    return { hourlyMinutes, hourlyValue, akordMinutes, akordValue };
+  }, [costMonth, members, tasks, timeLogs]);
+
+  // ─── Cost Method Modal (Scan vs Manual) ───
+  const renderCostMethodModal = () => {
+    if (!showCostMethodModal && !isScanningDocument) return null;
+
+    if (isScanningDocument) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-4">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            <p className="text-sm font-medium text-gray-700">Skanowanie dokumentu...</p>
+            <p className="text-xs text-gray-400">AI analizuje dane z dokumentu</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowCostMethodModal(false)} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">Dodaj koszt</h2>
+            <button onClick={() => setShowCostMethodModal(false)} className="p-1 rounded hover:bg-gray-100">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-gray-500">Wybierz sposób dodania kosztu:</p>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => costFileInputRef.current?.click()}
+                className="flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <ScanLine className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Skanuj dokument</p>
+                  <p className="text-xs text-gray-500">AI wyciągnie dane z faktury/rachunku (OCR)</p>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setShowCostMethodModal(false);
+                  resetCostForm();
+                  setShowCostFormModal(true);
+                }}
+                className="flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-green-400 hover:bg-green-50 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <FileInput className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Wprowadź ręcznie</p>
+                  <p className="text-xs text-gray-500">Wypełnij formularz samodzielnie</p>
+                </div>
+              </button>
+            </div>
+          </div>
+          <input
+            ref={costFileInputRef}
+            type="file"
+            accept="application/pdf,image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleScanDocument}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Cost Form Modal ───
+  const renderCostFormModal = () => {
+    if (!showCostFormModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => { setShowCostFormModal(false); resetCostForm(); }} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">
+              {editingCostId ? 'Edytuj koszt' : 'Nowy koszt bezpośredni'}
+            </h2>
+            <button onClick={() => { setShowCostFormModal(false); resetCostForm(); }} className="p-1 rounded hover:bg-gray-100">
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+
+          <div className="px-5 py-4 space-y-3">
+            {/* Document type */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Typ dokumentu</label>
+              <select
+                value={costFormData.document_type}
+                onChange={e => setCostFormData(prev => ({ ...prev, document_type: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Wybierz typ...</option>
+                {DOCUMENT_TYPES.map(dt => (
+                  <option key={dt} value={dt}>{dt}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Document number */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Nr dokumentu *</label>
+              <input
+                type="text"
+                value={costFormData.document_number}
+                onChange={e => setCostFormData(prev => ({ ...prev, document_number: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="np. FV/2026/01/001"
+              />
+            </div>
+
+            {/* Dates row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Data wystawienia</label>
+                <input
+                  type="date"
+                  value={costFormData.issue_date}
+                  onChange={e => setCostFormData(prev => ({ ...prev, issue_date: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Termin płatności</label>
+                <input
+                  type="date"
+                  value={costFormData.payment_due_date}
+                  onChange={e => setCostFormData(prev => ({ ...prev, payment_due_date: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Issuer */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Wystawca dokumentu</label>
+              <input
+                type="text"
+                value={costFormData.issuer}
+                onChange={e => setCostFormData(prev => ({ ...prev, issuer: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Nazwa firmy lub osoby"
+              />
+            </div>
+
+            {/* Value netto */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Wartość dokumentu netto (PLN) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={costFormData.value_netto}
+                onChange={e => setCostFormData(prev => ({ ...prev, value_netto: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Category */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Kategoria</label>
+              <select
+                value={costFormData.category}
+                onChange={e => setCostFormData(prev => ({ ...prev, category: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Wybierz kategorię...</option>
+                {COST_CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Payment status with add-new */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Status opłaty</label>
+              <div className="flex gap-2">
+                <select
+                  value={costFormData.payment_status}
+                  onChange={e => setCostFormData(prev => ({ ...prev, payment_status: e.target.value }))}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {allPaymentStatuses.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStatusInput(!showAddStatusInput)}
+                  className="px-2 py-2 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                  title="Dodaj nowy status"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              {showAddStatusInput && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    value={newStatusValue}
+                    onChange={e => setNewStatusValue(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addCustomPaymentStatus()}
+                    placeholder="Nazwa nowego statusu"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={addCustomPaymentStatus}
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Dodaj
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-5 py-3 border-t border-gray-200">
+            <button
+              onClick={() => { setShowCostFormModal(false); resetCostForm(); }}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveCost}
+              disabled={savingCost || !costFormData.document_number || !costFormData.value_netto}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {savingCost && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editingCostId ? 'Zapisz zmiany' : 'Dodaj koszt'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCosts = () => (
     <div className="space-y-4">
+      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase font-medium">Koszty bezpośrednie netto</p>
@@ -1819,42 +2314,202 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           <p className="text-lg font-bold text-gray-900 mt-1">{totalCosts.toLocaleString('pl-PL')} PLN</p>
         </div>
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {costs.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Brak kosztów</p>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Dokument</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wystawca</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość netto</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {costs.map(c => (
-                <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                      c.cost_type === 'direct' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {c.cost_type === 'direct' ? 'Bezpośredni' : 'Robocizna'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{c.document_number || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.issuer || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.category || '-'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900 text-right">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+
+      {/* Sub-tabs */}
+      <div className="flex gap-0 border-b border-gray-200">
+        <button
+          onClick={() => setCostSubTab('direct')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            costSubTab === 'direct'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          Koszty bezpośrednie
+        </button>
+        <button
+          onClick={() => setCostSubTab('labor')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            costSubTab === 'labor'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          Koszty robocizny
+        </button>
       </div>
+
+      {/* Direct Costs Sub-tab */}
+      {costSubTab === 'direct' && (
+        <div className="space-y-4">
+          {/* Header: month selector + add button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">{monthLabel}</span>
+              <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">
+                Suma: <span className="font-semibold text-gray-900">{filteredDirectCostsTotal.toLocaleString('pl-PL')} PLN</span>
+              </span>
+              <button
+                onClick={() => setShowCostMethodModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj koszt
+              </button>
+            </div>
+          </div>
+
+          {/* Direct costs list */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            {filteredDirectCosts.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Brak kosztów bezpośrednich w wybranym miesiącu</p>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nr dokumentu</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data wystawienia</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin płatności</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wystawca</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość netto</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status opłaty</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDirectCosts.map(c => (
+                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.document_number || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.payment_due_date ? new Date(c.payment_due_date).toLocaleDateString('pl-PL') : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.issuer || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{c.category || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          c.payment_status === 'Opłacone' || c.payment_status === 'paid' ? 'bg-green-100 text-green-700' :
+                          c.payment_status === 'Przeterminowane' ? 'bg-red-100 text-red-700' :
+                          c.payment_status === 'Częściowo opłacone' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {c.payment_status || 'Nieopłacone'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEditCost(c)}
+                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                            title="Edytuj"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCost(c.id)}
+                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
+                            title="Usuń"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Labor Costs Sub-tab */}
+      {costSubTab === 'labor' && (
+        <div className="space-y-4">
+          {/* Month selector */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigateMonth(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-semibold text-gray-700 min-w-[140px] text-center">{monthLabel}</span>
+            <button onClick={() => navigateMonth(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Labor costs summary */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Typ wynagrodzenia</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Ilość roboczogodzin</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość (PLN)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Godzinowe</span>
+                      <span className="text-sm text-gray-700">Wynagrodzenie roboczogodzinowe</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                    {(laborCostsForMonth.hourlyMinutes / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {laborCostsForMonth.hourlyValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Akord</span>
+                      <span className="text-sm text-gray-700">Wynagrodzenie akordowe</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
+                    {(laborCostsForMonth.akordMinutes / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {laborCostsForMonth.akordValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+                <tr className="bg-gray-50">
+                  <td className="px-4 py-3 text-sm font-semibold text-gray-700">Razem</td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {((laborCostsForMonth.hourlyMinutes + laborCostsForMonth.akordMinutes) / 60).toFixed(1)} godz.
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900 text-right font-bold">
+                    {(laborCostsForMonth.hourlyValue + laborCostsForMonth.akordValue).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Info note */}
+          <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+            <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-700">
+              Koszty robocizny są obliczane automatycznie na podstawie zalogowanych godzin pracy i stawek przypisanych pracownikom w projekcie.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      {renderCostMethodModal()}
+      {renderCostFormModal()}
     </div>
   );
 
