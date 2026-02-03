@@ -3,7 +3,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import {
   Building2, MapPin, Users, Plus, Trash2, Edit, ChevronRight, ChevronDown,
-  Archive, Search, ToggleLeft, ToggleRight, X, AlertCircle, List, GitBranch, Pencil, Loader2
+  Archive, Search, ToggleLeft, ToggleRight, X, AlertCircle, List, GitBranch, Pencil, Loader2,
+  Tag, Hash, ChevronUp
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Department } from '../../types';
@@ -21,6 +22,10 @@ interface DepartmentWithCount extends Department {
 interface DepartmentFormData {
   name: string;
   parent_id: string | null;
+  rodzaj: string;
+  typ: string;
+  kod_obiektu: string;
+  kod_manual: boolean;
   address_street: string;
   address_city: string;
   address_postal_code: string;
@@ -33,6 +38,10 @@ interface DepartmentFormData {
 const EMPTY_FORM: DepartmentFormData = {
   name: '',
   parent_id: null,
+  rodzaj: '',
+  typ: '',
+  kod_obiektu: '',
+  kod_manual: false,
   address_street: '',
   address_city: '',
   address_postal_code: '',
@@ -40,6 +49,106 @@ const EMPTY_FORM: DepartmentFormData = {
   latitude: '',
   longitude: '',
   range_meters: '200',
+};
+
+// ---------------------------------------------------------------
+// Helper: generate Kod obiektu from name
+// ---------------------------------------------------------------
+function generateKodObiektu(name: string): string {
+  const year = new Date().getFullYear().toString().slice(-2);
+  const words = name.trim().split(/\s+/).filter(Boolean);
+
+  let prefix = '';
+  if (words.length === 0) return '';
+  if (words.length === 1) {
+    prefix = words[0].substring(0, 2).toUpperCase();
+  } else {
+    prefix = (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  return `${prefix}${year}`;
+}
+
+// ---------------------------------------------------------------
+// ComboBox Component (select from list or type new value)
+// ---------------------------------------------------------------
+const ComboBox: React.FC<{
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+}> = ({ label, value, options, onChange, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setInputValue(value); }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = options.filter(o =>
+    o.toLowerCase().includes(inputValue.toLowerCase())
+  );
+  const showAddNew = inputValue.trim() && !options.some(o => o.toLowerCase() === inputValue.trim().toLowerCase());
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <div className="relative">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={e => { setInputValue(e.target.value); setIsOpen(true); }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder || `Wybierz lub wpisz ${label.toLowerCase()}...`}
+          className="w-full px-3 py-2 pr-8 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+        />
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        >
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+      {isOpen && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 && !showAddNew && (
+            <div className="px-3 py-2 text-sm text-slate-400">Brak opcji</div>
+          )}
+          {filtered.map(opt => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => { onChange(opt); setInputValue(opt); setIsOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition ${
+                opt === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+          {showAddNew && (
+            <button
+              type="button"
+              onClick={() => { onChange(inputValue.trim()); setIsOpen(false); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition text-emerald-700 border-t border-slate-100 flex items-center gap-2"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Dodaj: "{inputValue.trim()}"
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ---------------------------------------------------------------
@@ -134,9 +243,14 @@ const TreeNode: React.FC<{
         {/* Name – clickable to navigate */}
         <button
           onClick={() => onNavigate(node.id)}
-          className="font-medium text-slate-900 hover:text-blue-600 transition truncate text-left"
+          className="font-medium text-slate-900 hover:text-blue-600 transition truncate text-left flex items-center gap-2"
         >
           {node.name}
+          {node.kod_obiektu && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-100 text-slate-500">
+              {node.kod_obiektu}
+            </span>
+          )}
         </button>
 
         {/* Badges */}
@@ -239,6 +353,10 @@ export const DepartmentsPage: React.FC = () => {
   const [form, setForm] = useState<DepartmentFormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // Rodzaj / Typ options from DB
+  const [rodzajOptions, setRodzajOptions] = useState<string[]>([]);
+  const [typOptions, setTypOptions] = useState<string[]>([]);
+
   // ------- Data loading -------
   const loadDepartments = useCallback(async () => {
     if (!currentCompany) return;
@@ -265,9 +383,24 @@ export const DepartmentsPage: React.FC = () => {
     }
   }, [currentCompany]);
 
+  const loadRodzajTypOptions = useCallback(async () => {
+    if (!currentCompany) return;
+    try {
+      const [rodzajRes, typRes] = await Promise.all([
+        supabase.from('department_rodzaj_options').select('name').eq('company_id', currentCompany.id).order('name'),
+        supabase.from('department_typ_options').select('name').eq('company_id', currentCompany.id).order('name'),
+      ]);
+      if (rodzajRes.data) setRodzajOptions(rodzajRes.data.map((r: any) => r.name));
+      if (typRes.data) setTypOptions(typRes.data.map((r: any) => r.name));
+    } catch (err) {
+      console.error('Error loading rodzaj/typ options:', err);
+    }
+  }, [currentCompany]);
+
   useEffect(() => {
     loadDepartments();
-  }, [loadDepartments]);
+    loadRodzajTypOptions();
+  }, [loadDepartments, loadRodzajTypOptions]);
 
   // ------- Tree building -------
   const visibleDepartments = useMemo(() => {
@@ -319,6 +452,10 @@ export const DepartmentsPage: React.FC = () => {
     setForm({
       name: dept.name,
       parent_id: dept.parent_id ?? null,
+      rodzaj: dept.rodzaj || '',
+      typ: dept.typ || '',
+      kod_obiektu: dept.kod_obiektu || '',
+      kod_manual: !!dept.kod_obiektu,
       address_street: dept.address_street || '',
       address_city: dept.address_city || '',
       address_postal_code: dept.address_postal_code || '',
@@ -335,10 +472,18 @@ export const DepartmentsPage: React.FC = () => {
     if (!currentCompany || !form.name.trim()) return;
     setSaving(true);
 
+    // Determine kod_obiektu: use manual value or auto-generate
+    const kodValue = form.kod_manual && form.kod_obiektu.trim()
+      ? form.kod_obiektu.trim()
+      : generateKodObiektu(form.name);
+
     const payload: Record<string, any> = {
       company_id: currentCompany.id,
       name: form.name.trim(),
       parent_id: form.parent_id || null,
+      rodzaj: form.rodzaj.trim() || null,
+      typ: form.typ.trim() || null,
+      kod_obiektu: kodValue || null,
       address_street: form.address_street || null,
       address_city: form.address_city || null,
       address_postal_code: form.address_postal_code || null,
@@ -349,6 +494,20 @@ export const DepartmentsPage: React.FC = () => {
     };
 
     try {
+      // Save new rodzaj/typ options to lookup tables if they don't exist yet
+      if (form.rodzaj.trim() && !rodzajOptions.includes(form.rodzaj.trim())) {
+        await supabase.from('department_rodzaj_options').upsert(
+          { company_id: currentCompany.id, name: form.rodzaj.trim() },
+          { onConflict: 'company_id,name' }
+        );
+      }
+      if (form.typ.trim() && !typOptions.includes(form.typ.trim())) {
+        await supabase.from('department_typ_options').upsert(
+          { company_id: currentCompany.id, name: form.typ.trim() },
+          { onConflict: 'company_id,name' }
+        );
+      }
+
       if (editingDept) {
         const { error } = await supabase
           .from('departments')
@@ -365,6 +524,7 @@ export const DepartmentsPage: React.FC = () => {
       setEditingDept(null);
       setForm(EMPTY_FORM);
       await loadDepartments();
+      await loadRodzajTypOptions();
     } catch (err: any) {
       console.error('Error saving department:', err);
       alert(err.message || 'Wystapil blad podczas zapisu');
@@ -643,6 +803,9 @@ export const DepartmentsPage: React.FC = () => {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nazwa</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Kod</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Rodzaj</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Typ</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Obiekt nadrzedny</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Miasto</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Pracownicy</th>
@@ -668,6 +831,17 @@ export const DepartmentsPage: React.FC = () => {
                           <span className="font-medium text-slate-900">{node.name}</span>
                         </button>
                       </td>
+                      <td className="px-4 py-3">
+                        {node.kod_obiektu ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-slate-100 text-slate-700">
+                            {node.kod_obiektu}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{node.rodzaj || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{node.typ || '—'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{parentName}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{node.address_city || '—'}</td>
                       <td className="px-4 py-3 text-center">
@@ -782,6 +956,71 @@ export const DepartmentsPage: React.FC = () => {
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
+              </div>
+
+              {/* Rodzaj & Typ */}
+              <div className="grid grid-cols-2 gap-3">
+                <ComboBox
+                  label="Rodzaj"
+                  value={form.rodzaj}
+                  options={rodzajOptions}
+                  onChange={val => setForm(prev => ({ ...prev, rodzaj: val }))}
+                  placeholder="np. Biuro, Magazyn, Hala..."
+                />
+                <ComboBox
+                  label="Typ"
+                  value={form.typ}
+                  options={typOptions}
+                  onChange={val => setForm(prev => ({ ...prev, typ: val }))}
+                  placeholder="np. Wlasny, Wynajmowany..."
+                />
+              </div>
+
+              {/* Kod obiektu */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Kod obiektu
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={form.kod_manual ? form.kod_obiektu : (form.name.trim() ? generateKodObiektu(form.name) : '')}
+                      onChange={e => setForm(prev => ({ ...prev, kod_obiektu: e.target.value, kod_manual: true }))}
+                      readOnly={!form.kod_manual}
+                      placeholder="Auto"
+                      className={`w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm font-mono tracking-wider ${
+                        form.kod_manual
+                          ? 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          : 'bg-slate-50 text-slate-500 cursor-default'
+                      }`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.kod_manual) {
+                        setForm(prev => ({ ...prev, kod_manual: false, kod_obiektu: '' }));
+                      } else {
+                        setForm(prev => ({ ...prev, kod_manual: true, kod_obiektu: generateKodObiektu(prev.name) }));
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition ${
+                      form.kod_manual
+                        ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                        : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    {form.kod_manual ? 'Auto' : 'Edytuj'}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {form.kod_manual
+                    ? 'Reczna edycja kodu. Kliknij "Auto" aby przywrocic automatyczne generowanie.'
+                    : 'Generowany automatycznie: pierwsze litery slow nazwy + rok (np. WC26 = Warszawa Centrum 2026).'}
+                </p>
               </div>
 
               {/* Address section with autocomplete */}
