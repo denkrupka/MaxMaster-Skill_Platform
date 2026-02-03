@@ -8,6 +8,7 @@ import {
   CheckCircle,
   AlertTriangle,
   ArrowRight,
+  Edit3,
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -23,7 +24,6 @@ import { SectionTabs } from '../../components/SectionTabs';
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Count business days (Mon-Fri) between two dates, inclusive. */
 function countBusinessDays(startStr: string, endStr: string): number {
   const start = new Date(startStr);
   const end = new Date(endStr);
@@ -74,6 +74,7 @@ export const EmployeeTimeOffPage: React.FC = () => {
   // Modal
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<TimeOffRequest | null>(null);
 
   // Form state
   const [formTypeId, setFormTypeId] = useState('');
@@ -135,7 +136,6 @@ export const EmployeeTimeOffPage: React.FC = () => {
   const calculatedAmount = useMemo(() => {
     if (!formStart || !formEnd) return 0;
     if (!formAllDay && selectedType?.allows_hourly) {
-      // calculate hours
       const [sh, sm] = formStartTime.split(':').map(Number);
       const [eh, em] = formEndTime.split(':').map(Number);
       const days = countBusinessDays(formStart, formEnd);
@@ -147,6 +147,7 @@ export const EmployeeTimeOffPage: React.FC = () => {
 
   // ------- actions -------
   const openModal = () => {
+    setEditingRequest(null);
     setFormTypeId(types[0]?.id || '');
     setFormStart('');
     setFormEnd('');
@@ -157,28 +158,65 @@ export const EmployeeTimeOffPage: React.FC = () => {
     setShowModal(true);
   };
 
+  const openEditModal = (req: TimeOffRequest) => {
+    setEditingRequest(req);
+    setFormTypeId(req.time_off_type_id);
+    setFormStart(req.start_date);
+    setFormEnd(req.end_date);
+    setFormAllDay(req.all_day);
+    setFormStartTime(req.start_time || '08:00');
+    setFormEndTime(req.end_time || '16:00');
+    setFormComment(req.note_worker || '');
+    setShowModal(true);
+  };
+
   const handleSubmit = async () => {
     if (!currentUser || !formTypeId || !formStart || !formEnd) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('time_off_requests').insert([
-        {
-          company_id: currentUser.company_id,
-          user_id: currentUser.id,
-          time_off_type_id: formTypeId,
-          start_date: formStart,
-          end_date: formEnd,
-          all_day: formAllDay,
-          start_time: formAllDay ? null : formStartTime,
-          end_time: formAllDay ? null : formEndTime,
-          hourly: !formAllDay && !!selectedType?.allows_hourly,
-          amount: calculatedAmount,
-          status: 'pending' as TimeOffRequestStatus,
-          note_worker: formComment || null,
-        },
-      ]);
-      if (error) throw error;
+      if (editingRequest) {
+        // Update existing request and reset to pending
+        const { error } = await supabase
+          .from('time_off_requests')
+          .update({
+            time_off_type_id: formTypeId,
+            start_date: formStart,
+            end_date: formEnd,
+            all_day: formAllDay,
+            start_time: formAllDay ? null : formStartTime,
+            end_time: formAllDay ? null : formEndTime,
+            hourly: !formAllDay && !!selectedType?.allows_hourly,
+            amount: calculatedAmount,
+            status: 'pending' as TimeOffRequestStatus,
+            note_worker: formComment || null,
+            reviewed_by: null,
+            reviewed_at: null,
+            note_reviewer: null,
+          })
+          .eq('id', editingRequest.id);
+        if (error) throw error;
+      } else {
+        // Create new request
+        const { error } = await supabase.from('time_off_requests').insert([
+          {
+            company_id: currentUser.company_id,
+            user_id: currentUser.id,
+            time_off_type_id: formTypeId,
+            start_date: formStart,
+            end_date: formEnd,
+            all_day: formAllDay,
+            start_time: formAllDay ? null : formStartTime,
+            end_time: formAllDay ? null : formEndTime,
+            hourly: !formAllDay && !!selectedType?.allows_hourly,
+            amount: calculatedAmount,
+            status: 'pending' as TimeOffRequestStatus,
+            note_worker: formComment || null,
+          },
+        ]);
+        if (error) throw error;
+      }
       setShowModal(false);
+      setEditingRequest(null);
       await loadData();
     } catch (err) {
       console.error('Error submitting request', err);
@@ -203,6 +241,12 @@ export const EmployeeTimeOffPage: React.FC = () => {
   // ------- balance helpers -------
   const getLimit = (typeId: string): TimeOffLimit | undefined =>
     limits.find((l) => l.time_off_type_id === typeId);
+
+  const getPayLabel = (type: TimeOffType): { text: string; isPaid: boolean } => {
+    const rate = type.pay_rate ?? (type.is_paid ? 100 : 0);
+    if (rate > 0) return { text: `Płatny: ${rate}%`, isPaid: true };
+    return { text: 'Bezpłatny', isPaid: false };
+  };
 
   if (!currentUser) return null;
 
@@ -248,20 +292,36 @@ export const EmployeeTimeOffPage: React.FC = () => {
             const carried = limit?.carried_over_days ?? 0;
             const remaining = total + carried - used;
             const pct = total + carried > 0 ? (used / (total + carried)) * 100 : 0;
+            const payInfo = getPayLabel(type);
 
             return (
               <div
                 key={type.id}
                 className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <div
-                    className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: type.color || '#6366f1' }}
-                  />
-                  <h3 className="font-semibold text-slate-800 text-sm truncate">
-                    {type.name}
-                  </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: type.color || '#6366f1' }}
+                    />
+                    <h3 className="font-semibold text-slate-800 text-sm truncate">
+                      {type.name}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Pay status badge */}
+                <div className="mb-3">
+                  <span
+                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                      payInfo.isPaid
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {payInfo.text}
+                  </span>
                 </div>
 
                 {/* progress bar */}
@@ -278,7 +338,7 @@ export const EmployeeTimeOffPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-y-1 text-xs text-slate-500">
                   <span>Limit:</span>
                   <span className="text-right font-medium text-slate-700">
-                    {total} dni
+                    {total > 0 || carried > 0 ? `${total} dni` : 'Nielimitowany'}
                   </span>
                   <span>Wykorzystane:</span>
                   <span className="text-right font-medium text-slate-700">
@@ -287,10 +347,12 @@ export const EmployeeTimeOffPage: React.FC = () => {
                   <span>Pozostało:</span>
                   <span
                     className={`text-right font-bold ${
-                      remaining > 0 ? 'text-green-600' : 'text-red-600'
+                      total > 0 || carried > 0
+                        ? remaining > 0 ? 'text-green-600' : 'text-red-600'
+                        : 'text-slate-500'
                     }`}
                   >
-                    {remaining} dni
+                    {total > 0 || carried > 0 ? `${remaining} dni` : 'Nielimitowany'}
                   </span>
                   {carried > 0 && (
                     <>
@@ -346,15 +408,23 @@ export const EmployeeTimeOffPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {requests.map((req) => {
                   const sc = STATUS_CONFIG[req.status];
+                  const canEdit = req.status === 'pending' || req.status === 'rejected';
                   return (
-                    <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={req.id}
+                      className={`hover:bg-slate-50 transition-colors ${
+                        canEdit ? 'cursor-pointer' : ''
+                      }`}
+                      onClick={() => {
+                        if (canEdit) openEditModal(req);
+                      }}
+                    >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
                           <div
                             className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                             style={{
-                              backgroundColor:
-                                req.time_off_type?.color || '#6366f1',
+                              backgroundColor: req.time_off_type?.color || '#6366f1',
                             }}
                           />
                           <span className="font-medium text-slate-700">
@@ -390,22 +460,39 @@ export const EmployeeTimeOffPage: React.FC = () => {
                         {formatDate(req.created_at)}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        {req.status === 'pending' && (
-                          <button
-                            onClick={() => handleCancel(req.id)}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-                          >
-                            Anuluj
-                          </button>
-                        )}
-                        {req.status === 'rejected' && req.note_reviewer && (
-                          <span
-                            className="text-xs text-slate-400 cursor-help"
-                            title={`Powód: ${req.note_reviewer}`}
-                          >
-                            <AlertTriangle className="inline w-3.5 h-3.5" />
-                          </span>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {canEdit && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditModal(req);
+                              }}
+                              className="p-1.5 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
+                              title="Edytuj i wyślij ponownie"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          )}
+                          {req.status === 'pending' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCancel(req.id);
+                              }}
+                              className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                            >
+                              Anuluj
+                            </button>
+                          )}
+                          {req.status === 'rejected' && req.note_reviewer && (
+                            <span
+                              className="text-xs text-slate-400 cursor-help"
+                              title={`Powód: ${req.note_reviewer}`}
+                            >
+                              <AlertTriangle className="inline w-3.5 h-3.5" />
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -417,7 +504,7 @@ export const EmployeeTimeOffPage: React.FC = () => {
       </div>
 
       {/* ================================================================= */}
-      {/* New Request Modal */}
+      {/* New / Edit Request Modal */}
       {/* ================================================================= */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -425,10 +512,13 @@ export const EmployeeTimeOffPage: React.FC = () => {
             {/* header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h2 className="text-lg font-semibold text-slate-800">
-                Nowy wniosek urlopowy
+                {editingRequest ? 'Edytuj wniosek urlopowy' : 'Nowy wniosek urlopowy'}
               </h2>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingRequest(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -437,6 +527,20 @@ export const EmployeeTimeOffPage: React.FC = () => {
 
             {/* body */}
             <div className="px-6 py-5 space-y-4">
+              {/* Edit info banner */}
+              {editingRequest && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-700">
+                  {editingRequest.status === 'rejected'
+                    ? 'Wniosek został odrzucony. Możesz go edytować i wysłać ponownie.'
+                    : 'Edytujesz wniosek. Po zapisaniu zostanie wysłany ponownie do zatwierdzenia.'}
+                  {editingRequest.note_reviewer && (
+                    <div className="mt-1 text-xs text-amber-600">
+                      Powód odrzucenia: {editingRequest.note_reviewer}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Type */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -555,7 +659,10 @@ export const EmployeeTimeOffPage: React.FC = () => {
             {/* footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingRequest(null);
+                }}
                 className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 transition-colors"
               >
                 Anuluj
@@ -571,6 +678,11 @@ export const EmployeeTimeOffPage: React.FC = () => {
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Wysyłanie...
+                  </>
+                ) : editingRequest ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Wyślij ponownie
                   </>
                 ) : (
                   <>
