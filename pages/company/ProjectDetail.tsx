@@ -16,7 +16,8 @@ import {
   ProjectIncome, ProjectCost, ProjectScheduleEntry, ProjectIssue,
   ProjectFile, ProjectMemberType, ProjectMemberPaymentType, ProjectMemberStatus,
   ProjectIssueStatus, ProjectTaskBillingType, ProjectTaskWorkerPayment,
-  ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact
+  ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact,
+  ContractorClient
 } from '../../types';
 
 const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; bg: string; text: string }> = {
@@ -52,6 +53,7 @@ interface ProjectDetailPageProps {
   project: Project;
   projects: Project[];
   customers: ProjectCustomer[];
+  contractorClients?: ContractorClient[];
   departments: Department[];
   companyUsers: User[];
   users: User[];
@@ -61,7 +63,7 @@ interface ProjectDetailPageProps {
 }
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
-  project, projects, customers, departments, companyUsers, users,
+  project, projects, customers, contractorClients = [], departments, companyUsers, users,
   onBack, onEditProject, onUpdateProject
 }) => {
   const { state, setState } = useAppContext();
@@ -124,6 +126,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const getCustomerName = (customerId?: string) => {
     if (!customerId) return '-';
+    const cc = contractorClients.find(c => c.id === customerId);
+    if (cc) return cc.name;
     return customers.find(c => c.id === customerId)?.name || '-';
   };
 
