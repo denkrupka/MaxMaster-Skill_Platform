@@ -1334,6 +1334,7 @@ export interface ContractorClient {
   email?: string;
   phone?: string;
   note?: string;
+  contractor_type?: string;
   is_archived: boolean;
   created_at: string;
   updated_at: string;

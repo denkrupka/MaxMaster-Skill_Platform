@@ -99,7 +99,7 @@ export const ContractorsPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
 
-  const [activeMainTab, setActiveMainTab] = useState<'clients' | 'subcontractors'>('clients');
+  const [activeMainTab, setActiveMainTab] = useState<'clients' | 'subcontractors' | 'suppliers'>('clients');
   const [loading, setLoading] = useState(true);
 
   // --- Clients state ---
@@ -132,6 +132,27 @@ export const ContractorsPage: React.FC = () => {
   // Main contacts cache for table display
   const [clientMainContacts, setClientMainContacts] = useState<Record<string, ContractorClientContact>>({});
   const [subMainContacts, setSubMainContacts] = useState<Record<string, SubcontractorWorker>>({});
+  const [supplierMainContacts, setSupplierMainContacts] = useState<Record<string, ContractorClientContact>>({});
+
+  // --- Suppliers state (same structure as clients, different type) ---
+  const [suppliers, setSuppliers] = useState<ContractorClient[]>([]);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<ContractorClient | null>(null);
+  const [supplierForm, setSupplierForm] = useState(emptyClientForm);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+  const [supplierFormErrors, setSupplierFormErrors] = useState<Record<string, string>>({});
+  const [supplierNipLoading, setSupplierNipLoading] = useState(false);
+  const [supplierNipError, setSupplierNipError] = useState('');
+
+  // Supplier detail modal
+  const [selectedSupplier, setSelectedSupplier] = useState<ContractorClient | null>(null);
+  const [supplierDetailTab, setSupplierDetailTab] = useState<'dane' | 'kontakty' | 'notatka'>('dane');
+  const [supplierContacts, setSupplierContacts] = useState<ContractorClientContact[]>([]);
+  const [showAddSupplierContact, setShowAddSupplierContact] = useState(false);
+  const [supplierContactForm, setSupplierContactForm] = useState(emptyContactForm);
+  const [savingSupplierContact, setSavingSupplierContact] = useState(false);
+  const [supplierContactFormErrors, setSupplierContactFormErrors] = useState<Record<string, string>>({});
 
   // --- Subcontractors state ---
   const [subcontractors, setSubcontractors] = useState<ContractorSubcontractor[]>([]);
@@ -194,18 +215,27 @@ export const ContractorsPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [clientsRes, subsRes, mainContactsRes, mainWorkersRes] = await Promise.all([
-        supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).order('name'),
+      const [clientsRes, suppliersRes, subsRes, mainContactsRes, mainWorkersRes] = await Promise.all([
+        supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).or('contractor_type.eq.client,contractor_type.is.null').order('name'),
+        supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).eq('contractor_type', 'supplier').order('name'),
         supabase.from('contractors_subcontractors').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).order('name'),
         supabase.from('contractor_client_contacts').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
         supabase.from('subcontractor_workers').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
       ]);
       if (clientsRes.data) setClients(clientsRes.data);
+      if (suppliersRes.data) setSuppliers(suppliersRes.data);
       if (subsRes.data) setSubcontractors(subsRes.data);
       if (mainContactsRes.data) {
         const map: Record<string, ContractorClientContact> = {};
-        mainContactsRes.data.forEach((c: ContractorClientContact) => { map[c.client_id] = c; });
+        const smap: Record<string, ContractorClientContact> = {};
+        mainContactsRes.data.forEach((c: ContractorClientContact) => {
+          // Check if this contact belongs to a supplier or client
+          const isSupplier = suppliersRes.data?.some((s: ContractorClient) => s.id === c.client_id);
+          if (isSupplier) { smap[c.client_id] = c; }
+          else { map[c.client_id] = c; }
+        });
         setClientMainContacts(map);
+        setSupplierMainContacts(smap);
       }
       if (mainWorkersRes.data) {
         const map: Record<string, SubcontractorWorker> = {};
@@ -236,9 +266,15 @@ export const ContractorsPage: React.FC = () => {
       supabase.from('subcontractor_workers').select('*').eq('company_id', currentUser.company_id).eq('is_main_contact', true),
     ]);
     if (mainContactsRes.data) {
-      const map: Record<string, ContractorClientContact> = {};
-      mainContactsRes.data.forEach((c: ContractorClientContact) => { map[c.client_id] = c; });
-      setClientMainContacts(map);
+      const cmap: Record<string, ContractorClientContact> = {};
+      const smap: Record<string, ContractorClientContact> = {};
+      const supplierIds = new Set(suppliers.map(s => s.id));
+      mainContactsRes.data.forEach((c: ContractorClientContact) => {
+        if (supplierIds.has(c.client_id)) { smap[c.client_id] = c; }
+        else { cmap[c.client_id] = c; }
+      });
+      setClientMainContacts(cmap);
+      setSupplierMainContacts(smap);
     }
     if (mainWorkersRes.data) {
       const map: Record<string, SubcontractorWorker> = {};
@@ -384,7 +420,7 @@ export const ContractorsPage: React.FC = () => {
     if (!currentUser || !validateClientForm()) return;
     setSavingClient(true);
     try {
-      const payload = { ...clientForm, company_id: currentUser.company_id, updated_at: new Date().toISOString() };
+      const payload = { ...clientForm, contractor_type: 'client', company_id: currentUser.company_id, updated_at: new Date().toISOString() };
       if (editingClient) {
         const { data } = await supabase.from('contractors_clients').update(payload).eq('id', editingClient.id).select().single();
         if (data) setClients(prev => prev.map(c => c.id === data.id ? data : c));
@@ -492,6 +528,134 @@ export const ContractorsPage: React.FC = () => {
     await supabase.from('contractors_clients').update({ note, updated_at: new Date().toISOString() }).eq('id', selectedClient.id);
     setSelectedClient({ ...selectedClient, note });
     setClients(prev => prev.map(c => c.id === selectedClient.id ? { ...c, note } : c));
+  };
+
+  // ============================================================
+  // SUPPLIER CRUD (same as clients, contractor_type = 'supplier')
+  // ============================================================
+
+  const loadSupplierContacts = async (supplierId: string) => {
+    const { data } = await supabase.from('contractor_client_contacts').select('*').eq('client_id', supplierId).order('last_name');
+    if (data) setSupplierContacts(data);
+  };
+
+  const openCreateSupplier = () => {
+    setEditingSupplier(null);
+    setSupplierForm(emptyClientForm);
+    setSupplierFormErrors({});
+    setSupplierNipError('');
+    setShowSupplierModal(true);
+  };
+
+  const openEditSupplier = (s: ContractorClient) => {
+    setEditingSupplier(s);
+    setSupplierForm({
+      name: s.name, nip: s.nip || '', address_street: s.address_street || '',
+      address_city: s.address_city || '', address_postal_code: s.address_postal_code || '',
+      address_country: s.address_country || 'PL', note: s.note || '',
+    });
+    setSupplierFormErrors({});
+    setSupplierNipError('');
+    setShowSupplierModal(true);
+  };
+
+  const saveSupplier = async () => {
+    if (!currentUser || !supplierForm.name.trim()) return;
+    const errors: Record<string, string> = {};
+    if (!supplierForm.name.trim()) errors.name = 'Wymagane';
+    setSupplierFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setSavingSupplier(true);
+    try {
+      const payload = { ...supplierForm, contractor_type: 'supplier', company_id: currentUser.company_id, updated_at: new Date().toISOString() };
+      if (editingSupplier) {
+        const { data } = await supabase.from('contractors_clients').update(payload).eq('id', editingSupplier.id).select().single();
+        if (data) setSuppliers(prev => prev.map(s => s.id === data.id ? data : s));
+      } else {
+        const { data } = await supabase.from('contractors_clients').insert(payload).select().single();
+        if (data) setSuppliers(prev => [data, ...prev]);
+      }
+      setShowSupplierModal(false);
+    } catch (err) {
+      console.error('Error saving supplier:', err);
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  const deleteSupplier = async (id: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć tego dostawcę?')) return;
+    await supabase.from('contractors_clients').update({ is_archived: true, updated_at: new Date().toISOString() }).eq('id', id);
+    setSuppliers(prev => prev.filter(s => s.id !== id));
+  };
+
+  const openSupplierDetail = (s: ContractorClient) => {
+    setSelectedSupplier(s);
+    setSupplierDetailTab('dane');
+    loadSupplierContacts(s.id);
+  };
+
+  const validateSupplierContactForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!supplierContactForm.first_name.trim()) errors.first_name = 'Wymagane';
+    if (!supplierContactForm.last_name.trim()) errors.last_name = 'Wymagane';
+    if (!supplierContactForm.phone.trim()) errors.phone = 'Wymagane';
+    else if (!isValidPhone(supplierContactForm.phone)) errors.phone = 'Min. 9 cyfr';
+    if (!supplierContactForm.email.trim()) errors.email = 'Wymagane';
+    else if (!isValidEmail(supplierContactForm.email)) errors.email = 'Nieprawidłowy email';
+    setSupplierContactFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const saveSupplierContact = async () => {
+    if (!currentUser || !selectedSupplier || !validateSupplierContactForm()) return;
+    setSavingSupplierContact(true);
+    try {
+      if (supplierContactForm.is_main_contact) {
+        await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('client_id', selectedSupplier.id).eq('is_main_contact', true);
+      }
+      const payload = { ...supplierContactForm, client_id: selectedSupplier.id, company_id: currentUser.company_id };
+      const { data } = await supabase.from('contractor_client_contacts').insert(payload).select().single();
+      if (data) {
+        setSupplierContacts(prev => supplierContactForm.is_main_contact ? [...prev.map(c => ({ ...c, is_main_contact: false })), data] : [...prev, data]);
+        setInviteTarget({ companyName: selectedSupplier.name, firstName: supplierContactForm.first_name, lastName: supplierContactForm.last_name, phone: supplierContactForm.phone, type: 'client' });
+        setShowInviteModal(true);
+        await refreshMainContacts();
+      }
+      setSupplierContactForm(emptyContactForm);
+      setSupplierContactFormErrors({});
+      setShowAddSupplierContact(false);
+    } catch (err) {
+      console.error('Error saving supplier contact:', err);
+    } finally {
+      setSavingSupplierContact(false);
+    }
+  };
+
+  const toggleSupplierMainContact = async (contact: ContractorClientContact) => {
+    if (!selectedSupplier) return;
+    if (contact.is_main_contact) {
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('id', contact.id);
+      setSupplierContacts(prev => prev.map(c => c.id === contact.id ? { ...c, is_main_contact: false } : c));
+    } else {
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: false }).eq('client_id', selectedSupplier.id).eq('is_main_contact', true);
+      await supabase.from('contractor_client_contacts').update({ is_main_contact: true }).eq('id', contact.id);
+      setSupplierContacts(prev => prev.map(c => ({ ...c, is_main_contact: c.id === contact.id })));
+    }
+    await refreshMainContacts();
+  };
+
+  const deleteSupplierContact = async (id: string) => {
+    await supabase.from('contractor_client_contacts').delete().eq('id', id);
+    setSupplierContacts(prev => prev.filter(c => c.id !== id));
+    await refreshMainContacts();
+  };
+
+  const saveSupplierNote = async (note: string) => {
+    if (!selectedSupplier) return;
+    await supabase.from('contractors_clients').update({ note, updated_at: new Date().toISOString() }).eq('id', selectedSupplier.id);
+    setSelectedSupplier({ ...selectedSupplier, note });
+    setSuppliers(prev => prev.map(s => s.id === selectedSupplier.id ? { ...s, note } : s));
   };
 
   // ============================================================
@@ -653,6 +817,11 @@ export const ContractorsPage: React.FC = () => {
     (s.skills || '').toLowerCase().includes(subSearch.toLowerCase())
   );
 
+  const filteredSuppliers = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supplierSearch.toLowerCase()) ||
+    (s.nip || '').replace(/\D/g, '').includes(supplierSearch.replace(/\D/g, ''))
+  );
+
   // ============================================================
   // RENDER
   // ============================================================
@@ -686,6 +855,15 @@ export const ContractorsPage: React.FC = () => {
         >
           <Users size={18} />
           <span>Podwykonawcy ({subcontractors.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('suppliers')}
+          className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            activeMainTab === 'suppliers' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+          }`}
+        >
+          <Building2 size={18} />
+          <span>Dostawcy ({suppliers.length})</span>
         </button>
       </div>
 
@@ -816,6 +994,69 @@ export const ContractorsPage: React.FC = () => {
                           <button onClick={e => { e.stopPropagation(); openEditSub(sub); }}
                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil size={14} /></button>
                           <button onClick={e => { e.stopPropagation(); deleteSub(sub.id); }}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ============ TAB: DOSTAWCY ============ */}
+      {activeMainTab === 'suppliers' && (
+        <div>
+          <div className="flex items-center justify-between mb-4 gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Szukaj po nazwie lub NIP..."
+                value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button onClick={openCreateSupplier} className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+              <Plus size={18} /><span>Dodaj dostawcę</span>
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Nazwa firmy</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">NIP</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Kontakt</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Stanowisko</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Email</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Telefon</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase w-16"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredSuppliers.length === 0 ? (
+                  <tr><td colSpan={7} className="text-center py-12 text-slate-400 text-sm">Brak dostawców</td></tr>
+                ) : filteredSuppliers.map(supplier => {
+                  const mc = supplierMainContacts[supplier.id];
+                  return (
+                    <tr key={supplier.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openSupplierDetail(supplier)}>
+                      <td className="px-3 py-2 max-w-[220px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Building2 size={14} className="text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-800 truncate">{supplier.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-slate-500 font-mono whitespace-nowrap">{supplier.nip || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc ? `${mc.first_name} ${mc.last_name}` : '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.position || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.email || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.phone || '—'}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end space-x-0.5">
+                          <button onClick={e => { e.stopPropagation(); openEditSupplier(supplier); }}
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil size={14} /></button>
+                          <button onClick={e => { e.stopPropagation(); deleteSupplier(supplier.id); }}
                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -1401,6 +1642,256 @@ export const ContractorsPage: React.FC = () => {
                     rows={6}
                     className={inputCls}
                     placeholder="Wpisz notatki wewnętrzne dotyczące tego podwykonawcy..."
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Zapisuje się automatycznie po opuszczeniu pola.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: CREATE/EDIT SUPPLIER */}
+      {/* ============================================================ */}
+      {showSupplierModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowSupplierModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <h2 className="text-base font-bold text-slate-800">{editingSupplier ? 'Edytuj dostawcę' : 'Nowy dostawca'}</h2>
+              <button onClick={() => setShowSupplierModal(false)} className="text-slate-400 hover:text-slate-600 p-1"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div>
+                <label className={labelCls}>NIP</label>
+                <div className="flex space-x-2">
+                  <input type="text" value={supplierForm.nip}
+                    onChange={e => setSupplierForm({ ...supplierForm, nip: formatNip(e.target.value) })}
+                    className={`flex-1 ${inputCls}`} placeholder="000-000-00-00" maxLength={13} />
+                  <button type="button" onClick={() => {
+                    const rawNip = supplierForm.nip.replace(/\D/g, '');
+                    if (rawNip.length !== 10) { setSupplierNipError('NIP musi mieć 10 cyfr'); return; }
+                    setSupplierNipLoading(true); setSupplierNipError('');
+                    const today = new Date().toISOString().slice(0, 10);
+                    fetch(`https://wl-api.mf.gov.pl/api/search/nip/${rawNip}?date=${today}`)
+                      .then(r => r.json())
+                      .then(json => {
+                        if (json.result?.subject) {
+                          const s = json.result.subject;
+                          const fullAddress = s.residenceAddress || s.workingAddress || '';
+                          let street = '', city = '', postal = '';
+                          const parts = fullAddress.split(',').map((p: string) => p.trim());
+                          if (parts.length >= 2) {
+                            street = parts[0];
+                            const cityPart = parts[parts.length - 1];
+                            const postalMatch = cityPart.match(/^(\d{2}-\d{3})\s+(.+)/);
+                            if (postalMatch) { postal = postalMatch[1]; city = postalMatch[2]; }
+                            else { city = cityPart; }
+                          } else if (parts.length === 1) { city = parts[0]; }
+                          setSupplierForm(prev => ({ ...prev, name: s.name || prev.name, address_street: street || prev.address_street, address_city: city || prev.address_city, address_postal_code: postal || prev.address_postal_code }));
+                        } else { setSupplierNipError('Nie znaleziono podmiotu'); }
+                      })
+                      .catch(() => setSupplierNipError('Błąd połączenia z API'))
+                      .finally(() => setSupplierNipLoading(false));
+                  }} disabled={supplierNipLoading}
+                    className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50 border border-emerald-200 whitespace-nowrap"
+                    title="Pobierz dane z GUS">
+                    {supplierNipLoading ? <Loader2 size={14} className="animate-spin" /> : <SearchCheck size={14} />}
+                    <span>GUS</span>
+                  </button>
+                </div>
+                {supplierNipError && <p className="text-xs text-red-500 mt-0.5 flex items-center space-x-1"><AlertCircle size={12} /><span>{supplierNipError}</span></p>}
+              </div>
+              <div>
+                <label className={labelCls}>Nazwa firmy *</label>
+                <input type="text" value={supplierForm.name}
+                  onChange={e => setSupplierForm({ ...supplierForm, name: e.target.value })}
+                  className={supplierFormErrors.name ? inputErrCls : inputCls} placeholder="Nazwa dostawcy" />
+                {supplierFormErrors.name && <p className="text-xs text-red-500 mt-0.5">{supplierFormErrors.name}</p>}
+              </div>
+              <div>
+                <label className={labelCls}>Ulica</label>
+                <input type="text" value={supplierForm.address_street}
+                  onChange={e => setSupplierForm({ ...supplierForm, address_street: e.target.value })}
+                  className={inputCls} placeholder="Ulica i numer" />
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                <div className="col-span-2">
+                  <label className={labelCls}>Miasto</label>
+                  <input type="text" value={supplierForm.address_city}
+                    onChange={e => setSupplierForm({ ...supplierForm, address_city: e.target.value })}
+                    className={inputCls} placeholder="Miasto" />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelCls}>Kod pocztowy</label>
+                  <input type="text" value={supplierForm.address_postal_code}
+                    onChange={e => setSupplierForm({ ...supplierForm, address_postal_code: formatPostalCode(e.target.value) })}
+                    className={inputCls} placeholder="00-000" maxLength={6} />
+                </div>
+                <div>
+                  <label className={labelCls}>Kraj</label>
+                  <input type="text" value={supplierForm.address_country}
+                    onChange={e => setSupplierForm({ ...supplierForm, address_country: e.target.value.toUpperCase().slice(0, 2) })}
+                    className={inputCls} placeholder="PL" maxLength={2} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Notatka wewnętrzna</label>
+                <textarea value={supplierForm.note}
+                  onChange={e => setSupplierForm({ ...supplierForm, note: e.target.value })}
+                  rows={2} className={inputCls} placeholder="Notatka..." />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 px-5 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
+              <button onClick={() => setShowSupplierModal(false)} className="px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Anuluj</button>
+              <button onClick={saveSupplier} disabled={savingSupplier || !supplierForm.name.trim()}
+                className="px-4 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-1.5">
+                {savingSupplier && <Loader2 size={14} className="animate-spin" />}
+                <span>{editingSupplier ? 'Zapisz' : 'Dodaj'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: SUPPLIER DETAIL (tabs: dane, przedstawiciele, notatka) */}
+      {/* ============================================================ */}
+      {selectedSupplier && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSelectedSupplier(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-slate-800 truncate">{selectedSupplier.name}</h2>
+                {selectedSupplier.nip && <p className="text-xs text-slate-500 font-mono">NIP: {selectedSupplier.nip}</p>}
+              </div>
+              <button onClick={() => setSelectedSupplier(null)} className="text-slate-400 hover:text-slate-600 p-1 shrink-0"><X size={18} /></button>
+            </div>
+            <div className="flex space-x-1 bg-slate-100 mx-4 mt-3 rounded-lg p-0.5 shrink-0">
+              {(['dane', 'kontakty', 'notatka'] as const).map(tab => (
+                <button key={tab} onClick={() => setSupplierDetailTab(tab)}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    supplierDetailTab === tab ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                  }`}>
+                  {tab === 'dane' ? 'Dane firmy' : tab === 'kontakty' ? 'Przedstawiciele firmy' : 'Notatka'}
+                </button>
+              ))}
+            </div>
+            <div className="px-5 py-4 overflow-y-auto flex-1">
+              {supplierDetailTab === 'dane' && (
+                <div className="space-y-2">
+                  <InfoRow label="Nazwa" value={selectedSupplier.name} />
+                  <InfoRow label="NIP" value={selectedSupplier.nip} />
+                  <InfoRow label="Ulica" value={selectedSupplier.address_street} />
+                  <InfoRow label="Miasto" value={selectedSupplier.address_city} />
+                  <InfoRow label="Kod pocztowy" value={selectedSupplier.address_postal_code} />
+                  <InfoRow label="Kraj" value={selectedSupplier.address_country} />
+                </div>
+              )}
+              {supplierDetailTab === 'kontakty' && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-medium text-slate-500">{supplierContacts.length} przedstawicieli</span>
+                    <button onClick={() => { setSupplierContactForm(emptyContactForm); setSupplierContactFormErrors({}); setShowAddSupplierContact(true); }}
+                      className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      <UserPlus size={14} /><span>Dodaj</span>
+                    </button>
+                  </div>
+                  {showAddSupplierContact && (
+                    <div className="bg-blue-50/70 rounded-lg p-3 mb-3 space-y-2 border border-blue-100">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <input type="text" value={supplierContactForm.first_name} onChange={e => setSupplierContactForm({ ...supplierContactForm, first_name: e.target.value })}
+                            className={supplierContactFormErrors.first_name ? inputErrCls : inputCls} placeholder="Imię *" />
+                          {supplierContactFormErrors.first_name && <p className="text-xs text-red-500 mt-0.5">{supplierContactFormErrors.first_name}</p>}
+                        </div>
+                        <div>
+                          <input type="text" value={supplierContactForm.last_name} onChange={e => setSupplierContactForm({ ...supplierContactForm, last_name: e.target.value })}
+                            className={supplierContactFormErrors.last_name ? inputErrCls : inputCls} placeholder="Nazwisko *" />
+                          {supplierContactFormErrors.last_name && <p className="text-xs text-red-500 mt-0.5">{supplierContactFormErrors.last_name}</p>}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <input type="tel" value={supplierContactForm.phone}
+                            onChange={e => setSupplierContactForm({ ...supplierContactForm, phone: formatPhone(e.target.value) })}
+                            className={supplierContactFormErrors.phone ? inputErrCls : inputCls} placeholder="+48 ... *" />
+                          {supplierContactFormErrors.phone && <p className="text-xs text-red-500 mt-0.5">{supplierContactFormErrors.phone}</p>}
+                        </div>
+                        <div>
+                          <input type="email" value={supplierContactForm.email}
+                            onChange={e => setSupplierContactForm({ ...supplierContactForm, email: formatEmail(e.target.value) })}
+                            className={supplierContactFormErrors.email ? inputErrCls : inputCls} placeholder="Email *" />
+                          {supplierContactFormErrors.email && <p className="text-xs text-red-500 mt-0.5">{supplierContactFormErrors.email}</p>}
+                        </div>
+                        <input type="text" value={supplierContactForm.position} onChange={e => setSupplierContactForm({ ...supplierContactForm, position: e.target.value })}
+                          className={inputCls} placeholder="Stanowisko" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input type="checkbox" checked={supplierContactForm.is_main_contact}
+                            onChange={e => setSupplierContactForm({ ...supplierContactForm, is_main_contact: e.target.checked })}
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+                          <span className="text-xs font-medium text-slate-600 flex items-center space-x-1">
+                            <Star size={12} className="text-amber-500" /><span>Główny kontakt</span>
+                          </span>
+                        </label>
+                        <div className="flex space-x-2">
+                          <button onClick={() => { setShowAddSupplierContact(false); setSupplierContactFormErrors({}); }} className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
+                          <button onClick={saveSupplierContact} disabled={savingSupplierContact}
+                            className="px-3 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 flex items-center space-x-1">
+                            {savingSupplierContact && <Loader2 size={12} className="animate-spin" />}
+                            <span>Dodaj</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    {supplierContacts.map(contact => (
+                      <div key={contact.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium text-sm text-slate-800">{contact.first_name} {contact.last_name}</p>
+                            {contact.is_main_contact && (
+                              <span className="inline-flex items-center space-x-0.5 bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">
+                                <Star size={10} /><span>Główny</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+                            {contact.position && <span className="text-blue-600">{contact.position}</span>}
+                            {contact.phone && <span className="flex items-center space-x-1"><Phone size={11} /><span>{contact.phone}</span></span>}
+                            {contact.email && <span className="flex items-center space-x-1"><Mail size={11} /><span>{contact.email}</span></span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1 shrink-0">
+                          <button onClick={() => toggleSupplierMainContact(contact)}
+                            title={contact.is_main_contact ? 'Usuń jako główny kontakt' : 'Ustaw jako główny kontakt'}
+                            className={`p-1 rounded-lg transition-colors ${contact.is_main_contact ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-300 hover:text-amber-500 hover:bg-amber-50'}`}>
+                            <Star size={14} />
+                          </button>
+                          <button onClick={() => deleteSupplierContact(contact.id)}
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {supplierContacts.length === 0 && !showAddSupplierContact && (
+                      <p className="text-center text-xs text-slate-400 py-6">Brak przedstawicieli firmy</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {supplierDetailTab === 'notatka' && (
+                <div>
+                  <textarea
+                    defaultValue={selectedSupplier.note || ''}
+                    onBlur={e => saveSupplierNote(e.target.value)}
+                    rows={6}
+                    className={inputCls}
+                    placeholder="Wpisz notatki wewnętrzne dotyczące tego dostawcy..."
                   />
                   <p className="text-xs text-slate-400 mt-1">Zapisuje się automatycznie po opuszczeniu pola.</p>
                 </div>
