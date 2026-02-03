@@ -1,15 +1,26 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, X, Search, Pencil, Trash2, Loader2, Handshake,
-  Building2, Users, Phone, Mail, FileText, UserPlus, ChevronRight
+  Building2, Users, Phone, Mail, FileText, UserPlus, ChevronRight,
+  Check, ChevronDown
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
   ContractorClient, ContractorClientContact,
-  ContractorSubcontractor, SubcontractorWorker
+  ContractorSubcontractor, SubcontractorWorker,
+  SkillCategory
 } from '../../types';
+
+// ============================================================
+// SKILL OPTIONS for subcontractors
+// ============================================================
+
+const SUBCONTRACTOR_SKILL_OPTIONS = Object.values(SkillCategory).map(val => ({
+  value: val,
+  label: val,
+}));
 
 // ============================================================
 // EMPTY FORMS
@@ -25,7 +36,7 @@ const emptyContactForm = {
 };
 
 const emptySubcontractorForm = {
-  name: '', workers_count: 0, email: '', phone: '', skills: '',
+  name: '', workers_count: 0, email: '', phone: '', skills: '' as string,
 };
 
 const emptyWorkerForm = {
@@ -73,6 +84,35 @@ export const ContractorsPage: React.FC = () => {
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [workerForm, setWorkerForm] = useState(emptyWorkerForm);
   const [savingWorker, setSavingWorker] = useState(false);
+
+  // Skills dropdown
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState(false);
+  const skillsDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close skills dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (skillsDropdownRef.current && !skillsDropdownRef.current.contains(e.target as Node)) {
+        setShowSkillsDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Helpers for skills multi-select (comma-separated string)
+  const getSelectedSkills = (): string[] => {
+    if (!subForm.skills) return [];
+    return subForm.skills.split(',').map(s => s.trim()).filter(Boolean);
+  };
+
+  const toggleSkill = (skill: string) => {
+    const current = getSelectedSkills();
+    const updated = current.includes(skill)
+      ? current.filter(s => s !== skill)
+      : [...current, skill];
+    setSubForm({ ...subForm, skills: updated.join(', ') });
+  };
 
   // ============================================================
   // DATA LOADING
@@ -447,7 +487,18 @@ export const ContractorsPage: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-slate-600">{sub.workers_count || 0}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{sub.email || '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-600">{sub.phone || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{sub.skills || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[250px]">
+                      {sub.skills ? (
+                        <div className="flex flex-wrap gap-1">
+                          {sub.skills.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3).map(skill => (
+                            <span key={skill} className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">{skill}</span>
+                          ))}
+                          {sub.skills.split(',').filter(s => s.trim()).length > 3 && (
+                            <span className="inline-block text-xs text-slate-400">+{sub.skills.split(',').filter(s => s.trim()).length - 3}</span>
+                          )}
+                        </div>
+                      ) : '—'}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end space-x-1">
                         <button
@@ -703,11 +754,59 @@ export const ContractorsPage: React.FC = () => {
                 <input type="email" value={subForm.email} onChange={e => setSubForm({ ...subForm, email: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="email@podwykonawca.pl" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Umiejętności</label>
-                <textarea value={subForm.skills} onChange={e => setSubForm({ ...subForm, skills: e.target.value })}
-                  rows={3} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="np. elektryka, teletechnika, montaż..." />
+              <div ref={skillsDropdownRef}>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Umiejętności (zakres działania)</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSkillsDropdown(!showSkillsDropdown)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between bg-white"
+                  >
+                    <span className={getSelectedSkills().length > 0 ? 'text-slate-800' : 'text-slate-400'}>
+                      {getSelectedSkills().length > 0 ? `Wybrano: ${getSelectedSkills().length}` : 'Wybierz zakres...'}
+                    </span>
+                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${showSkillsDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showSkillsDropdown && (
+                    <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {SUBCONTRACTOR_SKILL_OPTIONS.map(opt => {
+                        const selected = getSelectedSkills().includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => toggleSkill(opt.value)}
+                            className={`w-full flex items-center space-x-2 px-3 py-2 text-sm text-left hover:bg-blue-50 transition-colors ${
+                              selected ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              selected ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                            }`}>
+                              {selected && <Check size={12} className="text-white" />}
+                            </div>
+                            <span>{opt.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {getSelectedSkills().length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {getSelectedSkills().map(skill => (
+                      <span
+                        key={skill}
+                        className="inline-flex items-center space-x-1 bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded-full"
+                      >
+                        <span>{skill}</span>
+                        <button type="button" onClick={() => toggleSkill(skill)} className="hover:text-blue-900">
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex justify-end space-x-3 p-6 border-t">
@@ -731,9 +830,14 @@ export const ContractorsPage: React.FC = () => {
             <div className="flex items-center justify-between p-6 border-b">
               <div>
                 <h2 className="text-lg font-bold text-slate-800">{selectedSub.name}</h2>
-                <p className="text-sm text-slate-500">
-                  {selectedSub.skills && <span>Umiejętności: {selectedSub.skills}</span>}
-                </p>
+                {selectedSub.email && <p className="text-sm text-slate-500">{selectedSub.email}{selectedSub.phone ? ` · ${selectedSub.phone}` : ''}</p>}
+                {selectedSub.skills && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {selectedSub.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                      <span key={skill} className="inline-block bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">{skill}</span>
+                    ))}
+                  </div>
+                )}
               </div>
               <button onClick={() => setSelectedSub(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
             </div>
