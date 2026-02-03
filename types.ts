@@ -1067,8 +1067,16 @@ export interface ProjectMember {
   payment_type: ProjectMemberPaymentType;
   hourly_rate?: number;
   member_status: ProjectMemberStatus;
+  position?: string;
   added_at: string;
   user?: User;
+}
+
+export interface ProjectIssueCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface ProjectTask {
@@ -1241,6 +1249,35 @@ export interface ProjectFile {
   file_size?: number;
   uploaded_by: string;
   created_at: string;
+}
+
+export interface ProjectAttendanceConfirmation {
+  id: string;
+  project_id: string;
+  company_id: string;
+  user_id: string;
+  date: string;
+  client_confirmed: boolean;
+  confirmed_at?: string;
+  confirmed_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectAttendanceRow {
+  user_id: string;
+  user_name: string;
+  department_name: string;
+  task_name: string;
+  date: string;
+  work_start?: string;
+  work_end?: string;
+  total_hours: number;
+  overtime_hours: number;
+  is_saturday: boolean;
+  is_sunday: boolean;
+  client_confirmed: boolean;
+  confirmation_id?: string;
 }
 
 // === МОДУЛЬ 5: Отчёты и Payroll ===
