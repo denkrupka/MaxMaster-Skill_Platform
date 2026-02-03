@@ -179,15 +179,21 @@ DECLARE
 BEGIN
   FOREACH tbl IN ARRAY ARRAY['project_protocols', 'project_income', 'project_costs', 'project_schedule', 'project_issues', 'project_files']
   LOOP
-    EXECUTE format('
-      CREATE POLICY IF NOT EXISTS "Company members can access %1$s" ON %1$s
-        FOR ALL USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()));
-    ', tbl);
+    BEGIN
+      EXECUTE format('
+        CREATE POLICY "Company members can access %1$s" ON %1$s
+          FOR ALL USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()));
+      ', tbl);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
   END LOOP;
 END $$;
 
-CREATE POLICY IF NOT EXISTS "Company members can access project_issue_history" ON project_issue_history
-  FOR ALL USING (issue_id IN (SELECT id FROM project_issues WHERE company_id IN (SELECT company_id FROM users WHERE id = auth.uid())));
+DO $$ BEGIN
+  CREATE POLICY "Company members can access project_issue_history" ON project_issue_history
+    FOR ALL USING (issue_id IN (SELECT id FROM project_issues WHERE company_id IN (SELECT company_id FROM users WHERE id = auth.uid())));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 14. Indexes
 CREATE INDEX IF NOT EXISTS idx_project_protocols_project ON project_protocols(project_id);
