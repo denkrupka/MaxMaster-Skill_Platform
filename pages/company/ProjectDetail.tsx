@@ -7,7 +7,7 @@ import {
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
   ExternalLink, AlertCircle, Wrench, Tag, Hash, CheckCircle2, FileDown,
   ScanLine, FileInput, ToggleLeft, ToggleRight,
-  ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud
+  ChevronLeft, ChevronRight, Save, UserPlus, HardHat, CheckCircle, Image, File, UploadCloud, Filter, Building
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -23,7 +23,8 @@ import {
   ProjectProtocolTask, ProjectIssueHistoryEntry, ProjectCustomerContact,
   ContractorClient, ContractorClientContact, ProjectIssueCategory,
   ProjectAttendanceConfirmation, ProjectAttendanceRow,
-  WorkerDay, WorkerDayEntry
+  WorkerDay, WorkerDayEntry, ContractorSubcontractor, SubcontractorWorker,
+  Skill, UserSkill
 } from '../../types';
 import { uploadDocument } from '../../lib/supabase';
 
@@ -181,14 +182,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [addMemberType, setAddMemberType] = useState<ProjectMemberType>('employee');
   const [memberSearch, setMemberSearch] = useState('');
-  const [memberForm, setMemberForm] = useState({
-    user_id: '',
-    role: 'member' as 'manager' | 'member',
-    payment_type: 'hourly' as ProjectMemberPaymentType,
-    hourly_rate: '',
-    position: '',
-    member_status: 'assigned' as ProjectMemberStatus,
-  });
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [isManagerChecked, setIsManagerChecked] = useState(false);
+  const [managerUserIds, setManagerUserIds] = useState<string[]>([]);
+  const [memberPaymentType, setMemberPaymentType] = useState<ProjectMemberPaymentType>('hourly');
+  const [memberHourlyRate, setMemberHourlyRate] = useState('');
+  const [skillFilter, setSkillFilter] = useState('');
+  // Subcontractor state
+  const [subcontractors, setSubcontractors] = useState<ContractorSubcontractor[]>([]);
+  const [subcontractorWorkers, setSubcontractorWorkers] = useState<SubcontractorWorker[]>([]);
+  const [selectedSubcontractorId, setSelectedSubcontractorId] = useState<string | null>(null);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
 
   // Issue modals
   const [showAddIssueModal, setShowAddIssueModal] = useState(false);
@@ -633,35 +637,66 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   });
 
   // ===== MEMBER HANDLERS =====
-  const openAddMemberModal = (type: ProjectMemberType) => {
+  const { skills: allSkills, userSkills: allUserSkills } = state;
+
+  const openAddMemberModal = async (type: ProjectMemberType) => {
     setAddMemberType(type);
     setMemberSearch('');
-    setMemberForm({
-      user_id: '',
-      role: 'member',
-      payment_type: 'hourly',
-      hourly_rate: '',
-      position: '',
-      member_status: 'assigned',
-    });
+    setSelectedUserIds([]);
+    setIsManagerChecked(false);
+    setManagerUserIds([]);
+    setMemberPaymentType('hourly');
+    setMemberHourlyRate('');
+    setSkillFilter('');
+    setSelectedSubcontractorId(null);
+    setSelectedWorkerIds([]);
+    if (type === 'subcontractor') {
+      const { data } = await supabase.from('contractors_subcontractors').select('*').eq('company_id', currentUser!.company_id).eq('is_archived', false);
+      setSubcontractors(data || []);
+      setSubcontractorWorkers([]);
+    }
     setShowAddMemberModal(true);
   };
 
-  const handleAddMember = async () => {
-    if (!currentUser || !memberForm.user_id) return;
-    const { error } = await supabase.from('project_members').insert({
-      project_id: project.id,
-      user_id: memberForm.user_id,
-      role: memberForm.role,
-      member_type: addMemberType,
-      payment_type: memberForm.payment_type,
-      hourly_rate: memberForm.hourly_rate ? parseFloat(memberForm.hourly_rate) : null,
-      position: memberForm.position || null,
-      member_status: memberForm.member_status,
-    });
-    if (!error) {
-      setShowAddMemberModal(false);
-      loadProjectData();
+  const loadSubcontractorWorkers = async (subId: string) => {
+    setSelectedSubcontractorId(subId);
+    setSelectedWorkerIds([]);
+    const { data } = await supabase.from('subcontractor_workers').select('*').eq('subcontractor_id', subId);
+    setSubcontractorWorkers(data || []);
+  };
+
+  const handleAddMembers = async () => {
+    if (!currentUser) return;
+    if (addMemberType === 'employee') {
+      if (selectedUserIds.length === 0) return;
+      const rows = selectedUserIds.map(uid => ({
+        project_id: project.id,
+        user_id: uid,
+        role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
+        member_type: 'employee' as ProjectMemberType,
+        payment_type: memberPaymentType,
+        hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+        member_status: 'assigned' as ProjectMemberStatus,
+      }));
+      const { error } = await supabase.from('project_members').insert(rows);
+      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
+    } else {
+      if (selectedWorkerIds.length === 0) return;
+      const rows = selectedWorkerIds.map(wid => {
+        const worker = subcontractorWorkers.find(w => w.id === wid);
+        return {
+          project_id: project.id,
+          user_id: wid,
+          role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
+          member_type: 'subcontractor' as ProjectMemberType,
+          payment_type: memberPaymentType,
+          hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+          position: worker?.position || null,
+          member_status: 'assigned' as ProjectMemberStatus,
+        };
+      });
+      const { error } = await supabase.from('project_members').insert(rows);
+      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
     }
   };
 
@@ -676,17 +711,47 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!error) loadProjectData();
   };
 
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUserIds(prev => {
+      const next = prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId];
+      // Clean manager selections
+      setManagerUserIds(m => m.filter(id => next.includes(id)));
+      return next;
+    });
+  };
+
+  const toggleWorkerSelection = (workerId: string) => {
+    setSelectedWorkerIds(prev => {
+      const next = prev.includes(workerId) ? prev.filter(id => id !== workerId) : [...prev, workerId];
+      setManagerUserIds(m => m.filter(id => next.includes(id)));
+      return next;
+    });
+  };
+
+  const skillNames = useMemo(() => {
+    const names = new Set<string>();
+    allSkills.forEach(s => { if (s.is_active !== false && !s.is_archived) names.add(s.name_pl); });
+    return Array.from(names).sort();
+  }, [allSkills]);
+
   const filteredUsersForMember = useMemo(() => {
     const existingUserIds = members.map(m => m.user_id);
     return companyUsers.filter(u => {
       if (existingUserIds.includes(u.id)) return false;
       if (memberSearch) {
         const search = memberSearch.toLowerCase();
-        return `${u.first_name} ${u.last_name}`.toLowerCase().includes(search);
+        if (!`${u.first_name} ${u.last_name}`.toLowerCase().includes(search)) return false;
+      }
+      if (skillFilter) {
+        const skillObj = allSkills.find(s => s.name_pl === skillFilter);
+        if (skillObj) {
+          const hasSkill = allUserSkills.some(us => us.user_id === u.id && us.skill_id === skillObj.id && us.status === 'confirmed');
+          if (!hasSkill) return false;
+        }
       }
       return true;
     });
-  }, [companyUsers, members, memberSearch]);
+  }, [companyUsers, members, memberSearch, skillFilter, allSkills, allUserSkills]);
 
   // ===== ISSUE HANDLERS =====
   const resetIssueForm = () => {
@@ -3226,7 +3291,19 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     );
   };
 
-  const renderMembers = () => (
+  const renderMembers = () => {
+    const currentSelectedItems = addMemberType === 'employee' ? selectedUserIds : selectedWorkerIds;
+    const getSelectedName = (id: string) => {
+      if (addMemberType === 'employee') {
+        const u = companyUsers.find(u => u.id === id);
+        return u ? `${u.first_name} ${u.last_name}` : id;
+      } else {
+        const w = subcontractorWorkers.find(w => w.id === id);
+        return w ? `${w.first_name} ${w.last_name}` : id;
+      }
+    };
+
+    return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <button onClick={() => openAddMemberModal('employee')} className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
@@ -3252,10 +3329,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {members.map(m => (
+              {members.map(m => {
+                const user = users.find(u => u.id === m.user_id);
+                return (
                 <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{getUserName(m.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{m.position || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{user?.target_position || m.position || '-'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${m.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                       {m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
@@ -3281,80 +3360,199 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Add Member Modal */}
       {showAddMemberModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">{addMemberType === 'employee' ? 'Dodaj pracownika' : 'Dodaj podwykonawcę'}</h3>
               <button onClick={() => setShowAddMemberModal(false)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Wyszukaj pracownika</label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj po imieniu lub nazwisku..."
-                    className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+
+              {/* --- EMPLOYEE MODE --- */}
+              {addMemberType === 'employee' && (<>
+                {/* Search + Skill filter */}
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj po imieniu lub nazwisku..."
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                  </div>
+                  <select value={skillFilter} onChange={e => setSkillFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 max-w-[180px]">
+                    <option value="">Wszystkie umiejętności</option>
+                    {skillNames.map(sn => <option key={sn} value={sn}>{sn}</option>)}
+                  </select>
                 </div>
-              </div>
-              <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
-                {filteredUsersForMember.length === 0 ? (
-                  <p className="text-sm text-gray-400 p-3 text-center">Brak dostępnych pracowników</p>
-                ) : (
-                  filteredUsersForMember.map(u => (
-                    <button key={u.id} onClick={() => setMemberForm(prev => ({ ...prev, user_id: u.id }))}
-                      className={`w-full text-left px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 ${memberForm.user_id === u.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}>
-                      {u.first_name} {u.last_name}
-                      {u.target_position && <span className="text-gray-400 ml-2">({u.target_position})</span>}
-                    </button>
-                  ))
+
+                {/* Employee list - multi-select checkboxes */}
+                <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                  {filteredUsersForMember.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-3 text-center">Brak dostępnych pracowników</p>
+                  ) : (
+                    filteredUsersForMember.map(u => (
+                      <label key={u.id}
+                        className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer ${selectedUserIds.includes(u.id) ? 'bg-blue-50' : ''}`}>
+                        <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={() => toggleUserSelection(u.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="font-medium text-gray-900">{u.first_name} {u.last_name}</span>
+                        {u.target_position && <span className="text-gray-400 text-xs">— {u.target_position}</span>}
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                {/* Selected count */}
+                {selectedUserIds.length > 0 && (
+                  <p className="text-sm text-blue-600 font-medium">Wybrano: {selectedUserIds.length} {selectedUserIds.length === 1 ? 'pracownika' : 'pracowników'}</p>
                 )}
-              </div>
-              {memberForm.user_id && (<>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Stanowisko</label>
-                  <input type="text" value={memberForm.position} onChange={e => setMemberForm(prev => ({ ...prev, position: e.target.value }))} placeholder="np. Murarz, Elektryk..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              </>)}
+
+              {/* --- SUBCONTRACTOR MODE --- */}
+              {addMemberType === 'subcontractor' && (<>
+                {!selectedSubcontractorId ? (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj podwykonawcy..."
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                    <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto">
+                      {subcontractors.filter(s => !memberSearch || s.name.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
+                        <p className="text-sm text-gray-400 p-3 text-center">Brak podwykonawców</p>
+                      ) : (
+                        subcontractors.filter(s => !memberSearch || s.name.toLowerCase().includes(memberSearch.toLowerCase())).map(sub => (
+                          <button key={sub.id} onClick={() => { loadSubcontractorWorkers(sub.id); setMemberSearch(''); }}
+                            className="w-full text-left px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                            <div className="flex items-center gap-2">
+                              <Building className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{sub.name}</p>
+                                {sub.nip && <p className="text-xs text-gray-400">NIP: {sub.nip}</p>}
+                                {sub.skills && <p className="text-xs text-gray-500 mt-0.5">{sub.skills}</p>}
+                              </div>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Back to companies */}
+                    <button onClick={() => { setSelectedSubcontractorId(null); setSelectedWorkerIds([]); setManagerUserIds([]); }}
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+                      <ChevronLeft className="w-4 h-4" /> Powrót do listy firm
+                    </button>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {subcontractors.find(s => s.id === selectedSubcontractorId)?.name}
+                      </p>
+                    </div>
+
+                    {/* Search workers */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="text" value={memberSearch} onChange={e => setMemberSearch(e.target.value)} placeholder="Szukaj pracownika..."
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+
+                    {/* Workers list - multi-select */}
+                    <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                      {subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
+                        <p className="text-sm text-gray-400 p-3 text-center">Brak pracowników podwykonawcy</p>
+                      ) : (
+                        subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).map(w => (
+                          <label key={w.id}
+                            className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer ${selectedWorkerIds.includes(w.id) ? 'bg-blue-50' : ''}`}>
+                            <input type="checkbox" checked={selectedWorkerIds.includes(w.id)} onChange={() => toggleWorkerSelection(w.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                            <span className="font-medium text-gray-900">{w.first_name} {w.last_name}</span>
+                            {w.position && <span className="text-gray-400 text-xs">— {w.position}</span>}
+                          </label>
+                        ))
+                      )}
+                    </div>
+
+                    {selectedWorkerIds.length > 0 && (
+                      <p className="text-sm text-blue-600 font-medium">Wybrano: {selectedWorkerIds.length} {selectedWorkerIds.length === 1 ? 'pracownika' : 'pracowników'}</p>
+                    )}
+                  </>
+                )}
+              </>)}
+
+              {/* --- COMMON OPTIONS (when items are selected) --- */}
+              {currentSelectedItems.length > 0 && (<>
+                {/* Manager checkbox */}
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={isManagerChecked} onChange={e => {
+                      setIsManagerChecked(e.target.checked);
+                      if (e.target.checked && currentSelectedItems.length === 1) {
+                        setManagerUserIds([currentSelectedItems[0]]);
+                      } else if (!e.target.checked) {
+                        setManagerUserIds([]);
+                      }
+                    }} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span className="text-sm font-medium text-gray-700">Kierownik zespołu</span>
+                  </label>
+
+                  {/* If manager checked and multiple selected - show picker */}
+                  {isManagerChecked && currentSelectedItems.length > 1 && (
+                    <div className="mt-2 border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
+                      <p className="text-xs text-gray-500 px-3 pt-2 pb-1">Wybierz kierownika(-ów) zespołu:</p>
+                      {currentSelectedItems.map(id => (
+                        <label key={id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={managerUserIds.includes(id)}
+                            onChange={() => setManagerUserIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-700">{getSelectedName(id)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Payment type */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rola</label>
-                    <select value={memberForm.role} onChange={e => setMemberForm(prev => ({ ...prev, role: e.target.value as 'manager' | 'member' }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                      <option value="member">Członek</option><option value="manager">Kierownik</option>
-                    </select>
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Forma wynagrodzenia</label>
-                    <select value={memberForm.payment_type} onChange={e => setMemberForm(prev => ({ ...prev, payment_type: e.target.value as ProjectMemberPaymentType }))}
+                    <select value={memberPaymentType} onChange={e => setMemberPaymentType(e.target.value as ProjectMemberPaymentType)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                       <option value="hourly">Stawka godzinowa</option><option value="akord">Akord</option>
                     </select>
                   </div>
+                  {memberPaymentType === 'hourly' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stawka (zł/godz.)</label>
+                      <input type="number" value={memberHourlyRate} onChange={e => setMemberHourlyRate(e.target.value)} placeholder="0.00"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+                    </div>
+                  )}
                 </div>
-                {memberForm.payment_type === 'hourly' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stawka (zł/godz.)</label>
-                    <input type="number" value={memberForm.hourly_rate} onChange={e => setMemberForm(prev => ({ ...prev, hourly_rate: e.target.value }))} placeholder="0.00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-                  </div>
-                )}
               </>)}
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
               <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
-              <button onClick={handleAddMember} disabled={!memberForm.user_id} className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">Dodaj</button>
+              <button onClick={handleAddMembers} disabled={currentSelectedItems.length === 0}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                Dodaj ({currentSelectedItems.length})
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderIssues = () => (
     <div className="space-y-4">
