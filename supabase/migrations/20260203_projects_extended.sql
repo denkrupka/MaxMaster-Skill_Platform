@@ -34,22 +34,41 @@ ALTER TABLE project_members
   ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC(12,2),
   ADD COLUMN IF NOT EXISTS member_status TEXT NOT NULL DEFAULT 'assigned';
 
--- 3. Extend project_tasks table
-ALTER TABLE project_tasks
-  ADD COLUMN IF NOT EXISTS billing_type TEXT NOT NULL DEFAULT 'ryczalt',
-  ADD COLUMN IF NOT EXISTS hourly_value NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS quantity NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS unit TEXT,
-  ADD COLUMN IF NOT EXISTS price_per_unit NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS total_value NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS worker_payment_type TEXT NOT NULL DEFAULT 'hourly',
-  ADD COLUMN IF NOT EXISTS worker_rate_per_unit NUMERIC(12,2),
-  ADD COLUMN IF NOT EXISTS assigned_users TEXT[],
-  ADD COLUMN IF NOT EXISTS has_start_deadline BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS start_date DATE,
-  ADD COLUMN IF NOT EXISTS start_time TIME,
-  ADD COLUMN IF NOT EXISTS has_end_deadline BOOLEAN DEFAULT false,
-  ADD COLUMN IF NOT EXISTS end_time TIME;
+-- 3. Create project_tasks table (separate from generic tasks)
+CREATE TABLE IF NOT EXISTS project_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  company_id UUID NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'todo',
+  priority TEXT DEFAULT 'medium',
+  billing_type TEXT NOT NULL DEFAULT 'ryczalt',
+  hourly_value NUMERIC(12,2),
+  quantity NUMERIC(12,2),
+  unit TEXT,
+  price_per_unit NUMERIC(12,2),
+  total_value NUMERIC(12,2),
+  worker_payment_type TEXT NOT NULL DEFAULT 'hourly',
+  worker_rate_per_unit NUMERIC(12,2),
+  assigned_users TEXT[],
+  has_start_deadline BOOLEAN DEFAULT false,
+  start_date DATE,
+  start_time TIME,
+  has_end_deadline BOOLEAN DEFAULT false,
+  end_date DATE,
+  end_time TIME,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE project_tasks ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Company members can access project_tasks" ON project_tasks
+    FOR ALL USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 4. Create project_protocols table
 CREATE TABLE IF NOT EXISTS project_protocols (
@@ -196,6 +215,7 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 -- 14. Indexes
+CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_protocols_project ON project_protocols(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_income_project ON project_income(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_costs_project ON project_costs(project_id);
