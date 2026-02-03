@@ -60,7 +60,7 @@ const emptyHourlySettings: HourlySettings = {
   overtime_paid: false, overtime_rate: '', overtime_base_hours: '8',
   saturday_paid: false, saturday_rate: '', saturday_hours: '8',
   sunday_paid: false, sunday_rate: '', sunday_hours: '8',
-  night_paid: false, night_rate: '', night_start_hour: '22', night_end_hour: '6',
+  night_paid: false, night_rate: '', night_start_hour: '22:00', night_end_hour: '06:00',
   travel_paid: false, travel_rate: '', travel_hours: '1',
 };
 
@@ -145,7 +145,7 @@ export const CompanyProjectsPage: React.FC = () => {
       const [projRes, custRes, ccRes, deptRes, costsRes, incomeRes, membersRes] = await Promise.all([
         supabase.from('projects').select('*').eq('company_id', currentUser.company_id).order('created_at', { ascending: false }),
         supabase.from('project_customers').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
-        supabase.from('contractor_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
         supabase.from('departments').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false),
         supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id),
         supabase.from('project_income').select('*').eq('company_id', currentUser.company_id),
@@ -203,8 +203,8 @@ export const CompanyProjectsPage: React.FC = () => {
       sunday_hours: project.sunday_hours?.toString() || '8',
       night_paid: project.night_paid || false,
       night_rate: project.night_rate?.toString() || '',
-      night_start_hour: project.night_start_hour?.toString() || '22',
-      night_end_hour: project.night_end_hour?.toString() || '6',
+      night_start_hour: project.night_start_hour != null ? `${String(Math.floor(project.night_start_hour)).padStart(2,'0')}:00` : '22:00',
+      night_end_hour: project.night_end_hour != null ? `${String(Math.floor(project.night_end_hour)).padStart(2,'0')}:00` : '06:00',
       travel_paid: project.travel_paid || false,
       travel_rate: project.travel_rate?.toString() || '',
       travel_hours: project.travel_hours?.toString() || '1',
@@ -280,8 +280,8 @@ export const CompanyProjectsPage: React.FC = () => {
         payload.sunday_hours = hourlySettings.sunday_hours ? parseFloat(hourlySettings.sunday_hours) : null;
         payload.night_paid = hourlySettings.night_paid;
         payload.night_rate = hourlySettings.night_rate ? parseFloat(hourlySettings.night_rate) : null;
-        payload.night_start_hour = hourlySettings.night_start_hour ? parseFloat(hourlySettings.night_start_hour) : null;
-        payload.night_end_hour = hourlySettings.night_end_hour ? parseFloat(hourlySettings.night_end_hour) : null;
+        payload.night_start_hour = hourlySettings.night_start_hour ? parseInt(hourlySettings.night_start_hour.split(':')[0], 10) : null;
+        payload.night_end_hour = hourlySettings.night_end_hour ? parseInt(hourlySettings.night_end_hour.split(':')[0], 10) : null;
         payload.travel_paid = hourlySettings.travel_paid;
         payload.travel_rate = hourlySettings.travel_rate ? parseFloat(hourlySettings.travel_rate) : null;
         payload.travel_hours = hourlySettings.travel_hours ? parseFloat(hourlySettings.travel_hours) : null;
@@ -292,14 +292,38 @@ export const CompanyProjectsPage: React.FC = () => {
 
       if (editingProject) {
         const { data, error } = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
-        if (!error && data) {
+        if (error) {
+          console.error('Error updating project:', error);
+          // Retry without potentially missing columns
+          delete payload.night_start_hour;
+          delete payload.night_end_hour;
+          const retry = await supabase.from('projects').update(payload).eq('id', editingProject.id).select().single();
+          if (!retry.error && retry.data) {
+            setProjects(prev => prev.map(p => p.id === retry.data.id ? retry.data : p));
+            if (selectedProject?.id === retry.data.id) setSelectedProject(retry.data);
+            setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został zaktualizowany' } }));
+          } else {
+            setState(prev => ({ ...prev, toast: { title: 'Błąd', message: 'Nie udało się zaktualizować projektu' } }));
+          }
+        } else if (data) {
           setProjects(prev => prev.map(p => p.id === data.id ? data : p));
           if (selectedProject?.id === data.id) setSelectedProject(data);
           setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został zaktualizowany' } }));
         }
       } else {
         const { data, error } = await supabase.from('projects').insert(payload).select().single();
-        if (!error && data) {
+        if (error) {
+          console.error('Error creating project:', error);
+          delete payload.night_start_hour;
+          delete payload.night_end_hour;
+          const retry = await supabase.from('projects').insert(payload).select().single();
+          if (!retry.error && retry.data) {
+            setProjects(prev => [retry.data, ...prev]);
+            setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został utworzony' } }));
+          } else {
+            setState(prev => ({ ...prev, toast: { title: 'Błąd', message: 'Nie udało się utworzyć projektu' } }));
+          }
+        } else if (data) {
           setProjects(prev => [data, ...prev]);
           setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został utworzony' } }));
         }
@@ -403,67 +427,47 @@ export const CompanyProjectsPage: React.FC = () => {
   // ========== RENDER MODAL FUNCTIONS ==========
   const renderProjectModal = () => {
     if (!showProjectModal) return null;
+    const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/30" onClick={() => setShowProjectModal(false)} />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowProjectModal(false)} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <h2 className="text-base font-semibold text-gray-900">
               {editingProject ? 'Edytuj projekt' : 'Nowy projekt'}
             </h2>
-            <button onClick={() => setShowProjectModal(false)} className="p-1 rounded hover:bg-gray-100">
-              <X className="w-5 h-5 text-gray-500" />
+            <button onClick={() => setShowProjectModal(false)} className="p-1 rounded-lg hover:bg-gray-100 -mr-1">
+              <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
-          <div className="space-y-4">
-            {/* Client - searchable dropdown (FIRST) */}
+          <div className="px-5 py-4 space-y-3">
+            {/* Client */}
             <div className="relative">
-              <label className="text-sm font-medium text-gray-700 block mb-1">Klient</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Klient</label>
               {selectedClient ? (
-                <div className="flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{selectedClient.name}</p>
-                    {selectedClient.nip && <p className="text-xs text-gray-400 font-mono">{selectedClient.nip}</p>}
+                <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-blue-50/50">
+                  <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{selectedClient.name}</p>
+                    {selectedClient.nip && <p className="text-[11px] text-gray-400 font-mono">{selectedClient.nip}</p>}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '', department_id: '' })); setClientSearchTerm(''); }}
-                    className="p-0.5 text-gray-400 hover:text-red-500 ml-2"
-                  >
-                    <X className="w-4 h-4" />
+                  <button type="button" onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '', department_id: '' })); setClientSearchTerm(''); }} className="p-0.5 text-gray-400 hover:text-red-500">
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ) : (
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    value={clientSearchTerm}
-                    onChange={(e) => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }}
-                    onFocus={() => setShowClientDropdown(true)}
-                    placeholder="Szukaj klienta po nazwie lub NIP..."
-                    className="w-full pl-10 pr-4 border border-gray-300 rounded-lg py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input type="text" value={clientSearchTerm} onChange={(e) => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }} onFocus={() => setShowClientDropdown(true)} placeholder="Szukaj po nazwie lub NIP..." className="w-full pl-8 pr-3 border border-gray-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white" />
                   {showClientDropdown && (
-                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '' })); setShowClientDropdown(false); setClientSearchTerm(''); }}
-                        className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50 border-b border-gray-100"
-                      >
-                        -- Brak klienta --
-                      </button>
+                    <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-44 overflow-y-auto">
+                      <button type="button" onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '' })); setShowClientDropdown(false); setClientSearchTerm(''); }} className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 border-b border-gray-100">-- Brak klienta --</button>
                       {filteredClients.length === 0 ? (
-                        <p className="px-3 py-2 text-sm text-gray-400">Brak wyników</p>
+                        <p className="px-3 py-2 text-xs text-gray-400">Brak wyników</p>
                       ) : filteredClients.map(client => (
-                        <button
-                          key={client.id}
-                          type="button"
-                          onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
-                        >
-                          <p className="text-sm font-medium text-gray-800 truncate">{client.name}</p>
-                          {client.nip && <p className="text-xs text-gray-400 font-mono">{client.nip}</p>}
+                        <button key={client.id} type="button" onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }} className="w-full text-left px-3 py-1.5 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0">
+                          <p className="text-sm text-gray-800 truncate">{client.name}</p>
+                          {client.nip && <p className="text-[11px] text-gray-400 font-mono">{client.nip}</p>}
                         </button>
                       ))}
                     </div>
@@ -472,230 +476,124 @@ export const CompanyProjectsPage: React.FC = () => {
               )}
             </div>
 
-            {/* Name mode toggle */}
+            {/* Name source */}
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-2">Źródło nazwy</label>
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 w-fit">
-                <button
-                  onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  Nazwa własna
-                </button>
-                <button
-                  onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                    projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  Wybrać obiekt
-                </button>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Źródło nazwy</label>
+              <div className="flex items-center bg-gray-100 rounded-lg p-0.5 w-fit">
+                <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Nazwa własna</button>
+                <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Wybrać obiekt</button>
               </div>
             </div>
 
             {projectForm.name_mode === 'custom' ? (
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Nazwa projektu *</label>
-                <input
-                  type="text"
-                  value={projectForm.name}
-                  onChange={(e) => setProjectForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="Nazwa projektu"
-                />
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nazwa projektu *</label>
+                <input type="text" value={projectForm.name} onChange={(e) => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className={inputCls} placeholder="Nazwa projektu" />
               </div>
             ) : (
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Wybierz obiekt *</label>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Obiekt *</label>
                 <div className="flex gap-2">
-                  <select
-                    value={projectForm.department_id}
-                    onChange={(e) => handleDepartmentChange(e.target.value)}
-                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Wybierz obiekt --</option>
-                    {filteredDepartments.map(d => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} {d.kod_obiektu ? `(${d.kod_obiektu})` : ''}
-                      </option>
-                    ))}
+                  <select value={projectForm.department_id} onChange={(e) => handleDepartmentChange(e.target.value)} className={`flex-1 ${inputCls}`}>
+                    <option value="">-- Wybierz --</option>
+                    {filteredDepartments.map(d => <option key={d.id} value={d.id}>{d.name} {d.kod_obiektu ? `(${d.kod_obiektu})` : ''}</option>)}
                   </select>
-                  <a
-                    href="#/company/departments"
-                    className="inline-flex items-center gap-1 px-3 py-2 text-sm text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50"
-                  >
-                    <Plus className="w-4 h-4" /> Nowy
-                  </a>
+                  <a href="#/company/departments" className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"><Plus className="w-3.5 h-3.5" /> Nowy</a>
                 </div>
-                {projectForm.customer_id && filteredDepartments.length < departments.length && (
-                  <p className="mt-1 text-xs text-gray-400">Wybrano klienta — wyświetlane są tylko powiązane obiekty</p>
+                {projectForm.customer_id && filteredDepartments.length < departments.length && filteredDepartments.length > 0 && (
+                  <p className="mt-1 text-[11px] text-gray-400">Filtrowane wg wybranego klienta</p>
                 )}
                 {projectForm.customer_id && filteredDepartments.length === 0 && (
-                  <p className="mt-1 text-xs text-amber-500">Brak obiektów powiązanych z wybranym klientem</p>
+                  <p className="mt-1 text-[11px] text-amber-500">Brak obiektów dla tego klienta</p>
                 )}
                 {projectForm.department_id && (() => {
                   const dept = departments.find(d => d.id === projectForm.department_id);
                   if (!dept) return null;
                   return (
-                    <div className="mt-2 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 space-y-1">
-                      {dept.kod_obiektu && <p><span className="font-medium">Kod budowy:</span> {dept.kod_obiektu}</p>}
-                      {dept.rodzaj && <p><span className="font-medium">Rodzaj:</span> {dept.rodzaj}</p>}
-                      {dept.typ && <p><span className="font-medium">Typ:</span> {dept.typ}</p>}
-                      {(dept.address_street || dept.address_city) && (
-                        <p><span className="font-medium">Adres:</span> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</p>
-                      )}
+                    <div className="mt-1.5 px-3 py-2 bg-gray-50 rounded-lg text-[11px] text-gray-500 leading-relaxed">
+                      {dept.kod_obiektu && <span className="mr-3"><b>Kod:</b> {dept.kod_obiektu}</span>}
+                      {dept.rodzaj && <span className="mr-3"><b>Rodzaj:</b> {dept.rodzaj}</span>}
+                      {dept.typ && <span className="mr-3"><b>Typ:</b> {dept.typ}</span>}
+                      {(dept.address_street || dept.address_city) && <><br /><b>Adres:</b> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</>}
                     </div>
                   );
                 })()}
               </div>
             )}
 
+            {/* Description */}
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">Opis</label>
-              <textarea
-                value={projectForm.description}
-                onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))}
-                rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                placeholder="Opis projektu..."
-              />
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Opis</label>
+              <textarea value={projectForm.description} onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className={inputCls} placeholder="Opis projektu..." />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Status + Color */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Status</label>
-                <select
-                  value={projectForm.status}
-                  onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                >
-                  {Object.entries(PROJECT_STATUS_CONFIG).map(([key, cfg]) => (
-                    <option key={key} value={key}>{cfg.label}</option>
-                  ))}
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Status</label>
+                <select value={projectForm.status} onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))} className={inputCls}>
+                  {Object.entries(PROJECT_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Kolor</label>
-                <div className="flex flex-wrap gap-1.5 mt-1">
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Kolor</label>
+                <div className="flex flex-wrap gap-1">
                   {COLOR_OPTIONS.map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setProjectForm(prev => ({ ...prev, color }))}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-gray-800 scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: color }}
-                    />
+                    <button key={color} onClick={() => setProjectForm(prev => ({ ...prev, color }))} className={`w-5 h-5 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-gray-700 scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: color }} />
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Billing type toggle */}
+            {/* Billing type */}
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-2">Forma wynagrodzenia</label>
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1 w-fit">
-                <button
-                  onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  Ryczałt
-                </button>
-                <button
-                  onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  Roboczogodziny
-                </button>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Forma wynagrodzenia</label>
+              <div className="flex items-center bg-gray-100 rounded-lg p-0.5 w-fit">
+                <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Ryczałt</button>
+                <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Roboczogodziny</button>
               </div>
             </div>
 
             {projectForm.billing_type === 'ryczalt' ? (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Budżet godzin</label>
-                  <input
-                    type="number"
-                    value={projectForm.budget_hours}
-                    onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="np. 100"
-                  />
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Budżet godzin</label>
+                  <input type="number" value={projectForm.budget_hours} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className={inputCls} placeholder="np. 100" />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700 block mb-1">Budżet netto (PLN)</label>
-                  <input
-                    type="number"
-                    value={projectForm.budget_amount}
-                    onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="np. 50000"
-                  />
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Budżet netto (PLN)</label>
+                  <input type="number" value={projectForm.budget_amount} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className={inputCls} placeholder="np. 50000" />
                 </div>
               </div>
             ) : (
-              <div>
-                <div className="flex items-end gap-4">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 block mb-1">Stawka roboczogodzinowa netto (PLN)</label>
-                    <input
-                      type="number"
-                      value={projectForm.hourly_rate}
-                      onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                      placeholder="np. 65"
-                    />
-                  </div>
-                  <button
-                    onClick={() => setShowHourlySettingsModal(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    <Settings className="w-4 h-4" />
-                    Ustawienia dodatkowe
-                  </button>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-500 block mb-1">Stawka netto (PLN/godz.)</label>
+                  <input type="number" value={projectForm.hourly_rate} onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={inputCls} placeholder="np. 65" />
                 </div>
+                <button onClick={() => setShowHourlySettingsModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
+                  <Settings className="w-3.5 h-3.5" /> Dodatkowe
+                </button>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Data rozpoczęcia</label>
-                <input
-                  type="date"
-                  value={projectForm.start_date}
-                  onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="text-xs font-medium text-gray-500 block mb-1">Data rozpoczęcia</label>
+                <input type="date" value={projectForm.start_date} onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className={inputCls} />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Data zakończenia</label>
-                <input
-                  type="date"
-                  value={projectForm.end_date}
-                  onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                />
+                <label className="text-xs font-medium text-gray-500 block mb-1">Data zakończenia</label>
+                <input type="date" value={projectForm.end_date} onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className={inputCls} />
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
-            <button
-              onClick={() => setShowProjectModal(false)}
-              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-            >
-              Anuluj
-            </button>
-            <button
-              onClick={saveProject}
-              disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {savingProject && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editingProject ? 'Zapisz zmiany' : 'Utwórz projekt'}
+          <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-5 py-3 border-t border-gray-100">
+            <button onClick={() => setShowProjectModal(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Anuluj</button>
+            <button onClick={saveProject} disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+              {savingProject && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {editingProject ? 'Zapisz' : 'Utwórz'}
             </button>
           </div>
         </div>
@@ -705,124 +603,88 @@ export const CompanyProjectsPage: React.FC = () => {
 
   const renderHourlySettingsModal = () => {
     if (!showHourlySettingsModal) return null;
+    const sInput = 'w-full border border-gray-200 rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 bg-white';
+    const toggleBtn = (active: boolean, toggle: () => void) => (
+      <button onClick={toggle} className="flex-shrink-0">
+        {active ? <ToggleRight className="w-7 h-4 text-blue-600" /> : <ToggleLeft className="w-7 h-4 text-gray-300" />}
+      </button>
+    );
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center">
-        <div className="absolute inset-0 bg-black/30" onClick={() => setShowHourlySettingsModal(false)} />
-        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Ustawienia dodatkowe stawek</h2>
-            <button onClick={() => setShowHourlySettingsModal(false)} className="p-1 rounded hover:bg-gray-100">
-              <X className="w-5 h-5 text-gray-500" />
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowHourlySettingsModal(false)} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">Ustawienia stawek</h2>
+            <button onClick={() => setShowHourlySettingsModal(false)} className="p-1 rounded-lg hover:bg-gray-100 -mr-1">
+              <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
-          <div className="space-y-4">
+          <div className="px-4 py-3 space-y-2">
             {/* Workday rate */}
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <label className="text-sm font-medium text-gray-700 block mb-1">Stawka za dni robocze netto (PLN/godz.)</label>
-              <input
-                type="number"
-                value={projectForm.hourly_rate}
-                onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="p-2.5 bg-blue-50/60 rounded-lg">
+              <label className="text-xs font-medium text-gray-600 block mb-1">Stawka za dni robocze netto (PLN/godz.)</label>
+              <input type="number" value={projectForm.hourly_rate} onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={sInput} />
             </div>
 
             {/* Overtime */}
-            <div className="p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Nadgodziny dodatkowo płatne</span>
-                <button onClick={() => setHourlySettings(prev => ({ ...prev, overtime_paid: !prev.overtime_paid }))}>
-                  {hourlySettings.overtime_paid
-                    ? <ToggleRight className="w-8 h-5 text-blue-600" />
-                    : <ToggleLeft className="w-8 h-5 text-gray-400" />}
-                </button>
+            <div className="p-2.5 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Nadgodziny</span>
+                {toggleBtn(hourlySettings.overtime_paid, () => setHourlySettings(prev => ({ ...prev, overtime_paid: !prev.overtime_paid })))}
               </div>
               {hourlySettings.overtime_paid && (
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Stawka za nadgodziny netto</label>
-                    <input type="number" value={hourlySettings.overtime_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Ilość godzin podstawowych dziennie</label>
-                    <input type="number" value={hourlySettings.overtime_base_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_base_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div><label className="text-[11px] text-gray-400">Stawka netto</label><input type="number" value={hourlySettings.overtime_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_rate: e.target.value }))} className={sInput} /></div>
+                  <div><label className="text-[11px] text-gray-400">Godz. podstaw./dzień</label><input type="number" value={hourlySettings.overtime_base_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, overtime_base_hours: e.target.value }))} className={sInput} /></div>
                 </div>
               )}
             </div>
 
             {/* Saturday */}
-            <div className="p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Soboty dodatkowo płatne</span>
-                <button onClick={() => setHourlySettings(prev => ({ ...prev, saturday_paid: !prev.saturday_paid }))}>
-                  {hourlySettings.saturday_paid
-                    ? <ToggleRight className="w-8 h-5 text-blue-600" />
-                    : <ToggleLeft className="w-8 h-5 text-gray-400" />}
-                </button>
+            <div className="p-2.5 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Soboty</span>
+                {toggleBtn(hourlySettings.saturday_paid, () => setHourlySettings(prev => ({ ...prev, saturday_paid: !prev.saturday_paid })))}
               </div>
               {hourlySettings.saturday_paid && (
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Stawka za soboty netto</label>
-                    <input type="number" value={hourlySettings.saturday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Ilość godzin pracy w soboty</label>
-                    <input type="number" value={hourlySettings.saturday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div><label className="text-[11px] text-gray-400">Stawka netto</label><input type="number" value={hourlySettings.saturday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_rate: e.target.value }))} className={sInput} /></div>
+                  <div><label className="text-[11px] text-gray-400">Godz. pracy</label><input type="number" value={hourlySettings.saturday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, saturday_hours: e.target.value }))} className={sInput} /></div>
                 </div>
               )}
             </div>
 
             {/* Sunday */}
-            <div className="p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Niedziele dodatkowo płatne</span>
-                <button onClick={() => setHourlySettings(prev => ({ ...prev, sunday_paid: !prev.sunday_paid }))}>
-                  {hourlySettings.sunday_paid
-                    ? <ToggleRight className="w-8 h-5 text-blue-600" />
-                    : <ToggleLeft className="w-8 h-5 text-gray-400" />}
-                </button>
+            <div className="p-2.5 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Niedziele</span>
+                {toggleBtn(hourlySettings.sunday_paid, () => setHourlySettings(prev => ({ ...prev, sunday_paid: !prev.sunday_paid })))}
               </div>
               {hourlySettings.sunday_paid && (
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Stawka za niedziele netto</label>
-                    <input type="number" value={hourlySettings.sunday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Ilość godzin pracy w niedziele</label>
-                    <input type="number" value={hourlySettings.sunday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div><label className="text-[11px] text-gray-400">Stawka netto</label><input type="number" value={hourlySettings.sunday_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_rate: e.target.value }))} className={sInput} /></div>
+                  <div><label className="text-[11px] text-gray-400">Godz. pracy</label><input type="number" value={hourlySettings.sunday_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, sunday_hours: e.target.value }))} className={sInput} /></div>
                 </div>
               )}
             </div>
 
             {/* Night */}
-            <div className="p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Prace w nocy dodatkowo płatne</span>
-                <button onClick={() => setHourlySettings(prev => ({ ...prev, night_paid: !prev.night_paid }))}>
-                  {hourlySettings.night_paid
-                    ? <ToggleRight className="w-8 h-5 text-blue-600" />
-                    : <ToggleLeft className="w-8 h-5 text-gray-400" />}
-                </button>
+            <div className="p-2.5 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Prace nocne</span>
+                {toggleBtn(hourlySettings.night_paid, () => setHourlySettings(prev => ({ ...prev, night_paid: !prev.night_paid })))}
               </div>
               {hourlySettings.night_paid && (
-                <div className="space-y-3 mt-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Stawka za prace nocne netto</label>
-                    <input type="number" value={hourlySettings.night_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2 mt-2">
+                  <div><label className="text-[11px] text-gray-400">Stawka netto</label><input type="number" value={hourlySettings.night_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_rate: e.target.value }))} className={sInput} /></div>
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-gray-500">Początek okresu nocnego (godz.)</label>
-                      <input type="number" min="0" max="23" value={hourlySettings.night_start_hour} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_start_hour: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" placeholder="np. 22" />
+                      <label className="text-[11px] text-gray-400">Od (początek nocy)</label>
+                      <input type="time" value={hourlySettings.night_start_hour} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_start_hour: e.target.value }))} className={sInput} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Koniec okresu nocnego (godz.)</label>
-                      <input type="number" min="0" max="23" value={hourlySettings.night_end_hour} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_end_hour: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" placeholder="np. 6" />
+                      <label className="text-[11px] text-gray-400">Do (koniec nocy)</label>
+                      <input type="time" value={hourlySettings.night_end_hour} onChange={(e) => setHourlySettings(prev => ({ ...prev, night_end_hour: e.target.value }))} className={sInput} />
                     </div>
                   </div>
                 </div>
@@ -830,36 +692,21 @@ export const CompanyProjectsPage: React.FC = () => {
             </div>
 
             {/* Travel */}
-            <div className="p-3 border border-gray-200 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Dojazd dodatkowo płatny</span>
-                <button onClick={() => setHourlySettings(prev => ({ ...prev, travel_paid: !prev.travel_paid }))}>
-                  {hourlySettings.travel_paid
-                    ? <ToggleRight className="w-8 h-5 text-blue-600" />
-                    : <ToggleLeft className="w-8 h-5 text-gray-400" />}
-                </button>
+            <div className="p-2.5 border border-gray-100 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-700">Dojazd</span>
+                {toggleBtn(hourlySettings.travel_paid, () => setHourlySettings(prev => ({ ...prev, travel_paid: !prev.travel_paid })))}
               </div>
               {hourlySettings.travel_paid && (
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <label className="text-xs text-gray-500">Stawka za czas dojazdu netto</label>
-                    <input type="number" value={hourlySettings.travel_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_rate: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500">Szacowana ilość godzin dojazdu</label>
-                    <input type="number" value={hourlySettings.travel_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_hours: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <div><label className="text-[11px] text-gray-400">Stawka netto</label><input type="number" value={hourlySettings.travel_rate} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_rate: e.target.value }))} className={sInput} /></div>
+                  <div><label className="text-[11px] text-gray-400">Szac. godzin</label><input type="number" value={hourlySettings.travel_hours} onChange={(e) => setHourlySettings(prev => ({ ...prev, travel_hours: e.target.value }))} className={sInput} /></div>
                 </div>
               )}
             </div>
           </div>
-          <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
-            <button
-              onClick={() => setShowHourlySettingsModal(false)}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Gotowe
-            </button>
+          <div className="sticky bottom-0 bg-white flex justify-end px-4 py-2.5 border-t border-gray-100">
+            <button onClick={() => setShowHourlySettingsModal(false)} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Gotowe</button>
           </div>
         </div>
       </div>
