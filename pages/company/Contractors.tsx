@@ -704,43 +704,43 @@ export const ContractorsPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+            <table className="w-full text-xs">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nazwa firmy</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">NIP</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Imię i nazwisko</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Stanowisko</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Telefon</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Nazwa firmy</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">NIP</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Kontakt</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Stanowisko</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Email</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Telefon</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredClients.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-12 text-slate-400">Brak klientów</td></tr>
+                  <tr><td colSpan={7} className="text-center py-12 text-slate-400 text-sm">Brak klientów</td></tr>
                 ) : filteredClients.map(client => {
                   const mc = clientMainContacts[client.id];
                   return (
                     <tr key={client.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openClientDetail(client)}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
-                          <Building2 size={16} className="text-slate-400" />
-                          <span className="font-medium text-slate-800">{client.name}</span>
+                      <td className="px-3 py-2 max-w-[220px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Building2 size={14} className="text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-800 truncate">{client.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-500 font-mono">{client.nip || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mc ? `${mc.first_name} ${mc.last_name}` : '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.position || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.email || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mc?.phone || '—'}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
+                      <td className="px-3 py-2 text-slate-500 font-mono whitespace-nowrap">{client.nip || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc ? `${mc.first_name} ${mc.last_name}` : '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.position || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.email || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mc?.phone || '—'}</td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end space-x-0.5">
                           <button onClick={e => { e.stopPropagation(); openEditClient(client); }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil size={14} /></button>
                           <button onClick={e => { e.stopPropagation(); deleteClient(client.id); }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
@@ -767,54 +767,56 @@ export const ContractorsPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+            <table className="w-full text-xs">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Nazwa firmy</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Imię i nazwisko</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Stanowisko</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Telefon</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Umiejętności</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Akcje</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Nazwa firmy</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">NIP</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Kontakt</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Stanowisko</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Email</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Telefon</th>
+                  <th className="text-left px-3 py-2 font-semibold text-slate-500 uppercase whitespace-nowrap">Umiejętności</th>
+                  <th className="text-right px-3 py-2 font-semibold text-slate-500 uppercase w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredSubs.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-12 text-slate-400">Brak podwykonawców</td></tr>
+                  <tr><td colSpan={8} className="text-center py-12 text-slate-400 text-sm">Brak podwykonawców</td></tr>
                 ) : filteredSubs.map(sub => {
                   const mw = subMainContacts[sub.id];
                   return (
                     <tr key={sub.id} className="hover:bg-slate-50 cursor-pointer transition-colors" onClick={() => openSubDetail(sub)}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
-                          <Users size={16} className="text-slate-400" />
-                          <span className="font-medium text-slate-800">{sub.name}</span>
+                      <td className="px-3 py-2 max-w-[220px]">
+                        <div className="flex items-center space-x-1.5">
+                          <Users size={14} className="text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-800 truncate">{sub.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mw ? `${mw.first_name} ${mw.last_name}` : '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.position || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.email || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{mw?.phone || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-600 max-w-[250px]">
+                      <td className="px-3 py-2 text-slate-500 font-mono whitespace-nowrap">{sub.nip || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw ? `${mw.first_name} ${mw.last_name}` : '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.position || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.email || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{mw?.phone || '—'}</td>
+                      <td className="px-3 py-2 text-slate-600 max-w-[180px]">
                         {sub.skills ? (
-                          <div className="flex flex-wrap gap-1">
-                            {sub.skills.split(',').map(s => s.trim()).filter(Boolean).slice(0, 3).map(skill => (
-                              <span key={skill} className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">{skill}</span>
+                          <div className="flex flex-wrap gap-0.5">
+                            {sub.skills.split(',').map(s => s.trim()).filter(Boolean).slice(0, 2).map(skill => (
+                              <span key={skill} className="inline-block bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full truncate max-w-[120px]">{skill}</span>
                             ))}
-                            {sub.skills.split(',').filter(s => s.trim()).length > 3 && (
-                              <span className="inline-block text-xs text-slate-400">+{sub.skills.split(',').filter(s => s.trim()).length - 3}</span>
+                            {sub.skills.split(',').filter(s => s.trim()).length > 2 && (
+                              <span className="inline-block text-slate-400">+{sub.skills.split(',').filter(s => s.trim()).length - 2}</span>
                             )}
                           </div>
                         ) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end space-x-0.5">
                           <button onClick={e => { e.stopPropagation(); openEditSub(sub); }}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Pencil size={16} /></button>
+                            className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil size={14} /></button>
                           <button onClick={e => { e.stopPropagation(); deleteSub(sub.id); }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
