@@ -1103,6 +1103,7 @@ export interface ProjectTask {
   assigned_users?: string[];
   assigned_to?: string;
   created_by?: string;
+  category?: string;
   has_start_deadline?: boolean;
   start_date?: string;
   start_time?: string;
@@ -1133,6 +1134,13 @@ export interface TaskTimeLog {
   description?: string;
   created_at: string;
   user?: User;
+}
+
+export interface ProjectTaskCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface TaskAttachment {
@@ -1210,6 +1218,7 @@ export interface ProjectCost {
   payment_method?: string;
   comment?: string;
   file_url?: string;
+  task_id?: string;
   created_at: string;
   updated_at: string;
 }
