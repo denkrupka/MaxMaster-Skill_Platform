@@ -188,6 +188,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   // Member modals
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [editingMember, setEditingMember] = useState<ProjectMember | null>(null);
+  const [editMemberForm, setEditMemberForm] = useState({ position: '', payment_type: 'hourly' as ProjectMemberPaymentType, hourly_rate: '', member_status: 'assigned' as ProjectMemberStatus });
   const [addMemberType, setAddMemberType] = useState<ProjectMemberType>('employee');
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -744,6 +746,30 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!confirm('Czy na pewno chcesz usunąć tego pracownika z projektu?')) return;
     const { error } = await supabase.from('project_members').delete().eq('id', memberId);
     if (!error) loadProjectData();
+  };
+
+  const handleOpenEditMember = (m: ProjectMember) => {
+    setEditingMember(m);
+    setEditMemberForm({
+      position: m.position || '',
+      payment_type: m.payment_type || 'hourly',
+      hourly_rate: m.hourly_rate ? String(m.hourly_rate) : '',
+      member_status: m.member_status || 'assigned',
+    });
+  };
+
+  const handleSaveEditMember = async () => {
+    if (!editingMember) return;
+    const { error } = await supabase.from('project_members').update({
+      position: editMemberForm.position || null,
+      payment_type: editMemberForm.payment_type,
+      hourly_rate: editMemberForm.payment_type === 'hourly' ? (parseFloat(editMemberForm.hourly_rate) || 0) : null,
+      member_status: editMemberForm.member_status,
+    }).eq('id', editingMember.id);
+    if (!error) {
+      await loadProjectData();
+      setEditingMember(null);
+    }
   };
 
   const toggleUserSelection = (userId: string) => {
@@ -2445,6 +2471,25 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const PAYMENT_METHODS = ['Przelew', 'Gotówka', 'Karta'];
 
+  const downloadFile = async (url: string, filename?: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || url.split('/').pop() || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Download failed:', err);
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+    }
+  };
+
   // Multi-file OCR state
   const [ocrResults, setOcrResults] = useState<Array<{ formData: typeof costFormData; fileUrl: string | null; file: File | null }>>([]);
   const [ocrCurrentIndex, setOcrCurrentIndex] = useState(0);
@@ -3103,22 +3148,36 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Stawka VAT</label>
-                <select
-                  value={costFormData.vat_rate || '23'}
-                  onChange={e => {
-                    const vat = Number(e.target.value);
-                    const netto = Number(costFormData.value_netto) || 0;
-                    const brutto = Math.round(netto * (1 + vat / 100) * 100) / 100;
-                    setCostFormData(prev => ({ ...prev, vat_rate: e.target.value, value_brutto: String(brutto) }));
-                  }}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="0">0%</option>
-                  <option value="5">5%</option>
-                  <option value="8">8%</option>
-                  <option value="23">23%</option>
-                </select>
+                <label className="block text-xs font-medium text-gray-600 mb-1">VAT</label>
+                <div className="flex gap-2">
+                  <select
+                    value={costFormData.vat_rate || '23'}
+                    onChange={e => {
+                      const vat = Number(e.target.value);
+                      const netto = Number(costFormData.value_netto) || 0;
+                      const brutto = Math.round(netto * (1 + vat / 100) * 100) / 100;
+                      setCostFormData(prev => ({ ...prev, vat_rate: e.target.value, value_brutto: String(brutto) }));
+                    }}
+                    className="w-16 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="8">8%</option>
+                    <option value="23">23%</option>
+                  </select>
+                  <input
+                    type="text"
+                    readOnly
+                    value={(() => {
+                      const netto = Number(costFormData.value_netto) || 0;
+                      const brutto = Number(costFormData.value_brutto) || 0;
+                      const vatAmt = brutto - netto;
+                      return vatAmt > 0 ? vatAmt.toLocaleString('pl-PL') + ' PLN' : '';
+                    })()}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600"
+                    placeholder="Kwota VAT"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Wartość brutto</label>
@@ -3387,13 +3446,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 onClick={() => {
                   const costsWithFiles = filteredDirectCosts.filter(c => selectedCostIds.has(c.id) && c.file_url);
                   costsWithFiles.forEach(c => {
-                    const a = document.createElement('a');
-                    a.href = c.file_url!;
-                    a.download = '';
-                    a.target = '_blank';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
+                    downloadFile(c.file_url!, c.document_number || undefined);
                   });
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200"
@@ -3492,15 +3545,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <a
-                            href={c.file_url || '#'}
-                            download
-                            onClick={e => { if (!c.file_url) e.preventDefault(); }}
-                            className={`p-1.5 rounded hover:bg-gray-100 ${c.file_url ? 'text-gray-400 hover:text-green-600' : 'text-gray-200 pointer-events-none'}`}
+                          <button
+                            onClick={() => c.file_url && downloadFile(c.file_url, c.document_number || undefined)}
+                            className={`p-1.5 rounded hover:bg-gray-100 ${c.file_url ? 'text-gray-400 hover:text-green-600' : 'text-gray-200 cursor-not-allowed'}`}
                             title="Pobierz plik"
+                            disabled={!c.file_url}
                           >
                             <Download className="w-3.5 h-3.5" />
-                          </a>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -3832,7 +3884,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 const memberName = user ? `${user.first_name} ${user.last_name}` : worker ? `${worker.first_name} ${worker.last_name}` : getUserName(m.user_id || '');
                 const memberPosition = user?.target_position || worker?.position || m.position || '-';
                 return (
-                <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleOpenEditMember(m)}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{memberName}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{memberPosition}</td>
                   <td className="px-4 py-3">
@@ -3843,7 +3895,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {m.payment_type === 'hourly' ? `Stawka: ${m.hourly_rate || 0} zł/godz.` : 'Akord'}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <select value={m.member_status} onChange={e => handleUpdateMemberStatus(m.id, e.target.value as ProjectMemberStatus)}
                       className={`text-xs font-medium rounded px-2 py-1 border-0 cursor-pointer ${
                         m.member_status === 'assigned' ? 'bg-green-100 text-green-700' :
@@ -3854,7 +3906,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                       <option value="temporarily_unassigned">Czasowo odpisany</option>
                     </select>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                     <button onClick={() => handleDeleteMember(m.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Usuń z projektu">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -3866,6 +3918,101 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           </table>
         )}
       </div>
+
+      {/* Edit Member Modal */}
+      {editingMember && (() => {
+        const user = editingMember.user_id ? users.find(u => u.id === editingMember.user_id) : null;
+        const worker = editingMember.worker_id ? subcontractorWorkers.find(w => w.id === editingMember.worker_id) : null;
+        const memberName = user ? `${user.first_name} ${user.last_name}` : worker ? `${worker.first_name} ${worker.last_name}` : '-';
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setEditingMember(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-900">Edytuj członka projektu</h2>
+              <button onClick={() => setEditingMember(null)} className="p-1 rounded hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Imię i nazwisko</label>
+                <p className="text-sm font-medium text-gray-900">{memberName}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Typ</label>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${editingMember.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                  {editingMember.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
+                </span>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Stanowisko</label>
+                <input
+                  type="text"
+                  value={editMemberForm.position}
+                  onChange={e => setEditMemberForm(prev => ({ ...prev, position: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Stanowisko"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Forma wynagrodzenia</label>
+                <select
+                  value={editMemberForm.payment_type}
+                  onChange={e => setEditMemberForm(prev => ({ ...prev, payment_type: e.target.value as ProjectMemberPaymentType }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="hourly">Stawka godzinowa</option>
+                  <option value="piece_rate">Akord</option>
+                </select>
+              </div>
+              {editMemberForm.payment_type === 'hourly' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Stawka (zł/godz.)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editMemberForm.hourly_rate}
+                    onChange={e => setEditMemberForm(prev => ({ ...prev, hourly_rate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select
+                  value={editMemberForm.member_status}
+                  onChange={e => setEditMemberForm(prev => ({ ...prev, member_status: e.target.value as ProjectMemberStatus }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="assigned">Dopisany do projektu</option>
+                  <option value="unassigned">Odpisany od projektu</option>
+                  <option value="temporarily_unassigned">Czasowo odpisany</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200">
+              <button
+                onClick={() => { setEditingMember(null); handleDeleteMember(editingMember.id); }}
+                className="px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                Usuń z projektu
+              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setEditingMember(null)} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Anuluj
+                </button>
+                <button onClick={handleSaveEditMember} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  Zapisz
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {/* Add Member Modal */}
       {showAddMemberModal && (
