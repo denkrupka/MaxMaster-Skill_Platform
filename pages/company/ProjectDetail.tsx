@@ -13,6 +13,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
+import { DocumentViewerModal } from '../../components/DocumentViewerModal';
 import {
   Project, ProjectTask, ProjectMember, ProjectCustomer, TaskTimeLog,
   TaskAttachment, TaskStatus_Project, TaskPriority, ProjectStatus, User,
@@ -163,6 +164,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   // Protocol preview modal
   const [previewProtocol, setPreviewProtocol] = useState<ProjectProtocol | null>(null);
+  // Protocol PDF viewer state (for eye icon -> DocumentViewerModal)
+  const [protocolPdfViewerUrl, setProtocolPdfViewerUrl] = useState<string | null>(null);
 
   // Income modal state
   const [showIncomeModal, setShowIncomeModal] = useState(false);
@@ -681,9 +684,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         .eq('project_id', project.id);
       const existingUserIds = new Set((existingMembers || []).map(m => m.user_id));
 
+      let rows: any[] = [];
       if (addMemberType === 'employee') {
         if (selectedUserIds.length === 0) { setShowAddMemberModal(false); return; }
-        const rows = selectedUserIds
+        rows = selectedUserIds
           .filter(uid => !existingUserIds.has(uid))
           .map(uid => ({
             project_id: project.id,
@@ -694,12 +698,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
             member_status: 'assigned' as ProjectMemberStatus,
           }));
-        if (rows.length === 0) { setShowAddMemberModal(false); loadProjectData(); return; }
-        const { error } = await supabase.from('project_members').insert(rows);
-        if (!error) { setShowAddMemberModal(false); loadProjectData(); }
       } else {
         if (selectedWorkerIds.length === 0) { setShowAddMemberModal(false); return; }
-        const rows = selectedWorkerIds
+        rows = selectedWorkerIds
           .filter(wid => !existingUserIds.has(wid))
           .map(wid => {
             const worker = subcontractorWorkers.find(w => w.id === wid);
@@ -707,17 +708,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               project_id: project.id,
               user_id: wid,
               role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
-              member_type: 'subcontractor' as ProjectMemberType,
+              member_type: addMemberType as ProjectMemberType,
               payment_type: memberPaymentType,
               hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
               position: worker?.position || null,
               member_status: 'assigned' as ProjectMemberStatus,
             };
           });
-        if (rows.length === 0) { setShowAddMemberModal(false); loadProjectData(); return; }
-        const { error } = await supabase.from('project_members').insert(rows);
-        if (!error) { setShowAddMemberModal(false); loadProjectData(); }
       }
+      // Insert individually to skip any remaining conflicts
+      for (const row of rows) {
+        await supabase.from('project_members').insert(row);
+      }
+      setShowAddMemberModal(false);
+      loadProjectData();
     } finally {
       setAddingMembers(false);
     }
@@ -1901,7 +1905,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     return c ? `${c.first_name} ${c.last_name}` : '-';
   };
 
-  const generateProtocolPDF = (p: ProjectProtocol) => {
+  const generateProtocolPDF = (p: ProjectProtocol, options?: { returnBlobUrl?: boolean }): string | void => {
     // Polish diacritics transliteration for jsPDF (helvetica doesn't support UTF-8)
     const pl = (s: string) => (s || '')
       .replace(/ą/g, 'a').replace(/Ą/g, 'A')
@@ -1972,8 +1976,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     doc.setFont('helvetica', 'normal');
     y += 5;
 
-    const colWidth = (pw / 2) - 14 - 4; // max width for each column
-    const wrapText = (text: string) => doc.splitTextToSize(text, colWidth) as string[];
+    const leftColWidth = colRight - ml - 4; // left column max width with gap
+    const rightColWidth = mr - colRight; // right column max width
+    const wrapLeft = (text: string) => doc.splitTextToSize(text, leftColWidth) as string[];
+    const wrapRight = (text: string) => doc.splitTextToSize(text, rightColWidth) as string[];
 
     const clientRaw = [
       pl(client?.name || getCustomerName(project.contractor_client_id || project.customer_id)),
@@ -1989,8 +1995,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       company?.tax_id ? `NIP: ${company.tax_id}` : '',
     ].filter(Boolean);
 
-    const clientLines = clientRaw.flatMap(l => wrapText(l));
-    const companyLines = companyRaw.flatMap(l => wrapText(l));
+    const clientLines = clientRaw.flatMap(l => wrapLeft(l));
+    const companyLines = companyRaw.flatMap(l => wrapRight(l));
 
     const maxL = Math.max(clientLines.length, companyLines.length);
     for (let i = 0; i < maxL; i++) {
@@ -2150,6 +2156,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     sigs(y);
     footer(3);
 
+    if (options?.returnBlobUrl) {
+      const blob = doc.output('blob');
+      return URL.createObjectURL(blob) + '#pdf';
+    }
     doc.save(`protokol_${(p.protocol_number || '').replace(/\//g, '-')}.pdf`);
   };
 
@@ -2209,9 +2219,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1">
                       <button
-                        onClick={() => setPreviewProtocol(p)}
+                        onClick={() => {
+                          const url = generateProtocolPDF(p, { returnBlobUrl: true }) as string;
+                          if (url) setProtocolPdfViewerUrl(url);
+                        }}
                         className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-blue-600"
-                        title="Podgląd"
+                        title="Podgląd PDF"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -2412,6 +2425,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     value_brutto: '',
     category: '',
     payment_status: 'Nieopłacone',
+    comment: '',
   });
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [savingCost, setSavingCost] = useState(false);
@@ -2444,6 +2458,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       value_brutto: '',
       category: '',
       payment_status: 'Nieopłacone',
+      comment: '',
     });
     setEditingCostId(null);
   };
@@ -2481,8 +2496,25 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       const netto = result.value_netto || 0;
       const vat = result.vat_rate || 23;
       const brutto = result.value_brutto || Math.round(netto * (1 + vat / 100) * 100) / 100;
+
+      // Match OCR document_type to dropdown options
+      const matchDocType = (ocrType: string): string => {
+        if (!ocrType) return '';
+        const lower = ocrType.toLowerCase();
+        // Exact match first
+        const exact = DOCUMENT_TYPES.find(dt => dt.toLowerCase() === lower);
+        if (exact) return exact;
+        // Partial match
+        if (lower.includes('faktura')) return 'Faktura VAT';
+        if (lower.includes('rachunek')) return 'Rachunek';
+        if (lower.includes('paragon')) return 'Paragon';
+        if (lower.includes('nota')) return 'Nota księgowa';
+        if (lower.includes('umowa')) return 'Umowa';
+        return 'Inne';
+      };
+
       setCostFormData({
-        document_type: result.document_type || '',
+        document_type: matchDocType(result.document_type || ''),
         document_number: result.document_number || '',
         issue_date: result.issue_date || '',
         payment_due_date: result.payment_due_date || '',
@@ -2498,6 +2530,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         value_brutto: brutto ? String(brutto) : '',
         category: result.category || '',
         payment_status: 'Nieopłacone',
+        comment: '',
       });
       setShowCostFormModal(true);
     } catch (err) {
@@ -2534,6 +2567,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         value_brutto: parseFloat(costFormData.value_brutto) || null,
         category: costFormData.category || null,
         payment_status: costFormData.payment_status || 'Nieopłacone',
+        comment: costFormData.comment || null,
       };
 
       if (editingCostId) {
@@ -2583,6 +2617,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       value_brutto: String(cost.value_brutto || 0),
       category: cost.category || '',
       payment_status: cost.payment_status || 'Nieopłacone',
+      comment: cost.comment || '',
     });
     setEditingCostId(cost.id);
     setShowCostFormModal(true);
@@ -3000,6 +3035,18 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Comment */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Komentarz / Uwagi</label>
+              <textarea
+                value={costFormData.comment}
+                onChange={e => setCostFormData(prev => ({ ...prev, comment: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                rows={3}
+                placeholder="Dodaj komentarz do kosztu..."
+              />
             </div>
           </div>
 
@@ -4201,6 +4248,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* ===== Protocol PDF Viewer Modal ===== */}
+      <DocumentViewerModal
+        isOpen={!!protocolPdfViewerUrl}
+        onClose={() => {
+          if (protocolPdfViewerUrl) URL.revokeObjectURL(protocolPdfViewerUrl.replace('#pdf', ''));
+          setProtocolPdfViewerUrl(null);
+        }}
+        urls={protocolPdfViewerUrl ? [protocolPdfViewerUrl] : []}
+        title="Podgląd protokołu PDF"
+      />
 
       {/* ===== Create Protocol Modal ===== */}
       {showProtocolModal && (
