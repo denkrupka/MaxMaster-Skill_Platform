@@ -189,7 +189,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   // Member modals
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState<ProjectMember | null>(null);
-  const [editMemberForm, setEditMemberForm] = useState({ position: '', payment_type: 'hourly' as ProjectMemberPaymentType, hourly_rate: '', member_status: 'assigned' as ProjectMemberStatus });
+  const [editMemberForm, setEditMemberForm] = useState({ position: '', payment_type: 'hourly' as ProjectMemberPaymentType, hourly_rate: '', member_status: 'assigned' as ProjectMemberStatus, role: 'member' as 'manager' | 'member' });
   const [addMemberType, setAddMemberType] = useState<ProjectMemberType>('employee');
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -755,6 +755,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_type: m.payment_type || 'hourly',
       hourly_rate: m.hourly_rate ? String(m.hourly_rate) : '',
       member_status: m.member_status || 'assigned',
+      role: m.role || 'member',
     });
   };
 
@@ -765,6 +766,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_type: editMemberForm.payment_type,
       hourly_rate: editMemberForm.payment_type === 'hourly' ? (parseFloat(editMemberForm.hourly_rate) || 0) : null,
       member_status: editMemberForm.member_status,
+      role: editMemberForm.role,
     }).eq('id', editingMember.id);
     if (!error) {
       await loadProjectData();
@@ -3886,7 +3888,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 return (
                 <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleOpenEditMember(m)}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{memberName}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{memberPosition}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      {memberPosition}
+                      {m.role === 'manager' && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">
+                          Kierownik
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${m.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                       {m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
@@ -3991,6 +4002,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <option value="unassigned">Odpisany od projektu</option>
                   <option value="temporarily_unassigned">Czasowo odpisany</option>
                 </select>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editMemberForm.role === 'manager'}
+                    onChange={e => setEditMemberForm(prev => ({ ...prev, role: e.target.checked ? 'manager' : 'member' }))}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Kierownik projektu</span>
+                </label>
               </div>
             </div>
             <div className="flex items-center justify-between px-5 py-3 border-t border-gray-200">
