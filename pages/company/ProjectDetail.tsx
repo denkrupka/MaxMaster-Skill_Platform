@@ -197,6 +197,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [subcontractorWorkers, setSubcontractorWorkers] = useState<SubcontractorWorker[]>([]);
   const [selectedSubcontractorId, setSelectedSubcontractorId] = useState<string | null>(null);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [addingMembers, setAddingMembers] = useState(false);
 
   // Issue modals
   const [showAddIssueModal, setShowAddIssueModal] = useState(false);
@@ -670,29 +671,25 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   };
 
   const handleAddMembers = async () => {
-    if (!currentUser) return;
-    if (addMemberType === 'employee') {
-      if (selectedUserIds.length === 0) return;
-      const rows = selectedUserIds.map(uid => ({
-        project_id: project.id,
-        user_id: uid,
-        role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
-        member_type: 'employee' as ProjectMemberType,
-        payment_type: memberPaymentType,
-        hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
-        member_status: 'assigned' as ProjectMemberStatus,
-      }));
-      const existingUserIds = members.map(m => m.user_id);
-      const filteredRows = rows.filter(r => !existingUserIds.includes(r.user_id));
-      if (filteredRows.length === 0) { setShowAddMemberModal(false); return; }
-      const { error } = await supabase.from('project_members').insert(filteredRows);
-      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
-    } else {
-      if (selectedWorkerIds.length === 0) return;
-      const existingUserIds = members.map(m => m.user_id);
-      const rows = selectedWorkerIds
-        .filter(wid => !existingUserIds.includes(wid))
-        .map(wid => {
+    if (!currentUser || addingMembers) return;
+    setAddingMembers(true);
+    try {
+      if (addMemberType === 'employee') {
+        if (selectedUserIds.length === 0) { setShowAddMemberModal(false); return; }
+        const rows = selectedUserIds.map(uid => ({
+          project_id: project.id,
+          user_id: uid,
+          role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
+          member_type: 'employee' as ProjectMemberType,
+          payment_type: memberPaymentType,
+          hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+          member_status: 'assigned' as ProjectMemberStatus,
+        }));
+        const { error } = await supabase.from('project_members').upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
+        if (!error) { setShowAddMemberModal(false); loadProjectData(); }
+      } else {
+        if (selectedWorkerIds.length === 0) { setShowAddMemberModal(false); return; }
+        const rows = selectedWorkerIds.map(wid => {
           const worker = subcontractorWorkers.find(w => w.id === wid);
           return {
             project_id: project.id,
@@ -705,9 +702,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             member_status: 'assigned' as ProjectMemberStatus,
           };
         });
-      if (rows.length === 0) { setShowAddMemberModal(false); return; }
-      const { error } = await supabase.from('project_members').insert(rows);
-      if (!error) { setShowAddMemberModal(false); loadProjectData(); }
+        const { error } = await supabase.from('project_members').upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
+        if (!error) { setShowAddMemberModal(false); loadProjectData(); }
+      }
+    } finally {
+      setAddingMembers(false);
     }
   };
 
@@ -1891,7 +1890,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const generateProtocolPDF = (p: ProjectProtocol) => {
     // Polish diacritics transliteration for jsPDF (helvetica doesn't support UTF-8)
-    const pl = (s: string) => s
+    const pl = (s: string) => (s || '')
       .replace(/ą/g, 'a').replace(/Ą/g, 'A')
       .replace(/ć/g, 'c').replace(/Ć/g, 'C')
       .replace(/ę/g, 'e').replace(/Ę/g, 'E')
@@ -2385,7 +2384,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     payment_due_date: '',
     issuer: '',
     issuer_nip: '',
-    issuer_address: '',
+    issuer_street: '',
+    issuer_building_number: '',
+    issuer_apartment_number: '',
+    issuer_city: '',
+    issuer_postal_code: '',
     value_netto: '',
     vat_rate: '23',
     value_brutto: '',
@@ -2413,7 +2416,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_due_date: '',
       issuer: '',
       issuer_nip: '',
-      issuer_address: '',
+      issuer_street: '',
+      issuer_building_number: '',
+      issuer_apartment_number: '',
+      issuer_city: '',
+      issuer_postal_code: '',
       value_netto: '',
       vat_rate: '23',
       value_brutto: '',
@@ -2463,7 +2470,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         payment_due_date: result.payment_due_date || '',
         issuer: result.issuer || '',
         issuer_nip: result.issuer_nip || '',
-        issuer_address: result.issuer_address || '',
+        issuer_street: result.issuer_street || '',
+        issuer_building_number: result.issuer_building_number || '',
+        issuer_apartment_number: result.issuer_apartment_number || '',
+        issuer_city: result.issuer_city || '',
+        issuer_postal_code: result.issuer_postal_code || '',
         value_netto: netto ? String(netto) : '',
         vat_rate: String(vat),
         value_brutto: brutto ? String(brutto) : '',
@@ -2495,7 +2506,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         payment_due_date: costFormData.payment_due_date || null,
         issuer: costFormData.issuer || null,
         issuer_nip: costFormData.issuer_nip || null,
-        issuer_address: costFormData.issuer_address || null,
+        issuer_street: costFormData.issuer_street || null,
+        issuer_building_number: costFormData.issuer_building_number || null,
+        issuer_apartment_number: costFormData.issuer_apartment_number || null,
+        issuer_city: costFormData.issuer_city || null,
+        issuer_postal_code: costFormData.issuer_postal_code || null,
         value_netto: parseFloat(costFormData.value_netto) || 0,
         vat_rate: parseFloat(costFormData.vat_rate) || null,
         value_brutto: parseFloat(costFormData.value_brutto) || null,
@@ -2540,7 +2555,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_due_date: cost.payment_due_date || '',
       issuer: cost.issuer || '',
       issuer_nip: cost.issuer_nip || '',
-      issuer_address: cost.issuer_address || '',
+      issuer_street: cost.issuer_street || '',
+      issuer_building_number: cost.issuer_building_number || '',
+      issuer_apartment_number: cost.issuer_apartment_number || '',
+      issuer_city: cost.issuer_city || '',
+      issuer_postal_code: cost.issuer_postal_code || '',
       value_netto: String(cost.value_netto || 0),
       vat_rate: String(cost.vat_rate || 23),
       value_brutto: String(cost.value_brutto || 0),
@@ -2803,16 +2822,58 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               />
             </div>
 
-            {/* Issuer address */}
+            {/* Issuer address fields */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Adres wystawcy</label>
-              <input
-                type="text"
-                value={costFormData.issuer_address || ''}
-                onChange={e => setCostFormData(prev => ({ ...prev, issuer_address: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="ul. Przykładowa 1, 00-000 Warszawa"
-              />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <input
+                    type="text"
+                    value={costFormData.issuer_street || ''}
+                    onChange={e => setCostFormData(prev => ({ ...prev, issuer_street: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Ulica"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={costFormData.issuer_building_number || ''}
+                    onChange={e => setCostFormData(prev => ({ ...prev, issuer_building_number: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Nr domu"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={costFormData.issuer_apartment_number || ''}
+                    onChange={e => setCostFormData(prev => ({ ...prev, issuer_apartment_number: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Nr lokalu"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
+                  <input
+                    type="text"
+                    value={costFormData.issuer_city || ''}
+                    onChange={e => setCostFormData(prev => ({ ...prev, issuer_city: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Miasto"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={costFormData.issuer_postal_code || ''}
+                    onChange={e => setCostFormData(prev => ({ ...prev, issuer_postal_code: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Kod pocztowy"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Netto + VAT + Brutto */}
@@ -3619,9 +3680,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-200">
               <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
-              <button onClick={handleAddMembers} disabled={currentSelectedItems.length === 0}
+              <button onClick={handleAddMembers} disabled={currentSelectedItems.length === 0 || addingMembers}
                 className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                Dodaj ({currentSelectedItems.length})
+                {addingMembers ? 'Dodawanie...' : `Dodaj (${currentSelectedItems.length})`}
               </button>
             </div>
           </div>

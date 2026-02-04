@@ -1196,7 +1196,11 @@ export interface ProjectCost {
   payment_due_date?: string;
   issuer?: string;
   issuer_nip?: string;
-  issuer_address?: string;
+  issuer_street?: string;
+  issuer_building_number?: string;
+  issuer_apartment_number?: string;
+  issuer_city?: string;
+  issuer_postal_code?: string;
   vat_rate?: number;
   value_brutto?: number;
   value_netto: number;
