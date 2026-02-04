@@ -33,16 +33,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Fix task_attachments: drop old FK if it references tasks, add new one for project_tasks
--- First, try to drop the old constraint if it exists
-DO $$ BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.table_constraints
-    WHERE constraint_name = 'task_attachments_task_id_fkey'
-    AND table_name = 'task_attachments'
-  ) THEN
-    ALTER TABLE task_attachments DROP CONSTRAINT task_attachments_task_id_fkey;
-  END IF;
-END $$;
+-- Fix task_attachments: drop old FK if it references tasks table (not project_tasks)
+ALTER TABLE task_attachments DROP CONSTRAINT IF EXISTS task_attachments_task_id_fkey;
 
 -- Seed default task categories (these will be added per-company on first use)
