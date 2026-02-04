@@ -912,6 +912,7 @@ export interface TimeOffLimit {
   total_days: number;
   used_days: number;
   carried_over_days: number;
+  is_enabled?: boolean;
   created_at: string;
   updated_at: string;
   time_off_type?: TimeOffType;

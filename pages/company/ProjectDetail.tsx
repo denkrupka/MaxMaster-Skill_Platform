@@ -682,23 +682,30 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
         member_status: 'assigned' as ProjectMemberStatus,
       }));
-      const { error } = await supabase.from('project_members').insert(rows);
+      const existingUserIds = members.map(m => m.user_id);
+      const filteredRows = rows.filter(r => !existingUserIds.includes(r.user_id));
+      if (filteredRows.length === 0) { setShowAddMemberModal(false); return; }
+      const { error } = await supabase.from('project_members').insert(filteredRows);
       if (!error) { setShowAddMemberModal(false); loadProjectData(); }
     } else {
       if (selectedWorkerIds.length === 0) return;
-      const rows = selectedWorkerIds.map(wid => {
-        const worker = subcontractorWorkers.find(w => w.id === wid);
-        return {
-          project_id: project.id,
-          user_id: wid,
-          role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
-          member_type: 'subcontractor' as ProjectMemberType,
-          payment_type: memberPaymentType,
-          hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
-          position: worker?.position || null,
-          member_status: 'assigned' as ProjectMemberStatus,
-        };
-      });
+      const existingUserIds = members.map(m => m.user_id);
+      const rows = selectedWorkerIds
+        .filter(wid => !existingUserIds.includes(wid))
+        .map(wid => {
+          const worker = subcontractorWorkers.find(w => w.id === wid);
+          return {
+            project_id: project.id,
+            user_id: wid,
+            role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
+            member_type: 'subcontractor' as ProjectMemberType,
+            payment_type: memberPaymentType,
+            hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+            position: worker?.position || null,
+            member_status: 'assigned' as ProjectMemberStatus,
+          };
+        });
+      if (rows.length === 0) { setShowAddMemberModal(false); return; }
       const { error } = await supabase.from('project_members').insert(rows);
       if (!error) { setShowAddMemberModal(false); loadProjectData(); }
     }
@@ -2126,7 +2133,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     sigs(y);
     footer(3);
 
-    doc.save(`protokol_${p.protocol_number.replace(/\//g, '-')}.pdf`);
+    doc.save(`protokol_${(p.protocol_number || '').replace(/\//g, '-')}.pdf`);
   };
 
   // =========== REMAINING TABS (unchanged) ===========
@@ -3529,10 +3536,18 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
                     {/* Workers list - multi-select */}
                     <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
-                      {subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).length === 0 ? (
+                      {subcontractorWorkers.filter(w => {
+                        if (members.some(m => m.user_id === w.id)) return false;
+                        if (memberSearch && !`${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())) return false;
+                        return true;
+                      }).length === 0 ? (
                         <p className="text-sm text-gray-400 p-3 text-center">Brak pracowników podwykonawcy</p>
                       ) : (
-                        subcontractorWorkers.filter(w => !memberSearch || `${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())).map(w => (
+                        subcontractorWorkers.filter(w => {
+                          if (members.some(m => m.user_id === w.id)) return false;
+                          if (memberSearch && !`${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())) return false;
+                          return true;
+                        }).map(w => (
                           <label key={w.id}
                             className={`flex items-center gap-3 px-3 py-2 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 cursor-pointer ${selectedWorkerIds.includes(w.id) ? 'bg-blue-50' : ''}`}>
                             <input type="checkbox" checked={selectedWorkerIds.includes(w.id)} onChange={() => toggleWorkerSelection(w.id)}
