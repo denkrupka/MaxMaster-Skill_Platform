@@ -66,6 +66,8 @@ serve(async (req) => {
 - vat_rate: stawka VAT jako liczba procentowa (np. 23 dla 23%)
 - value_brutto: wartość brutto dokumentu jako liczba
 - category: kategoria kosztów (np. "Materiały", "Usługi", "Transport", "Narzędzia", "Wynajem", "Inne")
+- payment_method: metoda płatności na dokumencie. Szukaj słów kluczowych: "przelew"/"przelew bankowy"/"transfer" → "Przelew", "gotówka"/"cash" → "Gotówka", "karta"/"karta płatnicza" → "Karta". Pusty string jeśli nie znaleziono.
+- payment_status: czy dokument jest opłacony. Szukaj informacji "opłacone"/"zapłacono"/"paid" → "Opłacone", w przeciwnym razie "Nieopłacone".
 
 Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wartości liczbowych.`,
                 },
@@ -92,8 +94,10 @@ Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wart
                 vat_rate: { type: 'NUMBER' },
                 value_brutto: { type: 'NUMBER' },
                 category: { type: 'STRING' },
+                payment_method: { type: 'STRING' },
+                payment_status: { type: 'STRING' },
               },
-              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_street', 'issuer_building_number', 'issuer_apartment_number', 'issuer_city', 'issuer_postal_code', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
+              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_street', 'issuer_building_number', 'issuer_apartment_number', 'issuer_city', 'issuer_postal_code', 'value_netto', 'vat_rate', 'value_brutto', 'category', 'payment_method', 'payment_status'],
             },
           },
         }),
