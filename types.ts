@@ -1206,7 +1206,9 @@ export interface ProjectCost {
   value_netto: number;
   category?: string;
   payment_status?: string;
+  payment_method?: string;
   comment?: string;
+  file_url?: string;
   created_at: string;
   updated_at: string;
 }

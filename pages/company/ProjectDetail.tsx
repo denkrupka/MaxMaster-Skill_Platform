@@ -14,6 +14,7 @@ import autoTable from 'jspdf-autotable';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { DocumentViewerModal } from '../../components/DocumentViewerModal';
+import { registerPolishFonts } from '../../lib/pdfFonts';
 import {
   Project, ProjectTask, ProjectMember, ProjectCustomer, TaskTimeLog,
   TaskAttachment, TaskStatus_Project, TaskPriority, ProjectStatus, User,
@@ -716,9 +717,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             };
           });
       }
-      // Insert individually to skip any remaining conflicts
+      // Insert individually, silently skip 409 conflicts
       for (const row of rows) {
-        await supabase.from('project_members').insert(row);
+        try {
+          const { error } = await supabase.from('project_members').insert(row);
+          if (error && error.code !== '23505' && !error.message?.includes('duplicate')) {
+            console.error('Error inserting member:', error);
+          }
+        } catch (_) { /* skip conflict */ }
       }
       setShowAddMemberModal(false);
       loadProjectData();
@@ -1906,19 +1912,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   };
 
   const generateProtocolPDF = (p: ProjectProtocol, options?: { returnBlobUrl?: boolean }): string | void => {
-    // Polish diacritics transliteration for jsPDF (helvetica doesn't support UTF-8)
-    const pl = (s: string) => (s || '')
-      .replace(/ą/g, 'a').replace(/Ą/g, 'A')
-      .replace(/ć/g, 'c').replace(/Ć/g, 'C')
-      .replace(/ę/g, 'e').replace(/Ę/g, 'E')
-      .replace(/ł/g, 'l').replace(/Ł/g, 'L')
-      .replace(/ń/g, 'n').replace(/Ń/g, 'N')
-      .replace(/ó/g, 'o').replace(/Ó/g, 'O')
-      .replace(/ś/g, 's').replace(/Ś/g, 'S')
-      .replace(/ź/g, 'z').replace(/Ź/g, 'Z')
-      .replace(/ż/g, 'z').replace(/Ż/g, 'Z');
+    // Helper to safely handle null/undefined strings
+    const s = (v: string | null | undefined) => v || '';
 
     const doc = new jsPDF();
+    registerPolishFonts(doc);
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
     const ml = 14;
@@ -1940,58 +1938,59 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString('pl-PL') : '';
     const periodTo = p.period_to ? fmtDate(p.period_to) : fmtDate(p.created_at);
 
+    const F = 'LiberationSans';
     const footer = (n: number) => {
       doc.setFontSize(8);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont(F, 'normal');
       doc.text(`Strona ${n} z ${totalPages}`, pw / 2, ph - 10, { align: 'center' });
     };
     const sigs = (yy: number) => {
       doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont(F, 'normal');
       doc.line(ml, yy, ml + 55, yy);
-      doc.text('Zamawiajacy:', ml, yy + 5);
+      doc.text('Zamawiający:', ml, yy + 5);
       doc.line(mr - 55, yy, mr, yy);
       doc.text('Wykonawca:', mr - 55, yy + 5);
     };
 
     // ========= PAGE 1 =========
     doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.text(pl(`PROTOKOL ODBIORU ROBOT NR ${p.protocol_number}`), pw / 2, 20, { align: 'center' });
+    doc.setFont(F, 'bold');
+    doc.text(`PROTOKÓŁ ODBIORU ROBÓT NR ${s(p.protocol_number)}`, pw / 2, 20, { align: 'center' });
 
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Czesc Nr.1', mr, 28, { align: 'right' });
+    doc.setFont(F, 'normal');
+    doc.text('Część Nr.1', mr, 28, { align: 'right' });
 
     let y = 36;
     doc.setFontSize(9);
-    doc.text(pl(`W dniu ${periodTo} r. Komisja Odbiorowa zlozona z przedstawicieli Zamawiajacego i Wykonawcy`), ml, y);
+    doc.text(`W dniu ${periodTo} r. Komisja Odbiorowa złożona z przedstawicieli Zamawiającego i Wykonawcy`, ml, y);
     y += 5;
-    doc.text(pl('przeprowadzila inspekcje w celu odbioru robot.'), ml, y);
+    doc.text('przeprowadziła inspekcję w celu odbioru robót.', ml, y);
 
     y += 10;
-    doc.setFont('helvetica', 'bold');
-    doc.text('Zamawiajacy:', ml, y);
+    doc.setFont(F, 'bold');
+    doc.text('Zamawiający:', ml, y);
     doc.text('Wykonawca:', colRight, y);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(F, 'normal');
     y += 5;
 
-    const leftColWidth = colRight - ml - 4; // left column max width with gap
-    const rightColWidth = mr - colRight; // right column max width
+    const leftColWidth = colRight - ml - 4;
+    const rightColWidth = mr - colRight;
     const wrapLeft = (text: string) => doc.splitTextToSize(text, leftColWidth) as string[];
     const wrapRight = (text: string) => doc.splitTextToSize(text, rightColWidth) as string[];
 
     const clientRaw = [
-      pl(client?.name || getCustomerName(project.contractor_client_id || project.customer_id)),
-      pl([client?.address_postal_code, client?.address_city].filter(Boolean).join(' ')),
-      pl(client?.address_street || ''),
+      s(client?.name || getCustomerName(project.contractor_client_id || project.customer_id)),
+      [client?.address_postal_code, client?.address_city].filter(Boolean).join(' '),
+      s(client?.address_street),
       client?.nip ? `NIP: ${client.nip}` : '',
     ].filter(Boolean);
 
     const companyRaw = [
-      pl(company?.legal_name || company?.name || ''),
-      pl([company?.address_postal_code, company?.address_city].filter(Boolean).join(' ')),
-      pl(company?.address_street || ''),
+      s(company?.legal_name || company?.name),
+      [company?.address_postal_code, company?.address_city].filter(Boolean).join(' '),
+      s(company?.address_street),
       company?.tax_id ? `NIP: ${company.tax_id}` : '',
     ].filter(Boolean);
 
@@ -2006,20 +2005,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     }
 
     y += 6;
-    doc.text(pl(`Nazwa obiektu: "${project.name}"`), ml, y); y += 5;
+    doc.text(`Nazwa obiektu: "${project.name}"`, ml, y); y += 5;
     if (dept) {
-      const addr = pl([dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', '));
+      const addr = [dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ');
       if (addr) { doc.text(`Adres obiektu: ${addr}`, ml, y); y += 5; }
       if (dept.kod_obiektu) { doc.text(`Kod Obiektu: ${dept.kod_obiektu}`, ml, y); y += 5; }
     }
-    doc.text(pl(`Wynagrodzenia Umowne (netto zl): ${budgetAmount.toLocaleString('pl-PL')} zl`), ml, y);
+    doc.text(`Wynagrodzenia Umowne (netto zł): ${budgetAmount.toLocaleString('pl-PL')} zł`, ml, y);
     y += 8;
 
+    const tblFont = F;
     autoTable(doc, {
       startY: y,
-      head: [['lp.', pl('Numer faktury biezacej'), pl('Wartosc odebranych robot\ndo zafakturowania w okresie\nrozliczeniowym zl. netto'), pl('Zaawansowanie procentowe\nodebranych robot w okresie\nrozliczeniowym\n(% od Wynagrodzenia)'), pl('Zaawansowanie procentowe\nrazem z poprzednimi\nprotokolami\n(% od Wynagrodzenia)')]],
+      head: [['lp.', 'Numer faktury bieżącej', 'Wartość odebranych robót\ndo zafakturowania w okresie\nrozliczeniowym zł. netto', 'Zaawansowanie procentowe\nodebranych robót w okresie\nrozliczeniowym\n(% od Wynagrodzenia)', 'Zaawansowanie procentowe\nrazem z poprzednimi\nprotokołami\n(% od Wynagrodzenia)']],
       body: [['1', p.invoice_number || '', `${p.total_value.toLocaleString('pl-PL')}`, `${currentPct}%`, `${cumulativePct}%`]],
-      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0] },
+      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], font: tblFont },
       headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
       bodyStyles: { halign: 'center' },
       columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 32 } },
@@ -2030,41 +2030,41 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     y = (doc as any).lastAutoTable?.finalY || y + 30;
     y += 6;
 
-    const robotType = p.protocol_type === 'standard' ? 'Roboty zgodnie z umowa' : 'Prace dodatkowe';
-    doc.text(pl('Okreslenie rodzaju robot:  '), ml, y);
-    doc.setFont('helvetica', 'bold');
-    doc.text(pl(robotType), ml + doc.getTextWidth(pl('Okreslenie rodzaju robot:  ')), y);
-    doc.setFont('helvetica', 'normal');
+    const robotType = p.protocol_type === 'standard' ? 'Roboty zgodnie z umową' : 'Prace dodatkowe';
+    doc.text('Określenie rodzaju robót:  ', ml, y);
+    doc.setFont(F, 'bold');
+    doc.text(robotType, ml + doc.getTextWidth('Określenie rodzaju robót:  '), y);
+    doc.setFont(F, 'normal');
     y += 5;
-    doc.text(pl('Wykaz odebranych robot: Zalacznik Nr.1 do protokolu'), ml, y); y += 5;
-    if (p.period_from) { doc.text(pl(`Data wykonania uslugi: ${fmtDate(p.period_from)}r`), ml, y); y += 5; }
-    doc.text(pl(`Data dokonania odbioru: ${periodTo}r`), ml, y); y += 8;
+    doc.text('Wykaz odebranych robót: Załącznik Nr.1 do protokołu', ml, y); y += 5;
+    if (p.period_from) { doc.text(`Data wykonania usługi: ${fmtDate(p.period_from)}r`, ml, y); y += 5; }
+    doc.text(`Data dokonania odbioru: ${periodTo}r`, ml, y); y += 8;
 
     doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Komisja postanowila**:', ml, y);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(F, 'bold');
+    doc.text('Komisja postanowiła**:', ml, y);
+    doc.setFont(F, 'normal');
     y += 5;
 
     const cbSz = 3.5;
     // Checkbox 1
     doc.rect(ml, y - 2.8, cbSz, cbSz);
-    if (p.accepted) { doc.setFont('helvetica', 'bold'); doc.text('X', ml + 0.7, y); doc.setFont('helvetica', 'normal'); }
-    doc.text(pl('Dokonac odbior robot z wykazu co zatwierdzone zostalo zlozonymi podpisami czlonkow'), ml + 5, y); y += 4;
-    doc.text(pl('komisji ze strony Zamawiajacego i Wykonawcy.'), ml + 5, y); y += 6;
+    if (p.accepted) { doc.setFont(F, 'bold'); doc.text('X', ml + 0.7, y); doc.setFont(F, 'normal'); }
+    doc.text('Dokonać odbiór robót z wykazu co zatwierdzone zostało złożonymi podpisami członków', ml + 5, y); y += 4;
+    doc.text('komisji ze strony Zamawiającego i Wykonawcy.', ml + 5, y); y += 6;
 
     // Checkbox 2
     doc.rect(ml, y - 2.8, cbSz, cbSz);
-    doc.text(pl('Dokonac odbior robot z wykazu, uwzgledniajac opisane usterki w liscie usterek bez'), ml + 5, y); y += 4;
-    doc.text(pl('wymagalnosci poprawy tych usterek przez Wykonawce, co zatwierdzone zostalo zlozonymi'), ml + 5, y); y += 4;
-    doc.text(pl('podpisami czlonkow komisji ze strony Zamawiajacego i Wykonawcy.'), ml + 5, y); y += 6;
+    doc.text('Dokonać odbiór robót z wykazu, uwzględniając opisane usterki w liście usterek bez', ml + 5, y); y += 4;
+    doc.text('wymagalności poprawy tych usterek przez Wykonawcę, co zatwierdzone zostało złożonymi', ml + 5, y); y += 4;
+    doc.text('podpisami członków komisji ze strony Zamawiającego i Wykonawcy.', ml + 5, y); y += 6;
 
     // Checkbox 3
     doc.rect(ml, y - 2.8, cbSz, cbSz);
-    doc.text(pl('Nie dokonywac odbioru robot ze wzgledu na usterki, z wyznaczeniem dodatkowego'), ml + 5, y); y += 4;
-    doc.text(pl('terminu na ponowny odbior (lista usterek oraz nowy termin inspekcji w celu odbioru robot'), ml + 5, y); y += 4;
-    doc.text(pl('zostaly wskazane w czesci Nr. 2 danego protokolu), co zatwierdzone zostalo zlozonymi'), ml + 5, y); y += 4;
-    doc.text(pl('podpisami czlonkow komisji ze strony Zamawiajacego i Wykonawcy.'), ml + 5, y);
+    doc.text('Nie dokonywać odbioru robót ze względu na usterki, z wyznaczeniem dodatkowego', ml + 5, y); y += 4;
+    doc.text('terminu na ponowny odbiór (lista usterek oraz nowy termin inspekcji w celu odbioru robót', ml + 5, y); y += 4;
+    doc.text('zostały wskazane w części Nr. 2 danego protokołu), co zatwierdzone zostało złożonymi', ml + 5, y); y += 4;
+    doc.text('podpisami członków komisji ze strony Zamawiającego i Wykonawcy.', ml + 5, y);
 
     y += 12;
     sigs(y);
@@ -2073,27 +2073,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     // ========= PAGE 2 =========
     doc.addPage();
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Czesc Nr.2***', mr, 18, { align: 'right' });
+    doc.setFont(F, 'normal');
+    doc.text('Część Nr.2***', mr, 18, { align: 'right' });
 
     y = 28;
-    doc.text(pl('Ze wzgledu na znaczne usterki ktore zostaly wykryte podczas przeprowadzenia inspekcji w celu'), ml, y); y += 5;
-    doc.text(pl('odbioru robot, komisja odbiorowa wyznacza nowy termin przeprowadzenia inspekcji w celu'), ml, y); y += 5;
-    doc.text(pl('odbioru robot - _______________'), ml, y); y += 10;
-    doc.text(pl('Wykonawca oswiadcza, ze dokona naprawy / wymiany / remontu usterek wskazanych w liscie'), ml, y); y += 5;
-    doc.text(pl('usterek do ww. terminu.'), ml, y); y += 12;
+    doc.text('Ze względu na znaczne usterki które zostały wykryte podczas przeprowadzenia inspekcji w celu', ml, y); y += 5;
+    doc.text('odbioru robót, komisja odbiorowa wyznacza nowy termin przeprowadzenia inspekcji w celu', ml, y); y += 5;
+    doc.text('odbioru robót - _______________', ml, y); y += 10;
+    doc.text('Wykonawca oświadcza, że dokona naprawy / wymiany / remontu usterek wskazanych w liście', ml, y); y += 5;
+    doc.text('usterek do ww. terminu.', ml, y); y += 12;
 
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(F, 'bold');
     doc.text('Lista usterek', pw / 2, y, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(F, 'normal');
     y += 6;
 
     autoTable(doc, {
       startY: y,
-      head: [['Budynek', 'Klatka', pl('Pietro'), 'Pomieszczenie', 'Przedmiot', 'Opis Usterki']],
+      head: [['Budynek', 'Klatka', 'Piętro', 'Pomieszczenie', 'Przedmiot', 'Opis Usterki']],
       body: Array.from({ length: 10 }, () => ['', '', '', '', '', '']),
-      styles: { fontSize: 7, cellPadding: 4, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 8 },
+      styles: { fontSize: 7, cellPadding: 4, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 8, font: tblFont },
       headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
       theme: 'grid',
       margin: { left: ml, right: 14 },
@@ -2105,21 +2105,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     sigs(y);
 
     doc.setFontSize(6);
-    doc.text(pl('*Nie potrzebne skreslic'), ml, ph - 28);
-    doc.text(pl('**Nalezy wyznaczyc jeden wariant - wpisujac X'), ml, ph - 24);
-    doc.text(pl('***Wypelnia sie tylko w przypadku jesli komisja postanowila nie dokonywac odbioru robot, lub dokonac odbioru - uwzgledniajac'), ml, ph - 20);
-    doc.text(pl('opisane usterki w liscie usterek bez wymagalnosci poprawy tych usterek przez Wykonawce'), ml, ph - 16);
+    doc.text('*Nie potrzebne skreślić', ml, ph - 28);
+    doc.text('**Należy wyznaczyć jeden wariant - wpisując X', ml, ph - 24);
+    doc.text('***Wypełnia się tylko w przypadku jeśli komisja postanowiła nie dokonywać odbioru robót, lub dokonać odbioru - uwzględniając', ml, ph - 20);
+    doc.text('opisane usterki w liście usterek bez wymagalności poprawy tych usterek przez Wykonawcę', ml, ph - 16);
 
     doc.setFontSize(8);
-    doc.text(pl(`Zalacznik Nr.1 do protokolu Nr ${p.protocol_number}`), pw / 2, ph - 12, { align: 'center' });
+    doc.text(`Załącznik Nr.1 do protokołu Nr ${s(p.protocol_number)}`, pw / 2, ph - 12, { align: 'center' });
     footer(2);
 
     // ========= PAGE 3 =========
     doc.addPage();
     doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.text(pl('Wykaz odebranych robot'), pw / 2, 20, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(F, 'bold');
+    doc.text('Wykaz odebranych robót', pw / 2, 20, { align: 'center' });
+    doc.setFont(F, 'normal');
 
     const prevTasksMap = new Map<string, number>();
     previousProtocols.forEach(pp => {
@@ -2130,15 +2130,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
     const taskRows = tasksArr.map((t, i) => {
       const prevPct = prevTasksMap.get(t.task_id) || 0;
-      return [String(i + 1), pl(t.name), t.value.toLocaleString('pl-PL'), `${t.completion_percent}%`, `${Math.min(prevPct + t.completion_percent, 100)}%`, ''];
+      return [String(i + 1), s(t.name), t.value.toLocaleString('pl-PL'), `${t.completion_percent}%`, `${Math.min(prevPct + t.completion_percent, 100)}%`, ''];
     });
     while (taskRows.length < 8) taskRows.push(['', '', '', '', '', '']);
 
     autoTable(doc, {
       startY: 28,
-      head: [['Nr', 'Nazwa', pl('Wartosc'), pl('Zaawansowanie\nprocentowe\nw okresie\nrozliczeniowym\n(% od\nWynagrodzenia)'), pl('Zaawansowanie\nprocentowe\nrazem z\npoprzednimi\nprotokolami\n(% od\nWynagrodzenia)'), 'Uwagi']],
+      head: [['Nr', 'Nazwa', 'Wartość', 'Zaawansowanie\nprocentowe\nw okresie\nrozliczeniowym\n(% od\nWynagrodzenia)', 'Zaawansowanie\nprocentowe\nrazem z\npoprzednimi\nprotokołami\n(% od\nWynagrodzenia)', 'Uwagi']],
       body: taskRows,
-      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 10 },
+      styles: { fontSize: 7, cellPadding: 2, lineWidth: 0.3, lineColor: [0, 0, 0], textColor: [0, 0, 0], minCellHeight: 10, font: tblFont },
       headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center', valign: 'middle' },
       bodyStyles: { valign: 'middle' },
       columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 50 }, 2: { cellWidth: 25, halign: 'right' }, 3: { cellWidth: 30, halign: 'center' }, 4: { cellWidth: 30, halign: 'center' }, 5: { cellWidth: 35 } },
@@ -2149,9 +2149,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     y = (doc as any).lastAutoTable?.finalY || 120;
     y += 12;
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.text(pl(`Wartosc sumaryczna odebranych robot: ${p.total_value.toLocaleString('pl-PL')} zl netto`), ml, y);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(F, 'bold');
+    doc.text(`Wartość sumaryczna odebranych robót: ${p.total_value.toLocaleString('pl-PL')} zł netto`, ml, y);
+    doc.setFont(F, 'normal');
     y += 15;
     sigs(y);
     footer(3);
@@ -2425,10 +2425,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     value_brutto: '',
     category: '',
     payment_status: 'Nieopłacone',
+    payment_method: '',
     comment: '',
   });
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [savingCost, setSavingCost] = useState(false);
+  const [costFileToUpload, setCostFileToUpload] = useState<File | null>(null);
+  const [costFileUrl, setCostFileUrl] = useState<string | null>(null);
+  const manualCostFileRef = useRef<HTMLInputElement>(null);
+  const [costDeleteConfirmId, setCostDeleteConfirmId] = useState<string | null>(null);
+  const [costViewerUrl, setCostViewerUrl] = useState<string | null>(null);
+  const PAYMENT_METHODS = ['Przelew', 'Gotówka', 'Karta'];
 
   // Payment status options with ability to add custom ones
   const DEFAULT_PAYMENT_STATUSES = ['Nieopłacone', 'Opłacone', 'Częściowo opłacone', 'Przeterminowane'];
@@ -2458,9 +2465,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       value_brutto: '',
       category: '',
       payment_status: 'Nieopłacone',
+      payment_method: '',
       comment: '',
     });
     setEditingCostId(null);
+    setCostFileToUpload(null);
+    setCostFileUrl(null);
   };
 
   const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2513,6 +2523,24 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         return 'Inne';
       };
 
+      // Match OCR payment_method
+      const matchPaymentMethod = (ocrMethod: string): string => {
+        if (!ocrMethod) return '';
+        const lower = ocrMethod.toLowerCase();
+        if (lower.includes('przelew') || lower.includes('transfer')) return 'Przelew';
+        if (lower.includes('gotówk') || lower.includes('cash') || lower.includes('gotowk')) return 'Gotówka';
+        if (lower.includes('kart') || lower.includes('card')) return 'Karta';
+        return '';
+      };
+
+      // Match OCR payment_status
+      const matchPaymentStatus = (ocrStatus: string): string => {
+        if (!ocrStatus) return 'Nieopłacone';
+        const lower = ocrStatus.toLowerCase();
+        if (lower.includes('opłac') || lower.includes('oplac') || lower.includes('paid') || lower.includes('zapłac') || lower.includes('zaplac')) return 'Opłacone';
+        return 'Nieopłacone';
+      };
+
       setCostFormData({
         document_type: matchDocType(result.document_type || ''),
         document_number: result.document_number || '',
@@ -2529,9 +2557,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         vat_rate: String(vat),
         value_brutto: brutto ? String(brutto) : '',
         category: result.category || '',
-        payment_status: 'Nieopłacone',
+        payment_status: matchPaymentStatus(result.payment_status || ''),
+        payment_method: matchPaymentMethod(result.payment_method || ''),
         comment: '',
       });
+
+      // Upload the scanned file to storage
+      setCostFileToUpload(file);
+      const ext = file.name.split('.').pop() || 'pdf';
+      const filePath = `cost-documents/${project.id}/${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage.from('project-files').upload(filePath, file);
+      if (!uploadErr) {
+        const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(filePath);
+        setCostFileUrl(urlData.publicUrl);
+      }
+
       setShowCostFormModal(true);
     } catch (err) {
       console.error('Document scan error:', err);
@@ -2547,6 +2587,18 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!currentUser || !costFormData.document_number || !costFormData.value_netto) return;
     setSavingCost(true);
     try {
+      // Upload manual file if present and no URL yet
+      let fileUrl = costFileUrl;
+      if (costFileToUpload && !fileUrl) {
+        const ext = costFileToUpload.name.split('.').pop() || 'pdf';
+        const filePath = `cost-documents/${project.id}/${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from('project-files').upload(filePath, costFileToUpload);
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(filePath);
+          fileUrl = urlData.publicUrl;
+        }
+      }
+
       const payload = {
         project_id: project.id,
         company_id: currentUser.company_id,
@@ -2567,7 +2619,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         value_brutto: parseFloat(costFormData.value_brutto) || null,
         category: costFormData.category || null,
         payment_status: costFormData.payment_status || 'Nieopłacone',
+        payment_method: costFormData.payment_method || null,
         comment: costFormData.comment || null,
+        file_url: fileUrl || null,
       };
 
       if (editingCostId) {
@@ -2617,9 +2671,12 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       value_brutto: String(cost.value_brutto || 0),
       category: cost.category || '',
       payment_status: cost.payment_status || 'Nieopłacone',
+      payment_method: cost.payment_method || '',
       comment: cost.comment || '',
     });
     setEditingCostId(cost.id);
+    setCostFileUrl(cost.file_url || null);
+    setCostFileToUpload(null);
     setShowCostFormModal(true);
   };
 
@@ -3037,6 +3094,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               )}
             </div>
 
+            {/* Payment method */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Metoda płatności</label>
+              <select
+                value={costFormData.payment_method}
+                onChange={e => setCostFormData(prev => ({ ...prev, payment_method: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Wybierz metodę...</option>
+                {PAYMENT_METHODS.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Comment */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Komentarz / Uwagi</label>
@@ -3048,9 +3120,67 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 placeholder="Dodaj komentarz do kosztu..."
               />
             </div>
+
+            {/* File upload */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Dokument (plik)</label>
+              {costFileUrl ? (
+                <div className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                  <File className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 truncate flex-1">Plik załączony</span>
+                  <button
+                    type="button"
+                    onClick={() => { setCostFileUrl(null); setCostFileToUpload(null); }}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : costFileToUpload ? (
+                <div className="flex items-center gap-2 p-2 border border-gray-200 rounded-lg bg-gray-50">
+                  <File className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 truncate flex-1">{costFileToUpload.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCostFileToUpload(null)}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => manualCostFileRef.current?.click()}
+                  className="w-full border border-dashed border-gray-300 rounded-lg px-3 py-3 text-sm text-gray-500 hover:bg-gray-50 hover:border-gray-400 flex items-center justify-center gap-2"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  Wybierz plik dokumentu
+                </button>
+              )}
+              <input
+                ref={manualCostFileRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) setCostFileToUpload(f);
+                  if (manualCostFileRef.current) manualCostFileRef.current.value = '';
+                }}
+              />
+            </div>
           </div>
 
           <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-5 py-3 border-t border-gray-200">
+            {editingCostId && (
+              <button
+                onClick={() => setCostDeleteConfirmId(editingCostId)}
+                className="px-4 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 mr-auto"
+              >
+                Usuń koszt
+              </button>
+            )}
             <button
               onClick={() => { setShowCostFormModal(false); resetCostForm(); }}
               className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
@@ -3163,15 +3293,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDirectCosts.map(c => (
-                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  {filteredDirectCosts.map(c => {
+                    const vatAmount = (c.value_brutto && c.value_netto) ? (c.value_brutto - c.value_netto) : null;
+                    return (
+                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleEditCost(c)}>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.document_number || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.payment_due_date ? new Date(c.payment_due_date).toLocaleDateString('pl-PL') : '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.issuer || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.issuer_nip || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 text-right">{c.vat_rate != null ? `${c.vat_rate}%` : '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 text-right">{vatAmount != null ? `${vatAmount.toLocaleString('pl-PL')} PLN` : '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-900 text-right">{c.value_brutto ? `${c.value_brutto.toLocaleString('pl-PL')} PLN` : '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.category || '-'}</td>
                       <td className="px-4 py-3">
@@ -3184,26 +3316,30 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                           {c.payment_status || 'Nieopłacone'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => handleEditCost(c)}
-                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
-                            title="Edytuj"
+                            onClick={() => c.file_url ? setCostViewerUrl(c.file_url) : undefined}
+                            className={`p-1.5 rounded hover:bg-gray-100 ${c.file_url ? 'text-gray-400 hover:text-blue-600' : 'text-gray-200 cursor-not-allowed'}`}
+                            title="Podgląd pliku"
+                            disabled={!c.file_url}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteCost(c.id)}
-                            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
-                            title="Usuń"
+                          <a
+                            href={c.file_url || '#'}
+                            download
+                            onClick={e => { if (!c.file_url) e.preventDefault(); }}
+                            className={`p-1.5 rounded hover:bg-gray-100 ${c.file_url ? 'text-gray-400 hover:text-green-600' : 'text-gray-200 pointer-events-none'}`}
+                            title="Pobierz plik"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -4244,6 +4380,52 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   Pobierz PDF
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Cost File Viewer Modal ===== */}
+      <DocumentViewerModal
+        isOpen={!!costViewerUrl}
+        onClose={() => setCostViewerUrl(null)}
+        urls={costViewerUrl ? [costViewerUrl] : []}
+        title="Podgląd dokumentu kosztowego"
+      />
+
+      {/* ===== Cost Delete Confirmation Modal ===== */}
+      {costDeleteConfirmId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setCostDeleteConfirmId(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <Trash2 className="w-10 h-10 text-red-400 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Usunąć koszt?</h3>
+            <p className="text-sm text-gray-500 mb-5">Tej operacji nie można cofnąć.</p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => setCostDeleteConfirmId(null)}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={async () => {
+                  const id = costDeleteConfirmId;
+                  setCostDeleteConfirmId(null);
+                  setShowCostFormModal(false);
+                  resetCostForm();
+                  try {
+                    const { error } = await supabase.from('project_costs').delete().eq('id', id);
+                    if (error) throw error;
+                    await loadProjectData();
+                  } catch (err) {
+                    console.error('Error deleting cost:', err);
+                  }
+                }}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Usuń
+              </button>
             </div>
           </div>
         </div>
