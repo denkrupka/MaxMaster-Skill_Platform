@@ -321,7 +321,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     }
     setAttendanceLoading(true);
     try {
-      const memberUserIds = members.filter(m => m.member_status === 'assigned').map(m => m.user_id);
+      const memberUserIds = members.filter(m => m.member_status === 'assigned' && m.user_id).map(m => m.user_id!);
       if (memberUserIds.length === 0) {
         setAttendanceRows([]);
         setAttendanceLoading(false);
@@ -681,9 +681,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       // Fetch current members to avoid duplicates
       const { data: existingMembers } = await supabase
         .from('project_members')
-        .select('user_id')
+        .select('user_id, worker_id')
         .eq('project_id', project.id);
-      const existingUserIds = new Set((existingMembers || []).map(m => m.user_id));
+      const existingUserIds = new Set((existingMembers || []).map(m => m.user_id).filter(Boolean));
+      const existingWorkerIds = new Set((existingMembers || []).map(m => m.worker_id).filter(Boolean));
 
       let rows: any[] = [];
       if (addMemberType === 'employee') {
@@ -702,12 +703,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       } else {
         if (selectedWorkerIds.length === 0) { setShowAddMemberModal(false); return; }
         rows = selectedWorkerIds
-          .filter(wid => !existingUserIds.has(wid))
+          .filter(wid => !existingWorkerIds.has(wid))
           .map(wid => {
             const worker = subcontractorWorkers.find(w => w.id === wid);
             return {
               project_id: project.id,
-              user_id: wid,
+              user_id: null,
+              worker_id: wid,
               role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
               member_type: addMemberType as ProjectMemberType,
               payment_type: memberPaymentType,
@@ -721,7 +723,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       for (const row of rows) {
         try {
           const { error } = await supabase.from('project_members').insert(row);
-          if (error && error.code !== '23505' && !error.message?.includes('duplicate')) {
+          if (error && error.code !== '23505' && error.code !== '23503' && !error.message?.includes('duplicate')) {
             console.error('Error inserting member:', error);
           }
         } catch (_) { /* skip conflict */ }
@@ -768,7 +770,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   }, [allSkills]);
 
   const filteredUsersForMember = useMemo(() => {
-    const existingUserIds = members.map(m => m.user_id);
+    const existingUserIds = members.map(m => m.user_id).filter(Boolean);
     return companyUsers.filter(u => {
       if (existingUserIds.includes(u.id)) return false;
       if (memberSearch) {
@@ -1552,25 +1554,30 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         </button>
         {membersDropdownOpen && (
           <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {members.map(m => (
+            {members.map(m => {
+              const mid = m.user_id || m.worker_id || m.id;
+              const mWorker = m.worker_id ? subcontractorWorkers.find(w => w.id === m.worker_id) : null;
+              const mName = m.user_id ? getUserName(m.user_id) : mWorker ? `${mWorker.first_name} ${mWorker.last_name}` : '-';
+              return (
               <label
-                key={m.user_id}
+                key={mid}
                 className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
               >
                 <input
                   type="checkbox"
-                  checked={form.assigned_users.includes(m.user_id)}
+                  checked={form.assigned_users.includes(mid)}
                   onChange={e => {
                     const newUsers = e.target.checked
-                      ? [...form.assigned_users, m.user_id]
-                      : form.assigned_users.filter(id => id !== m.user_id);
+                      ? [...form.assigned_users, mid]
+                      : form.assigned_users.filter(id => id !== mid);
                     setForm({ ...form, assigned_users: newUsers });
                   }}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
                 />
-                {getUserName(m.user_id)}
+                {mName}
               </label>
-            ))}
+              );
+            })}
             {members.length === 0 && (
               <p className="px-2.5 py-1.5 text-sm text-gray-400">Brak pracowników w projekcie</p>
             )}
@@ -2435,7 +2442,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const manualCostFileRef = useRef<HTMLInputElement>(null);
   const [costDeleteConfirmId, setCostDeleteConfirmId] = useState<string | null>(null);
   const [costViewerUrl, setCostViewerUrl] = useState<string | null>(null);
+  const [selectedCostIds, setSelectedCostIds] = useState<Set<string>>(new Set());
   const PAYMENT_METHODS = ['Przelew', 'Gotówka', 'Karta'];
+
+  // Multi-file OCR state
+  const [ocrResults, setOcrResults] = useState<Array<{ formData: typeof costFormData; fileUrl: string | null; file: File | null }>>([]);
+  const [ocrCurrentIndex, setOcrCurrentIndex] = useState(0);
+  const [ocrTotalFiles, setOcrTotalFiles] = useState(0);
 
   // Payment status options with ability to add custom ones
   const DEFAULT_PAYMENT_STATUSES = ['Nieopłacone', 'Opłacone', 'Częściowo opłacone', 'Przeterminowane'];
@@ -2471,77 +2484,75 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     setEditingCostId(null);
     setCostFileToUpload(null);
     setCostFileUrl(null);
+    setOcrResults([]);
+    setOcrCurrentIndex(0);
+    setOcrTotalFiles(0);
   };
 
-  const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Match OCR document_type to dropdown options
+  const matchDocType = (ocrType: string): string => {
+    if (!ocrType) return '';
+    const lower = ocrType.toLowerCase();
+    const exact = DOCUMENT_TYPES.find(dt => dt.toLowerCase() === lower);
+    if (exact) return exact;
+    if (lower.includes('faktura')) return 'Faktura VAT';
+    if (lower.includes('rachunek')) return 'Rachunek';
+    if (lower.includes('paragon')) return 'Paragon';
+    if (lower.includes('nota')) return 'Nota księgowa';
+    if (lower.includes('umowa')) return 'Umowa';
+    return 'Inne';
+  };
 
-    setIsScanningDocument(true);
-    setShowCostMethodModal(false);
+  // Match OCR payment_method
+  const matchPaymentMethod = (ocrMethod: string): string => {
+    if (!ocrMethod) return '';
+    const lower = ocrMethod.toLowerCase();
+    if (lower.includes('przelew') || lower.includes('transfer')) return 'Przelew';
+    if (lower.includes('gotówk') || lower.includes('cash') || lower.includes('gotowk')) return 'Gotówka';
+    if (lower.includes('kart') || lower.includes('card')) return 'Karta';
+    return '';
+  };
 
-    try {
-      const base64Promise = new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
-        reader.readAsDataURL(file);
-      });
-      const base64Data = await base64Promise;
+  // Match OCR payment_status
+  const matchPaymentStatus = (ocrStatus: string): string => {
+    if (!ocrStatus) return 'Nieopłacone';
+    const lower = ocrStatus.toLowerCase();
+    if (lower.includes('opłac') || lower.includes('oplac') || lower.includes('paid') || lower.includes('zapłac') || lower.includes('zaplac')) return 'Opłacone';
+    return 'Nieopłacone';
+  };
 
-      const { data, error } = await supabase.functions.invoke('parse-cost-document', {
-        body: {
-          fileBase64: base64Data,
-          mimeType: file.type || 'application/pdf',
-        },
-      });
+  const processOcrFile = async (file: File): Promise<{ formData: typeof costFormData; fileUrl: string | null; file: File }> => {
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.readAsDataURL(file);
+    });
 
-      if (error) throw error;
-      if (!data?.success) throw new Error(data?.error || 'Failed to parse document');
+    const { data, error } = await supabase.functions.invoke('parse-cost-document', {
+      body: { fileBase64: base64Data, mimeType: file.type || 'application/pdf' },
+    });
 
-      const result = data.data;
-      const netto = result.value_netto || 0;
-      const vat = result.vat_rate || 23;
-      const brutto = result.value_brutto || Math.round(netto * (1 + vat / 100) * 100) / 100;
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'Failed to parse document');
 
-      // Match OCR document_type to dropdown options
-      const matchDocType = (ocrType: string): string => {
-        if (!ocrType) return '';
-        const lower = ocrType.toLowerCase();
-        // Exact match first
-        const exact = DOCUMENT_TYPES.find(dt => dt.toLowerCase() === lower);
-        if (exact) return exact;
-        // Partial match
-        if (lower.includes('faktura')) return 'Faktura VAT';
-        if (lower.includes('rachunek')) return 'Rachunek';
-        if (lower.includes('paragon')) return 'Paragon';
-        if (lower.includes('nota')) return 'Nota księgowa';
-        if (lower.includes('umowa')) return 'Umowa';
-        return 'Inne';
-      };
+    const result = data.data;
+    const netto = result.value_netto || 0;
+    const vat = result.vat_rate || 23;
+    const brutto = result.value_brutto || Math.round(netto * (1 + vat / 100) * 100) / 100;
 
-      // Match OCR payment_method
-      const matchPaymentMethod = (ocrMethod: string): string => {
-        if (!ocrMethod) return '';
-        const lower = ocrMethod.toLowerCase();
-        if (lower.includes('przelew') || lower.includes('transfer')) return 'Przelew';
-        if (lower.includes('gotówk') || lower.includes('cash') || lower.includes('gotowk')) return 'Gotówka';
-        if (lower.includes('kart') || lower.includes('card')) return 'Karta';
-        return '';
-      };
+    // Upload the scanned file to storage
+    let fileUrl: string | null = null;
+    const ext = file.name.split('.').pop() || 'pdf';
+    const filePath = `cost-documents/${project.id}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('documents').upload(filePath, file);
+    if (!uploadErr) {
+      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath);
+      fileUrl = urlData.publicUrl;
+    }
 
-      // Match OCR payment_status
-      const matchPaymentStatus = (ocrStatus: string): string => {
-        if (!ocrStatus) return 'Nieopłacone';
-        const lower = ocrStatus.toLowerCase();
-        if (lower.includes('opłac') || lower.includes('oplac') || lower.includes('paid') || lower.includes('zapłac') || lower.includes('zaplac')) return 'Opłacone';
-        return 'Nieopłacone';
-      };
-
-      setCostFormData({
+    return {
+      formData: {
         document_type: matchDocType(result.document_type || ''),
         document_number: result.document_number || '',
         issue_date: result.issue_date || '',
@@ -2560,27 +2571,72 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         payment_status: matchPaymentStatus(result.payment_status || ''),
         payment_method: matchPaymentMethod(result.payment_method || ''),
         comment: '',
-      });
+      },
+      fileUrl,
+      file,
+    };
+  };
 
-      // Upload the scanned file to storage
-      setCostFileToUpload(file);
-      const ext = file.name.split('.').pop() || 'pdf';
-      const filePath = `cost-documents/${project.id}/${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from('project-files').upload(filePath, file);
-      if (!uploadErr) {
-        const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(filePath);
-        setCostFileUrl(urlData.publicUrl);
+  const handleScanDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsScanningDocument(true);
+    setShowCostMethodModal(false);
+
+    const fileArray = Array.from(files);
+    setOcrTotalFiles(fileArray.length);
+
+    try {
+      const results: Array<{ formData: typeof costFormData; fileUrl: string | null; file: File | null }> = [];
+
+      for (const file of fileArray) {
+        try {
+          const result = await processOcrFile(file);
+          results.push(result);
+        } catch (err) {
+          console.error('Error scanning file:', file.name, err);
+          // Add empty result for failed file
+          results.push({
+            formData: { document_type: '', document_number: file.name, issue_date: '', payment_due_date: '', issuer: '', issuer_nip: '', issuer_street: '', issuer_building_number: '', issuer_apartment_number: '', issuer_city: '', issuer_postal_code: '', value_netto: '', vat_rate: '23', value_brutto: '', category: '', payment_status: 'Nieopłacone', payment_method: '', comment: '' },
+            fileUrl: null,
+            file,
+          });
+        }
+      }
+
+      if (results.length > 0) {
+        setOcrResults(results);
+        setOcrCurrentIndex(0);
+        // Load first result into form
+        setCostFormData(results[0].formData);
+        setCostFileToUpload(results[0].file);
+        setCostFileUrl(results[0].fileUrl);
       }
 
       setShowCostFormModal(true);
     } catch (err) {
       console.error('Document scan error:', err);
-      setCostFormData(prev => ({ ...prev }));
       setShowCostFormModal(true);
     } finally {
       setIsScanningDocument(false);
       if (costFileInputRef.current) costFileInputRef.current.value = '';
     }
+  };
+
+  const handleOcrNavigate = (direction: 'prev' | 'next') => {
+    if (ocrResults.length <= 1) return;
+    // Save current form edits back to results array
+    const updated = [...ocrResults];
+    updated[ocrCurrentIndex] = { ...updated[ocrCurrentIndex], formData: { ...costFormData }, fileUrl: costFileUrl, file: costFileToUpload };
+    setOcrResults(updated);
+
+    const newIndex = direction === 'prev' ? ocrCurrentIndex - 1 : ocrCurrentIndex + 1;
+    if (newIndex < 0 || newIndex >= ocrResults.length) return;
+    setOcrCurrentIndex(newIndex);
+    setCostFormData(updated[newIndex].formData);
+    setCostFileToUpload(updated[newIndex].file);
+    setCostFileUrl(updated[newIndex].fileUrl);
   };
 
   const handleSaveCost = async () => {
@@ -2592,9 +2648,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       if (costFileToUpload && !fileUrl) {
         const ext = costFileToUpload.name.split('.').pop() || 'pdf';
         const filePath = `cost-documents/${project.id}/${Date.now()}.${ext}`;
-        const { error: uploadErr } = await supabase.storage.from('project-files').upload(filePath, costFileToUpload);
+        const { error: uploadErr } = await supabase.storage.from('documents').upload(filePath, costFileToUpload);
         if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(filePath);
+          const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath);
           fileUrl = urlData.publicUrl;
         }
       }
@@ -2633,8 +2689,22 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       }
 
       await loadProjectData();
-      setShowCostFormModal(false);
-      resetCostForm();
+
+      // If multi-file OCR and there are more results, move to next
+      if (ocrResults.length > 1 && ocrCurrentIndex < ocrResults.length - 1 && !editingCostId) {
+        const nextIndex = ocrCurrentIndex + 1;
+        // Remove the saved result from the array
+        const updated = ocrResults.filter((_, i) => i !== ocrCurrentIndex);
+        setOcrResults(updated);
+        const newIdx = Math.min(nextIndex > ocrCurrentIndex ? nextIndex - 1 : nextIndex, updated.length - 1);
+        setOcrCurrentIndex(newIdx);
+        setCostFormData(updated[newIdx].formData);
+        setCostFileToUpload(updated[newIdx].file);
+        setCostFileUrl(updated[newIdx].fileUrl);
+      } else {
+        setShowCostFormModal(false);
+        resetCostForm();
+      }
     } catch (err) {
       console.error('Error saving cost:', err);
     } finally {
@@ -2724,7 +2794,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     // Get project member IDs and their payment types/rates
     const memberMap = new Map<string, { payment_type: string; hourly_rate: number }>();
     members.forEach(mem => {
-      memberMap.set(mem.user_id, {
+      const key = mem.user_id || mem.worker_id || mem.id;
+      memberMap.set(key, {
         payment_type: mem.payment_type || 'hourly',
         hourly_rate: mem.hourly_rate || 0,
       });
@@ -2779,8 +2850,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
           <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-4">
             <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-            <p className="text-sm font-medium text-gray-700">Skanowanie dokumentu...</p>
-            <p className="text-xs text-gray-400">AI analizuje dane z dokumentu</p>
+            <p className="text-sm font-medium text-gray-700">Skanowanie dokumentów...</p>
+            <p className="text-xs text-gray-400">
+              {ocrTotalFiles > 1 ? `AI analizuje dokumenty (${ocrTotalFiles} plików)` : 'AI analizuje dane z dokumentu'}
+            </p>
           </div>
         </div>
       );
@@ -2833,6 +2906,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             ref={costFileInputRef}
             type="file"
             accept="application/pdf,image/png,image/jpeg,image/webp"
+            multiple
             className="hidden"
             onChange={handleScanDocument}
           />
@@ -2850,9 +2924,32 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => { setShowCostFormModal(false); resetCostForm(); }} />
         <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-3 border-b border-gray-200">
-            <h2 className="text-base font-semibold text-gray-900">
-              {editingCostId ? 'Edytuj koszt' : 'Nowy koszt bezpośredni'}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-base font-semibold text-gray-900">
+                {editingCostId ? 'Edytuj koszt' : 'Nowy koszt bezpośredni'}
+              </h2>
+              {ocrResults.length > 1 && !editingCostId && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleOcrNavigate('prev')}
+                    disabled={ocrCurrentIndex === 0}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600" />
+                  </button>
+                  <span className="text-xs font-medium text-gray-500 min-w-[3rem] text-center">
+                    {ocrCurrentIndex + 1} z {ocrResults.length}
+                  </span>
+                  <button
+                    onClick={() => handleOcrNavigate('next')}
+                    disabled={ocrCurrentIndex === ocrResults.length - 1}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+              )}
+            </div>
             <button onClick={() => { setShowCostFormModal(false); resetCostForm(); }} className="p-1 rounded hover:bg-gray-100">
               <X className="w-4 h-4 text-gray-400" />
             </button>
@@ -3193,7 +3290,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {savingCost && <Loader2 className="w-4 h-4 animate-spin" />}
-              {editingCostId ? 'Zapisz zmiany' : 'Dodaj koszt'}
+              {editingCostId ? 'Zapisz zmiany' : ocrResults.length > 1 ? `Dodaj i następny (${ocrResults.length - 1})` : 'Dodaj koszt'}
             </button>
           </div>
         </div>
@@ -3258,9 +3355,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">
-                Suma: <span className="font-semibold text-gray-900">{filteredDirectCostsTotal.toLocaleString('pl-PL')} PLN</span>
-              </span>
               <button
                 onClick={() => setShowCostMethodModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -3271,6 +3365,51 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </div>
           </div>
 
+          {/* Bulk action bar */}
+          {selectedCostIds.size > 0 && (
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+              <span className="text-sm font-medium text-blue-700">Zaznaczono: {selectedCostIds.size}</span>
+              <button
+                onClick={async () => {
+                  if (!confirm(`Czy na pewno chcesz usunąć ${selectedCostIds.size} pozycji?`)) return;
+                  for (const id of selectedCostIds) {
+                    await supabase.from('project_costs').delete().eq('id', id);
+                  }
+                  setSelectedCostIds(new Set());
+                  await loadProjectData();
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-700 bg-red-100 rounded-lg hover:bg-red-200"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Usuń zaznaczone
+              </button>
+              <button
+                onClick={() => {
+                  const costsWithFiles = filteredDirectCosts.filter(c => selectedCostIds.has(c.id) && c.file_url);
+                  costsWithFiles.forEach(c => {
+                    const a = document.createElement('a');
+                    a.href = c.file_url!;
+                    a.download = '';
+                    a.target = '_blank';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 rounded-lg hover:bg-green-200"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Pobierz pliki
+              </button>
+              <button
+                onClick={() => setSelectedCostIds(new Set())}
+                className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+              >
+                Odznacz wszystkie
+              </button>
+            </div>
+          )}
+
           {/* Direct costs list */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             {filteredDirectCosts.length === 0 ? (
@@ -3279,6 +3418,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-3 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredDirectCosts.length > 0 && filteredDirectCosts.every(c => selectedCostIds.has(c.id))}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSelectedCostIds(new Set(filteredDirectCosts.map(c => c.id)));
+                          } else {
+                            setSelectedCostIds(new Set());
+                          }
+                        }}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                      />
+                    </th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nr dokumentu</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data wystawienia</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Termin płatności</th>
@@ -3296,7 +3449,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   {filteredDirectCosts.map(c => {
                     const vatAmount = (c.value_brutto && c.value_netto) ? (c.value_brutto - c.value_netto) : null;
                     return (
-                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => handleEditCost(c)}>
+                    <tr key={c.id} className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${selectedCostIds.has(c.id) ? 'bg-blue-50' : ''}`} onClick={() => handleEditCost(c)}>
+                      <td className="px-3 py-3 w-10" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedCostIds.has(c.id)}
+                          onChange={() => {
+                            const next = new Set(selectedCostIds);
+                            if (next.has(c.id)) next.delete(c.id);
+                            else next.add(c.id);
+                            setSelectedCostIds(next);
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.document_number || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.issue_date ? new Date(c.issue_date).toLocaleDateString('pl-PL') : '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{c.payment_due_date ? new Date(c.payment_due_date).toLocaleDateString('pl-PL') : '-'}</td>
@@ -3661,11 +3827,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </thead>
             <tbody>
               {members.map(m => {
-                const user = users.find(u => u.id === m.user_id);
+                const user = m.user_id ? users.find(u => u.id === m.user_id) : null;
+                const worker = m.worker_id ? subcontractorWorkers.find(w => w.id === m.worker_id) : null;
+                const memberName = user ? `${user.first_name} ${user.last_name}` : worker ? `${worker.first_name} ${worker.last_name}` : getUserName(m.user_id || '');
+                const memberPosition = user?.target_position || worker?.position || m.position || '-';
                 return (
                 <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{getUserName(m.user_id)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{user?.target_position || m.position || '-'}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{memberName}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{memberPosition}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${m.member_type === 'employee' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
                       {m.member_type === 'employee' ? 'Pracownik' : 'Podwykonawca'}
@@ -3799,14 +3968,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     {/* Workers list - multi-select */}
                     <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
                       {subcontractorWorkers.filter(w => {
-                        if (members.some(m => m.user_id === w.id)) return false;
+                        if (members.some(m => m.worker_id === w.id || m.user_id === w.id)) return false;
                         if (memberSearch && !`${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())) return false;
                         return true;
                       }).length === 0 ? (
                         <p className="text-sm text-gray-400 p-3 text-center">Brak pracowników podwykonawcy</p>
                       ) : (
                         subcontractorWorkers.filter(w => {
-                          if (members.some(m => m.user_id === w.id)) return false;
+                          if (members.some(m => m.worker_id === w.id || m.user_id === w.id)) return false;
                           if (memberSearch && !`${w.first_name} ${w.last_name}`.toLowerCase().includes(memberSearch.toLowerCase())) return false;
                           return true;
                         }).map(w => (
