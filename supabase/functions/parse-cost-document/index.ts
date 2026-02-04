@@ -57,7 +57,11 @@ serve(async (req) => {
 - payment_due_date: termin płatności w formacie YYYY-MM-DD
 - issuer: nazwa wystawcy dokumentu (firma/osoba)
 - issuer_nip: NIP wystawcy (sam numer, bez kresek)
-- issuer_address: pełny adres wystawcy
+- issuer_street: ulica wystawcy (sama nazwa ulicy, np. "Nowy Świat")
+- issuer_building_number: numer budynku wystawcy (np. "33")
+- issuer_apartment_number: numer lokalu wystawcy (np. "12", pusty string jeśli brak)
+- issuer_city: miasto wystawcy (np. "Warszawa")
+- issuer_postal_code: kod pocztowy wystawcy (np. "00-029")
 - value_netto: wartość netto dokumentu jako liczba (bez waluty, separator dziesiętny to kropka)
 - vat_rate: stawka VAT jako liczba procentowa (np. 23 dla 23%)
 - value_brutto: wartość brutto dokumentu jako liczba
@@ -79,13 +83,17 @@ Jeśli pole nie jest znalezione, użyj pustego stringa dla tekstu lub 0 dla wart
                 payment_due_date: { type: 'STRING' },
                 issuer: { type: 'STRING' },
                 issuer_nip: { type: 'STRING' },
-                issuer_address: { type: 'STRING' },
+                issuer_street: { type: 'STRING' },
+                issuer_building_number: { type: 'STRING' },
+                issuer_apartment_number: { type: 'STRING' },
+                issuer_city: { type: 'STRING' },
+                issuer_postal_code: { type: 'STRING' },
                 value_netto: { type: 'NUMBER' },
                 vat_rate: { type: 'NUMBER' },
                 value_brutto: { type: 'NUMBER' },
                 category: { type: 'STRING' },
               },
-              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_address', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
+              required: ['document_type', 'document_number', 'issue_date', 'payment_due_date', 'issuer', 'issuer_nip', 'issuer_street', 'issuer_building_number', 'issuer_apartment_number', 'issuer_city', 'issuer_postal_code', 'value_netto', 'vat_rate', 'value_brutto', 'category'],
             },
           },
         }),
