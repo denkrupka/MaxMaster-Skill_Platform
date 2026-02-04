@@ -57,9 +57,9 @@ serve(async (req) => {
 - payment_due_date: termin płatności w formacie YYYY-MM-DD
 - issuer: nazwa wystawcy dokumentu (firma/osoba)
 - issuer_nip: NIP wystawcy (sam numer, bez kresek)
-- issuer_street: ulica wystawcy (sama nazwa ulicy, np. "Nowy Świat")
-- issuer_building_number: numer budynku wystawcy (np. "33")
-- issuer_apartment_number: numer lokalu wystawcy (np. "12", pusty string jeśli brak)
+- issuer_street: ulica wystawcy (sama nazwa ulicy, np. "Nowy Świat", "Juliusza Słowackiego")
+- issuer_building_number: numer budynku wystawcy (TYLKO numer budynku, np. "33", "55"). WAŻNE: jeśli adres zawiera format XX/YY (np. "55/1"), to XX to numer budynku a YY to numer lokalu - rozdziel je!
+- issuer_apartment_number: numer lokalu wystawcy (np. "1", "12"). WAŻNE: jeśli adres zawiera format XX/YY (np. "55/1"), to YY to numer lokalu. Pusty string jeśli brak lokalu
 - issuer_city: miasto wystawcy (np. "Warszawa")
 - issuer_postal_code: kod pocztowy wystawcy (np. "00-029")
 - value_netto: wartość netto dokumentu jako liczba (bez waluty, separator dziesiętny to kropka)

@@ -674,35 +674,48 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!currentUser || addingMembers) return;
     setAddingMembers(true);
     try {
+      // Fetch current members to avoid duplicates
+      const { data: existingMembers } = await supabase
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', project.id);
+      const existingUserIds = new Set((existingMembers || []).map(m => m.user_id));
+
       if (addMemberType === 'employee') {
         if (selectedUserIds.length === 0) { setShowAddMemberModal(false); return; }
-        const rows = selectedUserIds.map(uid => ({
-          project_id: project.id,
-          user_id: uid,
-          role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
-          member_type: 'employee' as ProjectMemberType,
-          payment_type: memberPaymentType,
-          hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
-          member_status: 'assigned' as ProjectMemberStatus,
-        }));
-        const { error } = await supabase.from('project_members').upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
+        const rows = selectedUserIds
+          .filter(uid => !existingUserIds.has(uid))
+          .map(uid => ({
+            project_id: project.id,
+            user_id: uid,
+            role: (isManagerChecked && managerUserIds.includes(uid)) ? 'manager' as const : 'member' as const,
+            member_type: 'employee' as ProjectMemberType,
+            payment_type: memberPaymentType,
+            hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+            member_status: 'assigned' as ProjectMemberStatus,
+          }));
+        if (rows.length === 0) { setShowAddMemberModal(false); loadProjectData(); return; }
+        const { error } = await supabase.from('project_members').insert(rows);
         if (!error) { setShowAddMemberModal(false); loadProjectData(); }
       } else {
         if (selectedWorkerIds.length === 0) { setShowAddMemberModal(false); return; }
-        const rows = selectedWorkerIds.map(wid => {
-          const worker = subcontractorWorkers.find(w => w.id === wid);
-          return {
-            project_id: project.id,
-            user_id: wid,
-            role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
-            member_type: 'subcontractor' as ProjectMemberType,
-            payment_type: memberPaymentType,
-            hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
-            position: worker?.position || null,
-            member_status: 'assigned' as ProjectMemberStatus,
-          };
-        });
-        const { error } = await supabase.from('project_members').upsert(rows, { onConflict: 'project_id,user_id', ignoreDuplicates: true });
+        const rows = selectedWorkerIds
+          .filter(wid => !existingUserIds.has(wid))
+          .map(wid => {
+            const worker = subcontractorWorkers.find(w => w.id === wid);
+            return {
+              project_id: project.id,
+              user_id: wid,
+              role: (isManagerChecked && managerUserIds.includes(wid)) ? 'manager' as const : 'member' as const,
+              member_type: 'subcontractor' as ProjectMemberType,
+              payment_type: memberPaymentType,
+              hourly_rate: memberHourlyRate ? parseFloat(memberHourlyRate) : null,
+              position: worker?.position || null,
+              member_status: 'assigned' as ProjectMemberStatus,
+            };
+          });
+        if (rows.length === 0) { setShowAddMemberModal(false); loadProjectData(); return; }
+        const { error } = await supabase.from('project_members').insert(rows);
         if (!error) { setShowAddMemberModal(false); loadProjectData(); }
       }
     } finally {
@@ -1959,20 +1972,25 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     doc.setFont('helvetica', 'normal');
     y += 5;
 
-    const clientName = pl(client?.name || getCustomerName(project.contractor_client_id || project.customer_id));
-    const clientLines = [
-      clientName,
+    const colWidth = (pw / 2) - 14 - 4; // max width for each column
+    const wrapText = (text: string) => doc.splitTextToSize(text, colWidth) as string[];
+
+    const clientRaw = [
+      pl(client?.name || getCustomerName(project.contractor_client_id || project.customer_id)),
       pl([client?.address_postal_code, client?.address_city].filter(Boolean).join(' ')),
       pl(client?.address_street || ''),
       client?.nip ? `NIP: ${client.nip}` : '',
     ].filter(Boolean);
 
-    const companyLines = [
+    const companyRaw = [
       pl(company?.legal_name || company?.name || ''),
       pl([company?.address_postal_code, company?.address_city].filter(Boolean).join(' ')),
       pl(company?.address_street || ''),
       company?.tax_id ? `NIP: ${company.tax_id}` : '',
     ].filter(Boolean);
+
+    const clientLines = clientRaw.flatMap(l => wrapText(l));
+    const companyLines = companyRaw.flatMap(l => wrapText(l));
 
     const maxL = Math.max(clientLines.length, companyLines.length);
     for (let i = 0; i < maxL; i++) {
@@ -2165,7 +2183,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </thead>
             <tbody>
               {protocols.map(p => (
-                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewProtocol(p)}>
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.protocol_number}</td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -2188,7 +2206,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                       <XCircle className="w-5 h-5 text-gray-300 mx-auto" />
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1">
                       <button
                         onClick={() => setPreviewProtocol(p)}
