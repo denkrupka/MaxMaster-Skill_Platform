@@ -26,7 +26,7 @@ import {
   ContractorClient, ContractorClientContact, ProjectIssueCategory,
   ProjectAttendanceConfirmation, ProjectAttendanceRow,
   WorkerDay, WorkerDayEntry, ContractorSubcontractor, SubcontractorWorker,
-  Skill, UserSkill
+  Skill, UserSkill, ProjectTaskCategory, TaskStatus_Project as TaskStatusProject
 } from '../../types';
 import { uploadDocument } from '../../lib/supabase';
 
@@ -87,6 +87,15 @@ interface ProjectDetailPageProps {
   onUpdateProject: (updated: Project) => void;
 }
 
+// Task status config
+const TASK_STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  todo: { label: 'Do zrobienia', bg: 'bg-gray-100', text: 'text-gray-700' },
+  in_progress: { label: 'W trakcie', bg: 'bg-blue-100', text: 'text-blue-700' },
+  review: { label: 'Do przeglądu', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+  done: { label: 'Gotowe', bg: 'bg-green-100', text: 'text-green-700' },
+  cancelled: { label: 'Anulowane', bg: 'bg-red-100', text: 'text-red-700' },
+};
+
 // Task form state
 interface TaskFormState {
   name: string;
@@ -105,6 +114,8 @@ interface TaskFormState {
   end_date: string;
   end_time: string;
   description: string;
+  status: string;
+  category: string;
 }
 
 const emptyTaskForm: TaskFormState = {
@@ -124,6 +135,8 @@ const emptyTaskForm: TaskFormState = {
   end_date: '',
   end_time: '',
   description: '',
+  status: 'todo',
+  category: '',
 };
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
@@ -252,10 +265,26 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [taskForm, setTaskForm] = useState<TaskFormState>({ ...emptyTaskForm });
   const [savingTask, setSavingTask] = useState(false);
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
-  const [taskDetailTab, setTaskDetailTab] = useState<'edit' | 'description' | 'attachments'>('edit');
+  const [taskDetailTab, setTaskDetailTab] = useState<'edit' | 'attachments' | 'koszt'>('edit');
   const [taskAttachments, setTaskAttachments] = useState<TaskAttachment[]>([]);
   const [editingTask, setEditingTask] = useState<TaskFormState>({ ...emptyTaskForm });
   const [showMembersDropdown, setShowMembersDropdown] = useState(false);
+  const [taskCategories, setTaskCategories] = useState<ProjectTaskCategory[]>([]);
+  const [showNewTaskCategoryInput, setShowNewTaskCategoryInput] = useState(false);
+  const [newTaskCategoryName, setNewTaskCategoryName] = useState('');
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [taskAttachmentPreviewIndex, setTaskAttachmentPreviewIndex] = useState<number | null>(null);
+
+  // Task list filter state
+  const [taskFilterCategory, setTaskFilterCategory] = useState('');
+  const [taskFilterCreator, setTaskFilterCreator] = useState('');
+  const [taskFilterResponsible, setTaskFilterResponsible] = useState('');
+  const [taskFilterStatus, setTaskFilterStatus] = useState('');
+  const [taskFilterBillingType, setTaskFilterBillingType] = useState('');
+  const [taskFilterWorkerPayment, setTaskFilterWorkerPayment] = useState('');
+  const [taskFilterEndDateFrom, setTaskFilterEndDateFrom] = useState('');
+  const [taskFilterEndDateTo, setTaskFilterEndDateTo] = useState('');
+  const [showTaskFilters, setShowTaskFilters] = useState(false);
 
   // Attendance tracking state
   const [attendanceRows, setAttendanceRows] = useState<ProjectAttendanceRow[]>([]);
@@ -282,7 +311,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [tasks, members, timeLogs, protocols, income, costs, schedule, issues, files, categories, contacts] = await Promise.all([
+      const [tasks, members, timeLogs, protocols, income, costs, schedule, issues, files, categories, contacts, taskCats] = await Promise.all([
         safeQuery(supabase.from('project_tasks').select('*').eq('project_id', project.id).order('created_at', { ascending: false })),
         safeQuery(supabase.from('project_members').select('*').eq('project_id', project.id)),
         safeQuery(supabase.from('task_time_logs').select('*').eq('company_id', currentUser.company_id)),
@@ -296,6 +325,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         project.contractor_client_id
           ? safeQuery(supabase.from('contractor_client_contacts').select('*').eq('client_id', project.contractor_client_id))
           : Promise.resolve([]),
+        safeQuery(supabase.from('project_task_categories').select('*').eq('company_id', currentUser.company_id).order('name')),
       ]);
       setTasks(tasks);
       setMembers(members);
@@ -308,6 +338,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       setFiles(files);
       setIssueCategories(categories);
       setClientContacts(contacts);
+      // Seed default categories if empty
+      if (taskCats.length === 0) {
+        const defaults = ['Instalacje Elektryczne', 'Instalacje Teletechniczne'];
+        const inserts = defaults.map(name => ({ company_id: currentUser.company_id, name }));
+        const { data: seeded } = await supabase.from('project_task_categories').insert(inserts).select();
+        setTaskCategories(seeded || []);
+      } else {
+        setTaskCategories(taskCats);
+      }
     } catch (err) {
       console.error('Error loading project data:', err);
     } finally {
@@ -1329,8 +1368,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         name: form.name,
         description: form.description || null,
         billing_type: form.billing_type,
-        status: 'todo',
+        status: form.status || 'todo',
         priority: 'medium',
+        category: form.category || null,
         worker_payment_type: form.worker_payment_type,
         worker_rate_per_unit: form.worker_payment_type === 'akord' ? form.worker_rate_per_unit : null,
         assigned_users: form.assigned_users.length > 0 ? form.assigned_users : null,
@@ -1341,6 +1381,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         end_date: form.has_end_deadline && form.end_date ? form.end_date : null,
         end_time: form.has_end_deadline && form.end_time ? form.end_time : null,
       };
+      if (!isEdit) {
+        taskData.created_by = currentUser.id;
+      }
 
       if (form.billing_type === 'ryczalt') {
         taskData.quantity = form.quantity;
@@ -1400,33 +1443,82 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       end_date: (task as any).end_date || task.due_date || '',
       end_time: task.end_time || '',
       description: task.description || '',
+      status: task.status || 'todo',
+      category: (task as any).category || '',
     });
     loadTaskAttachments(task.id);
   };
 
-  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0] || !selectedTask || !currentUser) return;
-    const file = e.target.files[0];
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `task-attachments/${selectedTask.id}/${Date.now()}_${safeName}`;
-
+  const handleDeleteTask = async (taskId: string) => {
     try {
-      const { error: uploadError } = await supabase.storage.from('documents').upload(path, file);
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
-
-      await supabase.from('task_attachments').insert({
-        task_id: selectedTask.id,
-        file_url: urlData.publicUrl,
-        file_name: file.name,
-        file_size: file.size,
-        uploaded_by: currentUser.id,
-      });
-      loadTaskAttachments(selectedTask.id);
+      await supabase.from('task_attachments').delete().eq('task_id', taskId);
+      await supabase.from('task_time_logs').delete().eq('task_id', taskId);
+      const { error } = await supabase.from('project_tasks').delete().eq('id', taskId);
+      if (error) throw error;
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+      setSelectedTask(null);
+      setDeletingTaskId(null);
     } catch (err) {
-      console.error('Error uploading attachment:', err);
+      console.error('Error deleting task:', err);
     }
+  };
+
+  const addTaskCategory = async () => {
+    if (!currentUser || !newTaskCategoryName.trim()) return;
+    const name = newTaskCategoryName.trim();
+    if (taskCategories.some(c => c.name === name)) {
+      setNewTaskCategoryName('');
+      setShowNewTaskCategoryInput(false);
+      return;
+    }
+    const { data } = await supabase.from('project_task_categories').insert({
+      company_id: currentUser.company_id,
+      name,
+    }).select().single();
+    if (data) setTaskCategories(prev => [...prev, data]);
+    setNewTaskCategoryName('');
+    setShowNewTaskCategoryInput(false);
+  };
+
+  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !selectedTask || !currentUser) return;
+    const files = Array.from(e.target.files);
+
+    for (const file of files) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `task-attachments/${selectedTask.id}/${Date.now()}_${safeName}`;
+
+      try {
+        const { error: uploadError } = await supabase.storage.from('documents').upload(path, file);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(path);
+
+        await supabase.from('task_attachments').insert({
+          task_id: selectedTask.id,
+          file_url: urlData.publicUrl,
+          file_name: file.name,
+          file_size: file.size,
+          uploaded_by: currentUser.id,
+        });
+      } catch (err) {
+        console.error('Error uploading attachment:', file.name, err);
+      }
+    }
+    loadTaskAttachments(selectedTask.id);
     e.target.value = '';
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    try {
+      await supabase.from('task_attachments').delete().eq('id', attachmentId);
+      if (selectedTask) loadTaskAttachments(selectedTask.id);
+    } catch (err) {
+      console.error('Error deleting attachment:', err);
+    }
+  };
+
+  const isImageFile = (fileName: string) => {
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
   };
 
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
@@ -1671,7 +1763,113 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         </div>
       </div>
 
-      {/* Row 6: Description */}
+      {/* Row 6: Category dropdown with add-new */}
+      <div>
+        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Kategoria</label>
+        <div className="flex gap-2">
+          <select
+            value={form.category}
+            onChange={e => setForm({ ...form, category: e.target.value })}
+            className="flex-1 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Wybierz kategorię...</option>
+            {taskCategories.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setShowNewTaskCategoryInput(!showNewTaskCategoryInput)}
+            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+            title="Dodaj nową kategorię"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {showNewTaskCategoryInput && (
+          <div className="flex gap-2 mt-1.5">
+            <input
+              type="text"
+              value={newTaskCategoryName}
+              onChange={e => setNewTaskCategoryName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTaskCategory()}
+              placeholder="Nazwa nowej kategorii"
+              className="flex-1 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              autoFocus
+            />
+            <button
+              onClick={addTaskCategory}
+              className="px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Dodaj
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Row 7: Status */}
+      <div>
+        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Status</label>
+        <select
+          value={form.status}
+          onChange={e => setForm({ ...form, status: e.target.value })}
+          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+        >
+          {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => (
+            <option key={key} value={key}>{cfg.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Row 8: Subcontractors */}
+      <div className="relative">
+        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Podwykonawcy</label>
+        <div className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white min-h-[32px]">
+          {form.assigned_users.filter(id => subcontractors.some(s => s.id === id)).length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {form.assigned_users.filter(id => subcontractors.some(s => s.id === id)).map(id => {
+                const sub = subcontractors.find(s => s.id === id);
+                return sub ? (
+                  <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-md">
+                    {sub.name}
+                    <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ) : null;
+              })}
+            </div>
+          ) : (
+            <span className="text-gray-400">Brak podwykonawców</span>
+          )}
+        </div>
+        {subcontractors.length > 0 && (
+          <div className="mt-1 max-h-28 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+            {subcontractors.filter(s => !s.is_archived).map(sub => (
+              <label
+                key={sub.id}
+                className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={form.assigned_users.includes(sub.id)}
+                  onChange={e => {
+                    const newUsers = e.target.checked
+                      ? [...form.assigned_users, sub.id]
+                      : form.assigned_users.filter(id => id !== sub.id);
+                    setForm({ ...form, assigned_users: newUsers });
+                  }}
+                  className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5"
+                />
+                <Building2 className="w-3.5 h-3.5 text-orange-400" />
+                {sub.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Row 9: Description */}
       <div>
         <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Opis zadania</label>
         <textarea
@@ -1688,10 +1886,73 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [addTaskMembersDropdown, setAddTaskMembersDropdown] = useState(false);
   const [editTaskMembersDropdown, setEditTaskMembersDropdown] = useState(false);
 
+  // Filtered tasks
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(task => {
+      if (taskFilterCategory && (task as any).category !== taskFilterCategory) return false;
+      if (taskFilterCreator && (task as any).created_by !== taskFilterCreator) return false;
+      if (taskFilterResponsible && !(task.assigned_users || []).includes(taskFilterResponsible)) return false;
+      if (taskFilterStatus && task.status !== taskFilterStatus) return false;
+      if (taskFilterBillingType && task.billing_type !== taskFilterBillingType) return false;
+      if (taskFilterWorkerPayment && task.worker_payment_type !== taskFilterWorkerPayment) return false;
+      const endDate = (task as any).end_date || task.due_date;
+      if (taskFilterEndDateFrom && endDate && endDate < taskFilterEndDateFrom) return false;
+      if (taskFilterEndDateTo && endDate && endDate > taskFilterEndDateTo) return false;
+      return true;
+    });
+  }, [tasks, taskFilterCategory, taskFilterCreator, taskFilterResponsible, taskFilterStatus, taskFilterBillingType, taskFilterWorkerPayment, taskFilterEndDateFrom, taskFilterEndDateTo]);
+
+  // Task cost calculation helpers
+  const getTaskCostValue = (task: ProjectTask) => {
+    if (task.billing_type === 'ryczalt') {
+      return task.total_value || (task.quantity && task.price_per_unit ? task.quantity * task.price_per_unit : 0);
+    } else {
+      // hourly: quantity of hours * project hourly rate
+      return task.hourly_value || 0;
+    }
+  };
+
+  const getTaskKosztPlan = (task: ProjectTask) => {
+    if (task.worker_payment_type === 'akord') {
+      return (task.quantity || 0) * (task.worker_rate_per_unit || 0);
+    } else {
+      // hourly: hours * member hourly rate (from project settings)
+      const assignedMember = members.find(m => (task.assigned_users || []).includes(m.user_id || m.worker_id || m.id));
+      const rate = assignedMember?.hourly_rate || 0;
+      return (task.hourly_value || 0) * rate;
+    }
+  };
+
+  const getTaskKosztFact = (task: ProjectTask) => {
+    // Actual costs: time logs for this task + direct costs linked to this task
+    const taskTimeLogs = timeLogs.filter(tl => tl.task_id === task.id);
+    let laborCost = 0;
+    taskTimeLogs.forEach(tl => {
+      const memInfo = members.find(m => (m.user_id || m.worker_id || m.id) === tl.user_id);
+      const hours = (tl.minutes || 0) / 60;
+      if (memInfo) {
+        if (memInfo.payment_type === 'akord' && task.worker_payment_type === 'akord' && task.worker_rate_per_unit) {
+          laborCost += hours * task.worker_rate_per_unit;
+        } else {
+          laborCost += hours * (memInfo.hourly_rate || 0);
+        }
+      }
+    });
+    const directCost = costs.filter(c => c.cost_type === 'direct' && (c as any).task_id === task.id).reduce((s, c) => s + (c.value_netto || 0), 0);
+    return laborCost + directCost;
+  };
+
   const renderTasks = () => (
     <div className="space-y-4">
-      {/* Add task button */}
-      <div className="flex justify-end">
+      {/* Header: filters toggle + add button */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setShowTaskFilters(!showTaskFilters)}
+          className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors ${showTaskFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+        >
+          <Filter className="w-4 h-4" />
+          Filtry
+        </button>
         <button
           onClick={() => { setShowAddTask(true); setTaskForm({ ...emptyTaskForm }); }}
           className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
@@ -1701,40 +1962,129 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         </button>
       </div>
 
+      {/* Filters bar */}
+      {showTaskFilters && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Kategoria</label>
+              <select value={taskFilterCategory} onChange={e => setTaskFilterCategory(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystkie</option>
+                {taskCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Utworzył</label>
+              <select value={taskFilterCreator} onChange={e => setTaskFilterCreator(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystko</option>
+                {[...new Set(tasks.map(t => (t as any).created_by).filter(Boolean))].map(uid => (
+                  <option key={uid} value={uid}>{getUserName(uid)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Odpowiedzialny</label>
+              <select value={taskFilterResponsible} onChange={e => setTaskFilterResponsible(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystko</option>
+                {members.map(m => {
+                  const mid = m.user_id || m.worker_id || m.id;
+                  return <option key={mid} value={mid}>{getUserName(m.user_id) || mid}</option>;
+                })}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Status</label>
+              <select value={taskFilterStatus} onChange={e => setTaskFilterStatus(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystkie</option>
+                {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => (
+                  <option key={key} value={key}>{cfg.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Forma wynagrodzenia</label>
+              <select value={taskFilterBillingType} onChange={e => setTaskFilterBillingType(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystkie</option>
+                <option value="ryczalt">Ryczałt</option>
+                <option value="hourly">Roboczogodziny</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Typ wynagrodzenia</label>
+              <select value={taskFilterWorkerPayment} onChange={e => setTaskFilterWorkerPayment(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
+                <option value="">Wszystkie</option>
+                <option value="akord">Akord</option>
+                <option value="hourly">Roboczogodziny</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Data zakończenia od</label>
+              <input type="date" value={taskFilterEndDateFrom} onChange={e => setTaskFilterEndDateFrom(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Data zakończenia do</label>
+              <input type="date" value={taskFilterEndDateTo} onChange={e => setTaskFilterEndDateTo(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
+            </div>
+          </div>
+          <div className="flex justify-end mt-2">
+            <button onClick={() => { setTaskFilterCategory(''); setTaskFilterCreator(''); setTaskFilterResponsible(''); setTaskFilterStatus(''); setTaskFilterBillingType(''); setTaskFilterWorkerPayment(''); setTaskFilterEndDateFrom(''); setTaskFilterEndDateTo(''); }} className="text-xs text-gray-500 hover:text-gray-700">
+              Wyczyść filtry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Task list */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        {tasks.length === 0 ? (
+        {filteredTasks.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">Brak zadań</p>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data rozpoczęcia</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Data zakończenia</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Utworzył</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Odpowiedzialny</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Koszt (Plan/Fakt)</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
               </tr>
             </thead>
             <tbody>
-              {tasks.map(task => (
+              {filteredTasks.map(task => {
+                const statusCfg = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.todo;
+                const costValue = getTaskCostValue(task);
+                const kosztPlan = getTaskKosztPlan(task);
+                const kosztFact = getTaskKosztFact(task);
+                return (
                 <tr
                   key={task.id}
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                   onClick={() => openTaskDetail(task)}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{(task as any).name || task.title}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{getUserName((task as any).created_by)}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
-                    {((task as any).end_date || task.due_date) ? new Date((task as any).end_date || task.due_date!).toLocaleDateString('pl-PL') : '-'}
+                    {(task.assigned_users || []).length > 0
+                      ? task.assigned_users!.map(id => getUserName(id)).join(', ')
+                      : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
-                    {task.total_value ? `${task.total_value.toLocaleString('pl-PL')} PLN` :
-                     task.hourly_value ? `${task.hourly_value.toLocaleString('pl-PL')} PLN` : '-'}
+                    {costValue ? `${costValue.toLocaleString('pl-PL')} PLN` : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right">
+                    <span className="text-gray-500">{kosztPlan.toLocaleString('pl-PL', { maximumFractionDigits: 0 })}</span>
+                    <span className="text-gray-400 mx-1">/</span>
+                    <span className={kosztFact > kosztPlan && kosztPlan > 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>{kosztFact.toLocaleString('pl-PL', { maximumFractionDigits: 0 })}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusCfg.bg} ${statusCfg.text}`}>
+                      {statusCfg.label}
+                    </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -1772,23 +2122,32 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       {/* Task Detail Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); setTaskAttachmentPreviewIndex(null); }}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
               <h2 className="text-base font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
-              <button onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }} className="p-0.5 rounded-lg hover:bg-gray-100 text-gray-400">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setDeletingTaskId(selectedTask.id)}
+                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
+                  title="Usuń zadanie"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); }} className="p-0.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Detail tabs */}
+            {/* Detail tabs - removed 'description', added 'koszt' */}
             <div className="border-b border-gray-200 px-5">
               <div className="flex gap-0">
-                {[
+                {([
                   { key: 'edit' as const, label: 'Edytuj' },
-                  { key: 'description' as const, label: 'Opis zadania' },
                   { key: 'attachments' as const, label: 'Załączniki' },
-                ].map(t => (
+                  { key: 'koszt' as const, label: 'Koszt' },
+                ] as { key: 'edit' | 'attachments' | 'koszt'; label: string }[]).map(t => (
                   <button
                     key={t.key}
                     onClick={() => setTaskDetailTab(t.key)}
@@ -1820,53 +2179,242 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   </div>
                 </>
               )}
-              {taskDetailTab === 'description' && (
-                <div>
-                  {selectedTask.description ? (
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedTask.description}</p>
-                  ) : (
-                    <p className="text-sm text-gray-400">Brak opisu zadania</p>
-                  )}
-                </div>
-              )}
+
               {taskDetailTab === 'attachments' && (
                 <div className="space-y-4">
                   <div className="flex justify-end">
                     <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer">
                       <Upload className="w-4 h-4" />
-                      Dodaj plik
-                      <input type="file" className="hidden" onChange={handleUploadAttachment} />
+                      Dodaj pliki
+                      <input type="file" className="hidden" multiple onChange={handleUploadAttachment} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.mp4,.mov" />
                     </label>
                   </div>
                   {taskAttachments.length === 0 ? (
                     <p className="text-sm text-gray-400 text-center py-4">Brak załączników</p>
                   ) : (
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Autor</th>
-                          <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Data</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {taskAttachments.map(att => (
-                          <tr key={att.id} className="border-b border-gray-100">
-                            <td className="px-4 py-2">
-                              <a href={att.file_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                                {att.file_name}
-                              </a>
-                            </td>
-                            <td className="px-4 py-2 text-sm text-gray-600">{getUserName(att.uploaded_by)}</td>
-                            <td className="px-4 py-2 text-sm text-gray-600">{new Date(att.created_at).toLocaleDateString('pl-PL')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="space-y-2">
+                      {taskAttachments.map((att, idx) => (
+                        <div key={att.id} className="flex items-center gap-3 p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                          {isImageFile(att.file_name) ? (
+                            <img src={att.file_url} alt={att.file_name} className="w-10 h-10 object-cover rounded" />
+                          ) : (
+                            <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
+                              <File className="w-5 h-5 text-gray-400" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{att.file_name}</p>
+                            <p className="text-xs text-gray-500">
+                              {getUserName(att.uploaded_by)} &middot; {new Date(att.created_at).toLocaleDateString('pl-PL')}
+                              {att.file_size ? ` &middot; ${(att.file_size / 1024).toFixed(0)} KB` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {isImageFile(att.file_name) && (
+                              <button
+                                onClick={() => setTaskAttachmentPreviewIndex(idx)}
+                                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                                title="Podgląd"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => downloadFile(att.file_url, att.file_name)}
+                              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-green-600"
+                              title="Pobierz"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAttachment(att.id)}
+                              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
+                              title="Usuń"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
+
+              {taskDetailTab === 'koszt' && (() => {
+                // Koszty robocizny for this task
+                const taskTimeLogs = timeLogs.filter(tl => tl.task_id === selectedTask.id);
+                let hourlyMinutes = 0, hourlyValue = 0, akordMinutes = 0, akordValue = 0;
+                taskTimeLogs.forEach(tl => {
+                  const memInfo = members.find(m => (m.user_id || m.worker_id || m.id) === tl.user_id);
+                  if (!memInfo) return;
+                  const hours = (tl.minutes || 0) / 60;
+                  if (memInfo.payment_type === 'akord') {
+                    akordMinutes += tl.minutes || 0;
+                    if (selectedTask.worker_payment_type === 'akord' && selectedTask.worker_rate_per_unit) {
+                      akordValue += hours * selectedTask.worker_rate_per_unit;
+                    } else {
+                      akordValue += hours * (memInfo.hourly_rate || 0);
+                    }
+                  } else {
+                    hourlyMinutes += tl.minutes || 0;
+                    hourlyValue += hours * (memInfo.hourly_rate || 0);
+                  }
+                });
+
+                // Koszty bezpośrednie for this task
+                const taskDirectCosts = costs.filter(c => c.cost_type === 'direct' && (c as any).task_id === selectedTask.id);
+                const totalDirectForTask = taskDirectCosts.reduce((s, c) => s + (c.value_netto || 0), 0);
+
+                return (
+                  <div className="space-y-6">
+                    {/* Koszty robocizny */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Koszty robocizny</h4>
+                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Typ</th>
+                              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Godziny</th>
+                              <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Wartość</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-b border-gray-100">
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">Godzinowe</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{(hourlyMinutes / 60).toFixed(1)} godz.</td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right font-medium">{hourlyValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</td>
+                            </tr>
+                            <tr className="border-b border-gray-100">
+                              <td className="px-4 py-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">Akord</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right">{(akordMinutes / 60).toFixed(1)} godz.</td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right font-medium">{akordValue.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</td>
+                            </tr>
+                            <tr className="bg-gray-50">
+                              <td className="px-4 py-2 text-sm font-semibold text-gray-700">Razem</td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right font-bold">{((hourlyMinutes + akordMinutes) / 60).toFixed(1)} godz.</td>
+                              <td className="px-4 py-2 text-sm text-gray-900 text-right font-bold">{(hourlyValue + akordValue).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Koszty bezpośrednie */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Koszty bezpośrednie</h4>
+                      {taskDirectCosts.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">Brak kosztów bezpośrednich przypisanych do tego zadania</p>
+                      ) : (
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="bg-gray-50 border-b border-gray-200">
+                                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Nr dokumentu</th>
+                                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Wystawca</th>
+                                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Netto</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {taskDirectCosts.map(c => (
+                                <tr key={c.id} className="border-b border-gray-100">
+                                  <td className="px-4 py-2 text-sm text-gray-900">{c.document_number || '-'}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-600">{c.issuer || '-'}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900 text-right font-medium">{c.value_netto.toLocaleString('pl-PL')} PLN</td>
+                                </tr>
+                              ))}
+                              <tr className="bg-gray-50">
+                                <td colSpan={2} className="px-4 py-2 text-sm font-semibold text-gray-700">Razem</td>
+                                <td className="px-4 py-2 text-sm text-gray-900 text-right font-bold">{totalDirectForTask.toLocaleString('pl-PL')} PLN</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Grand total */}
+                    <div className="bg-blue-50 rounded-lg p-3 flex justify-between items-center">
+                      <span className="text-sm font-semibold text-blue-900">Łączny koszt zadania</span>
+                      <span className="text-sm font-bold text-blue-900">
+                        {(hourlyValue + akordValue + totalDirectForTask).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete task confirmation */}
+      {deletingTaskId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm mx-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">Usunąć zadanie?</h3>
+            <p className="text-sm text-gray-500 mb-4">Ta operacja jest nieodwracalna. Wszystkie załączniki i logi czasu powiązane z tym zadaniem zostaną usunięte.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletingTaskId(null)} className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Anuluj
+              </button>
+              <button onClick={() => handleDeleteTask(deletingTaskId)} className="px-3 py-1.5 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700">
+                Usuń
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image carousel preview */}
+      {taskAttachmentPreviewIndex !== null && taskAttachments[taskAttachmentPreviewIndex] && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setTaskAttachmentPreviewIndex(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={taskAttachmentPreviewIndex <= 0}
+                  onClick={() => setTaskAttachmentPreviewIndex(i => i !== null ? Math.max(0, i - 1) : null)}
+                  className="p-1.5 rounded-lg bg-white/90 hover:bg-white disabled:opacity-30"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="text-sm font-medium text-white">{taskAttachmentPreviewIndex + 1} / {taskAttachments.filter(a => isImageFile(a.file_name)).length}</span>
+                <button
+                  disabled={taskAttachmentPreviewIndex >= taskAttachments.length - 1}
+                  onClick={() => setTaskAttachmentPreviewIndex(i => i !== null ? Math.min(taskAttachments.length - 1, i + 1) : null)}
+                  className="p-1.5 rounded-lg bg-white/90 hover:bg-white disabled:opacity-30"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadFile(taskAttachments[taskAttachmentPreviewIndex!].file_url, taskAttachments[taskAttachmentPreviewIndex!].file_name)}
+                  className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-gray-700"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setTaskAttachmentPreviewIndex(null)} className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <img
+              src={taskAttachments[taskAttachmentPreviewIndex].file_url}
+              alt={taskAttachments[taskAttachmentPreviewIndex].file_name}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+            <p className="text-center text-sm text-white/80 mt-2">{taskAttachments[taskAttachmentPreviewIndex].file_name}</p>
           </div>
         </div>
       )}
@@ -2462,6 +3010,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     payment_status: 'Nieopłacone',
     payment_method: '',
     comment: '',
+    task_id: '',
   });
   const [editingCostId, setEditingCostId] = useState<string | null>(null);
   const [savingCost, setSavingCost] = useState(false);
@@ -2527,6 +3076,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_status: 'Nieopłacone',
       payment_method: '',
       comment: '',
+      task_id: '',
     });
     setEditingCostId(null);
     setCostFileToUpload(null);
@@ -2618,6 +3168,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         payment_status: matchPaymentStatus(result.payment_status || ''),
         payment_method: matchPaymentMethod(result.payment_method || ''),
         comment: '',
+        task_id: '',
       },
       fileUrl,
       file,
@@ -2645,7 +3196,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           console.error('Error scanning file:', file.name, err);
           // Add empty result for failed file
           results.push({
-            formData: { document_type: '', document_number: file.name, issue_date: '', payment_due_date: '', issuer: '', issuer_nip: '', issuer_street: '', issuer_building_number: '', issuer_apartment_number: '', issuer_city: '', issuer_postal_code: '', value_netto: '', vat_rate: '23', value_brutto: '', category: '', payment_status: 'Nieopłacone', payment_method: '', comment: '' },
+            formData: { document_type: '', document_number: file.name, issue_date: '', payment_due_date: '', issuer: '', issuer_nip: '', issuer_street: '', issuer_building_number: '', issuer_apartment_number: '', issuer_city: '', issuer_postal_code: '', value_netto: '', vat_rate: '23', value_brutto: '', category: '', payment_status: 'Nieopłacone', payment_method: '', comment: '', task_id: '' },
             fileUrl: null,
             file,
           });
@@ -2725,6 +3276,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         payment_method: costFormData.payment_method || null,
         comment: costFormData.comment || null,
         file_url: fileUrl || null,
+        task_id: costFormData.task_id || null,
       };
 
       if (editingCostId) {
@@ -2790,6 +3342,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       payment_status: cost.payment_status || 'Nieopłacone',
       payment_method: cost.payment_method || '',
       comment: cost.comment || '',
+      task_id: (cost as any).task_id || '',
     });
     setEditingCostId(cost.id);
     setCostFileUrl(cost.file_url || null);
@@ -3277,6 +3830,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                 rows={3}
                 placeholder="Dodaj komentarz do kosztu..."
               />
+            </div>
+
+            {/* Task assignment (optional) */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Zadanie (opcjonalnie)</label>
+              <select
+                value={costFormData.task_id}
+                onChange={e => setCostFormData(prev => ({ ...prev, task_id: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">— Brak przypisania —</option>
+                {tasks.map(t => (
+                  <option key={t.id} value={t.id}>{(t as any).name || t.title}</option>
+                ))}
+              </select>
             </div>
 
             {/* File upload */}
