@@ -1062,7 +1062,8 @@ export interface Project {
 export interface ProjectMember {
   id: string;
   project_id: string;
-  user_id: string;
+  user_id?: string | null;
+  worker_id?: string | null;
   role: 'manager' | 'member';
   member_type: ProjectMemberType;
   payment_type: ProjectMemberPaymentType;
