@@ -682,6 +682,23 @@ const CalendarTab: React.FC<CalendarTabProps> = ({
   const [modalComment, setModalComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Objects (departments) data
+  const [objects, setObjects] = useState<{ id: string; name: string }[]>([]);
+  const [objectMembers, setObjectMembers] = useState<{ user_id: string; department_id: string }[]>([]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    const loadObjects = async () => {
+      const [deptRes, membersRes] = await Promise.all([
+        supabase.from('departments').select('id, name').eq('company_id', companyId).eq('is_archived', false).order('name'),
+        supabase.from('department_members').select('user_id, department_id').eq('company_id', companyId),
+      ]);
+      if (deptRes.data) setObjects(deptRes.data);
+      if (membersRes.data) setObjectMembers(membersRes.data);
+    };
+    loadObjects();
+  }, [companyId]);
+
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const totalDays = new Date(year, month + 1, 0).getDate();
@@ -691,20 +708,11 @@ const CalendarTab: React.FC<CalendarTabProps> = ({
 
   const monthLabel = currentMonth.toLocaleString('pl-PL', { month: 'long', year: 'numeric' });
 
-  const departments = useMemo(() => {
-    const deptMap = new Map<string, string>();
-    visibleUsers.forEach((u) => {
-      const deptId = (u as any).department_id;
-      const deptName = (u as any).department?.name;
-      if (deptId && deptName) deptMap.set(deptId, deptName);
-    });
-    return Array.from(deptMap.entries());
-  }, [visibleUsers]);
-
   const filteredUsers = useMemo(() => {
     if (!deptFilter) return visibleUsers;
-    return visibleUsers.filter((u) => (u as any).department_id === deptFilter);
-  }, [visibleUsers, deptFilter]);
+    const memberUserIds = new Set(objectMembers.filter(m => m.department_id === deptFilter).map(m => m.user_id));
+    return visibleUsers.filter((u) => memberUserIds.has(u.id));
+  }, [visibleUsers, deptFilter, objectMembers]);
 
   const approvedRequests = useMemo(
     () => requests.filter((r) => r.status === 'approved'),
@@ -862,9 +870,9 @@ const CalendarTab: React.FC<CalendarTabProps> = ({
                 onChange={(e) => setDeptFilter(e.target.value)}
                 className="appearance-none border border-slate-300 rounded-lg pl-3 pr-8 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
               >
-                <option value="">Wybierz oddział</option>
-                {departments.map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
+                <option value="">Wybierz obiekt</option>
+                {objects.map((obj) => (
+                  <option key={obj.id} value={obj.id}>{obj.name}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
