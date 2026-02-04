@@ -985,7 +985,7 @@ export type ProjectNameMode = 'custom' | 'object';
 export type ProjectMemberPaymentType = 'hourly' | 'akord';
 export type ProjectMemberStatus = 'assigned' | 'unassigned' | 'temporarily_unassigned';
 export type ProjectMemberType = 'employee' | 'subcontractor';
-export type ProjectIssueStatus = 'new' | 'in_progress' | 'completed' | 'cancelled';
+export type ProjectIssueStatus = 'new' | 'in_progress' | 'completed' | 'cancelled' | 'done';
 export type ProjectTaskBillingType = 'ryczalt' | 'hourly';
 export type ProjectTaskWorkerPayment = 'akord' | 'hourly';
 
@@ -1239,6 +1239,7 @@ export interface ProjectIssue {
   project_id: string;
   company_id: string;
   name: string;
+  issue_number?: number;
   reporter_id: string;
   reporter_company?: string;
   task_id?: string;
