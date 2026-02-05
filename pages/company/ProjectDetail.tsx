@@ -621,14 +621,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     doc.save(`lista_obecnosci_${project.name.replace(/\s+/g, '_')}_${attendanceDateFrom}_${attendanceDateTo}.pdf`);
   };
 
-  const getUserName = (userId?: string) => {
+  const getUserName = useCallback((userId?: string) => {
     if (!userId) return 'Nieprzypisany';
     if (!users || users.length === 0) return 'Nieznany';
     const user = users.find(usr => usr.id === userId);
     return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
-  };
+  }, [users]);
 
-  const getMemberName = (memberId?: string, includeCompany = false) => {
+  const getMemberName = useCallback((memberId?: string, includeCompany = false) => {
     if (!memberId) return 'Nieprzypisany';
     // Check if it's a user (employee)
     if (users && users.length > 0) {
@@ -649,9 +649,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       }
     }
     return 'Nieznany';
-  };
+  }, [users, subcontractorWorkers, subcontractors]);
 
-  const getCustomerName = (customerId?: string) => {
+  const getCustomerName = useCallback((customerId?: string) => {
     if (!customerId) return '-';
     if (contractorClients && contractorClients.length > 0) {
       const cc = contractorClients.find(c => c.id === customerId);
@@ -661,16 +661,21 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       return customers.find(c => c.id === customerId)?.name || '-';
     }
     return '-';
-  };
+  }, [contractorClients, customers]);
 
-  const getDepartmentName = (deptId?: string) => {
+  const getDepartmentName = useCallback((deptId?: string) => {
     if (!deptId) return '-';
     if (!departments || departments.length === 0) return '-';
     return departments.find(d => d.id === deptId)?.name || '-';
-  };
+  }, [departments]);
 
   const statusCfg = PROJECT_STATUS_CONFIG[project.status];
-  const dept = project.department_id ? departments.find(d => d.id === project.department_id) : null;
+  const dept = useMemo(() =>
+    project.department_id && departments && departments.length > 0
+      ? departments.find(d => d.id === project.department_id)
+      : null,
+    [project.department_id, departments]
+  );
 
   // Calculations
   const totalIncome = income.reduce((s, i) => s + (i.value || 0), 0);
@@ -1629,7 +1634,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
 
-  const getWorkerLabel = (wid: string, includeCompany = true) => {
+  const getWorkerLabel = useCallback((wid: string, includeCompany = true) => {
     if (!subcontractorWorkers || subcontractorWorkers.length === 0) return wid;
     const worker = subcontractorWorkers.find(w => w.id === wid);
     if (!worker) return wid;
@@ -1639,7 +1644,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       return `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}`;
     }
     return `${worker.first_name} ${worker.last_name}`;
-  };
+  }, [subcontractorWorkers, subcontractors]);
 
   const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => {
     const employeeMembers = members.filter(m => m.user_id);
@@ -1648,11 +1653,19 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     const selectedSubs = form.assigned_users.filter(id => members.some(m => m.worker_id === id));
     const filteredEmployees = employeeMembers.filter(m => {
       if (!taskEmployeeSearch) return true;
-      return getUserName(m.user_id!).toLowerCase().includes(taskEmployeeSearch.toLowerCase());
+      try {
+        return getUserName(m.user_id!).toLowerCase().includes(taskEmployeeSearch.toLowerCase());
+      } catch {
+        return false;
+      }
     });
     const filteredSubs = subMembers.filter(m => {
       if (!taskSubSearch) return true;
-      return getWorkerLabel(m.worker_id!).toLowerCase().includes(taskSubSearch.toLowerCase());
+      try {
+        return getWorkerLabel(m.worker_id!).toLowerCase().includes(taskSubSearch.toLowerCase());
+      } catch {
+        return false;
+      }
     });
 
     return (
