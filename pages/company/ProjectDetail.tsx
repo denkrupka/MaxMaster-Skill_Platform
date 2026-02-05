@@ -278,6 +278,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [taskEmployeeSearch, setTaskEmployeeSearch] = useState('');
   const [taskSubSearch, setTaskSubSearch] = useState('');
   const [subDropdownOpen, setSubDropdownOpen] = useState(false);
+  const [addTaskMembersDropdown, setAddTaskMembersDropdown] = useState(false);
+  const [editTaskMembersDropdown, setEditTaskMembersDropdown] = useState(false);
 
   // Task list filter state
   const [taskFilterCategory, setTaskFilterCategory] = useState('');
@@ -1938,9 +1940,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     </div>
     );
   };
-
-  const [addTaskMembersDropdown, setAddTaskMembersDropdown] = useState(false);
-  const [editTaskMembersDropdown, setEditTaskMembersDropdown] = useState(false);
 
   // Filtered tasks
   const filteredTasks = useMemo(() => {
