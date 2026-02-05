@@ -134,11 +134,7 @@ export const CompanyProjectsPage: React.FC = () => {
     return contractorClients.find(c => c.id === projectForm.customer_id) || null;
   }, [projectForm.customer_id, contractorClients]);
 
-  useEffect(() => {
-    if (currentUser) loadData();
-  }, [currentUser]);
-
-  const loadData = async () => {
+  async function loadData() {
     if (!currentUser) return;
     setLoading(true);
     try {
@@ -169,18 +165,22 @@ export const CompanyProjectsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const openCreateModal = () => {
+  useEffect(() => {
+    if (currentUser) loadData();
+  }, [currentUser]);
+
+  function openCreateModal() {
     setEditingProject(null);
     setProjectForm(emptyProjectForm);
     setHourlySettings(emptyHourlySettings);
     setClientSearchTerm('');
     setShowClientDropdown(false);
     setShowProjectModal(true);
-  };
+  }
 
-  const openEditModal = (project: Project) => {
+  function openEditModal(project: Project) {
     setEditingProject(project);
     // Use contractor_client_id if set, otherwise fall back to customer_id
     const clientId = project.contractor_client_id || project.customer_id || '';
@@ -222,7 +222,7 @@ export const CompanyProjectsPage: React.FC = () => {
     setShowProjectModal(true);
   };
 
-  const handleDepartmentChange = (deptId: string) => {
+  function handleDepartmentChange(deptId: string) {
     if (deptId) {
       const dept = departments.find(d => d.id === deptId);
       if (dept) {
@@ -239,9 +239,9 @@ export const CompanyProjectsPage: React.FC = () => {
     } else {
       setProjectForm(prev => ({ ...prev, department_id: '' }));
     }
-  };
+  }
 
-  const saveProject = async () => {
+  async function saveProject() {
     if (!currentUser) return;
     const nameToUse = projectForm.name_mode === 'object'
       ? departments.find(d => d.id === projectForm.department_id)?.name || projectForm.name
@@ -361,9 +361,9 @@ export const CompanyProjectsPage: React.FC = () => {
     } finally {
       setSavingProject(false);
     }
-  };
+  }
 
-  const deleteProject = async (projectId: string) => {
+  async function deleteProject(projectId: string) {
     if (!confirm('Czy na pewno chcesz usunąć ten projekt? Wszystkie powiązane dane zostaną również usunięte.')) return;
     const { error } = await supabase.from('projects').delete().eq('id', projectId);
     if (!error) {
@@ -371,7 +371,7 @@ export const CompanyProjectsPage: React.FC = () => {
       if (selectedProject?.id === projectId) setSelectedProject(null);
       setState(prev => ({ ...prev, toast: { title: 'Sukces', message: 'Projekt został usunięty' } }));
     }
-  };
+  }
 
   function getUserName(userId?: string) {
     if (!userId) return 'Nieprzypisany';
@@ -452,7 +452,7 @@ export const CompanyProjectsPage: React.FC = () => {
   }, [projects, search, customers, statusFilter]);
 
   // ========== RENDER MODAL FUNCTIONS ==========
-  const renderProjectModal = () => {
+  function renderProjectModal() {
     if (!showProjectModal) return null;
     const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';
     return (
@@ -626,9 +626,9 @@ export const CompanyProjectsPage: React.FC = () => {
         </div>
       </div>
     );
-  };
+  }
 
-  const renderHourlySettingsModal = () => {
+  function renderHourlySettingsModal() {
     if (!showHourlySettingsModal) return null;
     const sInput = 'w-full border border-gray-200 rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500 bg-white';
     const toggleBtn = (active: boolean, toggle: () => void) => (
@@ -738,7 +738,7 @@ export const CompanyProjectsPage: React.FC = () => {
         </div>
       </div>
     );
-  };
+  }
 
   if (!currentUser) return null;
 
