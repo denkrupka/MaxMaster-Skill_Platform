@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Plus, X, Search, FolderKanban, Users, Clock, FileText, Pencil, Trash2,
   Calendar, DollarSign, LayoutGrid, List, ChevronRight, Loader2, Eye,
@@ -373,27 +373,27 @@ export const CompanyProjectsPage: React.FC = () => {
     }
   };
 
-  function getUserName(userId?: string) {
+  const getUserName = (userId?: string) => {
     if (!userId) return 'Nieprzypisany';
     const u = users.find(u => u.id === userId);
     return u ? `${u.first_name} ${u.last_name}` : 'Nieznany';
-  }
+  };
 
-  function getCustomerName(customerId?: string) {
+  const getCustomerName = (customerId?: string) => {
     if (!customerId) return '-';
     // Check contractor_clients first, then fall back to project_customers
     const cc = contractorClients.find(c => c.id === customerId);
     if (cc) return cc.name;
     return customers.find(c => c.id === customerId)?.name || '-';
-  }
+  };
 
-  function getDepartmentName(deptId?: string) {
+  const getDepartmentName = (deptId?: string) => {
     if (!deptId) return '-';
     return departments.find(d => d.id === deptId)?.name || '-';
-  }
+  };
 
   // Calculate budget display for list
-  function getBudgetDisplay(project: Project) {
+  const getBudgetDisplay = (project: Project) => {
     if (project.billing_type === 'ryczalt' || !project.billing_type) {
       if (!project.budget_amount) return '-';
       const totalInvoiced = projectIncome
@@ -416,25 +416,25 @@ export const CompanyProjectsPage: React.FC = () => {
         sundayRate: project.sunday_paid ? (project.sunday_rate || 0) : 0,
       };
     }
-  }
+  };
 
   // Calculate direct costs for a project
-  function getDirectCosts(projectId: string) {
+  const getDirectCosts = (projectId: string) => {
     return projectCosts.filter(c => c.project_id === projectId && c.cost_type === 'direct').reduce((s, c) => s + (c.value_netto || 0), 0);
-  }
+  };
 
   // Calculate labor costs (simplified)
-  function getLaborCosts(projectId: string) {
+  const getLaborCosts = (projectId: string) => {
     return projectCosts.filter(c => c.project_id === projectId && c.cost_type === 'labor').reduce((s, c) => s + (c.value_netto || 0), 0);
-  }
+  };
 
   // Calculate profit
-  function getProfit(project: Project) {
+  const getProfit = (project: Project) => {
     const budget = project.billing_type === 'ryczalt' ? (project.budget_amount || 0) : 0;
     const directCosts = getDirectCosts(project.id);
     const laborCosts = getLaborCosts(project.id);
     return budget - directCosts - laborCosts;
-  }
+  };
 
   const filteredProjects = useMemo(() => {
     let list = projects;
