@@ -458,19 +458,19 @@ export const CompanyProjectsPage: React.FC = () => {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowProjectModal(false)} />
-        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-3 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-4 py-2 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">
               {editingProject ? 'Edytuj projekt' : 'Nowy projekt'}
             </h2>
             <button onClick={() => setShowProjectModal(false)} className="p-1 rounded-lg hover:bg-gray-100 -mr-1">
               <X className="w-4 h-4 text-gray-400" />
             </button>
           </div>
-          <div className="px-5 py-4 space-y-3">
+          <div className="px-4 py-2.5 space-y-2">
             {/* Client */}
             <div className="relative">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Klient</label>
+              <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Klient</label>
               {selectedClient ? (
                 <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-blue-50/50">
                   <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -505,7 +505,7 @@ export const CompanyProjectsPage: React.FC = () => {
 
             {/* Name source */}
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Źródło nazwy</label>
+              <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Źródło nazwy</label>
               <div className="flex items-center bg-gray-100 rounded-lg p-0.5 w-fit">
                 <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Nazwa własna</button>
                 <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Wybrać obiekt</button>
@@ -514,12 +514,12 @@ export const CompanyProjectsPage: React.FC = () => {
 
             {projectForm.name_mode === 'custom' ? (
               <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Nazwa projektu *</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Nazwa projektu *</label>
                 <input type="text" value={projectForm.name} onChange={(e) => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className={inputCls} placeholder="Nazwa projektu" />
               </div>
             ) : (
               <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Obiekt *</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Obiekt *</label>
                 <div className="flex gap-2">
                   <select value={projectForm.department_id} onChange={(e) => handleDepartmentChange(e.target.value)} className={`flex-1 ${inputCls}`}>
                     <option value="">-- Wybierz --</option>
@@ -550,20 +550,20 @@ export const CompanyProjectsPage: React.FC = () => {
 
             {/* Description */}
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Opis</label>
+              <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Opis</label>
               <textarea value={projectForm.description} onChange={(e) => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className={inputCls} placeholder="Opis projektu..." />
             </div>
 
             {/* Status + Color */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Status</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Status</label>
                 <select value={projectForm.status} onChange={(e) => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))} className={inputCls}>
                   {Object.entries(PROJECT_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Kolor</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Kolor</label>
                 <div className="flex flex-wrap gap-1">
                   {COLOR_OPTIONS.map(color => (
                     <button key={color} onClick={() => setProjectForm(prev => ({ ...prev, color }))} className={`w-5 h-5 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-gray-700 scale-110' : 'border-transparent hover:scale-105'}`} style={{ backgroundColor: color }} />
@@ -574,7 +574,7 @@ export const CompanyProjectsPage: React.FC = () => {
 
             {/* Billing type */}
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1">Forma wynagrodzenia</label>
+              <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Forma wynagrodzenia</label>
               <div className="flex items-center bg-gray-100 rounded-lg p-0.5 w-fit">
                 <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Ryczałt</button>
                 <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Roboczogodziny</button>
@@ -582,20 +582,20 @@ export const CompanyProjectsPage: React.FC = () => {
             </div>
 
             {projectForm.billing_type === 'ryczalt' ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-1.5">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">Budżet godzin</label>
+                  <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Budżet godzin</label>
                   <input type="number" value={projectForm.budget_hours} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className={inputCls} placeholder="np. 100" />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 block mb-1">Budżet netto (PLN)</label>
+                  <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Budżet netto (PLN)</label>
                   <input type="number" value={projectForm.budget_amount} onChange={(e) => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className={inputCls} placeholder="np. 50000" />
                 </div>
               </div>
             ) : (
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-gray-500 block mb-1">Stawka netto (PLN/godz.)</label>
+                  <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Stawka netto (PLN/godz.)</label>
                   <input type="number" value={projectForm.hourly_rate} onChange={(e) => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={inputCls} placeholder="np. 65" />
                 </div>
                 <button onClick={() => setShowHourlySettingsModal(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
@@ -605,18 +605,18 @@ export const CompanyProjectsPage: React.FC = () => {
             )}
 
             {/* Dates */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Data rozpoczęcia</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Data rozpoczęcia</label>
                 <input type="date" value={projectForm.start_date} onChange={(e) => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className={inputCls} />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Data zakończenia</label>
+                <label className="text-[9px] font-medium text-gray-500 uppercase tracking-wide block mb-0.5">Data zakończenia</label>
                 <input type="date" value={projectForm.end_date} onChange={(e) => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className={inputCls} />
               </div>
             </div>
           </div>
-          <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-5 py-3 border-t border-gray-100">
+          <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-4 py-2 border-t border-gray-100">
             <button onClick={() => setShowProjectModal(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Anuluj</button>
             <button onClick={saveProject} disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)} className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
               {savingProject && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

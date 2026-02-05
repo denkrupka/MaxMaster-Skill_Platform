@@ -1325,10 +1325,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   // Reload task attachments when issues change (for dynamic file syncing from submissions)
   useEffect(() => {
-    if (selectedTask && issues.length > 0) {
+    if (selectedTask) {
       loadTaskAttachments(selectedTask.id);
     }
-  }, [issues]);
+  }, [issues, selectedTask?.id]);
 
   // Click outside to close dropdowns
   useEffect(() => {
@@ -1675,11 +1675,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     });
 
     return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {/* Row 1: Nazwa + Billing type */}
-      <div className="grid grid-cols-[1fr,auto] gap-2 items-end">
+      <div className="grid grid-cols-[1fr,auto] gap-1.5 items-end">
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Nazwa zadania</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Nazwa zadania</label>
           <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
             className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="Nazwa zadania" />
         </div>
@@ -1696,31 +1696,31 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {/* Row 2: Value fields */}
       {form.billing_type === 'hourly' ? (
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Zaplanowana ilość godzin na wykonanie zadania</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Zaplanowana ilość godzin na wykonanie zadania</label>
           <input type="number" value={form.hourly_value || ''} onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
             className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-1.5">
           <div>
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Ilość</label>
+            <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Ilość</label>
             <input type="number" value={form.quantity || ''} onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
               className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Jed. miary</label>
+            <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Jed. miary</label>
             <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
               {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Cena jedn.</label>
+            <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Cena jedn.</label>
             <input type="number" value={form.price_per_unit || ''} onChange={e => setForm({ ...form, price_per_unit: parseFloat(e.target.value) || 0 })}
               className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wartość</label>
+            <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Wartość</label>
             <div className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-gray-50 text-gray-700 font-medium">
               {(form.quantity * form.price_per_unit).toLocaleString('pl-PL')} PLN
             </div>
@@ -1729,9 +1729,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       )}
 
       {/* Row 3: Worker payment + rate */}
-      <div className="grid grid-cols-[auto,1fr] gap-2 items-end">
+      <div className="grid grid-cols-[auto,1fr] gap-1.5 items-end">
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wynagrodzenie pracownika</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Wynagrodzenie pracownika</label>
           <div className="flex bg-gray-100 rounded-lg p-0.5">
             <button type="button" onClick={() => setForm({ ...form, worker_payment_type: 'akord' })}
               className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${form.worker_payment_type === 'akord' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Akord</button>
@@ -1741,7 +1741,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         </div>
         {form.worker_payment_type === 'akord' && (
           <div>
-            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Stawka jedn.</label>
+            <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Stawka jedn.</label>
             <input type="number" value={form.worker_rate_per_unit || ''} onChange={e => setForm({ ...form, worker_rate_per_unit: parseFloat(e.target.value) || 0 })}
               className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
           </div>
@@ -1750,7 +1750,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       {/* Row 4: Pracownicy odpowiedzialni - searchable multi-select */}
       <div className="relative dropdown-container">
-        <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pracownicy odpowiedzialni</label>
+        <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Pracownicy odpowiedzialni</label>
         {(selectedEmployees.length > 0 || form.assigned_users.includes('__ALL_EMPLOYEES__')) && (
           <div className="flex flex-wrap gap-1 mb-1">
             {form.assigned_users.includes('__ALL_EMPLOYEES__') && (
@@ -1810,7 +1810,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {/* Row 4b: Podwykonawcy odpowiedzialni - searchable multi-select */}
       {subMembers.length > 0 && (
         <div className="relative dropdown-container">
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Podwykonawcy odpowiedzialni</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Podwykonawcy odpowiedzialni</label>
           {(selectedSubs.length > 0 || form.assigned_users.includes('__ALL_CONTRACTORS__')) && (
             <div className="flex flex-wrap gap-1 mb-1">
               {form.assigned_users.includes('__ALL_CONTRACTORS__') && (
@@ -1871,9 +1871,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       )}
 
       {/* Row 5: Deadlines */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <div>
-          <label className="flex items-center gap-1 text-[10px] font-medium text-gray-500 mb-0.5">
+          <label className="flex items-center gap-1 text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">
             <input type="checkbox" checked={form.has_start_deadline} onChange={e => setForm({ ...form, has_start_deadline: e.target.checked })}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3" />
             Termin rozpoczęcia
@@ -1888,7 +1888,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           )}
         </div>
         <div>
-          <label className="flex items-center gap-1 text-[10px] font-medium text-gray-500 mb-0.5">
+          <label className="flex items-center gap-1 text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">
             <input type="checkbox" checked={form.has_end_deadline} onChange={e => setForm({ ...form, has_end_deadline: e.target.checked })}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3" />
             Termin zakończenia
@@ -1905,9 +1905,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       </div>
 
       {/* Row 6: Category + Status inline */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Kategoria</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Kategoria</label>
           <div className="flex gap-1">
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
               className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
@@ -1929,7 +1929,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           )}
         </div>
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Status</label>
+          <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Status</label>
           <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
             className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
             {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
@@ -1939,7 +1939,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       {/* Row 7: Description */}
       <div>
-        <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Opis</label>
+        <label className="block text-[9px] font-medium text-gray-500 mb-0.5 uppercase tracking-wide">Opis</label>
         <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2}
           className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none" placeholder="Opis zadania..." />
       </div>
@@ -2208,8 +2208,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); setTaskAttachmentPreviewIndex(null); setTaskAttachmentViewerUrl(null); }}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
+            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200">
+              <h2 className="text-sm font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setDeletingTaskId(selectedTask.id)}
@@ -2247,11 +2247,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </div>
             </div>
 
-            <div className="px-4 py-3">
+            <div className="px-4 py-2.5">
               {taskDetailTab === 'edit' && (
                 <>
                   {renderTaskFormFields(editingTask, setEditingTask, editTaskMembersDropdown, setEditTaskMembersDropdown)}
-                  <div className="flex justify-end mt-2">
+                  <div className="flex justify-end mt-1.5">
                     <button
                       onClick={() => handleSaveTask(true)}
                       disabled={savingTask || !editingTask.name.trim()}
