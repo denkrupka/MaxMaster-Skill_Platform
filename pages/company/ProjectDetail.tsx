@@ -623,36 +623,49 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const getUserName = (userId?: string) => {
     if (!userId) return 'Nieprzypisany';
-    const u = users.find(u => u.id === userId);
-    return u ? `${u.first_name} ${u.last_name}` : 'Nieznany';
+    if (!users || users.length === 0) return 'Nieznany';
+    const user = users.find(usr => usr.id === userId);
+    return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
   };
 
   const getMemberName = (memberId?: string, includeCompany = false) => {
     if (!memberId) return 'Nieprzypisany';
     // Check if it's a user (employee)
-    const u = users.find(u => u.id === memberId);
-    if (u) return `${u.first_name} ${u.last_name}`;
+    if (users && users.length > 0) {
+      const user = users.find(usr => usr.id === memberId);
+      if (user) return `${user.first_name} ${user.last_name}`;
+    }
     // Check if it's a worker (contractor)
-    const worker = subcontractorWorkers.find(w => w.id === memberId);
-    if (worker) {
-      const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
-      if (includeCompany && sub) {
-        return `${worker.first_name} ${worker.last_name} - ${sub.name}`;
+    if (subcontractorWorkers && subcontractorWorkers.length > 0) {
+      const worker = subcontractorWorkers.find(w => w.id === memberId);
+      if (worker) {
+        if (includeCompany && subcontractors && subcontractors.length > 0) {
+          const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
+          if (sub) {
+            return `${worker.first_name} ${worker.last_name} - ${sub.name}`;
+          }
+        }
+        return `${worker.first_name} ${worker.last_name}`;
       }
-      return `${worker.first_name} ${worker.last_name}`;
     }
     return 'Nieznany';
   };
 
   const getCustomerName = (customerId?: string) => {
     if (!customerId) return '-';
-    const cc = contractorClients.find(c => c.id === customerId);
-    if (cc) return cc.name;
-    return customers.find(c => c.id === customerId)?.name || '-';
+    if (contractorClients && contractorClients.length > 0) {
+      const cc = contractorClients.find(c => c.id === customerId);
+      if (cc) return cc.name;
+    }
+    if (customers && customers.length > 0) {
+      return customers.find(c => c.id === customerId)?.name || '-';
+    }
+    return '-';
   };
 
   const getDepartmentName = (deptId?: string) => {
     if (!deptId) return '-';
+    if (!departments || departments.length === 0) return '-';
     return departments.find(d => d.id === deptId)?.name || '-';
   };
 
@@ -1617,13 +1630,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
 
   const getWorkerLabel = (wid: string, includeCompany = true) => {
+    if (!subcontractorWorkers || subcontractorWorkers.length === 0) return wid;
     const worker = subcontractorWorkers.find(w => w.id === wid);
-    const sub = worker ? subcontractors.find(s => s.id === worker.subcontractor_id) : null;
-    if (includeCompany) {
-      return worker ? `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}` : wid;
-    } else {
-      return worker ? `${worker.first_name} ${worker.last_name}` : wid;
+    if (!worker) return wid;
+
+    if (includeCompany && subcontractors && subcontractors.length > 0) {
+      const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
+      return `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}`;
     }
+    return `${worker.first_name} ${worker.last_name}`;
   };
 
   const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => {
