@@ -274,6 +274,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [newTaskCategoryName, setNewTaskCategoryName] = useState('');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [taskAttachmentPreviewIndex, setTaskAttachmentPreviewIndex] = useState<number | null>(null);
+  const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
   const [taskEmployeeSearch, setTaskEmployeeSearch] = useState('');
   const [taskSubSearch, setTaskSubSearch] = useState('');
   const [subDropdownOpen, setSubDropdownOpen] = useState(false);
@@ -624,6 +625,23 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (!userId) return 'Nieprzypisany';
     const u = users.find(u => u.id === userId);
     return u ? `${u.first_name} ${u.last_name}` : 'Nieznany';
+  };
+
+  const getMemberName = (memberId?: string, includeCompany = false) => {
+    if (!memberId) return 'Nieprzypisany';
+    // Check if it's a user (employee)
+    const u = users.find(u => u.id === memberId);
+    if (u) return `${u.first_name} ${u.last_name}`;
+    // Check if it's a worker (contractor)
+    const worker = subcontractorWorkers.find(w => w.id === memberId);
+    if (worker) {
+      const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
+      if (includeCompany && sub) {
+        return `${worker.first_name} ${worker.last_name} - ${sub.name}`;
+      }
+      return `${worker.first_name} ${worker.last_name}`;
+    }
+    return 'Nieznany';
   };
 
   const getCustomerName = (customerId?: string) => {
@@ -1276,6 +1294,24 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     setScheduleInput(currentScheduleEntry ? String(currentScheduleEntry.planned_amount) : '');
   }, [currentScheduleEntry, scheduleMonth]);
 
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      // Check if click is outside dropdown containers
+      if (!target.closest('.dropdown-container')) {
+        setAddTaskMembersDropdown(false);
+        setEditTaskMembersDropdown(false);
+        setSubDropdownOpen(false);
+      }
+    };
+
+    if (addTaskMembersDropdown || editTaskMembersDropdown || subDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [addTaskMembersDropdown, editTaskMembersDropdown, subDropdownOpen]);
+
   const saveScheduleEntry = async () => {
     if (!currentUser) return;
     setScheduleSaving(true);
@@ -1458,7 +1494,26 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const loadTaskAttachments = async (taskId: string) => {
     const { data } = await supabase.from('task_attachments').select('*').eq('task_id', taskId).order('created_at', { ascending: false });
-    setTaskAttachments(data || []);
+    let attachments = data || [];
+
+    // Also load attachments from associated issue (zgłoszenie) if exists
+    const relatedIssue = issues.find(issue => issue.task_id === taskId);
+    if (relatedIssue && relatedIssue.file_urls && relatedIssue.file_urls.length > 0) {
+      // Add issue files as task attachments (read-only, from issue)
+      const issueAttachments = relatedIssue.file_urls.map((url, idx) => ({
+        id: `issue-${relatedIssue.id}-${idx}`,
+        task_id: taskId,
+        file_url: url,
+        file_name: url.split('/').pop() || 'attachment',
+        uploaded_by: relatedIssue.reporter_id,
+        created_at: relatedIssue.created_at,
+        file_size: null,
+        from_issue: true, // Mark as coming from issue
+      } as TaskAttachment & { from_issue?: boolean }));
+      attachments = [...attachments, ...issueAttachments];
+    }
+
+    setTaskAttachments(attachments);
   };
 
   const openTaskDetail = (task: ProjectTask) => {
@@ -1561,10 +1616,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
 
-  const getWorkerLabel = (wid: string) => {
+  const getWorkerLabel = (wid: string, includeCompany = true) => {
     const worker = subcontractorWorkers.find(w => w.id === wid);
     const sub = worker ? subcontractors.find(s => s.id === worker.subcontractor_id) : null;
-    return worker ? `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}` : wid;
+    if (includeCompany) {
+      return worker ? `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}` : wid;
+    } else {
+      return worker ? `${worker.first_name} ${worker.last_name}` : wid;
+    }
   };
 
   const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => {
@@ -1603,9 +1662,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       {/* Row 2: Value fields */}
       {form.billing_type === 'hourly' ? (
         <div>
-          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wartość godziny</label>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Zaplanowana ilość godzin na wykonanie zadania</label>
           <input type="number" value={form.hourly_value || ''} onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00 PLN" />
+            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
         </div>
       ) : (
         <div className="grid grid-cols-4 gap-1.5">
@@ -1656,11 +1715,17 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       </div>
 
       {/* Row 4: Pracownicy odpowiedzialni - searchable multi-select */}
-      <div className="relative">
+      <div className="relative dropdown-container">
         <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pracownicy odpowiedzialni</label>
-        {selectedEmployees.length > 0 && (
+        {(selectedEmployees.length > 0 || form.assigned_users.includes('__ALL_EMPLOYEES__')) && (
           <div className="flex flex-wrap gap-1 mb-1">
-            {selectedEmployees.map(id => (
+            {form.assigned_users.includes('__ALL_EMPLOYEES__') && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded-md font-medium">
+                Wszyscy pracownicy
+                <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== '__ALL_EMPLOYEES__') })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            )}
+            {!form.assigned_users.includes('__ALL_EMPLOYEES__') && selectedEmployees.map(id => (
               <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded-md">
                 {getUserName(id)}
                 <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
@@ -1678,13 +1743,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         </div>
         {membersDropdownOpen && (
           <div className="absolute z-20 mt-0.5 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+            <label className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 cursor-pointer text-sm font-medium border-b border-gray-100">
+              <input type="checkbox" checked={form.assigned_users.includes('__ALL_EMPLOYEES__')}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setForm({ ...form, assigned_users: [...form.assigned_users.filter(id => !employeeMembers.some(m => m.user_id === id)), '__ALL_EMPLOYEES__'] });
+                  } else {
+                    setForm({ ...form, assigned_users: form.assigned_users.filter(id => id !== '__ALL_EMPLOYEES__') });
+                  }
+                }}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5" />
+              Wszyscy pracownicy
+            </label>
             {filteredEmployees.map(m => {
               const mid = m.user_id!;
+              const isAllSelected = form.assigned_users.includes('__ALL_EMPLOYEES__');
               return (
                 <label key={mid} className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 cursor-pointer text-sm">
                   <input type="checkbox" checked={form.assigned_users.includes(mid)}
+                    disabled={isAllSelected}
                     onChange={e => { const nu = e.target.checked ? [...form.assigned_users, mid] : form.assigned_users.filter(id => id !== mid); setForm({ ...form, assigned_users: nu }); }}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5" />
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 disabled:opacity-50" />
                   {getUserName(mid)}
                 </label>
               );
@@ -1696,13 +1775,19 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       {/* Row 4b: Podwykonawcy odpowiedzialni - searchable multi-select */}
       {subMembers.length > 0 && (
-        <div className="relative">
+        <div className="relative dropdown-container">
           <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Podwykonawcy odpowiedzialni</label>
-          {selectedSubs.length > 0 && (
+          {(selectedSubs.length > 0 || form.assigned_users.includes('__ALL_CONTRACTORS__')) && (
             <div className="flex flex-wrap gap-1 mb-1">
-              {selectedSubs.map(id => (
+              {form.assigned_users.includes('__ALL_CONTRACTORS__') && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 text-[11px] rounded-md font-medium">
+                  Wszyscy podwykonawcy
+                  <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== '__ALL_CONTRACTORS__') })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                </span>
+              )}
+              {!form.assigned_users.includes('__ALL_CONTRACTORS__') && selectedSubs.map(id => (
                 <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 text-[11px] rounded-md">
-                  {getWorkerLabel(id)}
+                  {getWorkerLabel(id, false)}
                   <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
                 </span>
               ))}
@@ -1718,13 +1803,28 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           </div>
           {subDropdownOpen && (
             <div className="absolute z-20 mt-0.5 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+              <label className="flex items-center gap-2 px-2 py-1 hover:bg-orange-50 cursor-pointer text-sm font-medium border-b border-gray-100">
+                <input type="checkbox" checked={form.assigned_users.includes('__ALL_CONTRACTORS__')}
+                  onChange={e => {
+                    if (e.target.checked) {
+                      setForm({ ...form, assigned_users: [...form.assigned_users.filter(id => !subMembers.some(m => m.worker_id === id)), '__ALL_CONTRACTORS__'] });
+                    } else {
+                      setForm({ ...form, assigned_users: form.assigned_users.filter(id => id !== '__ALL_CONTRACTORS__') });
+                    }
+                  }}
+                  className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5" />
+                <Building2 className="w-3.5 h-3.5 text-orange-400" />
+                Wszyscy podwykonawcy
+              </label>
               {filteredSubs.map(m => {
                 const wid = m.worker_id!;
+                const isAllSelected = form.assigned_users.includes('__ALL_CONTRACTORS__');
                 return (
                   <label key={wid} className="flex items-center gap-2 px-2 py-1 hover:bg-orange-50 cursor-pointer text-sm">
                     <input type="checkbox" checked={form.assigned_users.includes(wid)}
+                      disabled={isAllSelected}
                       onChange={e => { const nu = e.target.checked ? [...form.assigned_users, wid] : form.assigned_users.filter(id => id !== wid); setForm({ ...form, assigned_users: nu }); }}
-                      className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5" />
+                      className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5 disabled:opacity-50" />
                     <Building2 className="w-3.5 h-3.5 text-orange-400" />
                     {getWorkerLabel(wid)}
                   </label>
@@ -1916,9 +2016,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Odpowiedzialny</label>
               <select value={taskFilterResponsible} onChange={e => setTaskFilterResponsible(e.target.value)} className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white">
                 <option value="">Wszystko</option>
+                <option value="__ALL__">Wszyscy</option>
                 {members.map(m => {
                   const mid = m.user_id || m.worker_id || m.id;
-                  return <option key={mid} value={mid}>{getUserName(m.user_id) || mid}</option>;
+                  return <option key={mid} value={mid}>{getMemberName(mid)}</option>;
                 })}
               </select>
             </div>
@@ -1996,9 +2097,18 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{(task as any).name || task.title}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{getUserName((task as any).created_by)}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {(task.assigned_users || []).length > 0
-                      ? task.assigned_users!.map(id => getUserName(id)).join(', ')
-                      : '-'}
+                    {(() => {
+                      if (!task.assigned_users || task.assigned_users.length === 0) return '-';
+                      const hasAllEmployees = task.assigned_users.includes('__ALL_EMPLOYEES__');
+                      const hasAllContractors = task.assigned_users.includes('__ALL_CONTRACTORS__');
+                      const parts: string[] = [];
+                      if (hasAllEmployees) parts.push('Wszyscy pracownicy');
+                      if (hasAllContractors) parts.push('Wszyscy podwykonawcy');
+                      if (!hasAllEmployees && !hasAllContractors) {
+                        return task.assigned_users.map(id => getMemberName(id)).join(', ');
+                      }
+                      return parts.join(', ');
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">
                     {costValue ? `${costValue.toLocaleString('pl-PL')} PLN` : '-'}
@@ -2123,8 +2233,38 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
               {taskDetailTab === 'attachments' && (
                 <div className="space-y-4">
-                  <div className="flex justify-end">
-                    <label className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer">
+                  <div className="flex justify-between items-center">
+                    {selectedAttachments.length > 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            for (const attId of selectedAttachments) {
+                              const att = taskAttachments.find(a => a.id === attId);
+                              if (att) downloadFile(att.file_url, att.file_name);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Pobierz zaznaczone ({selectedAttachments.length})
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Czy na pewno chcesz usunąć ${selectedAttachments.length} zaznaczonych plików?`)) {
+                              for (const attId of selectedAttachments) {
+                                await handleDeleteAttachment(attId);
+                              }
+                              setSelectedAttachments([]);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Usuń zaznaczone ({selectedAttachments.length})
+                        </button>
+                      </div>
+                    )}
+                    <label className={`inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 cursor-pointer ${selectedAttachments.length > 0 ? 'ml-auto' : ''}`}>
                       <Upload className="w-4 h-4" />
                       Dodaj pliki
                       <input type="file" className="hidden" multiple onChange={handleUploadAttachment} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.dwg,.mp4,.mov" />
@@ -2134,8 +2274,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                     <p className="text-sm text-gray-400 text-center py-4">Brak załączników</p>
                   ) : (
                     <div className="space-y-2">
-                      {taskAttachments.map((att, idx) => (
-                        <div key={att.id} className="flex items-center gap-3 p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50">
+                      {taskAttachments.map((att, idx) => {
+                        const fromIssue = (att as any).from_issue === true;
+                        return (
+                        <div key={att.id} className={`flex items-center gap-3 p-2.5 border rounded-lg hover:bg-gray-50 ${selectedAttachments.includes(att.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                          {!fromIssue && (
+                            <input
+                              type="checkbox"
+                              checked={selectedAttachments.includes(att.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedAttachments([...selectedAttachments, att.id]);
+                                } else {
+                                  setSelectedAttachments(selectedAttachments.filter(id => id !== att.id));
+                                }
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                            />
+                          )}
+                          {fromIssue && (
+                            <div className="w-4 h-4" />
+                          )}
                           {isImageFile(att.file_name) ? (
                             <img src={att.file_url} alt={att.file_name} className="w-10 h-10 object-cover rounded" />
                           ) : (
@@ -2144,22 +2303,26 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{att.file_name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900 truncate">{att.file_name}</p>
+                              {fromIssue && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-medium rounded">
+                                  Ze zgłoszenia
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500">
                               {getUserName(att.uploaded_by)} &middot; {new Date(att.created_at).toLocaleDateString('pl-PL')}
-                              {att.file_size ? ` &middot; ${(att.file_size / 1024).toFixed(0)} KB` : ''}
                             </p>
                           </div>
                           <div className="flex items-center gap-1">
-                            {isImageFile(att.file_name) && (
-                              <button
-                                onClick={() => setTaskAttachmentPreviewIndex(idx)}
-                                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
-                                title="Podgląd"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setTaskAttachmentPreviewIndex(idx)}
+                              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
+                              title="Podgląd"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => downloadFile(att.file_url, att.file_name)}
                               className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-green-600"
@@ -2167,16 +2330,19 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                             >
                               <Download className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
-                              title="Usuń"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!fromIssue && (
+                              <button
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600"
+                                title="Usuń"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
