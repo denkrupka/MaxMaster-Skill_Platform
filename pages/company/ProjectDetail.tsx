@@ -274,6 +274,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [newTaskCategoryName, setNewTaskCategoryName] = useState('');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [taskAttachmentPreviewIndex, setTaskAttachmentPreviewIndex] = useState<number | null>(null);
+  const [taskEmployeeSearch, setTaskEmployeeSearch] = useState('');
+  const [taskSubSearch, setTaskSubSearch] = useState('');
+  const [subDropdownOpen, setSubDropdownOpen] = useState(false);
 
   // Task list filter state
   const [taskFilterCategory, setTaskFilterCategory] = useState('');
@@ -1437,7 +1440,8 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         const { data } = await supabase.from('project_tasks').update(taskData).eq('id', selectedTask.id).select().single();
         if (data) {
           setTasks(prev => prev.map(t => t.id === selectedTask.id ? data : t));
-          setSelectedTask(data);
+          setSelectedTask(null);
+          setEditTaskMembersDropdown(false);
         }
       } else {
         const { data } = await supabase.from('project_tasks').insert(taskData).select().single();
@@ -1557,373 +1561,257 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
 
-  const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => (
-    <div className="space-y-3">
-      {/* Row 1: Nazwa + Forma wynagrodzenia */}
-      <div className="grid grid-cols-[1fr,auto] gap-3 items-end">
+  const getWorkerLabel = (wid: string) => {
+    const worker = subcontractorWorkers.find(w => w.id === wid);
+    const sub = worker ? subcontractors.find(s => s.id === worker.subcontractor_id) : null;
+    return worker ? `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}` : wid;
+  };
+
+  const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => {
+    const employeeMembers = members.filter(m => m.user_id);
+    const subMembers = members.filter(m => m.worker_id);
+    const selectedEmployees = form.assigned_users.filter(id => members.some(m => m.user_id === id));
+    const selectedSubs = form.assigned_users.filter(id => members.some(m => m.worker_id === id));
+    const filteredEmployees = employeeMembers.filter(m => {
+      if (!taskEmployeeSearch) return true;
+      return getUserName(m.user_id!).toLowerCase().includes(taskEmployeeSearch.toLowerCase());
+    });
+    const filteredSubs = subMembers.filter(m => {
+      if (!taskSubSearch) return true;
+      return getWorkerLabel(m.worker_id!).toLowerCase().includes(taskSubSearch.toLowerCase());
+    });
+
+    return (
+    <div className="space-y-2.5">
+      {/* Row 1: Nazwa + Billing type */}
+      <div className="grid grid-cols-[1fr,auto] gap-2 items-end">
         <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Nazwa zadania</label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={e => setForm({ ...form, name: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Nazwa zadania"
-          />
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Nazwa zadania</label>
+          <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="Nazwa zadania" />
         </div>
         <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Forma wynagrodzenia</label>
           <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, billing_type: 'ryczalt' })}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                form.billing_type === 'ryczalt' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Ryczałt
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, billing_type: 'hourly' })}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                form.billing_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Roboczogodziny
-            </button>
+            <button type="button" onClick={() => setForm({ ...form, billing_type: 'ryczalt' })}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${form.billing_type === 'ryczalt' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Ryczałt</button>
+            <button type="button" onClick={() => setForm({ ...form, billing_type: 'hourly' })}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${form.billing_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Roboczogodziny</button>
           </div>
         </div>
       </div>
 
-      {/* Row 2: Billing fields */}
+      {/* Row 2: Value fields */}
       {form.billing_type === 'hourly' ? (
-        <div className="w-48">
-          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Ilość godzin</label>
-          <div className="relative">
-            <input
-              type="number"
-              value={form.hourly_value || ''}
-              onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm pr-12 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="0"
-            />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">godz.</span>
-          </div>
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wartość godziny</label>
+          <input type="number" value={form.hourly_value || ''} onChange={e => setForm({ ...form, hourly_value: parseFloat(e.target.value) || 0 })}
+            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00 PLN" />
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-1.5">
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Ilość</label>
-            <input
-              type="number"
-              value={form.quantity || ''}
-              onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Ilość</label>
+            <input type="number" value={form.quantity || ''} onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Jed. miary</label>
-            <select
-              value={form.unit}
-              onChange={e => setForm({ ...form, unit: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer"
-            >
-              {UNIT_OPTIONS.map(u => (
-                <option key={u} value={u}>{u}</option>
-              ))}
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Jed. miary</label>
+            <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}
+              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+              {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Cena jedn.</label>
-            <input
-              type="number"
-              value={form.price_per_unit || ''}
-              onChange={e => setForm({ ...form, price_per_unit: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Cena jedn.</label>
+            <input type="number" value={form.price_per_unit || ''} onChange={e => setForm({ ...form, price_per_unit: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Wartość</label>
-            <div className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm bg-gray-50 text-gray-700 font-medium">
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wartość</label>
+            <div className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-gray-50 text-gray-700 font-medium">
               {(form.quantity * form.price_per_unit).toLocaleString('pl-PL')} PLN
             </div>
           </div>
         </div>
       )}
 
-      {/* Row 3: Worker payment + rate inline */}
-      <div className="grid grid-cols-[auto,1fr] gap-3 items-end">
+      {/* Row 3: Worker payment + rate */}
+      <div className="grid grid-cols-[auto,1fr] gap-2 items-end">
         <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Forma wynagrodzenia pracownika</label>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Wynagrodzenie pracownika</label>
           <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, worker_payment_type: 'akord' })}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                form.worker_payment_type === 'akord' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Akord
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, worker_payment_type: 'hourly' })}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                form.worker_payment_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Roboczogodziny
-            </button>
+            <button type="button" onClick={() => setForm({ ...form, worker_payment_type: 'akord' })}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${form.worker_payment_type === 'akord' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Akord</button>
+            <button type="button" onClick={() => setForm({ ...form, worker_payment_type: 'hourly' })}
+              className={`px-2 py-1 text-[11px] font-medium rounded-md transition-colors ${form.worker_payment_type === 'hourly' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Roboczogodziny</button>
           </div>
         </div>
         {form.worker_payment_type === 'akord' && (
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Wynagrodzenie pracownika (wartość jedn.)</label>
-            <input
-              type="number"
-              value={form.worker_rate_per_unit || ''}
-              onChange={e => setForm({ ...form, worker_rate_per_unit: parseFloat(e.target.value) || 0 })}
-              className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="0.00"
-            />
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Stawka jedn.</label>
+            <input type="number" value={form.worker_rate_per_unit || ''} onChange={e => setForm({ ...form, worker_rate_per_unit: parseFloat(e.target.value) || 0 })}
+              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500" placeholder="0.00" />
           </div>
         )}
       </div>
 
-      {/* Row 4: Assigned employees (only project members with user_id) */}
+      {/* Row 4: Pracownicy odpowiedzialni - searchable multi-select */}
       <div className="relative">
-        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Pracownicy odpowiedzialni</label>
-        <button
-          type="button"
-          onClick={() => setMembersDropdownOpen(!membersDropdownOpen)}
-          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-left bg-white flex items-center justify-between focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-        >
-          <span className={form.assigned_users.filter(id => members.some(m => m.user_id === id)).length > 0 ? 'text-gray-700' : 'text-gray-400'}>
-            {form.assigned_users.filter(id => members.some(m => m.user_id === id)).length > 0
-              ? form.assigned_users.filter(id => members.some(m => m.user_id === id)).map(id => getUserName(id)).join(', ')
-              : 'Wybierz pracowników'}
-          </span>
-          <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-        </button>
+        <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Pracownicy odpowiedzialni</label>
+        {selectedEmployees.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-1">
+            {selectedEmployees.map(id => (
+              <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[11px] rounded-md">
+                {getUserName(id)}
+                <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          <input type="text" value={taskEmployeeSearch}
+            onChange={e => { setTaskEmployeeSearch(e.target.value); setMembersDropdownOpen(true); }}
+            onFocus={() => setMembersDropdownOpen(true)}
+            placeholder="Szukaj pracownika..."
+            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 pr-7" />
+          <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+        </div>
         {membersDropdownOpen && (
-          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {members.filter(m => m.user_id).map(m => {
+          <div className="absolute z-20 mt-0.5 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+            {filteredEmployees.map(m => {
               const mid = m.user_id!;
               return (
-              <label
-                key={mid}
-                className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={form.assigned_users.includes(mid)}
-                  onChange={e => {
-                    const newUsers = e.target.checked
-                      ? [...form.assigned_users, mid]
-                      : form.assigned_users.filter(id => id !== mid);
-                    setForm({ ...form, assigned_users: newUsers });
-                  }}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-                />
-                {getUserName(mid)}
-              </label>
-              );
-            })}
-            {members.filter(m => m.user_id).length === 0 && (
-              <p className="px-2.5 py-1.5 text-sm text-gray-400">Brak pracowników w projekcie</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Row 4b: Subcontractor workers from project members */}
-      {members.filter(m => m.worker_id).length > 0 && (
-        <div>
-          <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Podwykonawcy odpowiedzialni</label>
-          <div className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white min-h-[32px]">
-            {form.assigned_users.filter(id => members.some(m => m.worker_id === id)).length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {form.assigned_users.filter(id => members.some(m => m.worker_id === id)).map(id => {
-                  const worker = subcontractorWorkers.find(w => w.id === id);
-                  const sub = worker ? subcontractors.find(s => s.id === worker.subcontractor_id) : null;
-                  const label = worker ? `${worker.first_name} ${worker.last_name}${sub ? ` - ${sub.name}` : ''}` : id;
-                  return (
-                    <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 text-xs rounded-md">
-                      {label}
-                      <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            ) : (
-              <span className="text-gray-400">Brak podwykonawców</span>
-            )}
-          </div>
-          <div className="mt-1 max-h-28 overflow-y-auto border border-gray-200 rounded-lg bg-white">
-            {members.filter(m => m.worker_id).map(m => {
-              const wid = m.worker_id!;
-              const worker = subcontractorWorkers.find(w => w.id === wid);
-              const sub = worker ? subcontractors.find(s => s.id === worker.subcontractor_id) : null;
-              const label = worker ? `${worker.first_name} ${worker.last_name}${sub ? ` - ${sub.name}` : ''}` : wid;
-              return (
-                <label
-                  key={wid}
-                  className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.assigned_users.includes(wid)}
-                    onChange={e => {
-                      const newUsers = e.target.checked
-                        ? [...form.assigned_users, wid]
-                        : form.assigned_users.filter(id => id !== wid);
-                      setForm({ ...form, assigned_users: newUsers });
-                    }}
-                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5"
-                  />
-                  <Building2 className="w-3.5 h-3.5 text-orange-400" />
-                  {label}
+                <label key={mid} className="flex items-center gap-2 px-2 py-1 hover:bg-blue-50 cursor-pointer text-sm">
+                  <input type="checkbox" checked={form.assigned_users.includes(mid)}
+                    onChange={e => { const nu = e.target.checked ? [...form.assigned_users, mid] : form.assigned_users.filter(id => id !== mid); setForm({ ...form, assigned_users: nu }); }}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5" />
+                  {getUserName(mid)}
                 </label>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {/* Row 5: Deadlines inline */}
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 mb-0.5">
-            <input
-              type="checkbox"
-              checked={form.has_start_deadline}
-              onChange={e => setForm({ ...form, has_start_deadline: e.target.checked })}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-            />
-            Termin rozpoczęcia
-          </label>
-          {form.has_start_deadline && (
-            <div className="flex gap-1.5">
-              <input
-                type="date"
-                value={form.start_date}
-                onChange={e => setForm({ ...form, start_date: e.target.value })}
-                className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="time"
-                value={form.start_time}
-                onChange={e => setForm({ ...form, start_time: e.target.value })}
-                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          )}
-        </div>
-        <div>
-          <label className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 mb-0.5">
-            <input
-              type="checkbox"
-              checked={form.has_end_deadline}
-              onChange={e => setForm({ ...form, has_end_deadline: e.target.checked })}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
-            />
-            Termin zakończenia
-          </label>
-          {form.has_end_deadline && (
-            <div className="flex gap-1.5">
-              <input
-                type="date"
-                value={form.end_date}
-                onChange={e => setForm({ ...form, end_date: e.target.value })}
-                className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-              <input
-                type="time"
-                value={form.end_time}
-                onChange={e => setForm({ ...form, end_time: e.target.value })}
-                className="w-24 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Row 6: Category dropdown with add-new */}
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Kategoria</label>
-        <div className="flex gap-2">
-          <select
-            value={form.category}
-            onChange={e => setForm({ ...form, category: e.target.value })}
-            className="flex-1 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Wybierz kategorię...</option>
-            {taskCategories.map(c => (
-              <option key={c.id} value={c.name}>{c.name}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => setShowNewTaskCategoryInput(!showNewTaskCategoryInput)}
-            className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
-            title="Dodaj nową kategorię"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        {showNewTaskCategoryInput && (
-          <div className="flex gap-2 mt-1.5">
-            <input
-              type="text"
-              value={newTaskCategoryName}
-              onChange={e => setNewTaskCategoryName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addTaskCategory()}
-              placeholder="Nazwa nowej kategorii"
-              className="flex-1 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              autoFocus
-            />
-            <button
-              onClick={addTaskCategory}
-              className="px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Dodaj
-            </button>
+            {filteredEmployees.length === 0 && <p className="px-2 py-1.5 text-xs text-gray-400">Brak wyników</p>}
           </div>
         )}
       </div>
 
-      {/* Row 7: Status */}
-      <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Status</label>
-        <select
-          value={form.status}
-          onChange={e => setForm({ ...form, status: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-        >
-          {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => (
-            <option key={key} value={key}>{cfg.label}</option>
-          ))}
-        </select>
+      {/* Row 4b: Podwykonawcy odpowiedzialni - searchable multi-select */}
+      {subMembers.length > 0 && (
+        <div className="relative">
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Podwykonawcy odpowiedzialni</label>
+          {selectedSubs.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1">
+              {selectedSubs.map(id => (
+                <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 text-orange-700 text-[11px] rounded-md">
+                  {getWorkerLabel(id)}
+                  <button type="button" onClick={() => setForm({ ...form, assigned_users: form.assigned_users.filter(uid => uid !== id) })} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="relative">
+            <input type="text" value={taskSubSearch}
+              onChange={e => { setTaskSubSearch(e.target.value); setSubDropdownOpen(true); }}
+              onFocus={() => setSubDropdownOpen(true)}
+              placeholder="Szukaj podwykonawcy..."
+              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 pr-7" />
+            <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          </div>
+          {subDropdownOpen && (
+            <div className="absolute z-20 mt-0.5 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-36 overflow-y-auto">
+              {filteredSubs.map(m => {
+                const wid = m.worker_id!;
+                return (
+                  <label key={wid} className="flex items-center gap-2 px-2 py-1 hover:bg-orange-50 cursor-pointer text-sm">
+                    <input type="checkbox" checked={form.assigned_users.includes(wid)}
+                      onChange={e => { const nu = e.target.checked ? [...form.assigned_users, wid] : form.assigned_users.filter(id => id !== wid); setForm({ ...form, assigned_users: nu }); }}
+                      className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 w-3.5 h-3.5" />
+                    <Building2 className="w-3.5 h-3.5 text-orange-400" />
+                    {getWorkerLabel(wid)}
+                  </label>
+                );
+              })}
+              {filteredSubs.length === 0 && <p className="px-2 py-1.5 text-xs text-gray-400">Brak wyników</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Row 5: Deadlines */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="flex items-center gap-1 text-[10px] font-medium text-gray-500 mb-0.5">
+            <input type="checkbox" checked={form.has_start_deadline} onChange={e => setForm({ ...form, has_start_deadline: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3" />
+            Termin rozpoczęcia
+          </label>
+          {form.has_start_deadline && (
+            <div className="flex gap-1">
+              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
+                className="flex-1 border border-gray-300 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+              <input type="time" value={form.start_time} onChange={e => setForm({ ...form, start_time: e.target.value })}
+                className="w-20 border border-gray-300 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="flex items-center gap-1 text-[10px] font-medium text-gray-500 mb-0.5">
+            <input type="checkbox" checked={form.has_end_deadline} onChange={e => setForm({ ...form, has_end_deadline: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3" />
+            Termin zakończenia
+          </label>
+          {form.has_end_deadline && (
+            <div className="flex gap-1">
+              <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
+                className="flex-1 border border-gray-300 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+              <input type="time" value={form.end_time} onChange={e => setForm({ ...form, end_time: e.target.value })}
+                className="w-20 border border-gray-300 rounded-lg px-1.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* (Subcontractors moved to Row 4b above Pracownicy) */}
+      {/* Row 6: Category + Status inline */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Kategoria</label>
+          <div className="flex gap-1">
+            <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+              <option value="">Wybierz...</option>
+              {taskCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+            <button type="button" onClick={() => setShowNewTaskCategoryInput(!showNewTaskCategoryInput)}
+              className="px-1.5 py-1 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600" title="Dodaj nową kategorię">
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+          {showNewTaskCategoryInput && (
+            <div className="flex gap-1 mt-1">
+              <input type="text" value={newTaskCategoryName} onChange={e => setNewTaskCategoryName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addTaskCategory()} placeholder="Nowa kategoria"
+                className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500" autoFocus />
+              <button onClick={addTaskCategory} className="px-2 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">Dodaj</button>
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Status</label>
+          <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+          </select>
+        </div>
+      </div>
 
-      {/* Row 9: Description */}
+      {/* Row 7: Description */}
       <div>
-        <label className="block text-[11px] font-medium text-gray-500 mb-0.5">Opis zadania</label>
-        <textarea
-          value={form.description}
-          onChange={e => setForm({ ...form, description: e.target.value })}
-          rows={2}
-          className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
-          placeholder="Opis zadania..."
-        />
+        <label className="block text-[10px] font-medium text-gray-500 mb-0.5">Opis</label>
+        <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2}
+          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none" placeholder="Opis zadania..." />
       </div>
     </div>
-  );
+    );
+  };
 
   const [addTaskMembersDropdown, setAddTaskMembersDropdown] = useState(false);
   const [editTaskMembersDropdown, setEditTaskMembersDropdown] = useState(false);
@@ -5012,7 +4900,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-gray-500">Status:</span>
-                {(['new', 'in_progress', 'completed', 'done', 'cancelled'] as ProjectIssueStatus[]).map(st => {
+                {(['new', 'in_progress', 'done', 'completed', 'cancelled'] as ProjectIssueStatus[]).map(st => {
                   const labels: Record<string, string> = { new: 'Nowe', in_progress: 'W trakcie', completed: 'Zakończone', done: 'Wykonane', cancelled: 'Anulowane' };
                   const activeColors: Record<string, string> = { new: 'bg-amber-200 text-amber-800', in_progress: 'bg-blue-200 text-blue-800', completed: 'bg-green-200 text-green-800', done: 'bg-emerald-200 text-emerald-800', cancelled: 'bg-red-200 text-red-800' };
                   return (
