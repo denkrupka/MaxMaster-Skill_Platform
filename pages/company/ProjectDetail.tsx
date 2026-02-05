@@ -305,15 +305,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   });
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  // Helper functions - must be defined early to avoid TDZ errors
-  const getUserName = useCallback((userId?: string) => {
+  // Helper functions - defined as regular functions to avoid TDZ with props
+  function getUserName(userId?: string): string {
     if (!userId) return 'Nieprzypisany';
     if (!users || users.length === 0) return 'Nieznany';
     const user = users.find(usr => usr.id === userId);
     return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
-  }, [users]);
+  }
 
-  const getMemberName = useCallback((memberId?: string, includeCompany = false) => {
+  function getMemberName(memberId?: string, includeCompany: boolean = false): string {
     if (!memberId) return 'Nieprzypisany';
     // Check if it's a user (employee)
     if (users && users.length > 0) {
@@ -334,9 +334,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       }
     }
     return 'Nieznany';
-  }, [users, subcontractorWorkers, subcontractors]);
+  }
 
-  const getCustomerName = useCallback((customerId?: string) => {
+  function getCustomerName(customerId?: string): string {
     if (!customerId) return '-';
     if (contractorClients && contractorClients.length > 0) {
       const cc = contractorClients.find(c => c.id === customerId);
@@ -346,15 +346,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       return customers.find(c => c.id === customerId)?.name || '-';
     }
     return '-';
-  }, [contractorClients, customers]);
+  }
 
-  const getDepartmentName = useCallback((deptId?: string) => {
+  function getDepartmentName(deptId?: string): string {
     if (!deptId) return '-';
     if (!departments || departments.length === 0) return '-';
     return departments.find(d => d.id === deptId)?.name || '-';
-  }, [departments]);
+  }
 
-  const getWorkerLabel = useCallback((wid: string, includeCompany = true) => {
+  function getWorkerLabel(wid: string, includeCompany: boolean = true): string {
     if (!subcontractorWorkers || subcontractorWorkers.length === 0) return wid;
     const worker = subcontractorWorkers.find(w => w.id === wid);
     if (!worker) return wid;
@@ -364,7 +364,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
       return `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}`;
     }
     return `${worker.first_name} ${worker.last_name}`;
-  }, [subcontractorWorkers, subcontractors]);
+  }
 
   useEffect(() => {
     if (currentUser && project) loadProjectData();
@@ -683,12 +683,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   };
 
   const statusCfg = PROJECT_STATUS_CONFIG[project.status];
-  const dept = useMemo(() =>
-    project.department_id && departments && departments.length > 0
-      ? departments.find(d => d.id === project.department_id)
-      : null,
-    [project.department_id, departments]
-  );
+  const dept = project.department_id && departments && departments.length > 0
+    ? departments.find(d => d.id === project.department_id)
+    : null;
 
   // Calculations
   const totalIncome = income.reduce((s, i) => s + (i.value || 0), 0);
