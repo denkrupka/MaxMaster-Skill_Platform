@@ -220,7 +220,7 @@ export const CompanyProjectsPage: React.FC = () => {
     setClientSearchTerm('');
     setShowClientDropdown(false);
     setShowProjectModal(true);
-  };
+  }
 
   function handleDepartmentChange(deptId: string) {
     if (deptId) {
