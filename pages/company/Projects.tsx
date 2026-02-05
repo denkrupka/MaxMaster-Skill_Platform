@@ -449,7 +449,7 @@ export const CompanyProjectsPage: React.FC = () => {
       );
     }
     return list;
-  }, [projects, search, customers, statusFilter]);
+  }, [projects, search, customers, contractorClients, statusFilter]);
 
   // ========== RENDER MODAL FUNCTIONS ==========
   function renderProjectModal() {
