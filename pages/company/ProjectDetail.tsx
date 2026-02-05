@@ -305,6 +305,67 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   });
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
+  // Helper functions - must be defined early to avoid TDZ errors
+  const getUserName = useCallback((userId?: string) => {
+    if (!userId) return 'Nieprzypisany';
+    if (!users || users.length === 0) return 'Nieznany';
+    const user = users.find(usr => usr.id === userId);
+    return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
+  }, [users]);
+
+  const getMemberName = useCallback((memberId?: string, includeCompany = false) => {
+    if (!memberId) return 'Nieprzypisany';
+    // Check if it's a user (employee)
+    if (users && users.length > 0) {
+      const user = users.find(usr => usr.id === memberId);
+      if (user) return `${user.first_name} ${user.last_name}`;
+    }
+    // Check if it's a worker (contractor)
+    if (subcontractorWorkers && subcontractorWorkers.length > 0) {
+      const worker = subcontractorWorkers.find(w => w.id === memberId);
+      if (worker) {
+        if (includeCompany && subcontractors && subcontractors.length > 0) {
+          const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
+          if (sub) {
+            return `${worker.first_name} ${worker.last_name} - ${sub.name}`;
+          }
+        }
+        return `${worker.first_name} ${worker.last_name}`;
+      }
+    }
+    return 'Nieznany';
+  }, [users, subcontractorWorkers, subcontractors]);
+
+  const getCustomerName = useCallback((customerId?: string) => {
+    if (!customerId) return '-';
+    if (contractorClients && contractorClients.length > 0) {
+      const cc = contractorClients.find(c => c.id === customerId);
+      if (cc) return cc.name;
+    }
+    if (customers && customers.length > 0) {
+      return customers.find(c => c.id === customerId)?.name || '-';
+    }
+    return '-';
+  }, [contractorClients, customers]);
+
+  const getDepartmentName = useCallback((deptId?: string) => {
+    if (!deptId) return '-';
+    if (!departments || departments.length === 0) return '-';
+    return departments.find(d => d.id === deptId)?.name || '-';
+  }, [departments]);
+
+  const getWorkerLabel = useCallback((wid: string, includeCompany = true) => {
+    if (!subcontractorWorkers || subcontractorWorkers.length === 0) return wid;
+    const worker = subcontractorWorkers.find(w => w.id === wid);
+    if (!worker) return wid;
+
+    if (includeCompany && subcontractors && subcontractors.length > 0) {
+      const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
+      return `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}`;
+    }
+    return `${worker.first_name} ${worker.last_name}`;
+  }, [subcontractorWorkers, subcontractors]);
+
   useEffect(() => {
     if (currentUser && project) loadProjectData();
   }, [currentUser, project?.id]);
@@ -620,54 +681,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
     doc.save(`lista_obecnosci_${project.name.replace(/\s+/g, '_')}_${attendanceDateFrom}_${attendanceDateTo}.pdf`);
   };
-
-  const getUserName = useCallback((userId?: string) => {
-    if (!userId) return 'Nieprzypisany';
-    if (!users || users.length === 0) return 'Nieznany';
-    const user = users.find(usr => usr.id === userId);
-    return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
-  }, [users]);
-
-  const getMemberName = useCallback((memberId?: string, includeCompany = false) => {
-    if (!memberId) return 'Nieprzypisany';
-    // Check if it's a user (employee)
-    if (users && users.length > 0) {
-      const user = users.find(usr => usr.id === memberId);
-      if (user) return `${user.first_name} ${user.last_name}`;
-    }
-    // Check if it's a worker (contractor)
-    if (subcontractorWorkers && subcontractorWorkers.length > 0) {
-      const worker = subcontractorWorkers.find(w => w.id === memberId);
-      if (worker) {
-        if (includeCompany && subcontractors && subcontractors.length > 0) {
-          const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
-          if (sub) {
-            return `${worker.first_name} ${worker.last_name} - ${sub.name}`;
-          }
-        }
-        return `${worker.first_name} ${worker.last_name}`;
-      }
-    }
-    return 'Nieznany';
-  }, [users, subcontractorWorkers, subcontractors]);
-
-  const getCustomerName = useCallback((customerId?: string) => {
-    if (!customerId) return '-';
-    if (contractorClients && contractorClients.length > 0) {
-      const cc = contractorClients.find(c => c.id === customerId);
-      if (cc) return cc.name;
-    }
-    if (customers && customers.length > 0) {
-      return customers.find(c => c.id === customerId)?.name || '-';
-    }
-    return '-';
-  }, [contractorClients, customers]);
-
-  const getDepartmentName = useCallback((deptId?: string) => {
-    if (!deptId) return '-';
-    if (!departments || departments.length === 0) return '-';
-    return departments.find(d => d.id === deptId)?.name || '-';
-  }, [departments]);
 
   const statusCfg = PROJECT_STATUS_CONFIG[project.status];
   const dept = useMemo(() =>
@@ -1633,18 +1646,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   };
 
   const UNIT_OPTIONS = ['szt.', 'm', 'm²', 'm³', 'mb', 'kg', 'l', 'kpl.', 'op.', 'godz.', 'usł.'];
-
-  const getWorkerLabel = useCallback((wid: string, includeCompany = true) => {
-    if (!subcontractorWorkers || subcontractorWorkers.length === 0) return wid;
-    const worker = subcontractorWorkers.find(w => w.id === wid);
-    if (!worker) return wid;
-
-    if (includeCompany && subcontractors && subcontractors.length > 0) {
-      const sub = subcontractors.find(s => s.id === worker.subcontractor_id);
-      return `${worker.first_name} ${worker.last_name}${sub ? ' - ' + sub.name : ''}`;
-    }
-    return `${worker.first_name} ${worker.last_name}`;
-  }, [subcontractorWorkers, subcontractors]);
 
   const renderTaskFormFields = (form: TaskFormState, setForm: (f: TaskFormState) => void, membersDropdownOpen: boolean, setMembersDropdownOpen: (v: boolean) => void) => {
     const employeeMembers = members.filter(m => m.user_id);
