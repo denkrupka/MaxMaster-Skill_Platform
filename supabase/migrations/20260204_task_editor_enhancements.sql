@@ -39,6 +39,23 @@ END $$;
 -- Fix task_attachments: drop old FK if it references tasks table (not project_tasks)
 ALTER TABLE task_attachments DROP CONSTRAINT IF EXISTS task_attachments_task_id_fkey;
 
+-- Ensure task_attachments has RLS policies for authenticated users
+ALTER TABLE task_attachments ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'task_attachments_select' AND tablename = 'task_attachments') THEN
+    CREATE POLICY task_attachments_select ON task_attachments FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'task_attachments_insert' AND tablename = 'task_attachments') THEN
+    CREATE POLICY task_attachments_insert ON task_attachments FOR INSERT WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'task_attachments_update' AND tablename = 'task_attachments') THEN
+    CREATE POLICY task_attachments_update ON task_attachments FOR UPDATE USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'task_attachments_delete' AND tablename = 'task_attachments') THEN
+    CREATE POLICY task_attachments_delete ON task_attachments FOR DELETE USING (true);
+  END IF;
+END $$;
+
 -- Backfill issue_number for existing issues
 DO $$
 DECLARE
