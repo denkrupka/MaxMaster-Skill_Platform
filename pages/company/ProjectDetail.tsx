@@ -274,6 +274,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
   const [newTaskCategoryName, setNewTaskCategoryName] = useState('');
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [taskAttachmentPreviewIndex, setTaskAttachmentPreviewIndex] = useState<number | null>(null);
+  const [taskAttachmentViewerUrl, setTaskAttachmentViewerUrl] = useState<string | null>(null);
   const [selectedAttachments, setSelectedAttachments] = useState<string[]>([]);
   const [taskEmployeeSearch, setTaskEmployeeSearch] = useState('');
   const [taskSubSearch, setTaskSubSearch] = useState('');
@@ -1322,6 +1323,13 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     setScheduleInput(currentScheduleEntry ? String(currentScheduleEntry.planned_amount) : '');
   }, [currentScheduleEntry, scheduleMonth]);
 
+  // Reload task attachments when issues change (for dynamic file syncing from submissions)
+  useEffect(() => {
+    if (selectedTask && issues.length > 0) {
+      loadTaskAttachments(selectedTask.id);
+    }
+  }, [issues]);
+
   // Click outside to close dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1667,7 +1675,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     });
 
     return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       {/* Row 1: Nazwa + Billing type */}
       <div className="grid grid-cols-[1fr,auto] gap-2 items-end">
         <div>
@@ -2097,6 +2105,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Nazwa</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Kategoria</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Utworzył</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Odpowiedzialny</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Wartość</th>
@@ -2118,6 +2127,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                   onClick={() => openTaskDetail(task)}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-gray-900">{(task as any).name || task.title}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">{task.category || '-'}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{getUserName((task as any).created_by)}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {(() => {
@@ -2196,9 +2206,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
 
       {/* Task Detail Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); setTaskAttachmentPreviewIndex(null); }}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setSelectedTask(null); setEditTaskMembersDropdown(false); setTaskAttachmentPreviewIndex(null); setTaskAttachmentViewerUrl(null); }}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200">
               <h2 className="text-base font-semibold text-gray-900">{(selectedTask as any).name || selectedTask.title}</h2>
               <div className="flex items-center gap-1">
                 <button
@@ -2215,7 +2225,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             </div>
 
             {/* Detail tabs - removed 'description', added 'koszt' */}
-            <div className="border-b border-gray-200 px-5">
+            <div className="border-b border-gray-200 px-4">
               <div className="flex gap-0">
                 {([
                   { key: 'edit' as const, label: 'Edytuj' },
@@ -2237,11 +2247,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               </div>
             </div>
 
-            <div className="px-5 py-4">
+            <div className="px-4 py-3">
               {taskDetailTab === 'edit' && (
                 <>
                   {renderTaskFormFields(editingTask, setEditingTask, editTaskMembersDropdown, setEditTaskMembersDropdown)}
-                  <div className="flex justify-end mt-3">
+                  <div className="flex justify-end mt-2">
                     <button
                       onClick={() => handleSaveTask(true)}
                       disabled={savingTask || !editingTask.name.trim()}
@@ -2340,7 +2350,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
                           </div>
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => setTaskAttachmentPreviewIndex(idx)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTaskAttachmentViewerUrl(att.file_url);
+                              }}
                               className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
                               title="Podgląd"
                             >
@@ -2548,6 +2561,14 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Task Attachment Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={!!taskAttachmentViewerUrl}
+        onClose={() => setTaskAttachmentViewerUrl(null)}
+        urls={taskAttachmentViewerUrl ? [taskAttachmentViewerUrl] : []}
+        title="Podgląd załącznika"
+      />
     </div>
   );
 
