@@ -23,11 +23,12 @@ import type {
 } from '../../types';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'formularze';
+type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'formularze' | 'wall_types';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'rodzaj_prac', label: 'Rodzaj prac', icon: ClipboardList },
-  { id: 'formularze', label: 'Formularze', icon: Layers },
+  { id: 'wall_types', label: 'Rodzaje ścian', icon: Layers },
+  { id: 'formularze', label: 'Formularze', icon: FolderOpen },
   { id: 'work_types', label: 'Typy prac', icon: Wrench },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
@@ -168,6 +169,12 @@ export const DictionariesPage: React.FC = () => {
   const [editingRequestWorkType, setEditingRequestWorkType] = useState<Partial<KosztorysWorkTypeRecord> | null>(null);
   const [requestWorkTypeSearch, setRequestWorkTypeSearch] = useState('');
 
+  // ============ Wall types (rodzaje ścian) ============
+  const [wallTypes, setWallTypes] = useState<{ id: string; code: string; name: string; wall_category: string; is_active: boolean }[]>([]);
+  const [wallTypeDialog, setWallTypeDialog] = useState(false);
+  const [editingWallType, setEditingWallType] = useState<{ id?: string; code: string; name: string; wall_category: string; is_active: boolean } | null>(null);
+  const [wallTypeSearch, setWallTypeSearch] = useState('');
+
   // ============ Formularze (form templates) ============
   const [formTemplates, setFormTemplates] = useState<KosztorysFormTemplateDB[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<KosztorysFormTemplateDB | null>(null);
@@ -206,6 +213,7 @@ export const DictionariesPage: React.FC = () => {
         loadMappingRules(),
         loadRequestWorkTypes(),
         loadFormTemplates(),
+        loadWallTypes(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -324,6 +332,25 @@ export const DictionariesPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading request work types:', err);
       setRequestWorkTypes([]);
+    }
+  };
+
+  // Load wall types (Rodzaje ścian)
+  const loadWallTypes = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_wall_types')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('wall_category')
+        .order('name');
+
+      if (error) throw error;
+      setWallTypes(data || []);
+    } catch (err) {
+      console.error('Error loading wall types:', err);
+      setWallTypes([]);
     }
   };
 
@@ -886,6 +913,74 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
+  // ============ Wall types filtered ============
+  const filteredWallTypes = useMemo(() =>
+    wallTypes.filter(wt =>
+      wt.name?.toLowerCase().includes(wallTypeSearch.toLowerCase()) ||
+      wt.code?.toLowerCase().includes(wallTypeSearch.toLowerCase())
+    ), [wallTypes, wallTypeSearch]);
+
+  // ============ CRUD for wall types ============
+  const handleSaveWallType = async () => {
+    if (!editingWallType || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingWallType.id) {
+        const { error } = await supabase
+          .from('kosztorys_wall_types')
+          .update({
+            code: editingWallType.code,
+            name: editingWallType.name,
+            wall_category: editingWallType.wall_category,
+            is_active: editingWallType.is_active,
+          })
+          .eq('id', editingWallType.id);
+
+        if (error) throw error;
+        showNotification('Rodzaj ściany zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_wall_types')
+          .insert({
+            code: editingWallType.code,
+            name: editingWallType.name,
+            wall_category: editingWallType.wall_category,
+            is_active: editingWallType.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Rodzaj ściany dodany', 'success');
+      }
+
+      setWallTypeDialog(false);
+      setEditingWallType(null);
+      await loadWallTypes();
+    } catch (error: any) {
+      console.error('Error saving wall type:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteWallType = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_wall_types')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Rodzaj ściany usunięty', 'success');
+      await loadWallTypes();
+    } catch (error: any) {
+      console.error('Error deleting wall type:', error);
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+  };
+
   // ============ CRUD for form templates ============
   const handleSaveFormTemplate = async () => {
     if (!editingFormTemplate || !currentUser) return;
@@ -1254,6 +1349,223 @@ export const DictionariesPage: React.FC = () => {
             <button
               onClick={handleSaveRequestWorkType}
               disabled={saving || !editingRequestWorkType?.code || !editingRequestWorkType?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Wall Types Tab ============
+  const renderWallTypesTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={wallTypeSearch}
+            onChange={(e) => setWallTypeSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingWallType({ code: '', name: '', wall_category: 'external', is_active: true });
+            setWallTypeDialog(true);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj rodzaj ściany
+        </button>
+      </div>
+
+      {/* External walls */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-3">Ściany zewnętrzne</h3>
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Kod</th>
+                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Nazwa</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-slate-700">Status</th>
+                <th className="w-24"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredWallTypes.filter(wt => wt.wall_category === 'external').map(wt => (
+                <tr key={wt.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-sm">{wt.code}</td>
+                  <td className="px-4 py-3 font-medium">{wt.name}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      wt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {wt.is_active ? 'Aktywny' : 'Nieaktywny'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        onClick={() => {
+                          setEditingWallType(wt);
+                          setWallTypeDialog(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm({ type: 'wall_type', id: wt.id })}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredWallTypes.filter(wt => wt.wall_category === 'external').length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    Brak ścian zewnętrznych.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Internal walls */}
+      <div>
+        <h3 className="text-lg font-semibold text-slate-900 mb-3">Ściany wewnętrzne</h3>
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Kod</th>
+                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Nazwa</th>
+                <th className="text-center px-4 py-3 text-sm font-semibold text-slate-700">Status</th>
+                <th className="w-24"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredWallTypes.filter(wt => wt.wall_category === 'internal').map(wt => (
+                <tr key={wt.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-sm">{wt.code}</td>
+                  <td className="px-4 py-3 font-medium">{wt.name}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                      wt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {wt.is_active ? 'Aktywny' : 'Nieaktywny'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        onClick={() => {
+                          setEditingWallType(wt);
+                          setWallTypeDialog(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm({ type: 'wall_type', id: wt.id })}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredWallTypes.filter(wt => wt.wall_category === 'internal').length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    Brak ścian wewnętrznych.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Wall Type Dialog */}
+      <Modal
+        isOpen={wallTypeDialog}
+        onClose={() => {
+          setWallTypeDialog(false);
+          setEditingWallType(null);
+        }}
+        title={editingWallType?.id ? 'Edytuj rodzaj ściany' : 'Nowy rodzaj ściany'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria *</label>
+            <select
+              value={editingWallType?.wall_category || 'external'}
+              onChange={(e) => setEditingWallType(prev => prev ? { ...prev, wall_category: e.target.value } : null)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="external">Ściana zewnętrzna</option>
+              <option value="internal">Ściana wewnętrzna</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingWallType?.code || ''}
+              onChange={(e) => setEditingWallType(prev => prev ? { ...prev, code: e.target.value.toLowerCase().replace(/\s+/g, '_') } : null)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. cegla, gipskarton"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingWallType?.name || ''}
+              onChange={(e) => setEditingWallType(prev => prev ? { ...prev, name: e.target.value } : null)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Cegła ceramiczna"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="wt-active"
+              checked={editingWallType?.is_active ?? true}
+              onChange={(e) => setEditingWallType(prev => prev ? { ...prev, is_active: e.target.checked } : null)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="wt-active" className="text-sm text-slate-700">Aktywny</label>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setWallTypeDialog(false);
+                setEditingWallType(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveWallType}
+              disabled={saving || !editingWallType?.code || !editingWallType?.name}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -3056,6 +3368,7 @@ export const DictionariesPage: React.FC = () => {
           ) : (
             <>
               {activeTab === 'rodzaj_prac' && renderRodzajPracTab()}
+              {activeTab === 'wall_types' && renderWallTypesTab()}
               {activeTab === 'formularze' && renderFormularzeTab()}
               {activeTab === 'work_types' && renderWorkTypesTab()}
               {activeTab === 'materials' && renderMaterialsTab()}
@@ -3104,6 +3417,7 @@ export const DictionariesPage: React.FC = () => {
                     else if (showDeleteConfirm.type === 'template') handleDeleteTemplate(showDeleteConfirm.id);
                     else if (showDeleteConfirm.type === 'mapping') handleDeleteMapping(showDeleteConfirm.id);
                     else if (showDeleteConfirm.type === 'request_work_type') handleDeleteRequestWorkType(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'wall_type') handleDeleteWallType(showDeleteConfirm.id);
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
