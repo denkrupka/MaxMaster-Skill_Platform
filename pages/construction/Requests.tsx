@@ -150,6 +150,8 @@ export const RequestsPage: React.FC = () => {
   const [objectTypeFilter, setObjectTypeFilter] = useState<KosztorysObjectType | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [showPrepareOfferModal, setShowPrepareOfferModal] = useState(false);
+  const [showFormSelectionModal, setShowFormSelectionModal] = useState(false);
+  const [checkingForm, setCheckingForm] = useState(false);
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -216,6 +218,36 @@ export const RequestsPage: React.FC = () => {
       setRequests([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoToFormulary = async () => {
+    if (!selectedRequest) return;
+    setCheckingForm(true);
+    try {
+      // Check if a form already exists for this request
+      const { data: existingForm } = await supabase
+        .from('kosztorys_forms')
+        .select('id')
+        .eq('request_id', selectedRequest.id)
+        .eq('is_current', true)
+        .single();
+
+      if (existingForm) {
+        // Form exists, go directly to formulary
+        setShowPrepareOfferModal(false);
+        window.location.hash = `#/construction/formulary/${selectedRequest.id}`;
+      } else {
+        // No form exists, show selection modal
+        setShowPrepareOfferModal(false);
+        setShowFormSelectionModal(true);
+      }
+    } catch (err) {
+      // No form found (error from .single()), show selection modal
+      setShowPrepareOfferModal(false);
+      setShowFormSelectionModal(true);
+    } finally {
+      setCheckingForm(false);
     }
   };
 
@@ -2036,17 +2068,19 @@ export const RequestsPage: React.FC = () => {
 
             <div className="p-6 space-y-3">
               <button
-                onClick={() => {
-                  setShowPrepareOfferModal(false);
-                  window.location.hash = `#/construction/formulary/${selectedRequest.id}`;
-                }}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
+                onClick={handleGoToFormulary}
+                disabled={checkingForm}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group disabled:opacity-50"
               >
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition">
-                  <ClipboardList className="w-6 h-6 text-purple-600" />
+                  {checkingForm ? (
+                    <Loader2 className="w-6 h-6 text-purple-600 animate-spin" />
+                  ) : (
+                    <ClipboardList className="w-6 h-6 text-purple-600" />
+                  )}
                 </div>
                 <div>
-                  <div className="font-medium text-slate-900">Wypełnić formularz</div>
+                  <div className="font-medium text-slate-900">Przejdź do formularza</div>
                   <div className="text-sm text-slate-500">Wypełnij formularz techniczny i wygeneruj kosztorys automatycznie</div>
                 </div>
               </button>
@@ -2091,6 +2125,128 @@ export const RequestsPage: React.FC = () => {
               >
                 <ArrowLeft className="w-4 h-4" />
                 Powrót
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form Selection Modal */}
+      {showFormSelectionModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
+              <p className="text-slate-600 mt-1">Wybierz formularz dla zapytania: {selectedRequest.investment_name}</p>
+            </div>
+
+            <div className="p-6 space-y-3">
+              {/* Create new empty form */}
+              <button
+                onClick={() => {
+                  setShowFormSelectionModal(false);
+                  window.location.hash = `#/construction/formulary/${selectedRequest.id}?new=true`;
+                }}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-green-300 transition text-left group"
+              >
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
+                  <Plus className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-slate-900">Utwórz nowy formularz</div>
+                  <div className="text-sm text-slate-500">Rozpocznij od pustego formularza</div>
+                </div>
+              </button>
+
+              {/* Recommended form based on object type */}
+              <button
+                onClick={() => {
+                  setShowFormSelectionModal(false);
+                  window.location.hash = `#/construction/formulary/${selectedRequest.id}?recommended=true`;
+                }}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition text-left group"
+              >
+                <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center group-hover:bg-blue-300 transition">
+                  <Star className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-blue-900 flex items-center gap-2">
+                    Zalecany formularz
+                    <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded-full">Rekomendowany</span>
+                  </div>
+                  <div className="text-sm text-blue-600">
+                    Formularz dopasowany do typu obiektu: {OBJECT_TYPE_LABELS[selectedRequest.object_type] || selectedRequest.object_type}
+                  </div>
+                </div>
+              </button>
+
+              {/* Choose from other forms */}
+              <div className="pt-2">
+                <div className="text-sm text-slate-500 mb-2 px-1">Lub wybierz dowolny formularz:</div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  <button
+                    onClick={() => {
+                      setShowFormSelectionModal(false);
+                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=MIESZK-IE`;
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
+                  >
+                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">Mieszkania / Biurowce - IE</div>
+                      <div className="text-xs text-slate-500">Instalacje elektryczne</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFormSelectionModal(false);
+                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=MIESZK-IT`;
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
+                  >
+                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">Mieszkania / Biurowce - IT</div>
+                      <div className="text-xs text-slate-500">Instalacje teletechniczne</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFormSelectionModal(false);
+                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=PREM-IE`;
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
+                  >
+                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">Przemysłowe - IE</div>
+                      <div className="text-xs text-slate-500">Instalacje elektryczne przemysłowe</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFormSelectionModal(false);
+                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=PREM-IT`;
+                    }}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
+                  >
+                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">Przemysłowe - IT</div>
+                      <div className="text-xs text-slate-500">Instalacje teletechniczne przemysłowe</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowFormSelectionModal(false)}
+                className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Wróć
               </button>
             </div>
           </div>

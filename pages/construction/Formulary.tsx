@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   ArrowLeft, Save, FileSpreadsheet, Calculator, ChevronDown, ChevronRight,
   Loader2, AlertCircle, CheckCircle2, Info, X, XCircle, RefreshCw, Settings,
-  Download, Upload, Eye, HelpCircle, Zap
+  Download, Upload, Eye, HelpCircle, Zap, Trash2, FileCheck, FilePlus, FileEdit,
+  Plus, Check, Pencil
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -571,6 +572,14 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
   const [showValidation, setShowValidation] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState<any>(null);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Inline editing state
+  const [editingItem, setEditingItem] = useState<{ type: 'group' | 'room' | 'category' | 'workType', code: string } | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [showAddModal, setShowAddModal] = useState<{ type: 'group' | 'room' | 'category' | 'workType', parentCode?: string } | null>(null);
+  const [newItemName, setNewItemName] = useState('');
 
   // Dictionary data for select fields
   const [extWallTypes, setExtWallTypes] = useState<{ id: string; name: string }[]>([]);
@@ -915,6 +924,102 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
     });
   };
 
+  // Inline editing functions
+  const startEditing = (type: 'group' | 'room' | 'category' | 'workType', code: string, currentName: string) => {
+    setEditingItem({ type, code });
+    setEditingValue(currentName);
+  };
+
+  const saveEditing = () => {
+    if (!editingItem || !template) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+
+    switch (editingItem.type) {
+      case 'group':
+        const group = newTemplate.room_groups.find(g => g.code === editingItem.code);
+        if (group) group.name = editingValue;
+        break;
+      case 'room':
+        for (const g of newTemplate.room_groups) {
+          const room = g.rooms.find(r => r.code === editingItem.code);
+          if (room) {
+            room.name = editingValue;
+            break;
+          }
+        }
+        break;
+      case 'category':
+        const cat = newTemplate.work_categories.find(c => c.code === editingItem.code);
+        if (cat) cat.name = editingValue;
+        break;
+      case 'workType':
+        for (const c of newTemplate.work_categories) {
+          const wt = c.work_types.find(w => w.code === editingItem.code);
+          if (wt) {
+            wt.name = editingValue;
+            break;
+          }
+        }
+        break;
+    }
+
+    setTemplate(newTemplate);
+    setEditingItem(null);
+    setEditingValue('');
+    hasChangesRef.current = true;
+  };
+
+  const cancelEditing = () => {
+    setEditingItem(null);
+    setEditingValue('');
+  };
+
+  const handleAddItem = () => {
+    if (!showAddModal || !template || !newItemName.trim()) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+    const code = newItemName.toUpperCase().replace(/\s+/g, '_').slice(0, 20) + '_' + Date.now().toString(36);
+
+    switch (showAddModal.type) {
+      case 'group':
+        newTemplate.room_groups.push({
+          code,
+          name: newItemName,
+          rooms: []
+        });
+        break;
+      case 'room':
+        if (showAddModal.parentCode) {
+          const group = newTemplate.room_groups.find(g => g.code === showAddModal.parentCode);
+          if (group) {
+            group.rooms.push({ code, name: newItemName });
+          }
+        }
+        break;
+      case 'category':
+        newTemplate.work_categories.push({
+          code,
+          name: newItemName,
+          work_types: []
+        });
+        break;
+      case 'workType':
+        if (showAddModal.parentCode) {
+          const category = newTemplate.work_categories.find(c => c.code === showAddModal.parentCode);
+          if (category) {
+            category.work_types.push({ code, name: newItemName, description: '' });
+          }
+        }
+        break;
+    }
+
+    setTemplate(newTemplate);
+    setShowAddModal(null);
+    setNewItemName('');
+    hasChangesRef.current = true;
+  };
+
   const getMarkedCount = () => {
     let count = 0;
     answers.forEach(v => { if (v) count++; });
@@ -1020,19 +1125,19 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
               </span>
             )}
             <button
-              onClick={handleValidate}
-              className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              onClick={() => setShowClearConfirm(true)}
+              className="flex items-center justify-center w-10 h-10 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
+              title="Wyczyść formularz"
             >
-              <Eye className="w-4 h-4" />
-              Sprawdź
+              <Trash2 className="w-5 h-5" />
             </button>
             <button
-              onClick={() => handleSave()}
+              onClick={() => setShowSaveModal(true)}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+              className="flex items-center justify-center w-10 h-10 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 disabled:opacity-50"
+              title="Zapisz"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Zapisz
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
             </button>
             <button
               onClick={handleGenerateEstimate}
@@ -1160,7 +1265,6 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 {/* Category row */}
                 <tr className="bg-slate-100">
                   <th className="sticky left-0 z-50 bg-slate-100 min-w-[250px] px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                    Pomieszczenie / Element
                   </th>
                   {template.work_categories.map((category, catIndex) => {
                     // Color palette for categories
@@ -1177,17 +1281,52 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                       'bg-emerald-100 text-emerald-800'
                     ];
                     const colorClass = categoryColors[catIndex % categoryColors.length];
+                    const isEditing = editingItem?.type === 'category' && editingItem.code === category.code;
                     return (
                       <th
                         key={category.code}
                         colSpan={category.work_types.length}
-                        className={`px-2 py-2 text-center text-xs font-semibold border-b border-r border-slate-200 ${colorClass}`}
+                        className={`px-2 py-2 text-center text-xs font-semibold border-b border-r border-slate-200 ${colorClass} cursor-pointer hover:opacity-80`}
                         data-category-index={catIndex}
+                        onClick={(e) => {
+                          if (!isEditing) {
+                            e.stopPropagation();
+                            startEditing('category', category.code, category.name);
+                          }
+                        }}
                       >
-                        {category.name}
+                        {isEditing ? (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              className="w-full px-1 py-0.5 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditing();
+                                if (e.key === 'Escape') cancelEditing();
+                              }}
+                            />
+                            <button onClick={saveEditing} className="p-0.5 hover:bg-white/50 rounded">
+                              <Check className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          category.name
+                        )}
                       </th>
                     );
                   })}
+                  <th className="px-2 py-2 bg-slate-100 border-b border-slate-200 w-8">
+                    <button
+                      onClick={() => setShowAddModal({ type: 'category' })}
+                      className="p-1 hover:bg-white/50 rounded text-slate-500 hover:text-slate-700"
+                      title="Dodaj kategorię"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </th>
                 </tr>
                 {/* Work types row */}
                 <tr className="bg-slate-50">
@@ -1209,23 +1348,68 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                       'bg-emerald-50'
                     ];
                     const bgColorClass = categoryBgColors[catIndex % categoryBgColors.length];
-                    return category.work_types.map(workType => (
+                    const workTypesWithAdd = [
+                      ...category.work_types.map(workType => {
+                        const isEditing = editingItem?.type === 'workType' && editingItem.code === workType.code;
+                        return (
+                          <th
+                            key={workType.code}
+                            className={`px-1 py-2 text-center min-w-[80px] border-b border-r border-slate-200 group relative cursor-pointer hover:opacity-80 ${bgColorClass}`}
+                            title={workType.description}
+                            onClick={() => {
+                              if (!isEditing) {
+                                startEditing('workType', workType.code, workType.name);
+                              }
+                            }}
+                          >
+                            {isEditing ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  value={editingValue}
+                                  onChange={(e) => setEditingValue(e.target.value)}
+                                  className="w-full px-1 py-0.5 text-[10px] rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveEditing();
+                                    if (e.key === 'Escape') cancelEditing();
+                                  }}
+                                />
+                                <button onClick={saveEditing} className="p-0.5 hover:bg-white/50 rounded">
+                                  <Check className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-600 font-normal leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                                {workType.name}
+                              </div>
+                            )}
+                          </th>
+                        );
+                      }),
                       <th
-                        key={workType.code}
-                        className={`px-1 py-2 text-center min-w-[80px] border-b border-r border-slate-200 group relative ${bgColorClass}`}
-                        title={workType.description}
+                        key={`add-${category.code}`}
+                        className={`px-1 py-2 text-center min-w-[40px] border-b border-r border-slate-200 ${bgColorClass}`}
                       >
-                        <div className="text-[10px] text-slate-600 font-normal leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                          {workType.name}
-                        </div>
+                        <button
+                          onClick={() => setShowAddModal({ type: 'workType', parentCode: category.code })}
+                          className="p-0.5 hover:bg-white/50 rounded text-slate-400 hover:text-slate-600"
+                          title="Dodaj rodzaj pracy"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
                       </th>
-                    ));
+                    ];
+                    return workTypesWithAdd;
                   })}
+                  <th className="bg-slate-50 border-b border-slate-200 w-8"></th>
                 </tr>
               </thead>
 
               <tbody>
-                {template.room_groups.map(group => (
+                {template.room_groups.map(group => {
+                  const isGroupEditing = editingItem?.type === 'group' && editingItem.code === group.code;
+                  return (
                   <React.Fragment key={group.code}>
                     {/* Group header */}
                     <tr
@@ -1241,23 +1425,88 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                           ) : (
                             <ChevronRight className="w-4 h-4 text-amber-600" />
                           )}
-                          {group.name}
-                          <span className="text-xs text-slate-400 font-normal">
-                            ({group.rooms.length} elementów)
-                          </span>
+                          {isGroupEditing ? (
+                            <div className="flex items-center gap-1 flex-1" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEditing();
+                                  if (e.key === 'Escape') cancelEditing();
+                                }}
+                              />
+                              <button onClick={saveEditing} className="p-1 hover:bg-amber-200 rounded">
+                                <Check className="w-4 h-4 text-green-600" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className="hover:bg-amber-200 px-1 rounded cursor-text"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditing('group', group.code, group.name);
+                              }}
+                            >
+                              {group.name}
+                            </span>
+                          )}
+                          {!isGroupEditing && (
+                            <span className="text-xs text-slate-400 font-normal">
+                              ({group.rooms.length} elementów)
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAddModal({ type: 'room', parentCode: group.code });
+                            }}
+                            className="ml-auto p-1 hover:bg-amber-200 rounded text-amber-600 hover:text-amber-800"
+                            title="Dodaj element"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                       <td
                         className="bg-amber-50 border-b border-slate-200"
-                        colSpan={template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0)}
+                        colSpan={template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0) + template.work_categories.length + 1}
                       />
                     </tr>
 
                     {/* Room rows */}
-                    {expandedGroups.has(group.code) && group.rooms.map(room => (
+                    {expandedGroups.has(group.code) && group.rooms.map(room => {
+                      const isRoomEditing = editingItem?.type === 'room' && editingItem.code === room.code;
+                      return (
                       <tr key={room.code} className="hover:bg-slate-50">
                         <td className="sticky left-0 z-30 bg-white px-3 py-2 text-sm text-slate-700 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                          <span className="pl-6">{room.name}</span>
+                          {isRoomEditing ? (
+                            <div className="flex items-center gap-1 pl-6" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEditing();
+                                  if (e.key === 'Escape') cancelEditing();
+                                }}
+                              />
+                              <button onClick={saveEditing} className="p-1 hover:bg-slate-200 rounded">
+                                <Check className="w-4 h-4 text-green-600" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span
+                              className="pl-6 hover:bg-slate-100 px-1 rounded cursor-text"
+                              onClick={() => startEditing('room', room.code, room.name)}
+                            >
+                              {room.name}
+                            </span>
+                          )}
                         </td>
                         {template.work_categories.flatMap((category, catIndex) => {
                           // Light category background colors for cells
@@ -1274,7 +1523,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                             'bg-emerald-50/30'
                           ];
                           const bgColorClass = categoryBgColors[catIndex % categoryBgColors.length];
-                          return category.work_types.map(workType => {
+                          const cells = category.work_types.map(workType => {
                             const isMarked = getCellValue(room.code, workType.code);
                             return (
                               <td
@@ -1292,36 +1541,40 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                               </td>
                             );
                           });
+                          // Add empty cell for the "add work type" column
+                          cells.push(
+                            <td key={`${room.code}-add-${category.code}`} className="border-b border-slate-100" />
+                          );
+                          return cells;
                         })}
+                        <td className="border-b border-slate-100" />
                       </tr>
-                    ))}
+                    )})}
                   </React.Fragment>
-                ))}
+                )})}
+                {/* Add group row */}
+                <tr>
+                  <td
+                    className="sticky left-0 z-30 bg-slate-50 px-3 py-2 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                  >
+                    <button
+                      onClick={() => setShowAddModal({ type: 'group' })}
+                      className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-2 py-1 rounded"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Dodaj pomieszczenie/grupę
+                    </button>
+                  </td>
+                  <td
+                    className="bg-slate-50 border-b border-slate-200"
+                    colSpan={template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0) + template.work_categories.length + 1}
+                  />
+                </tr>
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="mt-4 p-4 bg-white rounded-xl border border-slate-200">
-          <h4 className="text-sm font-semibold text-slate-700 mb-2">Legenda</h4>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-green-100 rounded flex items-center justify-center">
-                <span className="text-green-600 font-bold">✓</span>
-              </div>
-              <span className="text-slate-600">Praca zaznaczona</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-slate-50 rounded border border-slate-200"></div>
-              <span className="text-slate-600">Praca nie zaznaczona</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-amber-50 rounded border border-amber-200"></div>
-              <span className="text-slate-600">Nagłówek grupy (kliknij aby zwinąć/rozwinąć)</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Validation Modal */}
@@ -1483,6 +1736,164 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
               >
                 Zamknij
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Options Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Zapisz formularz</h3>
+              <p className="text-sm text-slate-500 mt-1">Wybierz sposób zapisania</p>
+            </div>
+            <div className="p-4 space-y-2">
+              <button
+                onClick={() => {
+                  handleSave();
+                  setShowSaveModal(false);
+                }}
+                className="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left"
+              >
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <FileCheck className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-slate-900">Zapisz dla tego zapytania</div>
+                  <div className="text-sm text-slate-500">Zapisz wypełniony formularz dla bieżącego zapytania</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  // TODO: Save as new template
+                  handleSave();
+                  setShowSaveModal(false);
+                }}
+                className="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-green-300 transition text-left"
+              >
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <FilePlus className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-slate-900">Zapisz jako nowy szablon</div>
+                  <div className="text-sm text-slate-500">Utwórz nowy szablon formularza do wielokrotnego użycia</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  // TODO: Update selected template
+                  handleSave();
+                  setShowSaveModal(false);
+                }}
+                className="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-amber-300 transition text-left"
+              >
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <FileEdit className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-slate-900">Zmień wybrany formularz</div>
+                  <div className="text-sm text-slate-500">Zaktualizuj istniejący szablon formularza</div>
+                </div>
+              </button>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Form Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Wyczyść formularz?</h3>
+              <p className="text-sm text-slate-500">
+                Ta operacja usunie wszystkie zaznaczenia i dane ogólne formularza. Tej akcji nie można cofnąć.
+              </p>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  // Clear all answers and general data
+                  setAnswers(new Map());
+                  setGeneralData({});
+                  hasChangesRef.current = true;
+                  setShowClearConfirm(false);
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Wyczyść
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Item Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
+                {showAddModal.type === 'group' && 'Dodaj grupę pomieszczeń'}
+                {showAddModal.type === 'room' && 'Dodaj element'}
+                {showAddModal.type === 'category' && 'Dodaj kategorię prac'}
+                {showAddModal.type === 'workType' && 'Dodaj rodzaj pracy'}
+              </h3>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">Nazwa</label>
+              <input
+                type="text"
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Wprowadź nazwę..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newItemName.trim()) handleAddItem();
+                  if (e.key === 'Escape') {
+                    setShowAddModal(null);
+                    setNewItemName('');
+                  }
+                }}
+              />
+            </div>
+            <div className="p-4 border-t border-slate-200 flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowAddModal(null);
+                  setNewItemName('');
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleAddItem}
+                disabled={!newItemName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Dodaj
               </button>
             </div>
           </div>

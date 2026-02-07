@@ -23,12 +23,11 @@ import type {
 } from '../../types';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'formularze' | 'wall_types';
+type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'wall_types';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'rodzaj_prac', label: 'Rodzaj prac', icon: ClipboardList },
   { id: 'wall_types', label: 'Rodzaje ścian', icon: Layers },
-  { id: 'formularze', label: 'Formularze', icon: FolderOpen },
   { id: 'work_types', label: 'Typy prac', icon: Wrench },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
@@ -3369,7 +3368,6 @@ export const DictionariesPage: React.FC = () => {
             <>
               {activeTab === 'rodzaj_prac' && renderRodzajPracTab()}
               {activeTab === 'wall_types' && renderWallTypesTab()}
-              {activeTab === 'formularze' && renderFormularzeTab()}
               {activeTab === 'work_types' && renderWorkTypesTab()}
               {activeTab === 'materials' && renderMaterialsTab()}
               {activeTab === 'equipment' && renderEquipmentTab()}
