@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-type TabKey = 'company' | 'working_time' | 'holidays';
+type TabKey = 'company' | 'working_time' | 'holidays' | 'construction';
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'company', label: 'Dane firmy', icon: <Building2 className="w-4 h-4" /> },
   { key: 'working_time', label: 'Czas pracy', icon: <Clock className="w-4 h-4" /> },
   { key: 'holidays', label: 'Dni wolne', icon: <CalendarDays className="w-4 h-4" /> },
+  { key: 'construction', label: 'Budowlanka', icon: <HardHat className="w-4 h-4" /> },
 ];
 
 const TIMEZONES = [
@@ -1024,6 +1025,176 @@ export const CompanySettingsPage: React.FC = () => {
                 </table>
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════
+          Tab 4: Budowlanka (Construction Settings)
+          ════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'construction' && (
+        <>
+          {/* Default Markups */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                <Percent className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Domyślne narzuty kosztorysowe</h2>
+                <p className="text-sm text-slate-500">Ustawienia narzutów dla nowych kosztorysów</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Koszty pośrednie (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="np. 65"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Narzut na koszty ogólne budowy</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Zysk (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="np. 10"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Marża zysku</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Koszty zakupu materiałów (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="np. 5"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Kp materiałów</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Koszty zakupu sprzętu (%)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  placeholder="np. 3"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Kp sprzętu</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Number Formatting */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <HardHat className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Numeracja dokumentów</h2>
+                <p className="text-sm text-slate-500">Wzorce numeracji dla dokumentów budowlanych</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Wzorzec numeru kosztorysu</label>
+                <input
+                  type="text"
+                  placeholder="KE/{YYYY}/{NR}"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Dostępne zmienne: {'{YYYY}'}, {'{MM}'}, {'{NR}'}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Wzorzec numeru oferty</label>
+                <input
+                  type="text"
+                  placeholder="OF/{YYYY}/{NR}"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Wzorzec numeru zamówienia</label>
+                <input
+                  type="text"
+                  placeholder="ZM/{YYYY}/{NR}"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Wzorzec numeru aktu</label>
+                <input
+                  type="text"
+                  placeholder="AKT/{YYYY}/{MM}/{NR}"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Working Calendar */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <CalendarDays className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Kalendarz roboczy budowy</h2>
+                <p className="text-sm text-slate-500">Domyślne ustawienia dla harmonogramów Gantta</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Godziny pracy dziennie</label>
+                <input
+                  type="number"
+                  placeholder="8"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Dni robocze w tygodniu</label>
+                <select className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                  <option value="5">5 dni (Pon-Pt)</option>
+                  <option value="6">6 dni (Pon-Sob)</option>
+                  <option value="7">7 dni</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Domyślny widok Gantta</label>
+                <select className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                  <option value="day">Dzienny</option>
+                  <option value="week">Tygodniowy</option>
+                  <option value="month">Miesięczny</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <button
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              <Save className="w-5 h-5" />
+              Zapisz ustawienia budowlane
+            </button>
           </div>
         </>
       )}

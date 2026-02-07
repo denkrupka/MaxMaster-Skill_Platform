@@ -118,7 +118,13 @@ import { CandidateSimulationPage } from './pages/candidate/Simulation';
 import { CandidateThankYouPage } from './pages/candidate/ThankYou';
 import { CompanyRegisterPage } from './pages/CompanyRegister';
 
-const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' }) => {
+// Construction Module Pages
+import {
+  EstimatesPage, OffersPage, ContractorsPage, DrawingsPage,
+  DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage
+} from './pages/construction';
+
+const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'contractors' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
   const { state, getEffectiveRole } = useAppContext();
 
   if (!state.currentUser) {
@@ -431,6 +437,17 @@ export default function App() {
 
           {/* Notifications page (all authenticated users) */}
           <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
+
+          {/* Construction Module Routes */}
+          <Route path="/construction/estimates" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimatesPage /></ProtectedRoute>} />
+          <Route path="/construction/offers" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="offers"><OffersPage /></ProtectedRoute>} />
+          <Route path="/construction/contractors" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="contractors"><ContractorsPage /></ProtectedRoute>} />
+          <Route path="/construction/drawings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="drawings"><DrawingsPage /></ProtectedRoute>} />
+          <Route path="/construction/dms" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><DMSPage /></ProtectedRoute>} />
+          <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />
+          <Route path="/construction/finance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="finance"><FinancePage /></ProtectedRoute>} />
+          <Route path="/construction/procurement" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="procurement"><ProcurementPage /></ProtectedRoute>} />
+          <Route path="/construction/approvals" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="approvals"><ApprovalsPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />

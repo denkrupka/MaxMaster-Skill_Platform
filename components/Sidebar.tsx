@@ -7,7 +7,10 @@ import {
   FileText, PieChart, Clock, FileCheck, Home, User, GraduationCap, LayoutDashboard, Briefcase, FileInput, AlertTriangle, Network,
   Building2, Target, UserCheck, Headphones, ChevronDown, RefreshCw, ShieldCheck, Gift,
   ClipboardList, CalendarOff, CalendarDays, CalendarClock, CalendarRange,
-  FolderKanban, BarChart3
+  FolderKanban, BarChart3,
+  // Construction module icons
+  Calculator, FileSpreadsheet, HardHat, PenTool, FolderOpen, GanttChartSquare,
+  Wallet, ShoppingCart, ClipboardCheck
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -283,6 +286,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty HR" />
                  <div className="my-2 border-t border-slate-100"></div>
+                 <CollapsibleNavGroup groupId="hr-construction" icon={HardHat} label="Budowlanka">
+                   <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
+                   <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
+                   <NavItem to="/construction/contractors" icon={Building2} label="Kontrahenci" />
+                   <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                   <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
+                   <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
+                   <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
+                   <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
+                   <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                 </CollapsibleNavGroup>
+                 <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/hr/settings" icon={Settings} label="Ustawienia" />
                </>
             )}
@@ -301,6 +316,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/projects" icon={FolderKanban} label="Projekty" matchPaths={['/employee/tasks', '/company/tasks', '/company/projects']} />
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
+                 <div className="my-2 border-t border-slate-100"></div>
+                 <CollapsibleNavGroup groupId="construction-modules" icon={HardHat} label="Budowlanka">
+                   <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
+                   <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
+                   <NavItem to="/construction/contractors" icon={Building2} label="Kontrahenci" />
+                   <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                   <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
+                   <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
+                   <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
+                   <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
+                   <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                 </CollapsibleNavGroup>
                  <div className="my-2 border-t border-slate-100"></div>
                  <NavItem to="/company/subscription" icon={DollarSign} label="Subskrypcja" />
                  <NavItem to="/company/referrals" icon={Gift} label="Program Poleceń" />
@@ -388,6 +415,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                       <NavItem to="/coordinator/skills" icon={Award} label="Umiejętności i uprawnienia" />
                       <NavItem to="/coordinator/library" icon={BookOpen} label="Baza wiedzy" />
                     </CollapsibleNavGroup>
+                    <div className="my-2 border-t border-slate-100"></div>
+                    <CollapsibleNavGroup groupId="coordinator-construction" icon={HardHat} label="Budowlanka">
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
+                      <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
+                      <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
+                      <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                    </CollapsibleNavGroup>
                     <NavItem to="/coordinator/profile" icon={User} label="Mój Profil" />
                 </>
             )}
@@ -428,6 +463,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <div className="my-2 border-t border-slate-100"></div>
                     <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" matchPaths={['/employee/attendance', '/company/team-now', '/company/attendance']} />
                     <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" matchPaths={['/employee/time-off', '/company/time-off']} />
+                    <div className="my-2 border-t border-slate-100"></div>
+                    <CollapsibleNavGroup groupId="brigadir-construction" icon={HardHat} label="Budowlanka">
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
+                      <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
+                      <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                    </CollapsibleNavGroup>
                 </>
             )}
 
@@ -445,6 +487,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <div className="my-4 border-t border-slate-100"></div>
                     <NavItem to="/company/attendance" icon={ClipboardList} label="Obecności" matchPaths={['/employee/attendance', '/company/team-now', '/company/attendance']} />
                     <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" matchPaths={['/employee/time-off', '/company/time-off']} />
+                    <div className="my-2 border-t border-slate-100"></div>
+                    <CollapsibleNavGroup groupId="brigadir-real-construction" icon={HardHat} label="Budowlanka">
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
+                      <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
+                      <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
+                    </CollapsibleNavGroup>
                   </>
                 )}
 
@@ -459,6 +508,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/employee/time-off" icon={CalendarOff} label="Moje urlopy" />
                     <NavItem to="/employee/schedule" icon={CalendarClock} label="Mój grafik" />
                     <NavItem to="/employee/tasks" icon={CheckSquare} label="Moje zadania" />
+                    <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                   </>
                 )}
                 <div className="my-2 border-t border-slate-100"></div>

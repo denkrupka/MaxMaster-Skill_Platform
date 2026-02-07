@@ -5,8 +5,11 @@ import {
   Receipt, Clock, Users, MessageSquare, Paperclip, Loader2, Plus, X,
   Pencil, Trash2, Upload, Download, Eye, Check, XCircle, Search,
   ChevronDown, Building2, MapPin, TrendingUp, FileText, Settings,
-  ExternalLink, AlertCircle, Wrench, Tag, Hash
+  ExternalLink, AlertCircle, Wrench, Tag, Hash,
+  Calculator, FileSpreadsheet, HardHat, PenTool, FolderOpen, GanttChartSquare,
+  Wallet, ShoppingCart, ClipboardCheck
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import {
@@ -209,6 +212,79 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
             <div className="flex justify-between"><span className="text-gray-500">Zgłoszenia</span><span className="text-gray-900">{issues.length}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Załączniki</span><span className="text-gray-900">{files.length}</span></div>
           </div>
+        </div>
+      </div>
+
+      {/* Construction Modules Quick Links */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <HardHat className="w-5 h-5 text-amber-600" />
+          <h3 className="text-sm font-semibold text-gray-900">Moduły Budowlane</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Link
+            to={`/construction/estimates?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <Calculator className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-gray-700">Kosztorys</span>
+          </Link>
+          <Link
+            to={`/construction/offers?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-green-600" />
+            <span className="text-sm font-medium text-gray-700">Oferty</span>
+          </Link>
+          <Link
+            to={`/construction/drawings?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <PenTool className="w-4 h-4 text-purple-600" />
+            <span className="text-sm font-medium text-gray-700">Rysunki</span>
+          </Link>
+          <Link
+            to={`/construction/dms?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <FolderOpen className="w-4 h-4 text-amber-600" />
+            <span className="text-sm font-medium text-gray-700">Dokumenty</span>
+          </Link>
+          <Link
+            to={`/construction/gantt?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <GanttChartSquare className="w-4 h-4 text-cyan-600" />
+            <span className="text-sm font-medium text-gray-700">Harmonogram</span>
+          </Link>
+          <Link
+            to={`/construction/finance?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <Wallet className="w-4 h-4 text-emerald-600" />
+            <span className="text-sm font-medium text-gray-700">Finanse</span>
+          </Link>
+          <Link
+            to={`/construction/procurement?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <ShoppingCart className="w-4 h-4 text-orange-600" />
+            <span className="text-sm font-medium text-gray-700">Zaopatrzenie</span>
+          </Link>
+          <Link
+            to={`/construction/approvals?project=${project.id}`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+            <span className="text-sm font-medium text-gray-700">Uzgodnienia</span>
+          </Link>
+          <Link
+            to={`/construction/contractors`}
+            className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+          >
+            <Building2 className="w-4 h-4 text-slate-600" />
+            <span className="text-sm font-medium text-gray-700">Kontrahenci</span>
+          </Link>
         </div>
       </div>
 
