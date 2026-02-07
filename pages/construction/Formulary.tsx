@@ -555,8 +555,8 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
   const { state } = useAppContext();
   const { currentUser } = state;
 
-  // Get request ID from URL or props
-  const urlRequestId = window.location.hash.match(/formulary\/([^/]+)/)?.[1];
+  // Get request ID from URL or props (exclude query params)
+  const urlRequestId = window.location.hash.match(/formulary\/([^/?]+)/)?.[1];
   const requestId = propRequestId || urlRequestId;
 
   const [request, setRequest] = useState<KosztorysRequest | null>(null);
