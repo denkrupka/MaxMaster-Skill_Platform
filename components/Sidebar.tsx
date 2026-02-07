@@ -10,7 +10,7 @@ import {
   FolderKanban, BarChart3,
   // Construction module icons
   Calculator, FileSpreadsheet, HardHat, PenTool, FolderOpen, GanttChartSquare,
-  Wallet, ShoppingCart, ClipboardCheck
+  Wallet, ShoppingCart, ClipboardCheck, Inbox
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Role, UserStatus } from '../types';
@@ -287,6 +287,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/hr/reports" icon={PieChart} label="Raporty HR" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="hr-construction" icon={HardHat} label="Budowlanka">
+                   <NavItem to="/construction/requests" icon={Inbox} label="Zapytania" />
+                   <NavItem to="/construction/dictionaries" icon={BookOpen} label="Słowniki" />
+                   <NavItem to="/construction/price-lists" icon={Wallet} label="Cenniki" />
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
                    <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
@@ -317,6 +320,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <NavItem to="/company/reports" icon={BarChart3} label="Raporty" />
                  <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="construction-modules" icon={HardHat} label="Budowlanka">
+                   <NavItem to="/construction/requests" icon={Inbox} label="Zapytania" />
+                   <NavItem to="/construction/dictionaries" icon={BookOpen} label="Słowniki" />
+                   <NavItem to="/construction/price-lists" icon={Wallet} label="Cenniki" />
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
                    <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />

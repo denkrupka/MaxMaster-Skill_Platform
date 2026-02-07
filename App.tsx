@@ -121,7 +121,8 @@ import { CompanyRegisterPage } from './pages/CompanyRegister';
 // Construction Module Pages
 import {
   EstimatesPage, OffersPage, DrawingsPage,
-  DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage
+  DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage,
+  RequestsPage, FormularyPage, DictionariesPage, PriceListsPage, EstimateViewPage
 } from './pages/construction';
 
 const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
@@ -447,6 +448,12 @@ export default function App() {
           <Route path="/construction/finance" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="finance"><FinancePage /></ProtectedRoute>} />
           <Route path="/construction/procurement" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="procurement"><ProcurementPage /></ProtectedRoute>} />
           <Route path="/construction/approvals" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="approvals"><ApprovalsPage /></ProtectedRoute>} />
+          <Route path="/construction/requests" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><RequestsPage /></ProtectedRoute>} />
+          <Route path="/construction/formulary/:requestId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><FormularyPage /></ProtectedRoute>} />
+          <Route path="/construction/dictionaries" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="estimates"><DictionariesPage /></ProtectedRoute>} />
+          <Route path="/construction/price-lists" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="estimates"><PriceListsPage /></ProtectedRoute>} />
+          <Route path="/construction/estimate/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
+          <Route path="/construction/estimate" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />

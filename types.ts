@@ -1579,6 +1579,383 @@ export interface EstimateTotals {
 }
 
 // =====================================================
+// МОДУЛЬ: ЭЛЕКТРОСМЕТА / KOSZTORYSOWANIE (ELEKTRYCZNE)
+// Система расчёта электромонтажных работ
+// =====================================================
+
+// Статусы запроса на расчёт
+export type KosztorysRequestStatus =
+  | 'new'               // Новый
+  | 'in_progress'       // В работе
+  | 'form_filled'       // Формуляр заполнен
+  | 'estimate_generated'// Смета сформирована
+  | 'estimate_approved' // Смета утверждена
+  | 'estimate_revision' // На доработке
+  | 'kp_sent'           // КП отправлено
+  | 'closed'            // Закрыт
+  | 'cancelled';        // Отменён
+
+// Тип объекта
+export type KosztorysObjectType = 'industrial' | 'residential' | 'office';
+
+// Тип установки
+export type KosztorysInstallationType = 'IE' | 'IT' | 'IE,IT';
+
+// Тип формуляра
+export type KosztorysFormType = 'PREM-IE' | 'PREM-IT' | 'MIESZK-IE' | 'MIESZK-IT';
+
+// Уровень детализации КП
+export type KosztorysProposalDetailLevel = 'detailed' | 'aggregated' | 'minimal';
+
+// Источник запроса
+export type KosztorysRequestSource = 'email' | 'phone' | 'meeting' | 'tender' | 'other';
+
+// Запрос на расчёт (Zapytanie)
+export interface KosztorysRequest {
+  id: string;
+  company_id: string;
+  request_number: string;              // ZAP-YYYY-NNNNN
+  status: KosztorysRequestStatus;
+  client_name: string;
+  contact_person: string;
+  phone: string;
+  email?: string;
+  investment_name: string;
+  object_type: KosztorysObjectType;
+  installation_types: KosztorysInstallationType;
+  address?: string;
+  planned_response_date?: string;
+  notes?: string;
+  request_source?: KosztorysRequestSource;
+  assigned_user_id: string;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  assigned_user?: User;
+  created_by?: User;
+  forms?: KosztorysForm[];
+  estimates?: KosztorysEstimate[];
+  files?: KosztorysRequestFile[];
+}
+
+// Файлы запроса
+export interface KosztorysRequestFile {
+  id: string;
+  request_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by_id: string;
+  uploaded_at: string;
+}
+
+// Формуляр выполняемых работ
+export interface KosztorysForm {
+  id: string;
+  request_id: string;
+  form_type: KosztorysFormType;
+  version: number;
+  is_current: boolean;
+  status: 'draft' | 'completed' | 'archived';
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  general_data?: KosztorysFormGeneralData;
+  answers?: KosztorysFormAnswer[];
+}
+
+// Общие технические данные формуляра (шапка)
+export interface KosztorysFormGeneralData {
+  id: string;
+  form_id: string;
+  hall_area?: number;           // Для промышленных
+  office_area?: number;         // Для промышленных
+  apartments_count?: string;    // Для жилых "120 mieszkań, 8500 m²"
+  ext_wall_type?: string;       // Тип наружных стен
+  int_wall_type?: string;       // Тип внутренних стен
+  hall_ceiling_height?: number; // Высота потолка цеха
+  office_ceiling_height?: number;// Высота потолка офисов
+  ceiling_height?: number;      // Общая высота потолка
+  consumable_material?: string; // Материал эксплуатационный
+}
+
+// Отметка в матрице формуляра
+export interface KosztorysFormAnswer {
+  id: string;
+  form_id: string;
+  room_code: string;            // Код помещения/элемента
+  room_group: string;           // Группа помещения
+  work_type_code: string;       // Код вида работ
+  work_category: string;        // Категория работ
+  is_marked: boolean;
+  created_at: string;
+}
+
+// Группа помещений для формуляра
+export interface KosztorysRoomGroup {
+  code: string;
+  name: string;
+  rooms: KosztorysRoom[];
+}
+
+// Помещение/элемент установки
+export interface KosztorysRoom {
+  code: string;
+  name: string;
+  description?: string;
+}
+
+// Категория работ
+export interface KosztorysWorkCategory {
+  code: string;
+  name: string;
+  work_types: KosztorysWorkType[];
+}
+
+// Вид работ
+export interface KosztorysWorkType {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  category: string;
+  subcategory?: string;
+  unit_id: number;
+  task_description?: string;
+  expected_result?: string;
+  labor_hours_per_unit?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: UnitMeasure;
+}
+
+// Справочник материалов
+export interface KosztorysMaterial {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  category?: string;
+  manufacturer?: string;
+  unit_id: number;
+  material_type: 'main' | 'minor' | 'consumable';
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: UnitMeasure;
+}
+
+// Справочник техники
+export interface KosztorysEquipment {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  category: 'machines' | 'tools';
+  unit_id: number;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: UnitMeasure;
+}
+
+// Шаблонное задание
+export interface KosztorysTemplateTask {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  work_type_id: string;
+  unit_id: number;
+  labor_hours?: number;
+  expected_result?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  work_type?: KosztorysWorkType;
+  unit?: UnitMeasure;
+  materials?: KosztorysTemplateTaskMaterial[];
+  equipment?: KosztorysTemplateTaskEquipment[];
+}
+
+// Материал в шаблонном задании
+export interface KosztorysTemplateTaskMaterial {
+  id: string;
+  template_task_id: string;
+  material_id: string;
+  quantity_coefficient: number;
+  material?: KosztorysMaterial;
+}
+
+// Техника в шаблонном задании
+export interface KosztorysTemplateTaskEquipment {
+  id: string;
+  template_task_id: string;
+  equipment_id: string;
+  quantity_coefficient: number;
+  equipment?: KosztorysEquipment;
+}
+
+// Правило маппинга (формуляр → шаблонное задание)
+export interface KosztorysMappingRule {
+  id: string;
+  company_id: string;
+  form_type: KosztorysFormType;
+  room_code: string;
+  room_group: string;
+  work_type_code: string;
+  work_category: string;
+  template_task_id: string;
+  coefficient: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  template_task?: KosztorysTemplateTask;
+}
+
+// Прайс-лист
+export interface KosztorysPriceList {
+  id: string;
+  company_id: string;
+  name: string;
+  valid_from: string;
+  valid_to?: string;
+  is_active: boolean;
+  created_by_id: string;
+  created_at: string;
+  items?: KosztorysPriceListItem[];
+}
+
+// Позиция прайс-листа
+export interface KosztorysPriceListItem {
+  id: string;
+  price_list_id: string;
+  item_type: 'work' | 'material' | 'equipment';
+  item_id: string;
+  unit_price: number;
+}
+
+// Смета (Kosztorys)
+export interface KosztorysEstimate {
+  id: string;
+  request_id: string;
+  form_id: string;
+  company_id: string;
+  estimate_number: string;          // KSZ-YYYY-NNNNN
+  version: number;
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected';
+  vat_rate: number;
+  total_works: number;
+  total_materials: number;
+  total_equipment: number;
+  subtotal_net: number;
+  vat_amount: number;
+  total_gross: number;
+  approved_by_id?: string;
+  approved_at?: string;
+  rejection_reason?: string;
+  created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  items?: KosztorysEstimateItem[];
+  equipment_items?: KosztorysEstimateEquipment[];
+  approved_by?: User;
+  request?: KosztorysRequest;
+}
+
+// Позиция сметы
+export interface KosztorysEstimateItem {
+  id: string;
+  estimate_id: string;
+  position_number: number;
+  room_group: string;
+  installation_element: string;
+  task_description: string;
+  material_name?: string;
+  unit_id: number;
+  quantity: number;
+  unit_price_work: number;
+  total_work: number;
+  unit_price_material: number;
+  total_material: number;
+  total_item: number;
+  expected_result?: string;
+  source: 'auto' | 'manual';
+  template_task_id?: string;
+  mapping_rule_id?: string;
+  price_deviation_reason?: string;   // Обоснование отклонения цены
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: UnitMeasure;
+}
+
+// Техника в смете
+export interface KosztorysEstimateEquipment {
+  id: string;
+  estimate_id: string;
+  equipment_id: string;
+  unit_id: number;
+  quantity: number;
+  unit_price: number;
+  total: number;
+  equipment?: KosztorysEquipment;
+  unit?: UnitMeasure;
+}
+
+// Коммерческое предложение (KP)
+export interface KosztorysProposal {
+  id: string;
+  request_id: string;
+  estimate_id: string;
+  company_id: string;
+  kp_number: string;                // KP-YYYY-NNNNN-vN
+  version: number;
+  detail_level: KosztorysProposalDetailLevel;
+  file_path_pdf?: string;
+  file_path_xlsx?: string;
+  file_path_docx?: string;
+  validity_days: number;
+  payment_terms?: string;
+  execution_terms?: string;
+  sent_at?: string;
+  viewed_at?: string;
+  accepted_at?: string;
+  rejected_at?: string;
+  client_response?: string;
+  created_by_id: string;
+  created_at: string;
+  // Relations
+  request?: KosztorysRequest;
+  estimate?: KosztorysEstimate;
+}
+
+// Шаблон матрицы формуляра
+export interface KosztorysFormTemplate {
+  form_type: KosztorysFormType;
+  title: string;
+  general_fields: KosztorysFormField[];
+  room_groups: KosztorysRoomGroup[];
+  work_categories: KosztorysWorkCategory[];
+}
+
+// Поле в шапке формуляра
+export interface KosztorysFormField {
+  code: string;
+  label: string;
+  type: 'text' | 'decimal' | 'integer';
+  required: boolean;
+  placeholder?: string;
+}
+
+// =====================================================
 // МОДУЛЬ: КОНТРАГЕНТЫ (KONTRAHENCI)
 // =====================================================
 

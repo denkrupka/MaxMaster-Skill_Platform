@@ -107,6 +107,9 @@ export const OffersPage: React.FC = () => {
   // Import from estimate state
   const [selectedEstimateId, setSelectedEstimateId] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [importSource, setImportSource] = useState<'estimates' | 'kosztorys'>('estimates');
+  const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
+  const [selectedKosztorysId, setSelectedKosztorysId] = useState('');
 
   // ============================================
   // DATA LOADING
@@ -119,7 +122,7 @@ export const OffersPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [offersRes, projectsRes, contractorsRes, estimatesRes] = await Promise.all([
+      const [offersRes, projectsRes, contractorsRes, estimatesRes, kosztorysRes] = await Promise.all([
         supabase
           .from('offers')
           .select('*, project:projects(*), client:contractors(*)')
@@ -141,6 +144,12 @@ export const OffersPage: React.FC = () => {
           .select('*, project:projects(name)')
           .eq('company_id', currentUser.company_id)
           .is('deleted_at', null)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('kosztorys_estimates')
+          .select('*, request:kosztorys_requests(investment_name, client_name)')
+          .eq('company_id', currentUser.company_id)
+          .in('status', ['approved', 'sent'])
           .order('created_at', { ascending: false })
       ]);
 
@@ -148,6 +157,7 @@ export const OffersPage: React.FC = () => {
       if (projectsRes.data) setProjects(projectsRes.data);
       if (contractorsRes.data) setContractors(contractorsRes.data);
       if (estimatesRes.data) setEstimates(estimatesRes.data);
+      if (kosztorysRes.data) setKosztorysEstimates(kosztorysRes.data);
     } catch (err) {
       console.error('Error loading offers:', err);
     } finally {
@@ -674,6 +684,36 @@ export const OffersPage: React.FC = () => {
     }
   };
 
+  // Import from Kosztorys module (ElektroSmeta)
+  const handleImportFromKosztorys = async () => {
+    if (!selectedKosztorysId || !currentUser) return;
+    setImportLoading(true);
+    try {
+      const { convertEstimateToOfferData } = await import('../../lib/proposalGenerator');
+      const result = await convertEstimateToOfferData(selectedKosztorysId);
+
+      if (!result) {
+        alert('Nie można załadować danych z kosztorysu');
+        setImportLoading(false);
+        return;
+      }
+
+      setOfferData(prev => ({
+        ...prev,
+        ...result.offerData
+      }));
+      setSections(result.sections);
+      setShowImportFromEstimate(false);
+      setSelectedKosztorysId('');
+      setImportSource('estimates');
+    } catch (err) {
+      console.error('Error importing from kosztorys:', err);
+      alert('Błąd podczas importu z modułu kosztorysowania');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   // ============================================
   // SECTION & ITEM MANAGEMENT
   // ============================================
@@ -1103,45 +1143,116 @@ export const OffersPage: React.FC = () => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-xl w-full max-w-lg">
         <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-          <h2 className="text-lg font-semibold">Wybierz kosztorys</h2>
+          <h2 className="text-lg font-semibold">Importuj z kosztorysu</h2>
           <button onClick={() => setShowImportFromEstimate(false)} className="p-1 hover:bg-slate-100 rounded">
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200">
+          <button
+            onClick={() => setImportSource('kosztorys')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition ${
+              importSource === 'kosztorys'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Kosztorysowanie (ElektroSmeta)
+          </button>
+          <button
+            onClick={() => setImportSource('estimates')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition ${
+              importSource === 'estimates'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Kosztorysy (Stare)
+          </button>
+        </div>
+
         <div className="p-4">
-          {estimates.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
-              <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-              <p>Brak dostępnych kosztorysów.</p>
-              <p className="text-sm mt-1">Najpierw utwórz kosztorys w module Kosztorysowanie.</p>
-            </div>
+          {importSource === 'kosztorys' ? (
+            // Kosztorysowanie module (ElektroSmeta)
+            kosztorysEstimates.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                <p>Brak zatwierdzonych kosztorysów.</p>
+                <p className="text-sm mt-1">Najpierw zatwierdź kosztorys w module Kosztorysowanie.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {kosztorysEstimates.map(est => (
+                  <label
+                    key={est.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                      selectedKosztorysId === est.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="kosztorys"
+                      checked={selectedKosztorysId === est.id}
+                      onChange={() => setSelectedKosztorysId(est.id)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900">
+                        {est.request?.investment_name || 'Kosztorys'} v{est.version}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {est.request?.client_name || 'Klient'} • {formatCurrency(est.final_total || est.grand_total || 0)}
+                      </p>
+                    </div>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      est.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {est.status === 'approved' ? 'Zatwierdzony' : 'Wysłany'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )
           ) : (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {estimates.map(est => (
-                <label
-                  key={est.id}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
-                    selectedEstimateId === est.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="estimate"
-                    checked={selectedEstimateId === est.id}
-                    onChange={() => setSelectedEstimateId(est.id)}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-slate-900">{est.name}</p>
-                    <p className="text-sm text-slate-500">
-                      {est.number} • {(est as any).project?.name || 'Bez projektu'} • {formatCurrency(est.total_cost)}
-                    </p>
-                  </div>
-                </label>
-              ))}
-            </div>
+            // Old estimates module
+            estimates.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                <p>Brak dostępnych kosztorysów.</p>
+                <p className="text-sm mt-1">Najpierw utwórz kosztorys w module Kosztorysowanie.</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                {estimates.map(est => (
+                  <label
+                    key={est.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                      selectedEstimateId === est.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="estimate"
+                      checked={selectedEstimateId === est.id}
+                      onChange={() => setSelectedEstimateId(est.id)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900">{est.name}</p>
+                      <p className="text-sm text-slate-500">
+                        {est.number} • {(est as any).project?.name || 'Bez projektu'} • {formatCurrency(est.total_cost)}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )
           )}
         </div>
         <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
@@ -1152,8 +1263,8 @@ export const OffersPage: React.FC = () => {
             Anuluj
           </button>
           <button
-            onClick={handleImportFromEstimate}
-            disabled={!selectedEstimateId || importLoading}
+            onClick={importSource === 'kosztorys' ? handleImportFromKosztorys : handleImportFromEstimate}
+            disabled={(importSource === 'kosztorys' ? !selectedKosztorysId : !selectedEstimateId) || importLoading}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {importLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}

@@ -1,0 +1,1943 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
+  Wrench, Package, Monitor, FileText, Link2, ChevronDown,
+  Settings, AlertCircle, ChevronRight
+} from 'lucide-react';
+import { useAppContext } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
+import type {
+  KosztorysWorkType,
+  KosztorysMaterial,
+  KosztorysEquipment,
+  KosztorysTemplateTask,
+  KosztorysMappingRule,
+  KosztorysFormType,
+} from '../../types';
+
+// ============ Типы для вкладок ============
+type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping';
+
+const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: 'work_types', label: 'Typy prac', icon: Wrench },
+  { id: 'materials', label: 'Materiały', icon: Package },
+  { id: 'equipment', label: 'Sprzęt', icon: Monitor },
+  { id: 'templates', label: 'Szablony', icon: FileText },
+  { id: 'mapping', label: 'Mapowanie', icon: Link2 },
+];
+
+// ============ Единицы измерения ============
+const UNITS = [
+  { value: 'szt', label: 'szt. (штуки)' },
+  { value: 'm', label: 'm (метры)' },
+  { value: 'm2', label: 'm² (кв.м)' },
+  { value: 'm3', label: 'm³ (куб.м)' },
+  { value: 'kg', label: 'kg (кг)' },
+  { value: 'kpl', label: 'kpl. (комплект)' },
+  { value: 'godz', label: 'godz. (часы)' },
+  { value: 'mb', label: 'mb (п.м)' },
+  { value: 'op', label: 'op. (упаковка)' },
+];
+
+// ============ Категории работ ============
+const WORK_CATEGORIES = [
+  { value: 'PRZYG', label: 'Podготовительные' },
+  { value: 'TRASY', label: 'Кабельные трассы' },
+  { value: 'OKAB', label: 'Кабелирование' },
+  { value: 'MONT', label: 'Монтаж' },
+  { value: 'URUCH', label: 'Пусконаладка' },
+  { value: 'ZEWN', label: 'Внешние работы' },
+  { value: 'SPRZET', label: 'Оборудование' },
+  { value: 'INNE', label: 'Прочее' },
+];
+
+// ============ Категории материалов ============
+const MATERIAL_CATEGORIES = [
+  { value: 'kable', label: 'Кабели' },
+  { value: 'osprzet', label: 'Электрофурнитура' },
+  { value: 'rozdzielnice', label: 'Щиты' },
+  { value: 'systemy', label: 'Крепления' },
+  { value: 'ochrona', label: 'Защита' },
+  { value: 'oswietlenie', label: 'Освещение' },
+  { value: 'teletechnika', label: 'Слаботочка' },
+  { value: 'inne', label: 'Прочее' },
+];
+
+// ============ Типы формуляров ============
+const FORM_TYPES: { value: KosztorysFormType; label: string }[] = [
+  { value: 'MIESZK-IE', label: 'MIESZK-IE (Жилые - электрика)' },
+  { value: 'MIESZK-IT', label: 'MIESZK-IT (Жилые - телеком)' },
+  { value: 'PREM-IE', label: 'PREM-IE (Промышленные - электрика)' },
+  { value: 'PREM-IT', label: 'PREM-IT (Промышленные - телеком)' },
+];
+
+// ============ Компонент Modal ============
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+}
+
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
+  if (!isOpen) return null;
+
+  const sizeClasses = {
+    sm: 'max-w-md',
+    md: 'max-w-lg',
+    lg: 'max-w-2xl',
+    xl: 'max-w-4xl',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+        <div className="fixed inset-0 transition-opacity bg-slate-500 bg-opacity-75" onClick={onClose} />
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+        <div className={`inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle ${sizeClasses[size]} w-full`}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-500">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="px-6 py-4">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const DictionariesPage: React.FC = () => {
+  const { state } = useAppContext();
+  const { currentUser } = state;
+
+  const [activeTab, setActiveTab] = useState<TabType>('work_types');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // ============ Типы работ ============
+  const [workTypes, setWorkTypes] = useState<KosztorysWorkType[]>([]);
+  const [workTypeDialog, setWorkTypeDialog] = useState(false);
+  const [editingWorkType, setEditingWorkType] = useState<Partial<KosztorysWorkType> | null>(null);
+  const [workTypeSearch, setWorkTypeSearch] = useState('');
+
+  // ============ Материалы ============
+  const [materials, setMaterials] = useState<KosztorysMaterial[]>([]);
+  const [materialDialog, setMaterialDialog] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<Partial<KosztorysMaterial> | null>(null);
+  const [materialSearch, setMaterialSearch] = useState('');
+
+  // ============ Оборудование ============
+  const [equipment, setEquipment] = useState<KosztorysEquipment[]>([]);
+  const [equipmentDialog, setEquipmentDialog] = useState(false);
+  const [editingEquipment, setEditingEquipment] = useState<Partial<KosztorysEquipment> | null>(null);
+  const [equipmentSearch, setEquipmentSearch] = useState('');
+
+  // ============ Шаблонные задания ============
+  const [templateTasks, setTemplateTasks] = useState<any[]>([]);
+  const [templateDialog, setTemplateDialog] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Partial<KosztorysTemplateTask> | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedTemplateMaterials, setSelectedTemplateMaterials] = useState<{ material_id: string; quantity: number }[]>([]);
+  const [selectedTemplateEquipment, setSelectedTemplateEquipment] = useState<{ equipment_id: string; quantity: number }[]>([]);
+
+  // ============ Правила маппинга ============
+  const [mappingRules, setMappingRules] = useState<any[]>([]);
+  const [mappingDialog, setMappingDialog] = useState(false);
+  const [editingMapping, setEditingMapping] = useState<Partial<KosztorysMappingRule> | null>(null);
+  const [mappingSearch, setMappingSearch] = useState('');
+
+  // ============ Delete confirmations ============
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ type: string; id: string } | null>(null);
+
+  // ============ Загрузка данных ============
+  useEffect(() => {
+    if (currentUser) {
+      loadAllData();
+    }
+  }, [currentUser]);
+
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        loadWorkTypes(),
+        loadMaterials(),
+        loadEquipment(),
+        loadTemplateTasks(),
+        loadMappingRules(),
+      ]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      showNotification('Błąd podczas ładowania danych', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadWorkTypes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_work_types')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('code', { ascending: true });
+
+      if (error) throw error;
+      setWorkTypes(data || []);
+    } catch (err) {
+      console.error('Error loading work types:', err);
+      setWorkTypes([]);
+    }
+  };
+
+  const loadMaterials = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_materials')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setMaterials(data || []);
+    } catch (err) {
+      console.error('Error loading materials:', err);
+      setMaterials([]);
+    }
+  };
+
+  const loadEquipment = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_equipment')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setEquipment(data || []);
+    } catch (err) {
+      console.error('Error loading equipment:', err);
+      setEquipment([]);
+    }
+  };
+
+  const loadTemplateTasks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_template_tasks')
+        .select(`
+          *,
+          work_type:kosztorys_work_types(*),
+          materials:kosztorys_template_task_materials(
+            *,
+            material:kosztorys_materials(*)
+          ),
+          equipment:kosztorys_template_task_equipment(
+            *,
+            equipment:kosztorys_equipment(*)
+          )
+        `)
+        .order('code', { ascending: true });
+
+      if (error) throw error;
+      setTemplateTasks(data || []);
+    } catch (err) {
+      console.error('Error loading templates:', err);
+      setTemplateTasks([]);
+    }
+  };
+
+  const loadMappingRules = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_mapping_rules')
+        .select(`
+          *,
+          template_task:kosztorys_template_tasks(*)
+        `)
+        .order('form_type', { ascending: true })
+        .order('room_code', { ascending: true });
+
+      if (error) throw error;
+      setMappingRules(data || []);
+    } catch (err) {
+      console.error('Error loading mapping rules:', err);
+      setMappingRules([]);
+    }
+  };
+
+  const showNotification = (message: string, type: 'success' | 'error') => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), 4000);
+  };
+
+  // ============ CRUD для типов работ ============
+  const handleSaveWorkType = async () => {
+    if (!editingWorkType || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingWorkType.id) {
+        const { error } = await supabase
+          .from('kosztorys_work_types')
+          .update({
+            code: editingWorkType.code,
+            name: editingWorkType.name,
+            category: editingWorkType.category,
+            unit: editingWorkType.unit,
+            description: editingWorkType.description,
+            labor_hours: editingWorkType.labor_hours,
+            is_active: editingWorkType.is_active,
+          })
+          .eq('id', editingWorkType.id);
+
+        if (error) throw error;
+        showNotification('Typ pracy zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_work_types')
+          .insert({
+            code: editingWorkType.code,
+            name: editingWorkType.name,
+            category: editingWorkType.category,
+            unit: editingWorkType.unit,
+            description: editingWorkType.description,
+            labor_hours: editingWorkType.labor_hours || 0,
+            is_active: editingWorkType.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Typ pracy dodany', 'success');
+      }
+
+      setWorkTypeDialog(false);
+      setEditingWorkType(null);
+      await loadWorkTypes();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteWorkType = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_work_types')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Typ pracy usunięty', 'success');
+      await loadWorkTypes();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  // ============ CRUD для материалов ============
+  const handleSaveMaterial = async () => {
+    if (!editingMaterial || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingMaterial.id) {
+        const { error } = await supabase
+          .from('kosztorys_materials')
+          .update({
+            code: editingMaterial.code,
+            name: editingMaterial.name,
+            category: editingMaterial.category,
+            unit: editingMaterial.unit,
+            description: editingMaterial.description,
+            manufacturer: editingMaterial.manufacturer,
+            default_price: editingMaterial.default_price,
+            is_active: editingMaterial.is_active,
+          })
+          .eq('id', editingMaterial.id);
+
+        if (error) throw error;
+        showNotification('Materiał zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_materials')
+          .insert({
+            code: editingMaterial.code,
+            name: editingMaterial.name,
+            category: editingMaterial.category,
+            unit: editingMaterial.unit,
+            description: editingMaterial.description,
+            manufacturer: editingMaterial.manufacturer,
+            default_price: editingMaterial.default_price || 0,
+            is_active: editingMaterial.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Materiał dodany', 'success');
+      }
+
+      setMaterialDialog(false);
+      setEditingMaterial(null);
+      await loadMaterials();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteMaterial = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_materials')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Materiał usunięty', 'success');
+      await loadMaterials();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  // ============ CRUD для оборудования ============
+  const handleSaveEquipment = async () => {
+    if (!editingEquipment || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingEquipment.id) {
+        const { error } = await supabase
+          .from('kosztorys_equipment')
+          .update({
+            code: editingEquipment.code,
+            name: editingEquipment.name,
+            category: editingEquipment.category,
+            unit: editingEquipment.unit,
+            description: editingEquipment.description,
+            manufacturer: editingEquipment.manufacturer,
+            default_price: editingEquipment.default_price,
+            is_active: editingEquipment.is_active,
+          })
+          .eq('id', editingEquipment.id);
+
+        if (error) throw error;
+        showNotification('Sprzęt zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_equipment')
+          .insert({
+            code: editingEquipment.code,
+            name: editingEquipment.name,
+            category: editingEquipment.category,
+            unit: editingEquipment.unit,
+            description: editingEquipment.description,
+            manufacturer: editingEquipment.manufacturer,
+            default_price: editingEquipment.default_price || 0,
+            is_active: editingEquipment.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Sprzęt dodany', 'success');
+      }
+
+      setEquipmentDialog(false);
+      setEditingEquipment(null);
+      await loadEquipment();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteEquipment = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_equipment')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Sprzęt usunięty', 'success');
+      await loadEquipment();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  // ============ CRUD для шаблонных заданий ============
+  const handleSaveTemplate = async () => {
+    if (!editingTemplate || !currentUser) return;
+    setSaving(true);
+
+    try {
+      let templateId = editingTemplate.id;
+
+      if (templateId) {
+        const { error } = await supabase
+          .from('kosztorys_template_tasks')
+          .update({
+            code: editingTemplate.code,
+            name: editingTemplate.name,
+            description: editingTemplate.description,
+            work_type_id: editingTemplate.work_type_id,
+            base_quantity: editingTemplate.base_quantity,
+            labor_hours: editingTemplate.labor_hours,
+            is_active: editingTemplate.is_active,
+          })
+          .eq('id', templateId);
+
+        if (error) throw error;
+
+        // Удаляем старые материалы и оборудование
+        await supabase.from('kosztorys_template_task_materials').delete().eq('template_task_id', templateId);
+        await supabase.from('kosztorys_template_task_equipment').delete().eq('template_task_id', templateId);
+      } else {
+        const { data, error } = await supabase
+          .from('kosztorys_template_tasks')
+          .insert({
+            code: editingTemplate.code,
+            name: editingTemplate.name,
+            description: editingTemplate.description,
+            work_type_id: editingTemplate.work_type_id,
+            base_quantity: editingTemplate.base_quantity || 1,
+            labor_hours: editingTemplate.labor_hours || 0,
+            is_active: editingTemplate.is_active ?? true,
+            company_id: currentUser.company_id,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        templateId = data.id;
+      }
+
+      // Добавляем материалы
+      const validMaterials = selectedTemplateMaterials.filter(m => m.material_id);
+      if (validMaterials.length > 0) {
+        const materialsToInsert = validMaterials.map(m => ({
+          template_task_id: templateId,
+          material_id: m.material_id,
+          quantity: m.quantity,
+        }));
+
+        const { error } = await supabase
+          .from('kosztorys_template_task_materials')
+          .insert(materialsToInsert);
+
+        if (error) throw error;
+      }
+
+      // Добавляем оборудование
+      const validEquipment = selectedTemplateEquipment.filter(e => e.equipment_id);
+      if (validEquipment.length > 0) {
+        const equipmentToInsert = validEquipment.map(e => ({
+          template_task_id: templateId,
+          equipment_id: e.equipment_id,
+          quantity: e.quantity,
+        }));
+
+        const { error } = await supabase
+          .from('kosztorys_template_task_equipment')
+          .insert(equipmentToInsert);
+
+        if (error) throw error;
+      }
+
+      showNotification(editingTemplate.id ? 'Szablon zaktualizowany' : 'Szablon dodany', 'success');
+      setTemplateDialog(false);
+      setEditingTemplate(null);
+      setSelectedTemplateMaterials([]);
+      setSelectedTemplateEquipment([]);
+      await loadTemplateTasks();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_template_tasks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Szablon usunięty', 'success');
+      await loadTemplateTasks();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  // ============ CRUD для правил маппинга ============
+  const handleSaveMapping = async () => {
+    if (!editingMapping || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingMapping.id) {
+        const { error } = await supabase
+          .from('kosztorys_mapping_rules')
+          .update({
+            form_type: editingMapping.form_type,
+            room_code: editingMapping.room_code,
+            work_code: editingMapping.work_code,
+            template_task_id: editingMapping.template_task_id,
+            multiplier: editingMapping.multiplier,
+            conditions: editingMapping.conditions,
+            priority: editingMapping.priority,
+            is_active: editingMapping.is_active,
+          })
+          .eq('id', editingMapping.id);
+
+        if (error) throw error;
+        showNotification('Reguła zaktualizowana', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_mapping_rules')
+          .insert({
+            form_type: editingMapping.form_type,
+            room_code: editingMapping.room_code,
+            work_code: editingMapping.work_code,
+            template_task_id: editingMapping.template_task_id,
+            multiplier: editingMapping.multiplier || 1,
+            conditions: editingMapping.conditions || {},
+            priority: editingMapping.priority || 0,
+            is_active: editingMapping.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Reguła dodana', 'success');
+      }
+
+      setMappingDialog(false);
+      setEditingMapping(null);
+      await loadMappingRules();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteMapping = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_mapping_rules')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Reguła usunięta', 'success');
+      await loadMappingRules();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  // ============ Фильтрация данных ============
+  const filteredWorkTypes = useMemo(() =>
+    workTypes.filter(wt =>
+      wt.code?.toLowerCase().includes(workTypeSearch.toLowerCase()) ||
+      wt.name?.toLowerCase().includes(workTypeSearch.toLowerCase())
+    ), [workTypes, workTypeSearch]);
+
+  const filteredMaterials = useMemo(() =>
+    materials.filter(m =>
+      m.code?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+      m.name?.toLowerCase().includes(materialSearch.toLowerCase())
+    ), [materials, materialSearch]);
+
+  const filteredEquipment = useMemo(() =>
+    equipment.filter(e =>
+      e.code?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+      e.name?.toLowerCase().includes(equipmentSearch.toLowerCase())
+    ), [equipment, equipmentSearch]);
+
+  const filteredTemplates = useMemo(() =>
+    templateTasks.filter(t =>
+      t.code?.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.name?.toLowerCase().includes(templateSearch.toLowerCase())
+    ), [templateTasks, templateSearch]);
+
+  const filteredMappings = useMemo(() =>
+    mappingRules.filter(m =>
+      m.room_code?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+      m.work_code?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+      m.form_type?.toLowerCase().includes(mappingSearch.toLowerCase())
+    ), [mappingRules, mappingSearch]);
+
+  // ============ Render Work Types Tab ============
+  const renderWorkTypesTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={workTypeSearch}
+            onChange={(e) => setWorkTypeSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingWorkType({ is_active: true, labor_hours: 1 });
+            setWorkTypeDialog(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj typ pracy
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">R-g</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {filteredWorkTypes.map((wt) => (
+              <tr key={wt.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{wt.code}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{wt.name}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
+                    {WORK_CATEGORIES.find(c => c.value === wt.category)?.label || wt.category}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{wt.unit}</td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">{wt.labor_hours}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-1 text-xs rounded-full ${wt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {wt.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setEditingWorkType(wt);
+                      setWorkTypeDialog(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm({ type: 'workType', id: wt.id })}
+                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredWorkTypes.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  Brak typów prac
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Work Type Dialog */}
+      <Modal
+        isOpen={workTypeDialog}
+        onClose={() => setWorkTypeDialog(false)}
+        title={editingWorkType?.id ? 'Edytuj typ pracy' : 'Dodaj typ pracy'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+              <input
+                type="text"
+                value={editingWorkType?.code || ''}
+                onChange={(e) => setEditingWorkType({ ...editingWorkType, code: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+              <select
+                value={editingWorkType?.category || ''}
+                onChange={(e) => setEditingWorkType({ ...editingWorkType, category: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {WORK_CATEGORIES.map(cat => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingWorkType?.name || ''}
+              onChange={(e) => setEditingWorkType({ ...editingWorkType, name: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+              <select
+                value={editingWorkType?.unit || ''}
+                onChange={(e) => setEditingWorkType({ ...editingWorkType, unit: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {UNITS.map(u => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">R-g (godz.)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={editingWorkType?.labor_hours || ''}
+                onChange={(e) => setEditingWorkType({ ...editingWorkType, labor_hours: parseFloat(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingWorkType?.description || ''}
+              onChange={(e) => setEditingWorkType({ ...editingWorkType, description: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="wt-active"
+              checked={editingWorkType?.is_active ?? true}
+              onChange={(e) => setEditingWorkType({ ...editingWorkType, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="wt-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            onClick={() => setWorkTypeDialog(false)}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSaveWorkType}
+            disabled={saving || !editingWorkType?.code || !editingWorkType?.name}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Zapisz
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Materials Tab ============
+  const renderMaterialsTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={materialSearch}
+            onChange={(e) => setMaterialSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingMaterial({ is_active: true, default_price: 0 });
+            setMaterialDialog(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj materiał
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producent</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {filteredMaterials.map((m) => (
+              <tr key={m.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{m.code}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{m.name}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
+                    {MATERIAL_CATEGORIES.find(c => c.value === m.category)?.label || m.category}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{m.manufacturer || '-'}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{m.unit}</td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">
+                  {m.default_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-1 text-xs rounded-full ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {m.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setEditingMaterial(m);
+                      setMaterialDialog(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm({ type: 'material', id: m.id })}
+                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredMaterials.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  Brak materiałów
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Material Dialog */}
+      <Modal
+        isOpen={materialDialog}
+        onClose={() => setMaterialDialog(false)}
+        title={editingMaterial?.id ? 'Edytuj materiał' : 'Dodaj materiał'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+              <input
+                type="text"
+                value={editingMaterial?.code || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, code: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+              <select
+                value={editingMaterial?.category || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {MATERIAL_CATEGORIES.map(cat => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingMaterial?.name || ''}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, name: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
+              <input
+                type="text"
+                value={editingMaterial?.manufacturer || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, manufacturer: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+              <select
+                value={editingMaterial?.unit || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, unit: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {UNITS.map(u => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Cena domyślna (PLN)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={editingMaterial?.default_price || ''}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, default_price: parseFloat(e.target.value) })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingMaterial?.description || ''}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="mat-active"
+              checked={editingMaterial?.is_active ?? true}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="mat-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            onClick={() => setMaterialDialog(false)}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSaveMaterial}
+            disabled={saving || !editingMaterial?.code || !editingMaterial?.name}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Zapisz
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Equipment Tab ============
+  const renderEquipmentTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={equipmentSearch}
+            onChange={(e) => setEquipmentSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingEquipment({ is_active: true, default_price: 0 });
+            setEquipmentDialog(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj sprzęt
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producent</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {filteredEquipment.map((e) => (
+              <tr key={e.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{e.code}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{e.name}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
+                    {e.category || '-'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600">{e.manufacturer || '-'}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{e.unit}</td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">
+                  {e.default_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-1 text-xs rounded-full ${e.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {e.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setEditingEquipment(e);
+                      setEquipmentDialog(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm({ type: 'equipment', id: e.id })}
+                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredEquipment.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  Brak sprzętu
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Equipment Dialog */}
+      <Modal
+        isOpen={equipmentDialog}
+        onClose={() => setEquipmentDialog(false)}
+        title={editingEquipment?.id ? 'Edytuj sprzęt' : 'Dodaj sprzęt'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+              <input
+                type="text"
+                value={editingEquipment?.code || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, code: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+              <input
+                type="text"
+                value={editingEquipment?.category || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingEquipment?.name || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, name: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
+              <input
+                type="text"
+                value={editingEquipment?.manufacturer || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, manufacturer: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+              <select
+                value={editingEquipment?.unit || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, unit: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {UNITS.map(u => (
+                  <option key={u.value} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Cena domyślna (PLN)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={editingEquipment?.default_price || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, default_price: parseFloat(e.target.value) })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingEquipment?.description || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="eq-active"
+              checked={editingEquipment?.is_active ?? true}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="eq-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            onClick={() => setEquipmentDialog(false)}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSaveEquipment}
+            disabled={saving || !editingEquipment?.code || !editingEquipment?.name}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Zapisz
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Templates Tab ============
+  const renderTemplatesTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={templateSearch}
+            onChange={(e) => setTemplateSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingTemplate({ is_active: true, base_quantity: 1, labor_hours: 1 });
+            setSelectedTemplateMaterials([]);
+            setSelectedTemplateEquipment([]);
+            setTemplateDialog(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj szablon
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Typ pracy</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Materiały</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Sprzęt</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">R-g</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {filteredTemplates.map((t) => (
+              <tr key={t.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{t.code}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{t.name}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{t.work_type?.name || '-'}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-700">
+                    {t.materials?.length || 0}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-700">
+                    {t.equipment?.length || 0}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">{t.labor_hours}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-1 text-xs rounded-full ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {t.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setEditingTemplate(t);
+                      setSelectedTemplateMaterials(
+                        t.materials?.map((m: any) => ({
+                          material_id: m.material_id,
+                          quantity: m.quantity,
+                        })) || []
+                      );
+                      setSelectedTemplateEquipment(
+                        t.equipment?.map((e: any) => ({
+                          equipment_id: e.equipment_id,
+                          quantity: e.quantity,
+                        })) || []
+                      );
+                      setTemplateDialog(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm({ type: 'template', id: t.id })}
+                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredTemplates.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  Brak szablonów
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Template Dialog */}
+      <Modal
+        isOpen={templateDialog}
+        onClose={() => setTemplateDialog(false)}
+        title={editingTemplate?.id ? 'Edytuj szablon' : 'Dodaj szablon'}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+              <input
+                type="text"
+                value={editingTemplate?.code || ''}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, code: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+              <input
+                type="text"
+                value={editingTemplate?.name || ''}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Typ pracy</label>
+              <select
+                value={editingTemplate?.work_type_id || ''}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, work_type_id: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {workTypes.filter(wt => wt.is_active).map(wt => (
+                  <option key={wt.id} value={wt.id}>{wt.code} - {wt.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Ilość bazowa</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={editingTemplate?.base_quantity || ''}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, base_quantity: parseFloat(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">R-g (godz.)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={editingTemplate?.labor_hours || ''}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, labor_hours: parseFloat(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingTemplate?.description || ''}
+              onChange={(e) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Materials section */}
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium text-slate-700">Materiały</label>
+              <button
+                type="button"
+                onClick={() => setSelectedTemplateMaterials([...selectedTemplateMaterials, { material_id: '', quantity: 1 }])}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                + Dodaj materiał
+              </button>
+            </div>
+            {selectedTemplateMaterials.map((tm, index) => (
+              <div key={index} className="flex gap-2 mb-2">
+                <select
+                  value={tm.material_id}
+                  onChange={(e) => {
+                    const updated = [...selectedTemplateMaterials];
+                    updated[index].material_id = e.target.value;
+                    setSelectedTemplateMaterials(updated);
+                  }}
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="">Wybierz materiał...</option>
+                  {materials.filter(m => m.is_active).map(m => (
+                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={tm.quantity}
+                  onChange={(e) => {
+                    const updated = [...selectedTemplateMaterials];
+                    updated[index].quantity = parseFloat(e.target.value) || 0;
+                    setSelectedTemplateMaterials(updated);
+                  }}
+                  className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  placeholder="Ilość"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelectedTemplateMaterials(selectedTemplateMaterials.filter((_, i) => i !== index))}
+                  className="p-2 text-red-500 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Equipment section */}
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium text-slate-700">Sprzęt</label>
+              <button
+                type="button"
+                onClick={() => setSelectedTemplateEquipment([...selectedTemplateEquipment, { equipment_id: '', quantity: 1 }])}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                + Dodaj sprzęt
+              </button>
+            </div>
+            {selectedTemplateEquipment.map((te, index) => (
+              <div key={index} className="flex gap-2 mb-2">
+                <select
+                  value={te.equipment_id}
+                  onChange={(e) => {
+                    const updated = [...selectedTemplateEquipment];
+                    updated[index].equipment_id = e.target.value;
+                    setSelectedTemplateEquipment(updated);
+                  }}
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="">Wybierz sprzęt...</option>
+                  {equipment.filter(eq => eq.is_active).map(eq => (
+                    <option key={eq.id} value={eq.id}>{eq.code} - {eq.name}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={te.quantity}
+                  onChange={(e) => {
+                    const updated = [...selectedTemplateEquipment];
+                    updated[index].quantity = parseFloat(e.target.value) || 0;
+                    setSelectedTemplateEquipment(updated);
+                  }}
+                  className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  placeholder="Ilość"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelectedTemplateEquipment(selectedTemplateEquipment.filter((_, i) => i !== index))}
+                  className="p-2 text-red-500 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="tpl-active"
+              checked={editingTemplate?.is_active ?? true}
+              onChange={(e) => setEditingTemplate({ ...editingTemplate, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="tpl-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            onClick={() => setTemplateDialog(false)}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSaveTemplate}
+            disabled={saving || !editingTemplate?.code || !editingTemplate?.name}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Zapisz
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Mapping Tab ============
+  const renderMappingTab = () => (
+    <div>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <div className="flex items-start gap-2">
+          <AlertCircle className="w-5 h-5 text-blue-500 mt-0.5" />
+          <p className="text-sm text-blue-700">
+            Reguły mapowania określają, które szablony zadań zostaną zastosowane dla poszczególnych kombinacji
+            pomieszczenie + typ pracy w formularzu. Wartość w komórce formularza jest mnożona przez mnożnik.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={mappingSearch}
+            onChange={(e) => setMappingSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingMapping({ is_active: true, multiplier: 1, priority: 0 });
+            setMappingDialog(true);
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj regułę
+        </button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Formularz</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Pomieszczenie</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod pracy</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Szablon</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Mnożnik</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Priorytet</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {filteredMappings.map((m) => (
+              <tr key={m.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 text-xs rounded-full bg-indigo-100 text-indigo-700">
+                    {m.form_type}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{m.room_code}</td>
+                <td className="px-4 py-3 text-sm font-medium text-slate-900">{m.work_code}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">
+                  {m.template_task ? `${m.template_task.code} - ${m.template_task.name}` : '-'}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">{m.multiplier}</td>
+                <td className="px-4 py-3 text-sm text-slate-600 text-right">{m.priority}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`px-2 py-1 text-xs rounded-full ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {m.is_active ? 'Aktywna' : 'Nieaktywna'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setEditingMapping(m);
+                      setMappingDialog(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-600"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm({ type: 'mapping', id: m.id })}
+                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredMappings.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  Brak reguł mapowania
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mapping Dialog */}
+      <Modal
+        isOpen={mappingDialog}
+        onClose={() => setMappingDialog(false)}
+        title={editingMapping?.id ? 'Edytuj regułę' : 'Dodaj regułę mapowania'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Typ formularza *</label>
+              <select
+                value={editingMapping?.form_type || ''}
+                onChange={(e) => setEditingMapping({ ...editingMapping, form_type: e.target.value as KosztorysFormType })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {FORM_TYPES.map(ft => (
+                  <option key={ft.value} value={ft.value}>{ft.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kod pomieszczenia *</label>
+              <input
+                type="text"
+                value={editingMapping?.room_code || ''}
+                onChange={(e) => setEditingMapping({ ...editingMapping, room_code: e.target.value })}
+                placeholder="np. MIESZK"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod pracy *</label>
+            <input
+              type="text"
+              value={editingMapping?.work_code || ''}
+              onChange={(e) => setEditingMapping({ ...editingMapping, work_code: e.target.value })}
+              placeholder="np. OKAB-01"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Szablon zadania *</label>
+            <select
+              value={editingMapping?.template_task_id || ''}
+              onChange={(e) => setEditingMapping({ ...editingMapping, template_task_id: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Wybierz szablon...</option>
+              {templateTasks.filter(t => t.is_active).map(t => (
+                <option key={t.id} value={t.id}>{t.code} - {t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Mnożnik</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={editingMapping?.multiplier || ''}
+                onChange={(e) => setEditingMapping({ ...editingMapping, multiplier: parseFloat(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-slate-500">Wartość formularza × mnożnik = ilość</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Priorytet</label>
+              <input
+                type="number"
+                value={editingMapping?.priority || ''}
+                onChange={(e) => setEditingMapping({ ...editingMapping, priority: parseInt(e.target.value) })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-slate-500">Wyższy = ważniejszy</p>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="map-active"
+              checked={editingMapping?.is_active ?? true}
+              onChange={(e) => setEditingMapping({ ...editingMapping, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="map-active" className="ml-2 text-sm text-slate-700">Aktywna</label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+          <button
+            onClick={() => setMappingDialog(false)}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+          >
+            Anuluj
+          </button>
+          <button
+            onClick={handleSaveMapping}
+            disabled={saving || !editingMapping?.form_type || !editingMapping?.room_code || !editingMapping?.work_code || !editingMapping?.template_task_id}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Zapisz
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Statistics ============
+  const stats = [
+    { label: 'Typy prac', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
+    { label: 'Materiały', value: materials.length, icon: Package, color: 'text-green-600' },
+    { label: 'Sprzęt', value: equipment.length, icon: Monitor, color: 'text-orange-600' },
+    { label: 'Szablony', value: templateTasks.length, icon: FileText, color: 'text-purple-600' },
+    { label: 'Reguły', value: mappingRules.length, icon: Link2, color: 'text-cyan-600' },
+  ];
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Słowniki kosztorysowania</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Zarządzanie typami prac, materiałami, sprzętem i szablonami
+          </p>
+        </div>
+        <button
+          onClick={loadAllData}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Odśwież
+        </button>
+      </div>
+
+      {/* Statistics */}
+      <div className="grid grid-cols-5 gap-4 mb-6">
+        {stats.map((stat, index) => (
+          <div key={index} className="bg-white rounded-lg shadow p-4 flex items-center gap-3">
+            <stat.icon className={`w-8 h-8 ${stat.color}`} />
+            <div>
+              <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
+              <div className="text-xs text-slate-500">{stat.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b border-slate-200">
+          <nav className="flex -mb-px">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <tab.icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+          ) : (
+            <>
+              {activeTab === 'work_types' && renderWorkTypesTab()}
+              {activeTab === 'materials' && renderMaterialsTab()}
+              {activeTab === 'equipment' && renderEquipmentTab()}
+              {activeTab === 'templates' && renderTemplatesTab()}
+              {activeTab === 'mapping' && renderMappingTab()}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg ${
+          notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        } text-white flex items-center gap-2`}>
+          {notification.type === 'success' ? (
+            <Check className="w-5 h-5" />
+          ) : (
+            <AlertCircle className="w-5 h-5" />
+          )}
+          {notification.message}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div className="fixed inset-0 transition-opacity bg-slate-500 bg-opacity-75" onClick={() => setShowDeleteConfirm(null)} />
+            <div className="relative bg-white rounded-lg max-w-sm w-full p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Potwierdź usunięcie</h3>
+              <p className="text-slate-600 mb-6">Czy na pewno chcesz usunąć ten element? Ta operacja jest nieodwracalna.</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={() => {
+                    if (showDeleteConfirm.type === 'workType') handleDeleteWorkType(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'material') handleDeleteMaterial(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'equipment') handleDeleteEquipment(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'template') handleDeleteTemplate(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'mapping') handleDeleteMapping(showDeleteConfirm.id);
+                  }}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Usuń
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DictionariesPage;
