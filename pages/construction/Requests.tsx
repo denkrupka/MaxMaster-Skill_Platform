@@ -248,7 +248,7 @@ export const RequestsPage: React.FC = () => {
         .select('id')
         .eq('request_id', selectedRequest.id)
         .eq('is_current', true)
-        .single();
+        .maybeSingle();
 
       if (existingForm) {
         // Form exists, go directly to formulary
@@ -260,7 +260,7 @@ export const RequestsPage: React.FC = () => {
         setShowFormSelectionModal(true);
       }
     } catch (err) {
-      // No form found (error from .single()), show selection modal
+      console.error('Error checking form:', err);
       setShowPrepareOfferModal(false);
       setShowFormSelectionModal(true);
     } finally {

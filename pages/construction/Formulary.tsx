@@ -723,7 +723,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         .eq('request_id', requestId)
         .eq('form_type', formType)
         .eq('is_current', true)
-        .single();
+        .maybeSingle();
 
       if (formData) {
         setForm(formData);
