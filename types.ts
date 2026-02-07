@@ -737,6 +737,7 @@ export interface Department {
   name: string;
   label?: string;
   parent_id?: string | null;
+  client_id?: string | null;
   rodzaj?: string | null;
   typ?: string | null;
   kod_obiektu?: string | null;
@@ -911,6 +912,7 @@ export interface TimeOffLimit {
   total_days: number;
   used_days: number;
   carried_over_days: number;
+  is_enabled?: boolean;
   created_at: string;
   updated_at: string;
   time_off_type?: TimeOffType;
@@ -983,7 +985,7 @@ export type ProjectNameMode = 'custom' | 'object';
 export type ProjectMemberPaymentType = 'hourly' | 'akord';
 export type ProjectMemberStatus = 'assigned' | 'unassigned' | 'temporarily_unassigned';
 export type ProjectMemberType = 'employee' | 'subcontractor';
-export type ProjectIssueStatus = 'new' | 'in_progress' | 'completed' | 'cancelled';
+export type ProjectIssueStatus = 'new' | 'in_progress' | 'completed' | 'cancelled' | 'done';
 export type ProjectTaskBillingType = 'ryczalt' | 'hourly';
 export type ProjectTaskWorkerPayment = 'akord' | 'hourly';
 
@@ -1040,6 +1042,9 @@ export interface Project {
   night_paid?: boolean;
   night_rate?: number;
   night_hours?: number;
+  night_start_hour?: number;
+  night_end_hour?: number;
+  contractor_client_id?: string;
   travel_paid?: boolean;
   travel_rate?: number;
   travel_hours?: number;
@@ -1057,14 +1062,23 @@ export interface Project {
 export interface ProjectMember {
   id: string;
   project_id: string;
-  user_id: string;
+  user_id?: string | null;
+  worker_id?: string | null;
   role: 'manager' | 'member';
   member_type: ProjectMemberType;
   payment_type: ProjectMemberPaymentType;
   hourly_rate?: number;
   member_status: ProjectMemberStatus;
+  position?: string;
   added_at: string;
   user?: User;
+}
+
+export interface ProjectIssueCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface ProjectTask {
@@ -1089,6 +1103,7 @@ export interface ProjectTask {
   assigned_users?: string[];
   assigned_to?: string;
   created_by?: string;
+  category?: string;
   has_start_deadline?: boolean;
   start_date?: string;
   start_time?: string;
@@ -1119,6 +1134,13 @@ export interface TaskTimeLog {
   description?: string;
   created_at: string;
   user?: User;
+}
+
+export interface ProjectTaskCategory {
+  id: string;
+  company_id: string;
+  name: string;
+  created_at: string;
 }
 
 export interface TaskAttachment {
@@ -1182,9 +1204,21 @@ export interface ProjectCost {
   issue_date?: string;
   payment_due_date?: string;
   issuer?: string;
+  issuer_nip?: string;
+  issuer_street?: string;
+  issuer_building_number?: string;
+  issuer_apartment_number?: string;
+  issuer_city?: string;
+  issuer_postal_code?: string;
+  vat_rate?: number;
+  value_brutto?: number;
   value_netto: number;
   category?: string;
   payment_status?: string;
+  payment_method?: string;
+  comment?: string;
+  file_url?: string;
+  task_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -1205,6 +1239,7 @@ export interface ProjectIssue {
   project_id: string;
   company_id: string;
   name: string;
+  issue_number?: number;
   reporter_id: string;
   reporter_company?: string;
   task_id?: string;
@@ -1212,6 +1247,7 @@ export interface ProjectIssue {
   status: ProjectIssueStatus;
   description?: string;
   accepted: boolean;
+  file_urls?: string[];
   history?: ProjectIssueHistoryEntry[];
   created_at: string;
   updated_at: string;
@@ -1237,6 +1273,35 @@ export interface ProjectFile {
   file_size?: number;
   uploaded_by: string;
   created_at: string;
+}
+
+export interface ProjectAttendanceConfirmation {
+  id: string;
+  project_id: string;
+  company_id: string;
+  user_id: string;
+  date: string;
+  client_confirmed: boolean;
+  confirmed_at?: string;
+  confirmed_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectAttendanceRow {
+  user_id: string;
+  user_name: string;
+  department_name: string;
+  task_name: string;
+  date: string;
+  work_start?: string;
+  work_end?: string;
+  total_hours: number;
+  overtime_hours: number;
+  is_saturday: boolean;
+  is_sunday: boolean;
+  client_confirmed: boolean;
+  confirmation_id?: string;
 }
 
 // === МОДУЛЬ 5: Отчёты и Payroll ===
@@ -1314,6 +1379,71 @@ export interface NotificationHub {
   read_at?: string;
   entity_type?: string;
   entity_id?: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------
+// Contractors
+// ---------------------------------------------------------------
+
+export interface ContractorClient {
+  id: string;
+  company_id: string;
+  name: string;
+  nip?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+  email?: string;
+  phone?: string;
+  note?: string;
+  contractor_type?: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractorClientContact {
+  id: string;
+  client_id: string;
+  company_id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  position?: string;
+  is_main_contact?: boolean;
+  created_at: string;
+}
+
+export interface ContractorSubcontractor {
+  id: string;
+  company_id: string;
+  name: string;
+  nip?: string;
+  address_street?: string;
+  address_city?: string;
+  address_postal_code?: string;
+  address_country?: string;
+  workers_count?: number;
+  skills?: string;
+  note?: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubcontractorWorker {
+  id: string;
+  subcontractor_id: string;
+  company_id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  position?: string;
+  is_main_contact?: boolean;
   created_at: string;
 }
 
@@ -1707,271 +1837,137 @@ export interface TicketJournal {
 export interface TicketAttachment {
   id: string;
   ticket_id: string;
-  file_url: string;
   file_name: string;
-  file_size?: number;
-  mime_type?: string;
-  uploaded_by_id?: string;
+  file_size: number;
+  file_type: string;
+  storage_path: string;
+  uploaded_by_id: string;
   created_at: string;
   uploaded_by?: User;
 }
 
 // =====================================================
-// МОДУЛЬ: ЧЕРТЕЖИ И ПЛАНЫ (RYSUNKI TECHNICZNE)
+// МОДУЛЬ: ЧЕРТЕЖИ / ПЛАНЫ (RYSUNKI)
 // =====================================================
 
-export type MarkupType = 'line' | 'arrow' | 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'polyline' | 'freehand' | 'text' | 'measurement';
-
-export interface PlanComponent {
-  id: string;
-  project_id: string;
-  parent_id?: string;
-  name: string;
-  code?: string;
-  description?: string;
-  sort_order: number;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  children?: PlanComponent[];
-  plans?: Plan[];
-}
+export type PlanStatus = 'draft' | 'active' | 'archived';
 
 export interface Plan {
   id: string;
-  component_id: string;
   project_id: string;
+  parent_id?: string;
   name: string;
   description?: string;
-  file_id?: string;
-  file_url: string;
-  thumbnail_url?: string;
-  original_filename?: string;
-  mime_type?: string;
+  status: PlanStatus;
+  version?: string;
+  file_name?: string;
+  storage_path?: string;
+  file_type?: string;
   file_size?: number;
-  width?: number;
-  height?: number;
-  calibration_enabled: boolean;
-  calibration_length?: number;
-  calibration_pixels?: number;
-  scale_ratio?: number;
-  version: number;
-  is_current_version: boolean;
-  parent_plan_id?: string;
+  preview_path?: string;
+  scale?: string;
   sort_order: number;
-  is_active: boolean;
+  uploaded_by_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  children?: Plan[];
+  components?: PlanComponent[];
+}
+
+export interface PlanComponent {
+  id: string;
+  plan_id: string;
+  name: string;
+  component_type: string;
+  geometry: Record<string, any>;
+  properties: Record<string, any>;
+  style: Record<string, any>;
+  layer?: string;
+  is_visible: boolean;
+  is_locked: boolean;
   created_by_id: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
-  component?: PlanComponent;
-  markups?: PlanMarkup[];
   tickets?: Ticket[];
-  layers?: PlanLayer[];
-}
-
-export interface PlanMarkup {
-  id: string;
-  plan_id: string;
-  author_id: string;
-  markup_type: MarkupType;
-  geometry: Record<string, any>;
-  stroke_color: string;
-  stroke_width: number;
-  fill_color?: string;
-  fill_opacity: number;
-  font_size?: number;
-  font_family?: string;
-  text_content?: string;
-  measurement_value?: number;
-  measurement_unit: string;
-  is_visible: boolean;
-  layer: string;
-  z_index: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  author?: User;
-}
-
-export interface PlanLayer {
-  id: string;
-  plan_id: string;
-  name: string;
-  slug: string;
-  color: string;
-  is_visible: boolean;
-  is_locked: boolean;
-  sort_order: number;
-  created_at: string;
 }
 
 // =====================================================
-// МОДУЛЬ: DMS / ДОКУМЕНТООБОРОТ (DOKUMENTY)
+// МОДУЛЬ: DMS (ДОКУМЕНТЫ)
 // =====================================================
 
-export type DMSPermission = 'view' | 'download' | 'edit' | 'delete' | 'manage';
-export type DMSActivityAction = 'created' | 'viewed' | 'downloaded' | 'updated' | 'renamed' | 'moved' | 'deleted' | 'restored' | 'permission_changed' | 'version_created';
+export type DMSDocumentStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'archived';
 
 export interface DMSFolder {
   id: string;
-  company_id: string;
   project_id?: string;
+  company_id: string;
   parent_id?: string;
-  name: string;
-  path: string;
-  path_ids: string[];
-  color: string;
-  is_system: boolean;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  deleted_by_id?: string;
-  children?: DMSFolder[];
-  files_count?: number;
-}
-
-export interface DMSFile {
-  id: string;
-  company_id: string;
-  project_id?: string;
-  folder_id?: string;
-  name: string;
-  original_name: string;
-  extension?: string;
-  mime_type?: string;
-  size: number;
-  storage_path: string;
-  url: string;
-  thumbnail_url?: string;
-  preview_url?: string;
-  version: number;
-  is_current_version: boolean;
-  parent_file_id?: string;
-  version_comment?: string;
-  checksum?: string;
-  metadata: Record<string, any>;
-  content_text?: string;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-  deleted_at?: string;
-  deleted_by_id?: string;
-  folder?: DMSFolder;
-  created_by?: User;
-  versions?: DMSFile[];
-}
-
-export interface DMSFilePermission {
-  id: string;
-  file_id?: string;
-  folder_id?: string;
-  user_id?: string;
-  role_id?: number;
-  permission: DMSPermission;
-  inherited: boolean;
-  inherited_from_id?: string;
-  granted_by_id: string;
-  created_at: string;
-  expires_at?: string;
-}
-
-export interface DMSActivityLog {
-  id: string;
-  company_id: string;
-  project_id?: string;
-  file_id?: string;
-  folder_id?: string;
-  user_id: string;
-  action: DMSActivityAction;
-  details?: Record<string, any>;
-  ip_address?: string;
-  user_agent?: string;
-  session_id?: string;
-  created_at: string;
-  user?: User;
-  file?: DMSFile;
-  folder?: DMSFolder;
-}
-
-export interface DMSBookmark {
-  id: string;
-  user_id: string;
-  file_id?: string;
-  folder_id?: string;
-  created_at: string;
-  file?: DMSFile;
-  folder?: DMSFolder;
-}
-
-// =====================================================
-// МОДУЛЬ: ДИАГРАММА ГАНТА (HARMONOGRAM)
-// =====================================================
-
-export type GanttDependencyType = 'FS' | 'FF' | 'SS' | 'SF';
-export type GanttTaskSource = 'estimate' | 'ticket' | 'manual' | 'milestone';
-
-export interface GanttTask {
-  id: string;
-  project_id: string;
-  estimate_task_id?: string;
-  ticket_id?: string;
-  title?: string;
-  parent_id?: string;
-  start_date?: string;
-  end_date?: string;
-  duration?: number;
-  progress: number;
-  has_custom_progress: boolean;
-  is_auto: boolean;
-  is_milestone: boolean;
-  color?: string;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-  source?: GanttTaskSource;
-  source_id?: string;
-  estimate_task?: EstimateTask;
-  ticket?: Ticket;
-  assigned_to?: User;
-  children?: GanttTask[];
-}
-
-export interface GanttDependency {
-  id: string;
-  project_id: string;
-  predecessor_id: string;
-  successor_id: string;
-  dependency_type: GanttDependencyType;
-  lag: number;
-  created_at: string;
-}
-
-export interface ProjectWorkingDays {
-  id: string;
-  project_id: string;
-  working_days_mask: number;
-  holidays: { date: string; name: string }[];
-  country_code?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface GanttBaseline {
-  id: string;
-  project_id: string;
   name: string;
   description?: string;
-  tasks_snapshot: {
-    task_id: string;
-    start_date: string;
-    end_date: string;
-    duration: number;
-    progress: number;
-  }[];
+  color: string;
+  icon?: string;
+  is_system: boolean;
+  permissions: Record<string, any>;
+  sort_order: number;
   created_by_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  children?: DMSFolder[];
+  documents?: DMSDocument[];
+}
+
+export interface DMSDocument {
+  id: string;
+  folder_id: string;
+  project_id?: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  file_name: string;
+  storage_path: string;
+  file_type: string;
+  file_size: number;
+  preview_path?: string;
+  status: DMSDocumentStatus;
+  version: number;
+  tags: string[];
+  metadata: Record<string, any>;
+  is_template: boolean;
+  template_id?: string;
+  uploaded_by_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  uploaded_by?: User;
+  versions?: DMSDocumentVersion[];
+  permissions?: DMSDocumentPermission[];
+}
+
+export interface DMSDocumentVersion {
+  id: string;
+  document_id: string;
+  version: number;
+  file_name: string;
+  storage_path: string;
+  file_size: number;
+  change_notes?: string;
+  created_by_id: string;
+  created_at: string;
+  created_by?: User;
+}
+
+export interface DMSDocumentPermission {
+  id: string;
+  document_id: string;
+  user_id?: string;
+  role_id?: string;
+  can_view: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_share: boolean;
   created_at: string;
 }
 
@@ -1979,263 +1975,152 @@ export interface GanttBaseline {
 // МОДУЛЬ: ФИНАНСЫ (FINANSE)
 // =====================================================
 
-export type FinanceOperationType = 'income' | 'expense';
-export type FinanceOperationStatus = 'pending' | 'completed' | 'cancelled';
-export type ActStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
-export type ActPaymentStatus = 'unpaid' | 'partial' | 'paid';
-export type ActType = 'customer' | 'contractor';
-export type ActFormType = 'KS2' | 'KS6a' | 'free';
+export type TransactionType = 'income' | 'expense';
+export type TransactionStatus = 'pending' | 'completed' | 'cancelled';
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'card' | 'other';
 
-export interface FinanceAccount {
+export interface FinanceCategory {
   id: string;
   company_id: string;
+  parent_id?: string;
   name: string;
-  account_type: 'bank' | 'cash' | 'card';
-  bank_name?: string;
-  bank_bik?: string;
-  account_number?: string;
-  corr_account?: string;
-  currency_id?: number;
-  initial_balance: number;
-  current_balance: number;
-  is_default: boolean;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FinanceOperationArticle {
-  id: number;
-  company_id?: string;
-  parent_id?: number;
-  name: string;
-  code?: string;
-  operation_type: FinanceOperationType;
+  transaction_type: TransactionType;
+  color: string;
   is_system: boolean;
   sort_order: number;
-  children?: FinanceOperationArticle[];
+  created_at: string;
+  updated_at: string;
+  children?: FinanceCategory[];
 }
 
-export interface FinanceOperation {
+export interface FinanceTransaction {
   id: string;
   company_id: string;
   project_id?: string;
-  account_id: string;
-  operation_type: FinanceOperationType;
-  operation_article_id?: number;
-  amount: number;
-  currency_id?: number;
-  operation_date: string;
-  accrual_date?: string;
+  category_id?: string;
   contractor_id?: string;
-  act_id?: string;
-  order_id?: string;
-  invoice_number?: string;
+  transaction_type: TransactionType;
+  amount: number;
+  currency_id: number;
+  exchange_rate: number;
+  amount_base: number;
   description?: string;
-  comment?: string;
-  attachments: { file_id: string; name: string }[];
-  status: FinanceOperationStatus;
-  confirmed_by_id?: string;
-  confirmed_at?: string;
+  reference_number?: string;
+  transaction_date: string;
+  due_date?: string;
+  status: TransactionStatus;
+  payment_method?: PaymentMethod;
+  is_recurring: boolean;
+  recurring_settings?: Record<string, any>;
+  attachments: string[];
   created_by_id: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  category?: FinanceCategory;
   project?: Project;
-  account?: FinanceAccount;
-  article?: FinanceOperationArticle;
   contractor?: Contractor;
 }
 
-export interface FinanceAct {
+export interface FinanceBudget {
+  id: string;
+  project_id: string;
+  category_id?: string;
+  name: string;
+  planned_amount: number;
+  spent_amount: number;
+  period_start?: string;
+  period_end?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  category?: FinanceCategory;
+}
+
+// =====================================================
+// МОДУЛЬ: ЗАКУПКИ (ZAOPATRZENIE)
+// =====================================================
+
+export type PurchaseRequestStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'received' | 'cancelled';
+export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'in_delivery' | 'received' | 'cancelled';
+
+export interface PurchaseRequest {
   id: string;
   company_id: string;
-  project_id: string;
-  number: string;
-  act_date: string;
-  period_from: string;
-  period_to: string;
-  contractor_id: string;
-  responsible_id?: string;
-  subtotal: number;
-  markups_json: { name: string; type: 'percent' | 'fixed'; value: number; amount: number }[];
-  total: number;
-  act_type: ActType;
-  form_type: ActFormType;
-  status: ActStatus;
-  payment_status: ActPaymentStatus;
-  paid_amount: number;
-  notes?: string;
-  internal_notes?: string;
-  template_id?: string;
-  generated_pdf_url?: string;
+  project_id?: string;
+  number?: string;
+  title: string;
+  description?: string;
+  status: PurchaseRequestStatus;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  needed_by?: string;
+  total_estimated: number;
+  approved_by_id?: string;
+  approved_at?: string;
+  rejection_reason?: string;
   created_by_id: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  items?: PurchaseRequestItem[];
   project?: Project;
-  contractor?: Contractor;
-  responsible?: User;
-  items?: FinanceActItem[];
 }
 
-export interface FinanceActItem {
+export interface PurchaseRequestItem {
   id: string;
-  act_id: string;
-  estimate_task_id?: string;
+  request_id: string;
+  resource_id?: string;
   name: string;
+  description?: string;
   unit_measure_id?: number;
-  volume_total: number;
-  volume_previous: number;
-  volume_current: number;
-  unit_price: number;
-  amount_total: number;
-  amount_previous: number;
-  amount_current: number;
+  quantity: number;
+  estimated_price?: number;
+  url?: string;
+  notes?: string;
   sort_order: number;
-  unit_measure?: UnitMeasure;
-  estimate_task?: EstimateTask;
-}
-
-// =====================================================
-// МОДУЛЬ: ЗАКУПКИ И СКЛАД (ZAOPATRZENIE)
-// =====================================================
-
-export type ResourceRequestStatus = 'new' | 'partial' | 'ordered' | 'received' | 'cancelled';
-export type OrderStatus = 'draft' | 'sent' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
-export type OrderDeliveryStatus = 'pending' | 'partial' | 'delivered';
-export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid';
-export type StockOperationType = 'receipt' | 'issue' | 'transfer' | 'inventory';
-
-export interface ResourceRequest {
-  id: string;
-  project_id: string;
-  estimate_resource_id?: string;
-  name: string;
-  resource_type: ResourceType;
-  unit_measure_id?: number;
-  volume_required: number;
-  volume_ordered: number;
-  volume_received: number;
-  planned_price?: number;
-  actual_price?: number;
-  planned_cost: number;
-  needed_at?: string;
-  status: ResourceRequestStatus;
-  is_over_budget: boolean;
-  comment?: string;
-  created_by_id: string;
   created_at: string;
-  updated_at: string;
-  project?: Project;
   unit_measure?: UnitMeasure;
-  estimate_resource?: EstimateResource;
 }
 
-export interface Order {
+export interface PurchaseOrder {
   id: string;
   company_id: string;
-  project_id: string;
-  contractor_id: string;
-  number: string;
+  project_id?: string;
+  contractor_id?: string;
+  request_id?: string;
+  number?: string;
+  status: PurchaseOrderStatus;
   order_date: string;
-  expected_date?: string;
+  expected_delivery?: string;
+  actual_delivery?: string;
   subtotal: number;
-  nds_percent: number;
-  nds_amount: number;
+  tax_amount: number;
   total: number;
-  status: OrderStatus;
-  delivery_status: OrderDeliveryStatus;
-  payment_status: OrderPaymentStatus;
+  shipping_address?: string;
   notes?: string;
   internal_notes?: string;
-  attachments: { file_id: string; name: string }[];
   created_by_id: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
-  project?: Project;
+  items?: PurchaseOrderItem[];
   contractor?: Contractor;
-  items?: OrderItem[];
+  project?: Project;
 }
 
-export interface OrderItem {
+export interface PurchaseOrderItem {
   id: string;
   order_id: string;
-  resource_request_id?: string;
+  request_item_id?: string;
   name: string;
-  resource_type: ResourceType;
+  description?: string;
   unit_measure_id?: number;
-  volume: number;
-  volume_delivered: number;
+  quantity: number;
   unit_price: number;
   total_price: number;
+  received_quantity: number;
   sort_order: number;
-  unit_measure?: UnitMeasure;
-  resource_request?: ResourceRequest;
-}
-
-export interface Stock {
-  id: string;
-  company_id: string;
-  project_id?: string;
-  name: string;
-  address?: string;
-  is_default: boolean;
-  is_active: boolean;
   created_at: string;
-  updated_at: string;
-}
-
-export interface StockBalance {
-  id: string;
-  stock_id: string;
-  name: string;
-  valuation_id?: string;
-  unit_measure_id?: number;
-  quantity: number;
-  reserved_quantity: number;
-  available_quantity: number;
-  unit_price: number;
-  total_value: number;
-  created_at: string;
-  updated_at: string;
-  stock?: Stock;
-  unit_measure?: UnitMeasure;
-  valuation?: Valuation;
-}
-
-export interface StockOperation {
-  id: string;
-  company_id: string;
-  project_id?: string;
-  stock_id: string;
-  operation_type: StockOperationType;
-  order_id?: string;
-  contractor_id?: string;
-  estimate_task_id?: string;
-  operation_date: string;
-  document_number?: string;
-  comment?: string;
-  created_by_id: string;
-  created_at: string;
-  stock?: Stock;
-  order?: Order;
-  contractor?: Contractor;
-  items?: StockOperationItem[];
-}
-
-export interface StockOperationItem {
-  id: string;
-  operation_id: string;
-  stock_balance_id?: string;
-  order_item_id?: string;
-  name: string;
-  unit_measure_id?: number;
-  quantity: number;
-  unit_price: number;
-  total: number;
-  sort_order: number;
   unit_measure?: UnitMeasure;
 }
 
@@ -2243,182 +2128,74 @@ export interface StockOperationItem {
 // МОДУЛЬ: СОГЛАСОВАНИЯ (UZGODNIENIA)
 // =====================================================
 
-export type ApprovalRequestStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'cancelled';
-export type ApprovalActionType = 'approved' | 'rejected' | 'returned' | 'delegated';
-export type ApprovalEntityType = 'estimate' | 'act' | 'document' | 'change_request' | 'offer' | 'order';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type ApprovalEntityType = 'document' | 'estimate' | 'offer' | 'purchase_request' | 'purchase_order' | 'ticket' | 'other';
 
-export interface ApprovalWorkflowTemplate {
+export interface ApprovalWorkflow {
   id: string;
   company_id: string;
   name: string;
   description?: string;
-  allow_modification: boolean;
-  notify_involved: boolean;
-  steps: {
-    step: number;
-    name: string;
-    approvers: { user_id?: string; role_id?: number }[];
-    require_all: boolean;
-  }[];
+  entity_type: ApprovalEntityType;
   is_active: boolean;
-  created_by_id: string;
+  is_default: boolean;
+  settings: Record<string, any>;
   created_at: string;
   updated_at: string;
+  steps?: ApprovalWorkflowStep[];
 }
 
-export interface ApprovalRequest {
+export interface ApprovalWorkflowStep {
+  id: string;
+  workflow_id: string;
+  name: string;
+  step_order: number;
+  approver_type: 'user' | 'role' | 'any_of_users';
+  approver_ids: string[];
+  is_required: boolean;
+  can_reject: boolean;
+  auto_approve_after_days?: number;
+  created_at: string;
+}
+
+export interface Approval {
   id: string;
   company_id: string;
-  project_id?: string;
-  workflow_template_id?: string;
+  workflow_id?: string;
   entity_type: ApprovalEntityType;
   entity_id: string;
-  subject: string;
-  message?: string;
+  entity_name: string;
+  status: ApprovalStatus;
   current_step: number;
-  status: ApprovalRequestStatus;
-  due_date?: string;
-  completed_at?: string;
   initiated_by_id: string;
+  initiated_at: string;
+  completed_at?: string;
+  notes?: string;
   created_at: string;
   updated_at: string;
-  workflow_template?: ApprovalWorkflowTemplate;
-  initiated_by?: User;
-  actions?: ApprovalAction[];
+  workflow?: ApprovalWorkflow;
+  steps?: ApprovalStep[];
 }
 
-export interface ApprovalAction {
+export interface ApprovalStep {
   id: string;
-  request_id: string;
-  step: number;
-  user_id: string;
-  action: ApprovalActionType;
+  approval_id: string;
+  step_order: number;
+  approver_id?: string;
+  status: ApprovalStatus;
   comment?: string;
-  delegated_to_id?: string;
+  decided_at?: string;
   created_at: string;
-  user?: User;
-  delegated_to?: User;
+  approver?: User;
 }
 
 // =====================================================
-// МОДУЛЬ: ОТЧЁТНОСТЬ (RAPORTY)
-// =====================================================
-
-export type ReportTemplateType = 'project_report' | 'ticket_report' | 'financial_report' | 'estimate_report' | 'act_report' | 'custom';
-export type ReportFormat = 'pdf' | 'xlsx' | 'csv' | 'html';
-export type DashboardType = 'project' | 'financial' | 'tasks' | 'custom';
-export type WidgetType = 'counter' | 'chart_pie' | 'chart_bar' | 'chart_line' | 'table' | 'list' | 'progress' | 'calendar';
-export type WidgetDataSource = 'tickets' | 'estimates' | 'finance' | 'projects' | 'resources' | 'custom_query';
-
-export interface ReportTemplate {
-  id: string;
-  company_id?: string;
-  name: string;
-  description?: string;
-  template_type: ReportTemplateType;
-  category?: string;
-  page_orientation: 'portrait' | 'landscape';
-  page_size: 'A4' | 'A3' | 'Letter';
-  margins: { top: number; bottom: number; left: number; right: number };
-  header_html?: string;
-  body_html: string;
-  footer_html?: string;
-  custom_css?: string;
-  settings: Record<string, any>;
-  required_params: { name: string; type: string; label: string; default?: any }[];
-  is_system: boolean;
-  is_active: boolean;
-  preview_image_url?: string;
-  version: number;
-  parent_template_id?: string;
-  created_by_id?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface GeneratedReport {
-  id: string;
-  company_id: string;
-  template_id?: string;
-  project_id?: string;
-  name: string;
-  format: ReportFormat;
-  file_url?: string;
-  file_size?: number;
-  parameters: Record<string, any>;
-  cache_key?: string;
-  expires_at?: string;
-  generated_by_id: string;
-  generated_at: string;
-  generation_time_ms?: number;
-  template?: ReportTemplate;
-  project?: Project;
-}
-
-export interface Dashboard {
-  id: string;
-  company_id?: string;
-  project_id?: string;
-  name: string;
-  description?: string;
-  dashboard_type: DashboardType;
-  layout: {
-    widget_id: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    config: Record<string, any>;
-  }[];
-  is_default: boolean;
-  is_public: boolean;
-  refresh_interval: number;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DashboardWidget {
-  id: string;
-  company_id?: string;
-  name: string;
-  description?: string;
-  widget_type: WidgetType;
-  data_source: WidgetDataSource;
-  config: Record<string, any>;
-  is_system: boolean;
-  created_by_id?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ScheduledReport {
-  id: string;
-  company_id: string;
-  template_id: string;
-  project_id?: string;
-  name: string;
-  parameters: Record<string, any>;
-  schedule_cron: string;
-  timezone: string;
-  format: ReportFormat;
-  delivery_method: 'email' | 'storage' | 'both';
-  recipients: { email?: string; user_id?: string }[];
-  is_active: boolean;
-  last_run_at?: string;
-  next_run_at?: string;
-  last_error?: string;
-  created_by_id: string;
-  created_at: string;
-  updated_at: string;
-  template?: ReportTemplate;
-}
-
-// =====================================================
-// РАСШИРЕННЫЕ РОЛИ ДЛЯ СТРОИТЕЛЬНЫХ МОДУЛЕЙ
+// РОЛИ СТРОИТЕЛЬСТВА
 // =====================================================
 
 export enum ConstructionRole {
+  OWNER = 'owner',
+  ADMIN = 'admin',
   PROJECT_MANAGER = 'project_manager',
   ESTIMATOR = 'estimator',
   FOREMAN = 'foreman',
