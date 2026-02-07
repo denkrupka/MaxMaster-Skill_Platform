@@ -2,13 +2,13 @@
  * GUS API Integration
  * Fetching company data from Polish GUS (BIR) by NIP
  *
- * Note: Official GUS BIR1 API requires registration at:
- * https://api.stat.gov.pl/Home/RegonApi
- *
- * This module supports:
- * 1. Official GUS BIR1 API (with API key)
- * 2. Fallback simulation for development
+ * This module uses Supabase Edge Function as proxy to avoid CORS issues.
  */
+
+import { SUPABASE_ANON_KEY } from './supabase';
+
+// Supabase project URL
+const SUPABASE_URL = 'https://diytvuczpciikzdhldny.supabase.co';
 
 export interface GUSCompanyData {
   nip: string;
@@ -70,13 +70,12 @@ export function formatNip(nip: string): string {
 }
 
 /**
- * Fetch company data from GUS BIR API
+ * Fetch company data from GUS via Supabase Edge Function (to avoid CORS)
  *
  * @param nip - Company NIP (tax identification number)
- * @param apiKey - Optional API key for official GUS API
  * @returns Company data or error
  */
-export async function fetchCompanyByNip(nip: string, apiKey?: string): Promise<GUSApiResponse> {
+export async function fetchCompanyByNip(nip: string): Promise<GUSApiResponse> {
   const normalizedNip = normalizeNip(nip);
 
   // Validate NIP format
@@ -87,239 +86,33 @@ export async function fetchCompanyByNip(nip: string, apiKey?: string): Promise<G
     };
   }
 
-  // If API key is provided, use official GUS API
-  if (apiKey) {
-    return fetchFromOfficialGusApi(normalizedNip, apiKey);
-  }
-
-  // Try public proxy services or return simulation for development
   try {
-    // Try rejestr.io API (free, limited)
-    const rejestrResponse = await fetchFromRejestrIo(normalizedNip);
-    if (rejestrResponse.success) {
-      return rejestrResponse;
-    }
-  } catch (e) {
-    console.warn('Rejestr.io API failed, trying alternative...');
-  }
-
-  // Fallback: Return error suggesting manual entry
-  return {
-    success: false,
-    error: 'Nie udało się pobrać danych z GUS. Wprowadź dane ręcznie.'
-  };
-}
-
-/**
- * Fetch from official GUS BIR1 API
- */
-async function fetchFromOfficialGusApi(nip: string, apiKey: string): Promise<GUSApiResponse> {
-  const GUS_API_URL = 'https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc';
-
-  try {
-    // Step 1: Login to get session ID
-    const loginResponse = await fetch(GUS_API_URL, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/gus-proxy`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
       },
-      body: `<?xml version="1.0" encoding="utf-8"?>
-        <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:ns="http://CIS/BIR/PUBL/2014/07">
-          <soap:Header xmlns:wsa="http://www.w3.org/2005/08/addressing">
-            <wsa:To>https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc</wsa:To>
-            <wsa:Action>http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/Zaloguj</wsa:Action>
-          </soap:Header>
-          <soap:Body>
-            <ns:Zaloguj>
-              <ns:pKluczUzytkownika>${apiKey}</ns:pKluczUzytkownika>
-            </ns:Zaloguj>
-          </soap:Body>
-        </soap:Envelope>`
-    });
-
-    if (!loginResponse.ok) {
-      throw new Error('GUS API login failed');
-    }
-
-    const loginText = await loginResponse.text();
-    const sidMatch = loginText.match(/<ZalogujResult>([^<]+)<\/ZalogujResult>/);
-
-    if (!sidMatch || !sidMatch[1]) {
-      throw new Error('Could not get session ID from GUS API');
-    }
-
-    const sessionId = sidMatch[1];
-
-    // Step 2: Search by NIP
-    const searchResponse = await fetch(GUS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
-        'sid': sessionId
-      },
-      body: `<?xml version="1.0" encoding="utf-8"?>
-        <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:ns="http://CIS/BIR/PUBL/2014/07" xmlns:dat="http://CIS/BIR/PUBL/2014/07/DataContract">
-          <soap:Header xmlns:wsa="http://www.w3.org/2005/08/addressing">
-            <wsa:To>https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc</wsa:To>
-            <wsa:Action>http://CIS/BIR/PUBL/2014/07/IUslugaBIRzewnPubl/DaneSzukajPodmioty</wsa:Action>
-          </soap:Header>
-          <soap:Body>
-            <ns:DaneSzukajPodmioty>
-              <ns:pParametryWyszukiwania>
-                <dat:Nip>${nip}</dat:Nip>
-              </ns:pParametryWyszukiwania>
-            </ns:DaneSzukajPodmioty>
-          </soap:Body>
-        </soap:Envelope>`
-    });
-
-    const searchText = await searchResponse.text();
-
-    // Parse the response
-    const data = parseGusResponse(searchText);
-
-    if (data) {
-      return { success: true, data };
-    }
-
-    return {
-      success: false,
-      error: 'Nie znaleziono firmy o podanym NIP'
-    };
-  } catch (error: any) {
-    console.error('GUS API error:', error);
-    return {
-      success: false,
-      error: `Błąd API GUS: ${error.message}`
-    };
-  }
-}
-
-/**
- * Parse GUS SOAP response to extract company data
- */
-function parseGusResponse(xml: string): GUSCompanyData | null {
-  try {
-    // Extract data from XML (simplified parsing)
-    const getValue = (tag: string): string => {
-      const match = xml.match(new RegExp(`<${tag}>([^<]*)</${tag}>`, 'i'));
-      return match ? match[1].trim() : '';
-    };
-
-    const nip = getValue('Nip');
-    if (!nip) return null;
-
-    return {
-      nip,
-      regon: getValue('Regon'),
-      name: getValue('Nazwa'),
-      street: getValue('Ulica'),
-      streetNumber: getValue('NrNieruchomosci'),
-      apartmentNumber: getValue('NrLokalu') || undefined,
-      city: getValue('Miejscowosc'),
-      postalCode: getValue('KodPocztowy'),
-      voivodeship: getValue('Wojewodztwo') || undefined,
-      county: getValue('Powiat') || undefined,
-      commune: getValue('Gmina') || undefined,
-      country: 'Polska'
-    };
-  } catch (e) {
-    return null;
-  }
-}
-
-/**
- * Fetch from Rejestr.io (free public API)
- * https://rejestr.io/
- */
-async function fetchFromRejestrIo(nip: string): Promise<GUSApiResponse> {
-  try {
-    const response = await fetch(`https://rejestr.io/api/v2/org?nip=${nip}`, {
-      headers: {
-        'Accept': 'application/json'
-      }
+      body: JSON.stringify({ nip: normalizedNip })
     });
 
     if (!response.ok) {
-      if (response.status === 404) {
-        return {
-          success: false,
-          error: 'Nie znaleziono firmy o podanym NIP'
-        };
-      }
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!data || !data.name) {
+      const errorData = await response.json().catch(() => ({}));
       return {
         success: false,
-        error: 'Nie znaleziono firmy o podanym NIP'
+        error: errorData.error || 'Nie udało się pobrać danych z GUS'
       };
     }
 
-    // Parse address
-    const addressParts = parseAddress(data.address || '');
-
-    return {
-      success: true,
-      data: {
-        nip: data.nip || nip,
-        regon: data.regon,
-        name: data.name,
-        street: addressParts.street,
-        streetNumber: addressParts.streetNumber,
-        city: addressParts.city,
-        postalCode: addressParts.postalCode,
-        country: 'Polska',
-        email: data.email,
-        phone: data.phone,
-        mainActivityCode: data.pkd,
-        mainActivityName: data.pkd_name
-      }
-    };
+    const result = await response.json();
+    return result;
   } catch (error: any) {
+    console.error('GUS proxy error:', error);
     return {
       success: false,
-      error: `Błąd pobierania danych: ${error.message}`
+      error: 'Nie udało się pobrać danych z GUS. Wprowadź dane ręcznie.'
     };
   }
-}
-
-/**
- * Parse Polish address string into components
- */
-function parseAddress(address: string): {
-  street: string;
-  streetNumber: string;
-  city: string;
-  postalCode: string;
-} {
-  const result = {
-    street: '',
-    streetNumber: '',
-    city: '',
-    postalCode: ''
-  };
-
-  if (!address) return result;
-
-  // Try to extract postal code (XX-XXX format)
-  const postalMatch = address.match(/(\d{2}-\d{3})\s+(\w+)/);
-  if (postalMatch) {
-    result.postalCode = postalMatch[1];
-    result.city = postalMatch[2];
-  }
-
-  // Try to extract street and number
-  const streetMatch = address.match(/^(?:ul\.\s*)?([^,\d]+)\s*(\d+[A-Za-z]?(?:\/\d+)?)?/i);
-  if (streetMatch) {
-    result.street = streetMatch[1].trim();
-    result.streetNumber = streetMatch[2] || '';
-  }
-
-  return result;
 }
 
 /**
