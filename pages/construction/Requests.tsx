@@ -2323,7 +2323,24 @@ export const RequestsPage: React.FC = () => {
 
       {/* Form Selection Modal */}
       {showFormSelectionModal && selectedRequest && (() => {
-        const requestWorkTypes = selectedRequest.work_types || [];
+        // Get work types from relation or fallback to installation_types field
+        let requestWorkTypes: { code: string; name: string }[] = [];
+
+        if (selectedRequest.work_types && selectedRequest.work_types.length > 0) {
+          // Use work_types from relation
+          requestWorkTypes = selectedRequest.work_types.map((wt: any) => ({
+            code: wt.work_type?.code || wt.work_type_id,
+            name: wt.work_type?.name || wt.work_type?.code || wt.work_type_id
+          }));
+        } else if (selectedRequest.installation_types) {
+          // Fallback: parse installation_types field (e.g., "IE,IT" or "IE")
+          const types = selectedRequest.installation_types.split(',').map((t: string) => t.trim());
+          requestWorkTypes = types.map((t: string) => ({
+            code: t,
+            name: t === 'IE' ? 'Instalacje elektryczne' : t === 'IT' ? 'Instalacje teletechniczne' : t
+          }));
+        }
+
         const hasMultipleWorkTypes = requestWorkTypes.length > 1;
         const isIndustrial = selectedRequest.object_type === 'industrial';
 
@@ -2347,7 +2364,7 @@ export const RequestsPage: React.FC = () => {
 
         // Check if all work types have templates selected
         const allTemplatesSelected = hasMultipleWorkTypes
-          ? requestWorkTypes.every(wt => workTypeTemplates[wt.work_type?.code || wt.work_type_id])
+          ? requestWorkTypes.every(wt => workTypeTemplates[wt.code])
           : true;
 
         const handleGoToFormulary = () => {
@@ -2357,23 +2374,26 @@ export const RequestsPage: React.FC = () => {
             const templatesParam = encodeURIComponent(JSON.stringify(workTypeTemplates));
             window.location.hash = `#/construction/formulary/${selectedRequest.id}?templates=${templatesParam}`;
           } else {
-            const workTypeCode = requestWorkTypes[0]?.work_type?.code || 'IE';
+            const workTypeCode = requestWorkTypes[0]?.code || 'IE';
             const template = getRecommendedTemplate(workTypeCode);
             window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${template}`;
           }
         };
 
         const handleSelectRecommended = () => {
-          if (hasMultipleWorkTypes) {
-            // Auto-select recommended template for each work type
-            const recommended: Record<string, string> = {};
-            requestWorkTypes.forEach(wt => {
-              const code = wt.work_type?.code || wt.work_type_id;
-              recommended[code] = getRecommendedTemplate(code);
-            });
-            setWorkTypeTemplates(recommended);
-          } else {
-            handleGoToFormulary();
+          // Auto-select recommended template for each work type
+          const recommended: Record<string, string> = {};
+          requestWorkTypes.forEach(wt => {
+            recommended[wt.code] = getRecommendedTemplate(wt.code);
+          });
+          setWorkTypeTemplates(recommended);
+
+          // If multiple work types, just set templates (don't navigate yet)
+          // If single, navigate directly
+          if (!hasMultipleWorkTypes) {
+            setShowFormSelectionModal(false);
+            const template = recommended[requestWorkTypes[0]?.code] || getRecommendedTemplate('IE');
+            window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${template}`;
           }
         };
 
@@ -2436,14 +2456,12 @@ export const RequestsPage: React.FC = () => {
                   <div className="text-sm font-medium text-slate-700 mb-3">Wybierz szablon dla każdego typu prac:</div>
                   <div className="space-y-3">
                     {requestWorkTypes.map(wt => {
-                      const wtCode = wt.work_type?.code || wt.work_type_id;
-                      const wtName = wt.work_type?.name || wtCode;
-                      const selectedTemplate = workTypeTemplates[wtCode];
+                      const selectedTemplate = workTypeTemplates[wt.code];
 
                       return (
-                        <div key={wtCode} className="p-3 bg-slate-50 rounded-lg">
+                        <div key={wt.code} className="p-3 bg-slate-50 rounded-lg">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-slate-900">{wtName}</span>
+                            <span className="font-medium text-slate-900">{wt.name}</span>
                             {selectedTemplate && (
                               <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
                                 <Check className="w-3 h-3" />
@@ -2455,7 +2473,7 @@ export const RequestsPage: React.FC = () => {
                             {availableTemplates.map(tmpl => (
                               <button
                                 key={tmpl.code}
-                                onClick={() => setWorkTypeTemplates(prev => ({ ...prev, [wtCode]: tmpl.code }))}
+                                onClick={() => setWorkTypeTemplates(prev => ({ ...prev, [wt.code]: tmpl.code }))}
                                 className={`flex-1 px-3 py-2 text-sm rounded-lg border transition ${
                                   selectedTemplate === tmpl.code
                                     ? 'border-blue-500 bg-blue-50 text-blue-700'
