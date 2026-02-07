@@ -1925,11 +1925,6 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                               {group.name}
                             </span>
                           )}
-                          {!isGroupEditing && (
-                            <span className="text-xs text-slate-400 font-normal">
-                              ({group.rooms.length} elementów)
-                            </span>
-                          )}
                           {isEditMode && (
                             <>
                               <button
