@@ -252,7 +252,7 @@ export const RequestsPage: React.FC = () => {
         .select('id, code, name')
         .eq('company_id', currentUser.company_id)
         .eq('is_active', true)
-        .order('sort_order');
+        .order('code');
       if (data) {
         setWorkTypes(data);
       } else {

@@ -316,7 +316,7 @@ export const DictionariesPage: React.FC = () => {
         .from('kosztorys_work_types')
         .select('*')
         .eq('company_id', currentUser.company_id)
-        .order('sort_order', { ascending: true })
+        .order('code', { ascending: true })
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -839,7 +839,6 @@ export const DictionariesPage: React.FC = () => {
             name: editingRequestWorkType.name,
             description: editingRequestWorkType.description,
             is_active: editingRequestWorkType.is_active,
-            sort_order: editingRequestWorkType.sort_order || 0,
           })
           .eq('id', editingRequestWorkType.id);
 
@@ -853,7 +852,6 @@ export const DictionariesPage: React.FC = () => {
             name: editingRequestWorkType.name,
             description: editingRequestWorkType.description,
             is_active: editingRequestWorkType.is_active ?? true,
-            sort_order: requestWorkTypes.length,
             company_id: currentUser.company_id,
           });
 
