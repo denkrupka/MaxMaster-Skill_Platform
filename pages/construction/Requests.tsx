@@ -60,6 +60,16 @@ interface ContactFormData {
   is_primary: boolean;
 }
 
+interface ExistingClient {
+  client_name: string;
+  nip: string | null;
+  company_street: string | null;
+  company_street_number: string | null;
+  company_city: string | null;
+  company_postal_code: string | null;
+  company_country: string | null;
+}
+
 interface RequestFormData {
   // Client data
   client_name: string;
@@ -186,6 +196,12 @@ export const RequestsPage: React.FC = () => {
   // Object code editing
   const [editingObjectCode, setEditingObjectCode] = useState(false);
 
+  // Existing clients for dropdown
+  const [existingClients, setExistingClients] = useState<ExistingClient[]>([]);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [filteredClients, setFilteredClients] = useState<ExistingClient[]>([]);
+
   useEffect(() => {
     if (currentUser) {
       loadRequests();
@@ -193,6 +209,7 @@ export const RequestsPage: React.FC = () => {
       loadObjectTypes();
       loadObjectCategories();
       loadWorkTypes();
+      loadExistingClients();
     }
   }, [currentUser]);
 
@@ -322,6 +339,61 @@ export const RequestsPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading users:', err);
     }
+  };
+
+  const loadExistingClients = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('kosztorys_requests')
+        .select('client_name, nip, company_street, company_street_number, company_city, company_postal_code, company_country')
+        .eq('company_id', currentUser.company_id)
+        .order('client_name');
+
+      if (data) {
+        // Remove duplicates by client_name
+        const uniqueClients = data.reduce((acc: ExistingClient[], curr) => {
+          if (!acc.find(c => c.client_name.toLowerCase() === curr.client_name.toLowerCase())) {
+            acc.push(curr);
+          }
+          return acc;
+        }, []);
+        setExistingClients(uniqueClients);
+      }
+    } catch (err) {
+      console.error('Error loading existing clients:', err);
+    }
+  };
+
+  // Filter clients based on search query
+  useEffect(() => {
+    if (clientSearchQuery.trim().length >= 2) {
+      const query = clientSearchQuery.toLowerCase();
+      const filtered = existingClients.filter(c =>
+        c.client_name.toLowerCase().includes(query) ||
+        (c.nip && c.nip.includes(query))
+      );
+      setFilteredClients(filtered);
+      setShowClientDropdown(filtered.length > 0 || clientSearchQuery.trim().length >= 2);
+    } else {
+      setFilteredClients([]);
+      setShowClientDropdown(false);
+    }
+  }, [clientSearchQuery, existingClients]);
+
+  const selectExistingClient = (client: ExistingClient) => {
+    setFormData(prev => ({
+      ...prev,
+      client_name: client.client_name,
+      nip: client.nip || '',
+      company_street: client.company_street || '',
+      company_street_number: client.company_street_number || '',
+      company_city: client.company_city || '',
+      company_postal_code: client.company_postal_code || '',
+      company_country: client.company_country || 'Polska'
+    }));
+    setClientSearchQuery('');
+    setShowClientDropdown(false);
   };
 
   const generateRequestNumber = () => {
@@ -778,6 +850,8 @@ export const RequestsPage: React.FC = () => {
     setShowCompanyAddressSuggestions(false);
     setShowObjectAddressSuggestions(false);
     setShowWorkTypesDropdown(false);
+    setClientSearchQuery('');
+    setShowClientDropdown(false);
   };
 
   const handleViewRequest = (request: KosztorysRequest) => {
@@ -1180,15 +1254,56 @@ export const RequestsPage: React.FC = () => {
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
+                  <div className="col-span-2 relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
                     <input
                       type="text"
                       value={formData.client_name}
-                      onChange={e => setFormData(prev => ({ ...prev, client_name: e.target.value }))}
+                      onChange={e => {
+                        setFormData(prev => ({ ...prev, client_name: e.target.value }));
+                        setClientSearchQuery(e.target.value);
+                      }}
+                      onFocus={() => {
+                        if (formData.client_name.length >= 2) {
+                          setClientSearchQuery(formData.client_name);
+                        }
+                      }}
+                      onBlur={() => {
+                        // Delay hiding to allow click on dropdown
+                        setTimeout(() => setShowClientDropdown(false), 200);
+                      }}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="np. ABC Development Sp. z o.o."
+                      placeholder="Wyszukaj istniejącego lub wpisz nową nazwę..."
                     />
+                    {showClientDropdown && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredClients.length > 0 ? (
+                          <>
+                            <div className="px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b">
+                              Istniejący klienci
+                            </div>
+                            {filteredClients.map((client, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => selectExistingClient(client)}
+                                className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0"
+                              >
+                                <div className="font-medium text-slate-900">{client.client_name}</div>
+                                <div className="text-xs text-slate-500 flex gap-2">
+                                  {client.nip && <span>NIP: {client.nip}</span>}
+                                  {client.company_city && <span>{client.company_city}</span>}
+                                </div>
+                              </button>
+                            ))}
+                          </>
+                        ) : clientSearchQuery.length >= 2 && (
+                          <div className="px-3 py-3 text-sm text-slate-500 text-center">
+                            Nie znaleziono klienta. Możesz dodać nowego lub wyszukać w GUS.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1384,8 +1499,8 @@ export const RequestsPage: React.FC = () => {
                   <Building2 className="w-5 h-5 text-slate-400" />
                   Obiekt
                 </h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-6 gap-4">
+                  <div className="col-span-3">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa obiektu *</label>
                     <input
                       type="text"
@@ -1395,28 +1510,28 @@ export const RequestsPage: React.FC = () => {
                       placeholder="np. Osiedle Słoneczne - Etap II"
                     />
                   </div>
-                  <div>
+                  <div className="col-span-1">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Kod obiektu</label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1">
                       <input
                         type="text"
                         value={formData.object_code}
                         onChange={e => setFormData(prev => ({ ...prev, object_code: e.target.value }))}
                         disabled={!editingObjectCode}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                        className="w-full px-2 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 font-mono"
                         placeholder="WC26"
                       />
                       <button
                         type="button"
                         onClick={() => setEditingObjectCode(!editingObjectCode)}
-                        className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                        className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg flex-shrink-0"
                         title={editingObjectCode ? 'Auto-generuj' : 'Edytuj ręcznie'}
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <div className="relative">
+                  <div className="col-span-2 relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj prac *</label>
                     <div className="relative">
                       <button
@@ -1463,7 +1578,7 @@ export const RequestsPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-3">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
                     <select
                       value={formData.object_type}
@@ -1478,7 +1593,7 @@ export const RequestsPage: React.FC = () => {
                       ))}
                     </select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-3">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
                     <select
                       value={formData.object_category_id}
