@@ -120,11 +120,11 @@ import { CompanyRegisterPage } from './pages/CompanyRegister';
 
 // Construction Module Pages
 import {
-  EstimatesPage, OffersPage, ContractorsPage, DrawingsPage,
+  EstimatesPage, OffersPage, DrawingsPage,
   DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage
 } from './pages/construction';
 
-const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'contractors' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
+const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
   const { state, getEffectiveRole } = useAppContext();
 
   if (!state.currentUser) {
@@ -441,7 +441,6 @@ export default function App() {
           {/* Construction Module Routes */}
           <Route path="/construction/estimates" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimatesPage /></ProtectedRoute>} />
           <Route path="/construction/offers" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="offers"><OffersPage /></ProtectedRoute>} />
-          <Route path="/construction/contractors" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="contractors"><ContractorsPage /></ProtectedRoute>} />
           <Route path="/construction/drawings" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR]} requiredModule="drawings"><DrawingsPage /></ProtectedRoute>} />
           <Route path="/construction/dms" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR, Role.BRIGADIR, Role.EMPLOYEE]} requiredModule="dms"><DMSPage /></ProtectedRoute>} />
           <Route path="/construction/gantt" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="gantt"><GanttPage /></ProtectedRoute>} />

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus, Search, FolderOpen, File, FileText, FileImage, FileVideo,
   Upload, Download, Trash2, Pencil, MoreVertical, Grid, List,
   ChevronRight, ChevronDown, Star, Clock, Users, Lock, Eye, Share2,
-  ArrowLeft, Loader2, X, Check, Filter, Home
+  ArrowLeft, Loader2, X, Check, Filter, Home, Save, Link as LinkIcon,
+  Copy
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +37,7 @@ export const DMSPage: React.FC = () => {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [allFolders, setAllFolders] = useState<DMSFolder[]>([]);
   const [folders, setFolders] = useState<FolderWithChildren[]>([]);
   const [currentFolder, setCurrentFolder] = useState<DMSFolder | null>(null);
   const [currentFiles, setCurrentFiles] = useState<DMSFile[]>([]);
@@ -44,11 +46,25 @@ export const DMSPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
+  // Modals
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
+  const [showFileModal, setShowFileModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+
   const [editingFolder, setEditingFolder] = useState<DMSFolder | null>(null);
+  const [selectedFile, setSelectedFile] = useState<DMSFile | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+
+  // Upload state
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  // Folder form
+  const [folderForm, setFolderForm] = useState({ name: '', description: '' });
+  const [saving, setSaving] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentUser) loadProjects();
@@ -59,8 +75,8 @@ export const DMSPage: React.FC = () => {
   }, [selectedProject]);
 
   useEffect(() => {
-    if (currentFolder || selectedProject) loadCurrentFolderContent();
-  }, [currentFolder]);
+    if (selectedProject) loadCurrentFolderContent();
+  }, [currentFolder, selectedProject]);
 
   const loadProjects = async () => {
     if (!currentUser) return;
@@ -91,6 +107,7 @@ export const DMSPage: React.FC = () => {
         .order('name');
 
       if (data) {
+        setAllFolders(data);
         const folderMap = new Map<string, FolderWithChildren>();
         data.forEach(f => {
           folderMap.set(f.id, { ...f, children: [], isExpanded: false });
@@ -140,17 +157,25 @@ export const DMSPage: React.FC = () => {
     setCurrentFolder(folder);
     if (folder) {
       // Build breadcrumb
-      const newBreadcrumb = [...breadcrumb];
-      const existingIndex = newBreadcrumb.findIndex(f => f.id === folder.id);
-      if (existingIndex >= 0) {
-        newBreadcrumb.splice(existingIndex + 1);
-      } else {
-        newBreadcrumb.push(folder);
-      }
-      setBreadcrumb(newBreadcrumb);
+      const buildBreadcrumb = (folderId: string): DMSFolder[] => {
+        const f = allFolders.find(x => x.id === folderId);
+        if (!f) return [];
+        if (f.parent_id) {
+          return [...buildBreadcrumb(f.parent_id), f];
+        }
+        return [f];
+      };
+      setBreadcrumb(buildBreadcrumb(folder.id));
     } else {
       setBreadcrumb([]);
     }
+  };
+
+  const getSubfolders = () => {
+    if (!currentFolder) {
+      return allFolders.filter(f => !f.parent_id);
+    }
+    return allFolders.filter(f => f.parent_id === currentFolder.id);
   };
 
   const filteredFiles = useMemo(() => {
@@ -163,6 +188,142 @@ export const DMSPage: React.FC = () => {
   const getUserName = (userId: string) => {
     const user = users.find(u => u.id === userId);
     return user ? `${user.first_name} ${user.last_name}` : 'Nieznany';
+  };
+
+  const formatDate = (date: string) =>
+    new Date(date).toLocaleDateString('pl-PL');
+
+  // Folder CRUD
+  const handleSaveFolder = async () => {
+    if (!currentUser || !selectedProject || !folderForm.name.trim()) return;
+    setSaving(true);
+    try {
+      if (editingFolder) {
+        await supabase
+          .from('dms_folders')
+          .update({
+            name: folderForm.name.trim(),
+            description: folderForm.description
+          })
+          .eq('id', editingFolder.id);
+      } else {
+        await supabase
+          .from('dms_folders')
+          .insert({
+            company_id: currentUser.company_id,
+            project_id: selectedProject.id,
+            parent_id: currentFolder?.id || null,
+            name: folderForm.name.trim(),
+            description: folderForm.description,
+            created_by_id: currentUser.id
+          });
+      }
+      setShowFolderModal(false);
+      setEditingFolder(null);
+      setFolderForm({ name: '', description: '' });
+      await loadFolders();
+    } catch (err) {
+      console.error('Error saving folder:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteFolder = async (folder: DMSFolder) => {
+    if (!confirm(`Czy na pewno chcesz usunąć folder "${folder.name}" i wszystkie pliki w nim?`)) return;
+    try {
+      await supabase
+        .from('dms_folders')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', folder.id);
+      await loadFolders();
+    } catch (err) {
+      console.error('Error deleting folder:', err);
+    }
+  };
+
+  // File upload
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setUploadFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!currentUser || !selectedProject || uploadFiles.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of uploadFiles) {
+        // Upload to storage
+        const fileName = `${selectedProject.id}/${currentFolder?.id || 'root'}/${Date.now()}_${file.name}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('dms')
+          .upload(fileName, file);
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          continue;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('dms')
+          .getPublicUrl(fileName);
+
+        // Create file record
+        await supabase
+          .from('dms_files')
+          .insert({
+            company_id: currentUser.company_id,
+            project_id: selectedProject.id,
+            folder_id: currentFolder?.id || null,
+            name: file.name,
+            original_name: file.name,
+            file_url: urlData?.publicUrl,
+            storage_path: fileName,
+            size: file.size,
+            mime_type: file.type,
+            version: 1,
+            is_current_version: true,
+            created_by_id: currentUser.id
+          });
+      }
+
+      setShowUploadModal(false);
+      setUploadFiles([]);
+      await loadCurrentFolderContent();
+    } catch (err) {
+      console.error('Error uploading files:', err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteFile = async (file: DMSFile) => {
+    if (!confirm(`Czy na pewno chcesz usunąć plik "${file.name}"?`)) return;
+    try {
+      await supabase
+        .from('dms_files')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', file.id);
+      await loadCurrentFolderContent();
+    } catch (err) {
+      console.error('Error deleting file:', err);
+    }
+  };
+
+  const handleDownload = (file: DMSFile) => {
+    if (file.file_url) {
+      window.open(file.file_url, '_blank');
+    }
+  };
+
+  const copyShareLink = (file: DMSFile) => {
+    if (file.file_url) {
+      navigator.clipboard.writeText(file.file_url);
+      alert('Link skopiowany!');
+    }
   };
 
   // Project selection
@@ -198,6 +359,81 @@ export const DMSPage: React.FC = () => {
               </div>
             </button>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  // File detail modal
+  if (selectedFile) {
+    const FileIcon = getFileIcon(selectedFile.mime_type);
+    return (
+      <div className="p-6">
+        <button
+          onClick={() => setSelectedFile(null)}
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          Powrót do listy
+        </button>
+
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          {/* Preview */}
+          <div className="h-96 bg-slate-100 flex items-center justify-center">
+            {selectedFile.mime_type?.startsWith('image/') && selectedFile.file_url ? (
+              <img src={selectedFile.file_url} alt={selectedFile.name} className="max-h-full max-w-full object-contain" />
+            ) : (
+              <FileIcon className="w-24 h-24 text-slate-300" />
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="p-6">
+            <h1 className="text-xl font-bold text-slate-900 mb-4">{selectedFile.name}</h1>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Rozmiar</p>
+                <p className="font-medium text-slate-900">{formatFileSize(selectedFile.size)}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Typ</p>
+                <p className="font-medium text-slate-900">{selectedFile.mime_type || 'Nieznany'}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Wersja</p>
+                <p className="font-medium text-slate-900">{selectedFile.version}</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Dodany</p>
+                <p className="font-medium text-slate-900">{formatDate(selectedFile.created_at)}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleDownload(selectedFile)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Download className="w-4 h-4" />
+                Pobierz
+              </button>
+              <button
+                onClick={() => copyShareLink(selectedFile)}
+                className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                <Share2 className="w-4 h-4" />
+                Udostępnij link
+              </button>
+              <button
+                onClick={() => { handleDeleteFile(selectedFile); setSelectedFile(null); }}
+                className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                Usuń
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -248,14 +484,21 @@ export const DMSPage: React.FC = () => {
           </button>
         </div>
         <button
-          onClick={() => { setEditingFolder(null); setShowFolderModal(true); }}
+          onClick={() => {
+            setEditingFolder(null);
+            setFolderForm({ name: '', description: '' });
+            setShowFolderModal(true);
+          }}
           className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
         >
           <Plus className="w-4 h-4" />
           Folder
         </button>
         <button
-          onClick={() => setShowUploadModal(true)}
+          onClick={() => {
+            setUploadFiles([]);
+            setShowUploadModal(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           <Upload className="w-4 h-4" />
@@ -276,46 +519,43 @@ export const DMSPage: React.FC = () => {
       </div>
 
       {/* Folders */}
-      {!currentFolder && folders.length > 0 && (
+      {getSubfolders().length > 0 && (
         <div className="mb-6">
           <h2 className="text-sm font-medium text-slate-500 mb-3">Foldery</h2>
           <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' : 'space-y-2'}>
-            {folders.map(folder => (
-              <button
+            {getSubfolders().map(folder => (
+              <div
                 key={folder.id}
-                onClick={() => navigateToFolder(folder)}
                 className={viewMode === 'grid'
-                  ? 'p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition text-center'
-                  : 'w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition'
+                  ? 'p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition text-center cursor-pointer group'
+                  : 'w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition cursor-pointer group'
                 }
+                onClick={() => navigateToFolder(folder)}
               >
-                <FolderOpen className="w-8 h-8 text-amber-500 mx-auto mb-2" style={viewMode === 'list' ? { margin: 0 } : undefined} />
-                <span className={`font-medium text-slate-900 ${viewMode === 'grid' ? 'block truncate' : 'flex-1 text-left'}`}>
+                <FolderOpen className={`w-8 h-8 text-amber-500 ${viewMode === 'grid' ? 'mx-auto mb-2' : ''}`} />
+                <span className={`font-medium text-slate-900 ${viewMode === 'grid' ? 'block truncate' : 'flex-1 text-left truncate'}`}>
                   {folder.name}
                 </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Subfolders in current folder */}
-      {currentFolder && folders.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-medium text-slate-500 mb-3">Podfoldery</h2>
-          <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4' : 'space-y-2'}>
-            {folders.filter(f => f.parent_id === currentFolder.id).map(folder => (
-              <button
-                key={folder.id}
-                onClick={() => navigateToFolder(folder)}
-                className={viewMode === 'grid'
-                  ? 'p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition text-center'
-                  : 'w-full flex items-center gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition'
-                }
-              >
-                <FolderOpen className="w-8 h-8 text-amber-500" />
-                <span className="font-medium text-slate-900 truncate">{folder.name}</span>
-              </button>
+                <div className={`${viewMode === 'grid' ? 'flex justify-center gap-1 mt-2' : 'flex gap-1'} opacity-0 group-hover:opacity-100`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingFolder(folder);
+                      setFolderForm({ name: folder.name, description: folder.description || '' });
+                      setShowFolderModal(true);
+                    }}
+                    className="p-1 hover:bg-slate-200 rounded"
+                  >
+                    <Pencil className="w-4 h-4 text-slate-400" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder); }}
+                    className="p-1 hover:bg-red-100 rounded"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -333,7 +573,10 @@ export const DMSPage: React.FC = () => {
             <File className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 mb-4">Brak plików w tym folderze</p>
             <button
-              onClick={() => setShowUploadModal(true)}
+              onClick={() => {
+                setUploadFiles([]);
+                setShowUploadModal(true);
+              }}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Wgraj pierwszy plik
@@ -346,17 +589,40 @@ export const DMSPage: React.FC = () => {
               return (
                 <div
                   key={file.id}
-                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition cursor-pointer"
+                  className="p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition cursor-pointer group"
+                  onClick={() => setSelectedFile(file)}
                 >
-                  <div className="aspect-square bg-slate-100 rounded-lg flex items-center justify-center mb-3">
+                  <div className="aspect-square bg-slate-100 rounded-lg flex items-center justify-center mb-3 overflow-hidden">
                     {file.thumbnail_url ? (
                       <img src={file.thumbnail_url} alt={file.name} className="w-full h-full object-cover rounded-lg" />
+                    ) : file.mime_type?.startsWith('image/') && file.file_url ? (
+                      <img src={file.file_url} alt={file.name} className="w-full h-full object-cover rounded-lg" />
                     ) : (
                       <FileIcon className="w-12 h-12 text-slate-400" />
                     )}
                   </div>
                   <p className="font-medium text-slate-900 truncate text-sm">{file.name}</p>
                   <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
+                  <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
+                      className="p-1 hover:bg-slate-200 rounded"
+                    >
+                      <Download className="w-4 h-4 text-slate-400" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); copyShareLink(file); }}
+                      className="p-1 hover:bg-slate-200 rounded"
+                    >
+                      <Share2 className="w-4 h-4 text-slate-400" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteFile(file); }}
+                      className="p-1 hover:bg-red-100 rounded"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -368,24 +634,34 @@ export const DMSPage: React.FC = () => {
               return (
                 <div
                   key={file.id}
-                  className="flex items-center gap-4 p-3 hover:bg-slate-50 cursor-pointer"
+                  className="flex items-center gap-4 p-3 hover:bg-slate-50 cursor-pointer group"
+                  onClick={() => setSelectedFile(file)}
                 >
                   <FileIcon className="w-8 h-8 text-slate-400" />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-slate-900 truncate">{file.name}</p>
                     <p className="text-sm text-slate-500">
-                      {formatFileSize(file.size)} • Wersja {file.version} • {getUserName(file.created_by_id)}
+                      {formatFileSize(file.size)} • v{file.version} • {getUserName(file.created_by_id)} • {formatDate(file.created_at)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button className="p-2 hover:bg-slate-200 rounded-lg">
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
+                      className="p-2 hover:bg-slate-200 rounded-lg"
+                    >
                       <Download className="w-4 h-4 text-slate-400" />
                     </button>
-                    <button className="p-2 hover:bg-slate-200 rounded-lg">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); copyShareLink(file); }}
+                      className="p-2 hover:bg-slate-200 rounded-lg"
+                    >
                       <Share2 className="w-4 h-4 text-slate-400" />
                     </button>
-                    <button className="p-2 hover:bg-slate-200 rounded-lg">
-                      <MoreVertical className="w-4 h-4 text-slate-400" />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteFile(file); }}
+                      className="p-2 hover:bg-red-100 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
                     </button>
                   </div>
                 </div>
@@ -394,6 +670,134 @@ export const DMSPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Folder Modal */}
+      {showFolderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">
+                {editingFolder ? 'Edytuj folder' : 'Nowy folder'}
+              </h2>
+              <button onClick={() => setShowFolderModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+                <input
+                  type="text"
+                  value={folderForm.name}
+                  onChange={e => setFolderForm({ ...folderForm, name: e.target.value })}
+                  placeholder="np. Dokumentacja projektowa"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                <textarea
+                  value={folderForm.description}
+                  onChange={e => setFolderForm({ ...folderForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowFolderModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveFolder}
+                disabled={!folderForm.name.trim() || saving}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingFolder ? 'Zapisz' : 'Utwórz'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Wgraj pliki</h2>
+              <button onClick={() => setShowUploadModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="text-sm text-slate-600">
+                <span className="font-medium">Lokalizacja: </span>
+                {currentFolder ? breadcrumb.map(f => f.name).join(' / ') : 'Katalog główny'}
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-6 border-2 border-dashed border-slate-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition text-center"
+                >
+                  <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <p className="text-slate-600">Kliknij aby wybrać pliki</p>
+                  <p className="text-xs text-slate-400 mt-1">lub przeciągnij i upuść</p>
+                </button>
+              </div>
+              {uploadFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Wybrane pliki ({uploadFiles.length})</p>
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {uploadFiles.map((file, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+                        <File className="w-4 h-4 text-slate-400" />
+                        <span className="flex-1 text-sm truncate">{file.name}</span>
+                        <span className="text-xs text-slate-400">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                        <button
+                          onClick={() => setUploadFiles(uploadFiles.filter((_, j) => j !== i))}
+                          className="p-1 hover:bg-slate-200 rounded"
+                        >
+                          <X className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={uploadFiles.length === 0 || uploading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                Wgraj ({uploadFiles.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

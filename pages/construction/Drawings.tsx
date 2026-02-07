@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Plus, Search, FileImage, FolderOpen, ChevronRight, ChevronDown, Loader2,
   Upload, Eye, Download, Trash2, Pencil, Grid, List, ZoomIn, ZoomOut,
   Move, Type, Circle, Square, ArrowRight, Ruler, Layers, Settings,
-  MapPin, MessageSquare, X, MoreVertical, ArrowLeft
+  MapPin, MessageSquare, X, MoreVertical, ArrowLeft, Save, Check
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -22,15 +22,32 @@ export const DrawingsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [components, setComponents] = useState<ComponentWithPlans[]>([]);
+  const [allPlans, setAllPlans] = useState<Plan[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
+  // Modals
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showComponentModal, setShowComponentModal] = useState(false);
   const [editingComponent, setEditingComponent] = useState<PlanComponent | null>(null);
-  const [parentComponentId, setParentComponentId] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+
+  // Upload state
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploadComponentId, setUploadComponentId] = useState<string>('');
+  const [uploading, setUploading] = useState(false);
+
+  // Component form
+  const [componentForm, setComponentForm] = useState({
+    name: '',
+    description: '',
+    parent_id: ''
+  });
+
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentUser) loadProjects();
@@ -78,6 +95,7 @@ export const DrawingsPage: React.FC = () => {
 
       const componentsData = componentsRes.data || [];
       const plansData = plansRes.data || [];
+      setAllPlans(plansData);
 
       // Build hierarchy
       const componentMap = new Map<string, ComponentWithPlans>();
@@ -118,6 +136,137 @@ export const DrawingsPage: React.FC = () => {
         }));
       return toggle(prev);
     });
+  };
+
+  const flattenComponents = (comps: ComponentWithPlans[], result: ComponentWithPlans[] = []): ComponentWithPlans[] => {
+    comps.forEach(c => {
+      result.push(c);
+      if (c.children) flattenComponents(c.children, result);
+    });
+    return result;
+  };
+
+  const allComponentsFlat = useMemo(() => flattenComponents(components), [components]);
+
+  // Component CRUD
+  const handleSaveComponent = async () => {
+    if (!currentUser || !selectedProject || !componentForm.name.trim()) return;
+    setSaving(true);
+    try {
+      if (editingComponent) {
+        await supabase
+          .from('plan_components')
+          .update({
+            name: componentForm.name.trim(),
+            description: componentForm.description,
+            parent_id: componentForm.parent_id || null
+          })
+          .eq('id', editingComponent.id);
+      } else {
+        await supabase
+          .from('plan_components')
+          .insert({
+            project_id: selectedProject.id,
+            name: componentForm.name.trim(),
+            description: componentForm.description,
+            parent_id: componentForm.parent_id || null,
+            sort_order: allComponentsFlat.length
+          });
+      }
+      setShowComponentModal(false);
+      setEditingComponent(null);
+      setComponentForm({ name: '', description: '', parent_id: '' });
+      await loadPlansData();
+    } catch (err) {
+      console.error('Error saving component:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteComponent = async (componentId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten komponent i wszystkie rysunki w nim?')) return;
+    try {
+      await supabase
+        .from('plan_components')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', componentId);
+      await loadPlansData();
+    } catch (err) {
+      console.error('Error deleting component:', err);
+    }
+  };
+
+  // File upload
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setUploadFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!currentUser || !selectedProject || uploadFiles.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of uploadFiles) {
+        // Upload to storage
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${selectedProject.id}/${Date.now()}_${file.name}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('plans')
+          .upload(fileName, file);
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          continue;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('plans')
+          .getPublicUrl(fileName);
+
+        // Create plan record
+        await supabase
+          .from('plans')
+          .insert({
+            project_id: selectedProject.id,
+            component_id: uploadComponentId || null,
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            file_name: file.name,
+            file_url: urlData?.publicUrl,
+            file_size: file.size,
+            mime_type: file.type,
+            version: 1,
+            is_current_version: true,
+            created_by_id: currentUser.id,
+            sort_order: allPlans.length
+          });
+      }
+
+      setShowUploadModal(false);
+      setUploadFiles([]);
+      setUploadComponentId('');
+      await loadPlansData();
+    } catch (err) {
+      console.error('Error uploading files:', err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeletePlan = async (plan: Plan) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten rysunek?')) return;
+    try {
+      await supabase
+        .from('plans')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', plan.id);
+      await loadPlansData();
+    } catch (err) {
+      console.error('Error deleting plan:', err);
+    }
   };
 
   // Project selection view
@@ -222,6 +371,18 @@ export const DrawingsPage: React.FC = () => {
               <Layers className="w-5 h-5 text-slate-600" />
             </button>
           </div>
+          <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+            {selectedPlan.file_url && (
+              <a
+                href={selectedPlan.file_url}
+                download
+                className="p-2 hover:bg-slate-100 rounded-lg"
+                title="Pobierz"
+              >
+                <Download className="w-5 h-5 text-slate-600" />
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-auto">
@@ -271,14 +432,22 @@ export const DrawingsPage: React.FC = () => {
           </button>
         </div>
         <button
-          onClick={() => { setEditingComponent(null); setParentComponentId(null); setShowComponentModal(true); }}
+          onClick={() => {
+            setEditingComponent(null);
+            setComponentForm({ name: '', description: '', parent_id: '' });
+            setShowComponentModal(true);
+          }}
           className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
         >
           <Plus className="w-4 h-4" />
           Komponent
         </button>
         <button
-          onClick={() => setShowUploadModal(true)}
+          onClick={() => {
+            setUploadFiles([]);
+            setUploadComponentId('');
+            setShowUploadModal(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           <Upload className="w-4 h-4" />
@@ -295,7 +464,11 @@ export const DrawingsPage: React.FC = () => {
           <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-4" />
           <p className="text-slate-500 mb-4">Brak komponentów. Utwórz pierwszy komponent projektu.</p>
           <button
-            onClick={() => { setEditingComponent(null); setParentComponentId(null); setShowComponentModal(true); }}
+            onClick={() => {
+              setEditingComponent(null);
+              setComponentForm({ name: '', description: '', parent_id: '' });
+              setShowComponentModal(true);
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Dodaj komponent
@@ -310,10 +483,178 @@ export const DrawingsPage: React.FC = () => {
               level={0}
               onToggle={toggleComponentExpand}
               onSelectPlan={setSelectedPlan}
-              onAddPlan={() => setShowUploadModal(true)}
+              onEditComponent={(c) => {
+                setEditingComponent(c);
+                setComponentForm({
+                  name: c.name,
+                  description: c.description || '',
+                  parent_id: c.parent_id || ''
+                });
+                setShowComponentModal(true);
+              }}
+              onDeleteComponent={handleDeleteComponent}
+              onDeletePlan={handleDeletePlan}
+              onUploadTo={(id) => {
+                setUploadComponentId(id);
+                setShowUploadModal(true);
+              }}
               viewMode={viewMode}
             />
           ))}
+        </div>
+      )}
+
+      {/* Component Modal */}
+      {showComponentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">
+                {editingComponent ? 'Edytuj komponent' : 'Nowy komponent'}
+              </h2>
+              <button onClick={() => setShowComponentModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+                <input
+                  type="text"
+                  value={componentForm.name}
+                  onChange={e => setComponentForm({ ...componentForm, name: e.target.value })}
+                  placeholder="np. Piętro 1, Instalacja elektryczna"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                <textarea
+                  value={componentForm.description}
+                  onChange={e => setComponentForm({ ...componentForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Komponent nadrzędny</label>
+                <select
+                  value={componentForm.parent_id}
+                  onChange={e => setComponentForm({ ...componentForm, parent_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Brak (główny poziom) --</option>
+                  {allComponentsFlat
+                    .filter(c => c.id !== editingComponent?.id)
+                    .map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowComponentModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveComponent}
+                disabled={!componentForm.name.trim() || saving}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {editingComponent ? 'Zapisz' : 'Utwórz'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Wgraj rysunki</h2>
+              <button onClick={() => setShowUploadModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Komponent docelowy</label>
+                <select
+                  value={uploadComponentId}
+                  onChange={e => setUploadComponentId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Bez komponentu --</option>
+                  {allComponentsFlat.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Pliki *</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.dwg,.dxf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full p-6 border-2 border-dashed border-slate-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition text-center"
+                >
+                  <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <p className="text-slate-600">Kliknij aby wybrać pliki</p>
+                  <p className="text-xs text-slate-400 mt-1">lub przeciągnij i upuść</p>
+                </button>
+              </div>
+              {uploadFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-slate-700">Wybrane pliki ({uploadFiles.length})</p>
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {uploadFiles.map((file, i) => (
+                      <div key={i} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+                        <FileImage className="w-4 h-4 text-slate-400" />
+                        <span className="flex-1 text-sm truncate">{file.name}</span>
+                        <span className="text-xs text-slate-400">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                        <button
+                          onClick={() => setUploadFiles(uploadFiles.filter((_, j) => j !== i))}
+                          className="p-1 hover:bg-slate-200 rounded"
+                        >
+                          <X className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleUpload}
+                disabled={uploadFiles.length === 0 || uploading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                Wgraj ({uploadFiles.length})
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -325,12 +666,15 @@ interface ComponentItemProps {
   level: number;
   onToggle: (id: string) => void;
   onSelectPlan: (plan: Plan) => void;
-  onAddPlan: () => void;
+  onEditComponent: (c: PlanComponent) => void;
+  onDeleteComponent: (id: string) => void;
+  onDeletePlan: (plan: Plan) => void;
+  onUploadTo: (componentId: string) => void;
   viewMode: 'grid' | 'list';
 }
 
 const ComponentItem: React.FC<ComponentItemProps> = ({
-  component, level, onToggle, onSelectPlan, onAddPlan, viewMode
+  component, level, onToggle, onSelectPlan, onEditComponent, onDeleteComponent, onDeletePlan, onUploadTo, viewMode
 }) => {
   const hasChildren = (component.children && component.children.length > 0) ||
     (component.plans && component.plans.length > 0);
@@ -340,22 +684,44 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
       <div
         className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-50"
         style={{ paddingLeft: `${12 + level * 20}px` }}
-        onClick={() => onToggle(component.id)}
       >
-        {hasChildren ? (
-          component.isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
+        <button onClick={() => onToggle(component.id)} className="p-0.5">
+          {hasChildren ? (
+            component.isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            )
           ) : (
-            <ChevronRight className="w-4 h-4 text-slate-400" />
-          )
-        ) : (
-          <span className="w-4" />
-        )}
+            <span className="w-4" />
+          )}
+        </button>
         <FolderOpen className="w-5 h-5 text-amber-500" />
         <span className="flex-1 font-medium text-slate-900">{component.name}</span>
         <span className="text-sm text-slate-500">
           {component.plans?.length || 0} rysunków
         </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onUploadTo(component.id); }}
+          className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-blue-600"
+          title="Wgraj rysunek"
+        >
+          <Upload className="w-4 h-4" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onEditComponent(component); }}
+          className="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"
+          title="Edytuj"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeleteComponent(component.id); }}
+          className="p-1.5 hover:bg-red-100 rounded text-slate-400 hover:text-red-600"
+          title="Usuń"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
 
       {component.isExpanded && (
@@ -368,7 +734,10 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
               level={level + 1}
               onToggle={onToggle}
               onSelectPlan={onSelectPlan}
-              onAddPlan={onAddPlan}
+              onEditComponent={onEditComponent}
+              onDeleteComponent={onDeleteComponent}
+              onDeletePlan={onDeletePlan}
+              onUploadTo={onUploadTo}
               viewMode={viewMode}
             />
           ))}
@@ -380,8 +749,8 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
                 <div
                   key={plan.id}
                   className={viewMode === 'grid'
-                    ? 'bg-slate-50 rounded-lg border border-slate-200 p-3 cursor-pointer hover:border-blue-300 hover:shadow-md transition'
-                    : 'flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer'
+                    ? 'bg-slate-50 rounded-lg border border-slate-200 p-3 cursor-pointer hover:border-blue-300 hover:shadow-md transition group'
+                    : 'flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer group'
                   }
                   style={viewMode === 'list' ? { paddingLeft: `${12 + (level + 1) * 20}px` } : undefined}
                   onClick={() => onSelectPlan(plan)}
@@ -395,14 +764,30 @@ const ComponentItem: React.FC<ComponentItemProps> = ({
                           <FileImage className="w-8 h-8 text-slate-400" />
                         )}
                       </div>
-                      <p className="text-sm font-medium text-slate-900 truncate">{plan.name}</p>
-                      <p className="text-xs text-slate-500">Wersja {plan.version}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{plan.name}</p>
+                          <p className="text-xs text-slate-500">Wersja {plan.version}</p>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onDeletePlan(plan); }}
+                          className="p-1 hover:bg-red-100 rounded text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
                       <FileImage className="w-5 h-5 text-blue-500" />
                       <span className="flex-1 text-sm text-slate-700">{plan.name}</span>
                       <span className="text-xs text-slate-500">v{plan.version}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeletePlan(plan); }}
+                        className="p-1 hover:bg-red-100 rounded text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                       <Eye className="w-4 h-4 text-slate-400" />
                     </>
                   )}
