@@ -2651,47 +2651,75 @@ export const RequestsPage: React.FC = () => {
                       </button>
                     </div>
                   ) : (
-                    /* Template List */
-                    <>
-                      {savedTemplates.length === 0 ? (
-                        <div className="text-center py-8 text-slate-500">
-                          <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                          <p>Brak zapisanych szablonów</p>
-                          <p className="text-sm mt-1">Szablony można zapisać z poziomu formularza</p>
+                    /* Template List - System + Saved */
+                    <div className="space-y-4">
+                      {/* System templates */}
+                      <div>
+                        <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
+                          Szablony systemowe
                         </div>
-                      ) : (
-                        savedTemplates.map((tmpl) => (
-                          <button
-                            key={tmpl.id}
-                            onClick={() => openEditTemplate(tmpl)}
-                            className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
-                          >
-                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition">
-                              <FileSpreadsheet className="w-5 h-5 text-slate-500 group-hover:text-blue-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
-                                  {tmpl.form_type || 'CUSTOM'}
-                                </span>
-                                {tmpl.work_type && (
-                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                    {tmpl.work_type}
-                                  </span>
-                                )}
-                                {tmpl.object_type && (
-                                  <span className="text-xs text-slate-500">
-                                    {OBJECT_TYPE_LABELS[tmpl.object_type as KosztorysObjectType] || tmpl.object_type}
-                                  </span>
-                                )}
+                        <div className="space-y-2">
+                          {allTemplates.map((tmpl) => (
+                            <div
+                              key={tmpl.code}
+                              className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 text-left"
+                            >
+                              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                               </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                    {tmpl.code}
+                                  </span>
+                                  <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
+                                    {tmpl.forWorkTypes.join(', ')}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-xs text-slate-400">System</span>
                             </div>
-                            <Pencil className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
-                          </button>
-                        ))
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Saved templates */}
+                      {savedTemplates.length > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
+                            Zapisane szablony
+                          </div>
+                          <div className="space-y-2">
+                            {savedTemplates.map((tmpl) => (
+                              <button
+                                key={tmpl.id}
+                                onClick={() => openEditTemplate(tmpl)}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
+                              >
+                                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
+                                  <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                                      {tmpl.form_type || 'CUSTOM'}
+                                    </span>
+                                    {tmpl.work_type && (
+                                      <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
+                                        {tmpl.work_type}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Pencil className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               ) : wizardStep === 0 ? (
