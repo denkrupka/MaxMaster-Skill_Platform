@@ -1616,16 +1616,36 @@ export interface KosztorysRequest {
   company_id: string;
   request_number: string;              // ZAP-YYYY-NNNNN
   status: KosztorysRequestStatus;
+  // Client data
   client_name: string;
+  nip?: string;                        // Tax ID (NIP)
+  company_street?: string;             // Client company address
+  company_street_number?: string;
+  company_city?: string;
+  company_postal_code?: string;
+  company_country?: string;
+  // Legacy contact fields (migrated to contacts table)
   contact_person: string;
   phone: string;
   email?: string;
-  investment_name: string;
+  // Object data
+  investment_name: string;             // Object name
+  object_code?: string;                // Auto-generated code (e.g., WC26)
   object_type: KosztorysObjectType;
+  object_type_id?: string;             // FK to kosztorys_object_types
+  object_category_id?: string;         // FK to kosztorys_object_categories
   installation_types: KosztorysInstallationType;
-  address?: string;
+  // Object address
+  address?: string;                    // Legacy single field
+  object_street?: string;
+  object_street_number?: string;
+  object_city?: string;
+  object_postal_code?: string;
+  object_country?: string;
+  // Other
   planned_response_date?: string;
   notes?: string;
+  internal_notes?: string;             // Internal notes (not visible to client)
   request_source?: KosztorysRequestSource;
   assigned_user_id: string;
   created_by_id: string;
@@ -1637,6 +1657,49 @@ export interface KosztorysRequest {
   forms?: KosztorysForm[];
   estimates?: KosztorysEstimate[];
   files?: KosztorysRequestFile[];
+  contacts?: KosztorysRequestContact[];  // Multiple representatives
+  object_type_record?: KosztorysObjectTypeRecord;
+  object_category?: KosztorysObjectCategoryRecord;
+}
+
+// Представитель компании (контакт)
+export interface KosztorysRequestContact {
+  id: string;
+  request_id: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  email?: string;
+  position?: string;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Тип объекта (управляемый пользователем)
+export interface KosztorysObjectTypeRecord {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Категория объекта (управляемая пользователем)
+export interface KosztorysObjectCategoryRecord {
+  id: string;
+  company_id: string;
+  object_type_id?: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  object_type?: KosztorysObjectTypeRecord;
 }
 
 // Файлы запроса

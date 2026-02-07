@@ -112,12 +112,12 @@ export async function generateEstimateFromForm(
       return result;
     }
 
-    // 2. Загружаем ответы формуляра (только где value > 0)
+    // 2. Загружаем ответы формуляра (только отмеченные)
     const { data: answers, error: answersError } = await supabase
       .from('kosztorys_form_answers')
       .select('*')
       .eq('form_id', formId)
-      .gt('value', 0);
+      .eq('is_marked', true);
 
     if (answersError) {
       result.errors.push('Nie można załadować odpowiedzi formularza');
@@ -208,16 +208,19 @@ export async function generateEstimateFromForm(
 
     for (const answer of answers) {
       // Находим подходящие правила маппинга
+      // Используем work_type_code из ответа (или work_code если есть)
+      const workCode = answer.work_code || answer.work_type_code;
+
       const applicableRules = (mappingRules || []).filter((rule: any) => {
         // Точное совпадение или wildcard '*'
         const roomMatch = rule.room_code === answer.room_code || rule.room_code === '*';
-        const workMatch = rule.work_code === answer.work_code || rule.work_code === '*';
+        const workMatch = rule.work_type_code === workCode || rule.work_code === workCode || rule.work_type_code === '*';
         return roomMatch && workMatch;
       });
 
       if (applicableRules.length === 0) {
         result.warnings.push(
-          `Brak reguły mapowania dla: ${answer.room_code} + ${answer.work_code}`
+          `Brak reguły mapowania dla: ${answer.room_code} + ${workCode}`
         );
         continue;
       }
@@ -228,13 +231,14 @@ export async function generateEstimateFromForm(
 
       if (!template) {
         result.warnings.push(
-          `Brak szablonu dla reguły: ${answer.room_code} + ${answer.work_code}`
+          `Brak szablonu dla reguły: ${answer.room_code} + ${workCode}`
         );
         continue;
       }
 
-      // Рассчитываем количество
-      const quantity = answer.value * (rule.multiplier || 1) * (template.base_quantity || 1);
+      // Рассчитываем количество (value по умолчанию = 1 если не задано)
+      const answerValue = answer.value ?? 1;
+      const quantity = answerValue * (rule.multiplier || 1) * (template.base_quantity || 1);
 
       // Получаем цену работы
       const workPrice = getPrice('labor', template.code, template.work_type?.labor_hours * 50 || 0);
@@ -310,7 +314,7 @@ export async function generateEstimateFromForm(
         work_code: template.code,
         work_name: template.name,
         room_code: answer.room_code,
-        room_name: answer.room_name || answer.room_code,
+        room_name: answer.room_name || answer.room_group || answer.room_code,
         unit: template.work_type?.unit || 'szt',
         quantity,
         unit_price: workPrice,
