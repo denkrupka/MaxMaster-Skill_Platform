@@ -20,7 +20,11 @@ CREATE TABLE IF NOT EXISTS ticket_types (
 );
 
 -- 2. Ticket Type Fields (пользовательские поля)
-CREATE TYPE ticket_field_type AS ENUM ('text', 'number', 'date', 'datetime', 'select', 'multiselect', 'user', 'file', 'checkbox');
+DO $$ BEGIN
+  CREATE TYPE ticket_field_type AS ENUM ('text', 'number', 'date', 'datetime', 'select', 'multiselect', 'user', 'file', 'checkbox');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS ticket_type_fields (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

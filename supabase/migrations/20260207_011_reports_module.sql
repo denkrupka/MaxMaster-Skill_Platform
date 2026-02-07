@@ -5,8 +5,17 @@
 -- =====================================================
 
 -- 1. Report Templates
-CREATE TYPE report_template_type AS ENUM ('project_report', 'ticket_report', 'financial_report', 'estimate_report', 'act_report', 'custom');
-CREATE TYPE report_format AS ENUM ('pdf', 'xlsx', 'csv', 'html');
+DO $$ BEGIN
+  CREATE TYPE report_template_type AS ENUM ('project_report', 'ticket_report', 'financial_report', 'estimate_report', 'act_report', 'custom');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE report_format AS ENUM ('pdf', 'xlsx', 'csv', 'html');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS report_templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -54,7 +63,11 @@ CREATE TABLE IF NOT EXISTS generated_reports (
 );
 
 -- 3. Dashboards
-CREATE TYPE dashboard_type AS ENUM ('project', 'financial', 'tasks', 'custom');
+DO $$ BEGIN
+  CREATE TYPE dashboard_type AS ENUM ('project', 'financial', 'tasks', 'custom');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS dashboards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,8 +87,17 @@ CREATE TABLE IF NOT EXISTS dashboards (
 );
 
 -- 4. Dashboard Widgets
-CREATE TYPE widget_type AS ENUM ('counter', 'chart_pie', 'chart_bar', 'chart_line', 'table', 'list', 'progress', 'calendar');
-CREATE TYPE widget_data_source AS ENUM ('tickets', 'estimates', 'finance', 'projects', 'resources', 'custom_query');
+DO $$ BEGIN
+  CREATE TYPE widget_type AS ENUM ('counter', 'chart_pie', 'chart_bar', 'chart_line', 'table', 'list', 'progress', 'calendar');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE widget_data_source AS ENUM ('tickets', 'estimates', 'finance', 'projects', 'resources', 'custom_query');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS dashboard_widgets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -24,7 +24,11 @@ CREATE TABLE IF NOT EXISTS finance_accounts (
 );
 
 -- 2. Finance Operation Articles (статьи доходов/расходов)
-CREATE TYPE finance_operation_type AS ENUM ('income', 'expense');
+DO $$ BEGIN
+  CREATE TYPE finance_operation_type AS ENUM ('income', 'expense');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS finance_operation_articles (
   id SERIAL PRIMARY KEY,
@@ -54,7 +58,11 @@ INSERT INTO finance_operation_articles (name, code, operation_type, is_system, s
 ON CONFLICT DO NOTHING;
 
 -- 3. Finance Operations
-CREATE TYPE finance_operation_status AS ENUM ('pending', 'completed', 'cancelled');
+DO $$ BEGIN
+  CREATE TYPE finance_operation_status AS ENUM ('pending', 'completed', 'cancelled');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS finance_operations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,10 +92,29 @@ CREATE TABLE IF NOT EXISTS finance_operations (
 );
 
 -- 4. Finance Acts (акты выполненных работ)
-CREATE TYPE act_status AS ENUM ('draft', 'sent', 'accepted', 'rejected');
-CREATE TYPE act_payment_status AS ENUM ('unpaid', 'partial', 'paid');
-CREATE TYPE act_type AS ENUM ('customer', 'contractor');
-CREATE TYPE act_form_type AS ENUM ('KS2', 'KS6a', 'free');
+DO $$ BEGIN
+  CREATE TYPE act_status AS ENUM ('draft', 'sent', 'accepted', 'rejected');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE act_payment_status AS ENUM ('unpaid', 'partial', 'paid');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE act_type AS ENUM ('customer', 'contractor');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE act_form_type AS ENUM ('KS2', 'KS6a', 'free');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS finance_acts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

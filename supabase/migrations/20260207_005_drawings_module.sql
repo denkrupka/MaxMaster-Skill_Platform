@@ -67,7 +67,11 @@ CREATE TABLE IF NOT EXISTS plan_layers (
 );
 
 -- 4. Plan Markups (annotations)
-CREATE TYPE markup_type AS ENUM ('line', 'arrow', 'rectangle', 'circle', 'ellipse', 'polygon', 'polyline', 'freehand', 'text', 'measurement');
+DO $$ BEGIN
+  CREATE TYPE markup_type AS ENUM ('line', 'arrow', 'rectangle', 'circle', 'ellipse', 'polygon', 'polyline', 'freehand', 'text', 'measurement');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS plan_markups (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -55,7 +55,11 @@ CREATE TABLE IF NOT EXISTS dms_files (
 );
 
 -- 3. DMS Permissions
-CREATE TYPE dms_permission AS ENUM ('view', 'download', 'edit', 'delete', 'manage');
+DO $$ BEGIN
+  CREATE TYPE dms_permission AS ENUM ('view', 'download', 'edit', 'delete', 'manage');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS dms_file_permissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,10 +77,14 @@ CREATE TABLE IF NOT EXISTS dms_file_permissions (
 );
 
 -- 4. DMS Activity Log
-CREATE TYPE dms_activity_action AS ENUM (
-  'created', 'viewed', 'downloaded', 'updated', 'renamed',
-  'moved', 'deleted', 'restored', 'permission_changed', 'version_created'
-);
+DO $$ BEGIN
+  CREATE TYPE dms_activity_action AS ENUM (
+    'created', 'viewed', 'downloaded', 'updated', 'renamed',
+    'moved', 'deleted', 'restored', 'permission_changed', 'version_created'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS dms_activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -4,6 +4,15 @@
 -- Description: Creates tables for cost estimation with hierarchical structure
 -- =====================================================
 
+-- Helper function for updated_at triggers (if not exists)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 1. Unit Measures (справочник единиц измерения)
 CREATE TABLE IF NOT EXISTS unit_measures (
   id SERIAL PRIMARY KEY,
@@ -44,7 +53,11 @@ CREATE TABLE IF NOT EXISTS valuation_groups (
 );
 
 -- 3. Valuations (справочник расценок)
-CREATE TYPE resource_type AS ENUM ('labor', 'material', 'equipment', 'overhead');
+DO $$ BEGIN
+  CREATE TYPE resource_type AS ENUM ('labor', 'material', 'equipment', 'overhead');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS valuations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,7 +87,11 @@ CREATE TABLE IF NOT EXISTS estimate_stages (
 );
 
 -- 5. Estimate Tasks (позиции сметы)
-CREATE TYPE estimate_calculate_mode AS ENUM ('manual', 'by_resources');
+DO $$ BEGIN
+  CREATE TYPE estimate_calculate_mode AS ENUM ('manual', 'by_resources');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS estimate_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

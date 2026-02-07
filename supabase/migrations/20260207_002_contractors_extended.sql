@@ -15,8 +15,17 @@ CREATE TABLE IF NOT EXISTS contractor_groups (
 );
 
 -- 2. Unified Contractors table
-CREATE TYPE contractor_entity_type AS ENUM ('individual', 'legal_entity');
-CREATE TYPE contractor_type AS ENUM ('customer', 'contractor', 'supplier');
+DO $$ BEGIN
+  CREATE TYPE contractor_entity_type AS ENUM ('individual', 'legal_entity');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE contractor_type AS ENUM ('customer', 'contractor', 'supplier');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS contractors (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

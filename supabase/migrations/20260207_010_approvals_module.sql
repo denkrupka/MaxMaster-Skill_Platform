@@ -21,8 +21,17 @@ CREATE TABLE IF NOT EXISTS approval_workflow_templates (
 );
 
 -- 2. Approval Requests
-CREATE TYPE approval_request_status AS ENUM ('pending', 'in_progress', 'approved', 'rejected', 'cancelled');
-CREATE TYPE approval_entity_type AS ENUM ('estimate', 'act', 'document', 'change_request', 'offer', 'order');
+DO $$ BEGIN
+  CREATE TYPE approval_request_status AS ENUM ('pending', 'in_progress', 'approved', 'rejected', 'cancelled');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE approval_entity_type AS ENUM ('estimate', 'act', 'document', 'change_request', 'offer', 'order');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS approval_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -43,7 +52,11 @@ CREATE TABLE IF NOT EXISTS approval_requests (
 );
 
 -- 3. Approval Actions (history of approvals)
-CREATE TYPE approval_action_type AS ENUM ('approved', 'rejected', 'returned', 'delegated');
+DO $$ BEGIN
+  CREATE TYPE approval_action_type AS ENUM ('approved', 'rejected', 'returned', 'delegated');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS approval_actions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
