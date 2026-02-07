@@ -2724,15 +2724,29 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
       {/* Template Select Modal */}
       {showTemplateSelectModal && (() => {
         const isIndustrial = request?.object_type === 'industrial';
-        const availableTemplates = isIndustrial
-          ? [
-              { code: 'PREM-IE', name: 'Przemysłowe - Instalacje elektryczne', desc: 'Hale produkcyjne, magazyny, obiekty przemysłowe' },
-              { code: 'PREM-IT', name: 'Przemysłowe - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla obiektów przemysłowych' }
-            ]
-          : [
-              { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - Instalacje elektryczne', desc: 'Budynki mieszkalne, biurowce, obiekty użyteczności publicznej' },
-              { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla budynków mieszkalnych i biurowych' }
-            ];
+        // Determine work type (IE/IT) based on active work type code
+        const activeWorkTypeCode = activeWorkType.toUpperCase();
+        const isIEWorkType = activeWorkTypeCode.includes('IE') || activeWorkTypeCode.includes('ELEKTR');
+        const isITWorkType = activeWorkTypeCode.includes('IT') || activeWorkTypeCode.includes('TELE');
+
+        // All templates with work type compatibility info
+        const allTemplates = [
+          { code: 'PREM-IE', name: 'Przemysłowe - Instalacje elektryczne', desc: 'Hale produkcyjne, magazyny, obiekty przemysłowe', forWorkTypes: ['IE'], forObjectTypes: ['industrial'] },
+          { code: 'PREM-IT', name: 'Przemysłowe - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla obiektów przemysłowych', forWorkTypes: ['IT'], forObjectTypes: ['industrial'] },
+          { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - Instalacje elektryczne', desc: 'Budynki mieszkalne, biurowce, obiekty użyteczności publicznej', forWorkTypes: ['IE'], forObjectTypes: ['residential', 'office'] },
+          { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla budynków mieszkalnych i biurowych', forWorkTypes: ['IT'], forObjectTypes: ['residential', 'office'] }
+        ];
+
+        // Filter templates by object type AND work type
+        const availableTemplates = allTemplates.filter(t => {
+          // Check object type
+          const matchesObjectType = t.forObjectTypes.includes(request?.object_type || 'residential');
+          // Check work type - match IE to IE templates, IT to IT templates
+          const targetWorkType = isIEWorkType ? 'IE' : isITWorkType ? 'IT' : 'IE';
+          const matchesWorkType = t.forWorkTypes.includes(targetWorkType);
+          return matchesObjectType && matchesWorkType;
+        });
+
         const currentTemplateCode = formsByWorkType[activeWorkType]?.template?.form_type;
 
         return (
