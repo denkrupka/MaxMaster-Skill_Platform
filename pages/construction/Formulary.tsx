@@ -1233,8 +1233,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                       onClick={() => toggleGroupExpand(group.code)}
                     >
                       <td
-                        className="sticky left-0 z-30 bg-amber-50 px-3 py-2 font-semibold text-slate-900 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
-                        colSpan={1 + template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0)}
+                        className="sticky left-0 z-30 bg-amber-50 px-3 py-2 font-semibold text-slate-900 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[250px]"
                       >
                         <div className="flex items-center gap-2">
                           {expandedGroups.has(group.code) ? (
@@ -1248,6 +1247,10 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                           </span>
                         </div>
                       </td>
+                      <td
+                        className="bg-amber-50 border-b border-slate-200"
+                        colSpan={template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0)}
+                      />
                     </tr>
 
                     {/* Room rows */}
