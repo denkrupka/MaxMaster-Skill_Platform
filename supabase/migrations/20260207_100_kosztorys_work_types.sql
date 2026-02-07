@@ -1,41 +1,19 @@
--- Миграция для создания таблицы kosztorys_work_types (Rodzaj prac)
--- Эта таблица заменяет захардкоженные installation_types и позволяет создавать multi-select
+-- Миграция для расширения таблицы kosztorys_work_types (Rodzaj prac)
+-- Добавляет sort_order если не существует, и создает связующую таблицу
 
--- Таблица типов работ
-CREATE TABLE IF NOT EXISTS kosztorys_work_types (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  code VARCHAR(50) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  is_active BOOLEAN DEFAULT true,
-  sort_order INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(company_id, code)
-);
+-- Добавляем колонку sort_order если её нет
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'kosztorys_work_types' AND column_name = 'sort_order'
+  ) THEN
+    ALTER TABLE kosztorys_work_types ADD COLUMN sort_order INTEGER DEFAULT 0;
+  END IF;
+END $$;
 
--- Индексы
-CREATE INDEX IF NOT EXISTS idx_kosztorys_work_types_company_id ON kosztorys_work_types(company_id);
-CREATE INDEX IF NOT EXISTS idx_kosztorys_work_types_is_active ON kosztorys_work_types(is_active);
+-- Индекс для sort_order (если не существует)
 CREATE INDEX IF NOT EXISTS idx_kosztorys_work_types_sort_order ON kosztorys_work_types(sort_order);
-
--- RLS политики
-ALTER TABLE kosztorys_work_types ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view work types from their company" ON kosztorys_work_types
-  FOR SELECT USING (
-    company_id IN (SELECT company_id FROM users WHERE id = auth.uid())
-  );
-
-CREATE POLICY "Company admins can manage work types" ON kosztorys_work_types
-  FOR ALL USING (
-    company_id IN (
-      SELECT company_id FROM users
-      WHERE id = auth.uid()
-      AND role IN ('company_admin', 'hr', 'coordinator')
-    )
-  );
 
 -- Связующая таблица для многоуровневого выбора типов работ в запросе
 CREATE TABLE IF NOT EXISTS kosztorys_request_work_types (
@@ -53,6 +31,10 @@ CREATE INDEX IF NOT EXISTS idx_kosztorys_request_work_types_work_type_id ON kosz
 -- RLS для связующей таблицы
 ALTER TABLE kosztorys_request_work_types ENABLE ROW LEVEL SECURITY;
 
+-- Удаляем старые политики если есть
+DROP POLICY IF EXISTS "Users can view request work types" ON kosztorys_request_work_types;
+DROP POLICY IF EXISTS "Users can manage request work types" ON kosztorys_request_work_types;
+
 CREATE POLICY "Users can view request work types" ON kosztorys_request_work_types
   FOR SELECT USING (
     request_id IN (
@@ -68,19 +50,3 @@ CREATE POLICY "Users can manage request work types" ON kosztorys_request_work_ty
       WHERE company_id IN (SELECT company_id FROM users WHERE id = auth.uid())
     )
   );
-
--- Триггер для обновления updated_at
-CREATE OR REPLACE FUNCTION update_kosztorys_work_types_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_kosztorys_work_types_updated_at
-  BEFORE UPDATE ON kosztorys_work_types
-  FOR EACH ROW EXECUTE FUNCTION update_kosztorys_work_types_updated_at();
-
--- Seed данные (стандартные типы работ)
--- Эти данные будут вставлены для каждой компании через функцию или при регистрации
