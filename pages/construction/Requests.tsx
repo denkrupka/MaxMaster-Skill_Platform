@@ -207,6 +207,7 @@ export const RequestsPage: React.FC = () => {
   // Template management
   const [showTemplateManagement, setShowTemplateManagement] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [hiddenSystemTemplates, setHiddenSystemTemplates] = useState<string[]>([]);
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [templateFormData, setTemplateFormData] = useState({
     name: '',
@@ -448,6 +449,7 @@ export const RequestsPage: React.FC = () => {
   const loadSavedTemplates = async () => {
     if (!currentUser) return;
     try {
+      // Load active saved templates
       const { data, error } = await supabase
         .from('kosztorys_form_templates')
         .select('*')
@@ -457,6 +459,16 @@ export const RequestsPage: React.FC = () => {
 
       if (error) throw error;
       setSavedTemplates(data || []);
+
+      // Load hidden system template codes
+      const { data: hiddenData } = await supabase
+        .from('kosztorys_form_templates')
+        .select('form_type')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', false)
+        .in('form_type', ['PREM-IE', 'PREM-IT', 'MIESZK-IE', 'MIESZK-IT']);
+
+      setHiddenSystemTemplates(hiddenData?.map(h => h.form_type) || []);
     } catch (err) {
       console.error('Error loading saved templates:', err);
       setSavedTemplates([]);
@@ -524,6 +536,56 @@ export const RequestsPage: React.FC = () => {
       work_types: template.template_data?.work_types || (template.work_type ? [template.work_type] : []),
       object_type: template.object_type || ''
     });
+  };
+
+  // Hide/delete system template
+  const handleHideSystemTemplate = async (templateCode: string) => {
+    if (!currentUser) return;
+    if (!confirm('Czy na pewno chcesz ukryć ten szablon systemowy?')) return;
+
+    try {
+      // Insert a record marking this system template as hidden
+      const { error } = await supabase
+        .from('kosztorys_form_templates')
+        .insert({
+          company_id: currentUser.company_id,
+          name: `HIDDEN_${templateCode}`,
+          form_type: templateCode,
+          is_active: false,
+          template_data: {}
+        });
+
+      if (error) throw error;
+
+      // Reload templates
+      await loadSavedTemplates();
+    } catch (err) {
+      console.error('Error hiding system template:', err);
+      alert('Błąd podczas ukrywania szablonu');
+    }
+  };
+
+  // Restore hidden system template
+  const handleRestoreSystemTemplate = async (templateCode: string) => {
+    if (!currentUser) return;
+
+    try {
+      // Delete the record that marks this template as hidden
+      const { error } = await supabase
+        .from('kosztorys_form_templates')
+        .delete()
+        .eq('company_id', currentUser.company_id)
+        .eq('form_type', templateCode)
+        .eq('is_active', false);
+
+      if (error) throw error;
+
+      // Reload templates
+      await loadSavedTemplates();
+    } catch (err) {
+      console.error('Error restoring system template:', err);
+      alert('Błąd podczas przywracania szablonu');
+    }
   };
 
   // Filter clients based on search query
@@ -2404,11 +2466,12 @@ export const RequestsPage: React.FC = () => {
           { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - IT', desc: 'Teletechnika mieszkaniowa', forWorkTypes: ['IT'], forObjectTypes: ['residential', 'office'] }
         ];
 
-        // Get templates compatible with work type and object type
+        // Get templates compatible with work type and object type (excluding hidden)
         const getCompatibleTemplates = (workTypeCode: string) => {
           const isIE = workTypeCode.toUpperCase().includes('IE');
           const targetWorkType = isIE ? 'IE' : 'IT';
           return allTemplates.filter(t =>
+            !hiddenSystemTemplates.includes(t.code) &&
             t.forWorkTypes.includes(targetWorkType) &&
             (t.forObjectTypes.includes(selectedRequest.object_type) || t.forObjectTypes.includes('*'))
           );
@@ -2652,37 +2715,45 @@ export const RequestsPage: React.FC = () => {
                     </div>
                   ) : (
                     /* Template List - System + Saved */
-                    <div className="space-y-4">
-                      {/* System templates */}
-                      <div>
-                        <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
-                          Szablony systemowe
-                        </div>
-                        <div className="space-y-2">
-                          {allTemplates.map((tmpl) => (
-                            <div
-                              key={tmpl.code}
-                              className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 text-left"
-                            >
-                              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                    {tmpl.code}
-                                  </span>
-                                  <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
-                                    {tmpl.forWorkTypes.join(', ')}
-                                  </span>
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                      {/* System templates (active) */}
+                      {allTemplates.filter(t => !hiddenSystemTemplates.includes(t.code)).length > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
+                            Szablony systemowe
+                          </div>
+                          <div className="space-y-2">
+                            {allTemplates.filter(t => !hiddenSystemTemplates.includes(t.code)).map((tmpl) => (
+                              <div
+                                key={tmpl.code}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 text-left"
+                              >
+                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                  <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                                 </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                      {tmpl.code}
+                                    </span>
+                                    <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
+                                      {tmpl.forWorkTypes.join(', ')}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleHideSystemTemplate(tmpl.code)}
+                                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Ukryj szablon"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
-                              <span className="text-xs text-slate-400">System</span>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Saved templates */}
                       {savedTemplates.length > 0 && (
@@ -2715,6 +2786,42 @@ export const RequestsPage: React.FC = () => {
                                 </div>
                                 <Pencil className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
                               </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Hidden system templates */}
+                      {hiddenSystemTemplates.length > 0 && (
+                        <div>
+                          <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
+                            Ukryte szablony
+                          </div>
+                          <div className="space-y-2">
+                            {allTemplates.filter(t => hiddenSystemTemplates.includes(t.code)).map((tmpl) => (
+                              <div
+                                key={tmpl.code}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-100 text-left opacity-60"
+                              >
+                                <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
+                                  <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-slate-500 truncate">{tmpl.name}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-500 rounded">
+                                      {tmpl.code}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRestoreSystemTemplate(tmpl.code)}
+                                  className="p-2 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                                  title="Przywróć szablon"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              </div>
                             ))}
                           </div>
                         </div>
