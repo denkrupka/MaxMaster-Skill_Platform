@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft, Save, FileSpreadsheet, Calculator, ChevronDown, ChevronRight,
-  Loader2, AlertCircle, CheckCircle2, Info, X, RefreshCw, Settings,
+  Loader2, AlertCircle, CheckCircle2, Info, X, XCircle, RefreshCw, Settings,
   Download, Upload, Eye, HelpCircle, Zap
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';

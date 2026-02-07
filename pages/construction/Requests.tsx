@@ -139,7 +139,7 @@ const initialContactData: ContactFormData = {
 
 export const RequestsPage: React.FC = () => {
   const { state } = useAppContext();
-  const { currentUser } = state;
+  const { currentUser, currentCompany } = state;
 
   const [requests, setRequests] = useState<KosztorysRequest[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -1549,7 +1549,7 @@ export const RequestsPage: React.FC = () => {
                       <option value="">-- Wybierz --</option>
                       <option value="investor">Po stronie Inwestora</option>
                       <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
-                      <option value="company">Po stronie {currentUser?.company?.name || 'Firmy'}</option>
+                      <option value="company">Po stronie {currentCompany?.name || 'Firmy'}</option>
                     </select>
                   </div>
                   <div>
@@ -1562,7 +1562,7 @@ export const RequestsPage: React.FC = () => {
                       <option value="">-- Wybierz --</option>
                       <option value="investor">Po stronie Inwestora</option>
                       <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
-                      <option value="company">Po stronie {currentUser?.company?.name || 'Firmy'}</option>
+                      <option value="company">Po stronie {currentCompany?.name || 'Firmy'}</option>
                     </select>
                   </div>
                 </div>
@@ -1819,7 +1819,7 @@ export const RequestsPage: React.FC = () => {
                           <span className="font-medium">
                             {(selectedRequest as any).main_material_side === 'investor' && 'Po stronie Inwestora'}
                             {(selectedRequest as any).main_material_side === 'client' && `Po stronie ${selectedRequest.client_name}`}
-                            {(selectedRequest as any).main_material_side === 'company' && 'Po stronie Firmy'}
+                            {(selectedRequest as any).main_material_side === 'company' && `Po stronie ${currentCompany?.name || 'Firmy'}`}
                           </span>
                         </div>
                       )}
@@ -1829,7 +1829,7 @@ export const RequestsPage: React.FC = () => {
                           <span className="font-medium">
                             {(selectedRequest as any).minor_material_side === 'investor' && 'Po stronie Inwestora'}
                             {(selectedRequest as any).minor_material_side === 'client' && `Po stronie ${selectedRequest.client_name}`}
-                            {(selectedRequest as any).minor_material_side === 'company' && 'Po stronie Firmy'}
+                            {(selectedRequest as any).minor_material_side === 'company' && `Po stronie ${currentCompany?.name || 'Firmy'}`}
                           </span>
                         </div>
                       )}
