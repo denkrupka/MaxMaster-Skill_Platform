@@ -200,6 +200,8 @@ export const RequestsPage: React.FC = () => {
   const [showPrepareOfferModal, setShowPrepareOfferModal] = useState(false);
   const [showFormSelectionModal, setShowFormSelectionModal] = useState(false);
   const [checkingForm, setCheckingForm] = useState(false);
+  // Template selection per work type (for multi-work-type requests)
+  const [workTypeTemplates, setWorkTypeTemplates] = useState<Record<string, string>>({});
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -2320,15 +2322,75 @@ export const RequestsPage: React.FC = () => {
       )}
 
       {/* Form Selection Modal */}
-      {showFormSelectionModal && selectedRequest && (
+      {showFormSelectionModal && selectedRequest && (() => {
+        const requestWorkTypes = selectedRequest.work_types || [];
+        const hasMultipleWorkTypes = requestWorkTypes.length > 1;
+        const isIndustrial = selectedRequest.object_type === 'industrial';
+
+        // Available templates based on object type
+        const availableTemplates = isIndustrial
+          ? [
+              { code: 'PREM-IE', name: 'Przemysłowe - IE', desc: 'Instalacje elektryczne przemysłowe' },
+              { code: 'PREM-IT', name: 'Przemysłowe - IT', desc: 'Instalacje teletechniczne przemysłowe' }
+            ]
+          : [
+              { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - IE', desc: 'Instalacje elektryczne' },
+              { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - IT', desc: 'Instalacje teletechniczne' }
+            ];
+
+        // Get recommended template for a work type code
+        const getRecommendedTemplate = (workTypeCode: string) => {
+          const isIE = workTypeCode.toUpperCase().includes('IE');
+          if (isIndustrial) return isIE ? 'PREM-IE' : 'PREM-IT';
+          return isIE ? 'MIESZK-IE' : 'MIESZK-IT';
+        };
+
+        // Check if all work types have templates selected
+        const allTemplatesSelected = hasMultipleWorkTypes
+          ? requestWorkTypes.every(wt => workTypeTemplates[wt.work_type?.code || wt.work_type_id])
+          : true;
+
+        const handleGoToFormulary = () => {
+          setShowFormSelectionModal(false);
+          if (hasMultipleWorkTypes) {
+            // Encode templates for each work type
+            const templatesParam = encodeURIComponent(JSON.stringify(workTypeTemplates));
+            window.location.hash = `#/construction/formulary/${selectedRequest.id}?templates=${templatesParam}`;
+          } else {
+            const workTypeCode = requestWorkTypes[0]?.work_type?.code || 'IE';
+            const template = getRecommendedTemplate(workTypeCode);
+            window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${template}`;
+          }
+        };
+
+        const handleSelectRecommended = () => {
+          if (hasMultipleWorkTypes) {
+            // Auto-select recommended template for each work type
+            const recommended: Record<string, string> = {};
+            requestWorkTypes.forEach(wt => {
+              const code = wt.work_type?.code || wt.work_type_id;
+              recommended[code] = getRecommendedTemplate(code);
+            });
+            setWorkTypeTemplates(recommended);
+          } else {
+            handleGoToFormulary();
+          }
+        };
+
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
-              <p className="text-slate-600 mt-1">Wybierz formularz dla zapytania: {selectedRequest.investment_name}</p>
+              <p className="text-slate-600 mt-1">
+                {hasMultipleWorkTypes
+                  ? `Wybierz szablony dla każdego typu prac (${requestWorkTypes.length} typy)`
+                  : `Wybierz formularz dla: ${selectedRequest.investment_name}`
+                }
+              </p>
             </div>
 
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-4">
               {/* Create new empty form */}
               <button
                 onClick={() => {
@@ -2346,12 +2408,9 @@ export const RequestsPage: React.FC = () => {
                 </div>
               </button>
 
-              {/* Recommended form based on object type */}
+              {/* Recommended - auto-select best templates */}
               <button
-                onClick={() => {
-                  setShowFormSelectionModal(false);
-                  window.location.hash = `#/construction/formulary/${selectedRequest.id}?recommended=true`;
-                }}
+                onClick={handleSelectRecommended}
                 className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition text-left group"
               >
                 <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center group-hover:bg-blue-300 transition">
@@ -2363,83 +2422,108 @@ export const RequestsPage: React.FC = () => {
                     <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded-full">Rekomendowany</span>
                   </div>
                   <div className="text-sm text-blue-600">
-                    Formularz dopasowany do typu obiektu: {OBJECT_TYPE_LABELS[selectedRequest.object_type] || selectedRequest.object_type}
+                    {hasMultipleWorkTypes
+                      ? 'Automatycznie dopasuj szablony do każdego typu prac'
+                      : `Formularz dopasowany do typu obiektu: ${OBJECT_TYPE_LABELS[selectedRequest.object_type] || selectedRequest.object_type}`
+                    }
                   </div>
                 </div>
               </button>
 
-              {/* Choose from other forms */}
-              <div className="pt-2">
-                <div className="text-sm text-slate-500 mb-2 px-1">Lub wybierz dowolny formularz:</div>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  <button
-                    onClick={() => {
-                      setShowFormSelectionModal(false);
-                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=MIESZK-IE`;
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
-                  >
-                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="font-medium text-slate-900 text-sm">Mieszkania / Biurowce - IE</div>
-                      <div className="text-xs text-slate-500">Instalacje elektryczne</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowFormSelectionModal(false);
-                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=MIESZK-IT`;
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
-                  >
-                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="font-medium text-slate-900 text-sm">Mieszkania / Biurowce - IT</div>
-                      <div className="text-xs text-slate-500">Instalacje teletechniczne</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowFormSelectionModal(false);
-                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=PREM-IE`;
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
-                  >
-                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="font-medium text-slate-900 text-sm">Przemysłowe - IE</div>
-                      <div className="text-xs text-slate-500">Instalacje elektryczne przemysłowe</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowFormSelectionModal(false);
-                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=PREM-IT`;
-                    }}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
-                  >
-                    <FileSpreadsheet className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <div className="font-medium text-slate-900 text-sm">Przemysłowe - IT</div>
-                      <div className="text-xs text-slate-500">Instalacje teletechniczne przemysłowe</div>
-                    </div>
-                  </button>
+              {/* Multi-work-type template selection */}
+              {hasMultipleWorkTypes && (
+                <div className="pt-2 border-t border-slate-200">
+                  <div className="text-sm font-medium text-slate-700 mb-3">Wybierz szablon dla każdego typu prac:</div>
+                  <div className="space-y-3">
+                    {requestWorkTypes.map(wt => {
+                      const wtCode = wt.work_type?.code || wt.work_type_id;
+                      const wtName = wt.work_type?.name || wtCode;
+                      const selectedTemplate = workTypeTemplates[wtCode];
+
+                      return (
+                        <div key={wtCode} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-slate-900">{wtName}</span>
+                            {selectedTemplate && (
+                              <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                {availableTemplates.find(t => t.code === selectedTemplate)?.name}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-2">
+                            {availableTemplates.map(tmpl => (
+                              <button
+                                key={tmpl.code}
+                                onClick={() => setWorkTypeTemplates(prev => ({ ...prev, [wtCode]: tmpl.code }))}
+                                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition ${
+                                  selectedTemplate === tmpl.code
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : 'border-slate-200 hover:border-slate-300 hover:bg-white'
+                                }`}
+                              >
+                                {tmpl.code.split('-')[1]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Single work type - show template list */}
+              {!hasMultipleWorkTypes && (
+                <div className="pt-2">
+                  <div className="text-sm text-slate-500 mb-2 px-1">Lub wybierz inny formularz:</div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {availableTemplates.map(tmpl => (
+                      <button
+                        key={tmpl.code}
+                        onClick={() => {
+                          setShowFormSelectionModal(false);
+                          window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${tmpl.code}`;
+                        }}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
+                      >
+                        <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                        <div>
+                          <div className="font-medium text-slate-900 text-sm">{tmpl.name}</div>
+                          <div className="text-xs text-slate-500">{tmpl.desc}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="p-6 border-t border-slate-200 flex justify-end">
+            <div className="p-6 border-t border-slate-200 flex justify-between">
               <button
-                onClick={() => setShowFormSelectionModal(false)}
+                onClick={() => {
+                  setShowFormSelectionModal(false);
+                  setWorkTypeTemplates({});
+                }}
                 className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Wróć
               </button>
+              {hasMultipleWorkTypes && allTemplatesSelected && (
+                <button
+                  onClick={handleGoToFormulary}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg"
+                >
+                  Przejdź do formularza
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

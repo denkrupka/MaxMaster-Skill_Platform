@@ -598,6 +598,16 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
   const [extWallTypes, setExtWallTypes] = useState<{ id: string; name: string }[]>([]);
   const [intWallTypes, setIntWallTypes] = useState<{ id: string; name: string }[]>([]);
 
+  // Multi work type support
+  const [requestWorkTypes, setRequestWorkTypes] = useState<{ code: string; name: string }[]>([]);
+  const [activeWorkType, setActiveWorkType] = useState<string>('');
+  const [formsByWorkType, setFormsByWorkType] = useState<Record<string, {
+    form: KosztorysForm | null;
+    template: KosztorysFormTemplate | null;
+    answers: Map<string, boolean>;
+    generalData: Partial<KosztorysFormGeneralData>;
+  }>>({});
+
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasChangesRef = useRef(false);
 
@@ -694,71 +704,174 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
     setLoading(true);
 
     try {
-      // Load request
+      // Load request with work types
       const { data: requestData, error: reqError } = await supabase
         .from('kosztorys_requests')
-        .select('*')
+        .select(`
+          *,
+          work_types:kosztorys_request_work_types(work_type_id, work_type:kosztorys_work_types(id, code, name))
+        `)
         .eq('id', requestId)
         .single();
 
       if (reqError) throw reqError;
       setRequest(requestData);
 
-      // Determine form type
-      const formType = getFormType(requestData.object_type, requestData.installation_types);
-      setTemplate(FORM_TEMPLATES[formType]);
-
-      // Expand all groups by default
-      const allGroups = new Set(FORM_TEMPLATES[formType].room_groups.map(g => g.code));
-      setExpandedGroups(allGroups);
-
-      // Load existing form if any
-      const { data: formData } = await supabase
-        .from('kosztorys_forms')
-        .select(`
-          *,
-          general_data:kosztorys_form_general_data(*),
-          answers:kosztorys_form_answers(*)
-        `)
-        .eq('request_id', requestId)
-        .eq('form_type', formType)
-        .eq('is_current', true)
-        .maybeSingle();
-
-      if (formData) {
-        setForm(formData);
-        if (formData.general_data) {
-          setGeneralData(formData.general_data);
-        }
-        if (formData.answers) {
-          const answerMap = new Map<string, boolean>();
-          formData.answers.forEach((a: KosztorysFormAnswer) => {
-            answerMap.set(`${a.room_code}:${a.work_type_code}`, a.is_marked);
-          });
-          setAnswers(answerMap);
-        }
+      // Extract work types from request
+      const workTypes: { code: string; name: string }[] = [];
+      if (requestData.work_types && requestData.work_types.length > 0) {
+        requestData.work_types.forEach((wt: any) => {
+          if (wt.work_type) {
+            workTypes.push({ code: wt.work_type.code, name: wt.work_type.name });
+          }
+        });
       } else {
-        // Create new form
-        const { data: newForm, error: createError } = await supabase
-          .from('kosztorys_forms')
-          .insert({
-            request_id: requestId,
-            form_type: formType,
-            version: 1,
-            is_current: true,
-            status: 'draft',
-            created_by_id: currentUser.id
-          })
-          .select()
-          .single();
+        // Fallback to installation_types
+        if (requestData.installation_types?.includes('IE')) {
+          workTypes.push({ code: 'IE', name: 'Instalacje elektryczne' });
+        }
+        if (requestData.installation_types?.includes('IT')) {
+          workTypes.push({ code: 'IT', name: 'Instalacje teletechniczne' });
+        }
+        if (workTypes.length === 0) {
+          workTypes.push({ code: 'IE', name: 'Instalacje elektryczne' });
+        }
+      }
+      setRequestWorkTypes(workTypes);
 
-        if (createError) throw createError;
-        setForm(newForm);
+      // Parse URL params for templates
+      const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+      const templatesParam = urlParams.get('templates');
+      const singleTemplate = urlParams.get('template');
+      let workTypeTemplatesMap: Record<string, string> = {};
+
+      if (templatesParam) {
+        try {
+          workTypeTemplatesMap = JSON.parse(decodeURIComponent(templatesParam));
+        } catch (e) {
+          console.error('Error parsing templates param:', e);
+        }
+      } else if (singleTemplate) {
+        // Apply single template to first work type
+        workTypes.forEach(wt => {
+          workTypeTemplatesMap[wt.code] = singleTemplate as KosztorysFormType;
+        });
+      }
+
+      // Load or create forms for each work type
+      const formsMap: Record<string, any> = {};
+
+      for (const wt of workTypes) {
+        // Determine form type for this work type
+        let formType = workTypeTemplatesMap[wt.code] as KosztorysFormType;
+        if (!formType) {
+          formType = getFormType(requestData.object_type, wt.code);
+        }
+
+        // Load existing form for this work type
+        const { data: formData } = await supabase
+          .from('kosztorys_forms')
+          .select(`
+            *,
+            general_data:kosztorys_form_general_data(*),
+            answers:kosztorys_form_answers(*)
+          `)
+          .eq('request_id', requestId)
+          .eq('form_type', formType)
+          .eq('is_current', true)
+          .maybeSingle();
+
+        if (formData) {
+          const answerMap = new Map<string, boolean>();
+          if (formData.answers) {
+            formData.answers.forEach((a: KosztorysFormAnswer) => {
+              answerMap.set(`${a.room_code}:${a.work_type_code}`, a.is_marked);
+            });
+          }
+          formsMap[wt.code] = {
+            form: formData,
+            template: FORM_TEMPLATES[formType],
+            answers: answerMap,
+            generalData: formData.general_data || {}
+          };
+        } else {
+          // Create new form
+          const { data: newForm, error: createError } = await supabase
+            .from('kosztorys_forms')
+            .insert({
+              request_id: requestId,
+              form_type: formType,
+              version: 1,
+              is_current: true,
+              status: 'draft',
+              created_by_id: currentUser.id
+            })
+            .select()
+            .single();
+
+          if (createError) throw createError;
+          formsMap[wt.code] = {
+            form: newForm,
+            template: FORM_TEMPLATES[formType],
+            answers: new Map(),
+            generalData: {}
+          };
+        }
+      }
+
+      setFormsByWorkType(formsMap);
+
+      // Set active work type and current form/template/answers
+      const firstWorkType = workTypes[0]?.code || 'IE';
+      setActiveWorkType(firstWorkType);
+
+      if (formsMap[firstWorkType]) {
+        setForm(formsMap[firstWorkType].form);
+        setTemplate(formsMap[firstWorkType].template);
+        setAnswers(formsMap[firstWorkType].answers);
+        setGeneralData(formsMap[firstWorkType].generalData);
+
+        // Expand all groups
+        if (formsMap[firstWorkType].template) {
+          const allGroups = new Set(formsMap[firstWorkType].template.room_groups.map((g: any) => g.code));
+          setExpandedGroups(allGroups);
+        }
       }
     } catch (err) {
       console.error('Error loading form:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Switch active work type
+  const switchWorkType = (workTypeCode: string) => {
+    // Save current state
+    if (activeWorkType && formsByWorkType[activeWorkType]) {
+      setFormsByWorkType(prev => ({
+        ...prev,
+        [activeWorkType]: {
+          ...prev[activeWorkType],
+          answers: answers,
+          generalData: generalData
+        }
+      }));
+    }
+
+    // Load new work type
+    const newData = formsByWorkType[workTypeCode];
+    if (newData) {
+      setActiveWorkType(workTypeCode);
+      setForm(newData.form);
+      setTemplate(newData.template);
+      setAnswers(newData.answers);
+      setGeneralData(newData.generalData);
+
+      // Expand all groups for new template
+      if (newData.template) {
+        const allGroups = new Set(newData.template.room_groups.map((g: any) => g.code));
+        setExpandedGroups(allGroups);
+      }
     }
   };
 
@@ -1443,6 +1556,73 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
             )}
           </div>
         </div>
+
+        {/* Work Type Tabs - only show if multiple work types */}
+        {requestWorkTypes.length > 1 && (
+          <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-slate-600 mr-2">Rodzaj prac:</span>
+              {requestWorkTypes.map(wt => (
+                <button
+                  key={wt.code}
+                  onClick={() => switchWorkType(wt.code)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                    activeWorkType === wt.code
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  {wt.name || wt.code}
+                  {formsByWorkType[wt.code]?.template && (
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      activeWorkType === wt.code
+                        ? 'bg-blue-500 text-blue-100'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {formsByWorkType[wt.code].template?.form_type}
+                    </span>
+                  )}
+                </button>
+              ))}
+              {/* Change template button */}
+              <button
+                onClick={() => {
+                  // Show modal to change template for active work type
+                  const isIndustrial = request?.object_type === 'industrial';
+                  const templates = isIndustrial
+                    ? ['PREM-IE', 'PREM-IT']
+                    : ['MIESZK-IE', 'MIESZK-IT'];
+                  const currentTemplate = formsByWorkType[activeWorkType]?.template?.form_type;
+                  const newTemplate = templates.find(t => t !== currentTemplate) || templates[0];
+
+                  // Confirm and reload with new template
+                  if (confirm(`Zmienić szablon dla ${activeWorkType} na ${newTemplate}?`)) {
+                    const newTemplateObj = FORM_TEMPLATES[newTemplate as KosztorysFormType];
+                    setFormsByWorkType(prev => ({
+                      ...prev,
+                      [activeWorkType]: {
+                        ...prev[activeWorkType],
+                        template: newTemplateObj
+                      }
+                    }));
+                    setTemplate(newTemplateObj);
+                    if (newTemplateObj) {
+                      const allGroups = new Set(newTemplateObj.room_groups.map(g => g.code));
+                      setExpandedGroups(allGroups);
+                    }
+                    hasChangesRef.current = true;
+                  }
+                }}
+                className="ml-auto px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1"
+                title="Zmień szablon dla aktywnego typu prac"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Zmień szablon
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Matrix */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
