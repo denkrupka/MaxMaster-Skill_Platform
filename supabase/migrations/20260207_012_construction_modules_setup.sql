@@ -4,31 +4,53 @@
 -- Description: Register construction modules and set up roles
 -- =====================================================
 
--- 1. Add construction modules to available_modules
-INSERT INTO available_modules (code, name, description, is_active, price_monthly, price_yearly, features, sort_order) VALUES
-  ('estimates', 'Kosztorysowanie', 'Kosztorysowanie projektów z hierarchiczną strukturą etapów, pozycji i zasobów', TRUE, 99.00, 990.00,
-   '["Etapy i pozycje", "Zasoby i materiały", "Narzedziownia", "Import/Export", "Szablony wycen"]'::jsonb, 10),
-  ('offers', 'Ofertowanie', 'Tworzenie i zarządzanie ofertami handlowymi z szablonami i śledzeniem', TRUE, 49.00, 490.00,
-   '["Szablony ofert", "Śledzenie statusu", "Publiczny link", "Historia zmian", "Integracja z kosztorysem"]'::jsonb, 11),
-  ('drawings', 'Rysunki Techniczne', 'Zarządzanie rysunkami technicznymi z adnotacjami i znacznikami', TRUE, 79.00, 790.00,
-   '["Przeglądarka planów", "Adnotacje i znaczniki", "Warstwy", "Powiązanie z zadaniami", "Wersjonowanie"]'::jsonb, 12),
-  ('dms', 'Dokumenty (DMS)', 'System zarządzania dokumentami z wersjonowaniem i uprawnieniami', TRUE, 59.00, 590.00,
-   '["Foldery i pliki", "Wersjonowanie", "Uprawnienia", "Wyszukiwanie pełnotekstowe", "Udostępnianie"]'::jsonb, 13),
-  ('gantt', 'Harmonogram', 'Harmonogramowanie projektów z wykresem Gantta i zależnościami', TRUE, 69.00, 690.00,
-   '["Wykres Gantta", "Zależności zadań", "Ścieżka krytyczna", "Linie bazowe", "Kalendarz roboczy"]'::jsonb, 14),
-  ('finance', 'Finanse', 'Operacje finansowe, rozliczenia i akty wykonawcze', TRUE, 89.00, 890.00,
-   '["Operacje finansowe", "Akty wykonawcze", "Budżetowanie", "Raporty finansowe", "Integracja z kosztorysem"]'::jsonb, 15),
-  ('procurement', 'Zaopatrzenie', 'Zarządzanie zamówieniami, dostawami i magazynem', TRUE, 79.00, 790.00,
-   '["Zapotrzebowanie", "Zamówienia", "Dostawy", "Magazyn", "Kontrola budżetu"]'::jsonb, 16),
-  ('approvals', 'Uzgodnienia', 'Workflow zatwierdzania dokumentów i zmian', TRUE, 39.00, 390.00,
-   '["Szablony workflow", "Wieloetapowe zatwierdzanie", "Historia decyzji", "Powiadomienia", "Delegowanie"]'::jsonb, 17)
+-- 1. Add construction modules to modules table
+INSERT INTO modules (code, name_pl, name_en, description_pl, description_en, available_roles, base_price_per_user, is_active, display_order, icon) VALUES
+  ('estimates', 'Kosztorysowanie', 'Estimates',
+   'Kosztorysowanie projektów z hierarchiczną strukturą etapów, pozycji i zasobów',
+   'Project cost estimation with hierarchical stages, items and resources',
+   ARRAY['company_admin', 'hr', 'coordinator'], 99.00, TRUE, 10, 'Calculator'),
+  ('offers', 'Ofertowanie', 'Offers',
+   'Tworzenie i zarządzanie ofertami handlowymi z szablonami i śledzeniem',
+   'Creating and managing commercial offers with templates and tracking',
+   ARRAY['company_admin', 'hr', 'coordinator'], 49.00, TRUE, 11, 'FileSpreadsheet'),
+  ('drawings', 'Rysunki Techniczne', 'Technical Drawings',
+   'Zarządzanie rysunkami technicznymi z adnotacjami i znacznikami',
+   'Technical drawings management with annotations and markers',
+   ARRAY['company_admin', 'hr', 'coordinator', 'brigadir'], 79.00, TRUE, 12, 'PenTool'),
+  ('dms', 'Dokumenty (DMS)', 'Documents (DMS)',
+   'System zarządzania dokumentami z wersjonowaniem i uprawnieniami',
+   'Document management system with versioning and permissions',
+   ARRAY['company_admin', 'hr', 'coordinator', 'brigadir', 'employee'], 59.00, TRUE, 13, 'FolderOpen'),
+  ('gantt', 'Harmonogram', 'Schedule',
+   'Harmonogramowanie projektów z wykresem Gantta i zależnościami',
+   'Project scheduling with Gantt chart and dependencies',
+   ARRAY['company_admin', 'hr', 'coordinator'], 69.00, TRUE, 14, 'GanttChartSquare'),
+  ('finance', 'Finanse', 'Finance',
+   'Operacje finansowe, rozliczenia i akty wykonawcze',
+   'Financial operations, settlements and completion acts',
+   ARRAY['company_admin', 'hr'], 89.00, TRUE, 15, 'Wallet'),
+  ('procurement', 'Zaopatrzenie', 'Procurement',
+   'Zarządzanie zamówieniami, dostawami i magazynem',
+   'Order management, deliveries and warehouse',
+   ARRAY['company_admin', 'hr', 'coordinator'], 79.00, TRUE, 16, 'ShoppingCart'),
+  ('approvals', 'Uzgodnienia', 'Approvals',
+   'Workflow zatwierdzania dokumentów i zmian',
+   'Document and change approval workflow',
+   ARRAY['company_admin', 'hr', 'coordinator'], 39.00, TRUE, 17, 'ClipboardCheck'),
+  ('contractors', 'Kontrahenci', 'Contractors',
+   'Zarządzanie kontrahentami, dostawcami i podwykonawcami',
+   'Contractor, supplier and subcontractor management',
+   ARRAY['company_admin', 'hr', 'coordinator'], 0.00, TRUE, 18, 'Building2')
 ON CONFLICT (code) DO UPDATE SET
-  name = EXCLUDED.name,
-  description = EXCLUDED.description,
-  price_monthly = EXCLUDED.price_monthly,
-  price_yearly = EXCLUDED.price_yearly,
-  features = EXCLUDED.features,
-  sort_order = EXCLUDED.sort_order;
+  name_pl = EXCLUDED.name_pl,
+  name_en = EXCLUDED.name_en,
+  description_pl = EXCLUDED.description_pl,
+  description_en = EXCLUDED.description_en,
+  available_roles = EXCLUDED.available_roles,
+  base_price_per_user = EXCLUDED.base_price_per_user,
+  display_order = EXCLUDED.display_order,
+  icon = EXCLUDED.icon;
 
 -- 2. Add construction roles
 DO $$
