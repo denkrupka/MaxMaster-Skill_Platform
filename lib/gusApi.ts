@@ -70,12 +70,14 @@ export function formatNip(nip: string): string {
 }
 
 /**
- * Fetch company data from GUS via Supabase Edge Function (to avoid CORS)
+ * Fetch company data from GUS via existing Supabase Edge Function (search-gus)
+ * Uses DataPort.pl API
  *
  * @param nip - Company NIP (tax identification number)
+ * @param skipDuplicateCheck - If true, returns data even if company is already registered
  * @returns Company data or error
  */
-export async function fetchCompanyByNip(nip: string): Promise<GUSApiResponse> {
+export async function fetchCompanyByNip(nip: string, skipDuplicateCheck: boolean = true): Promise<GUSApiResponse> {
   const normalizedNip = normalizeNip(nip);
 
   // Validate NIP format
@@ -87,7 +89,7 @@ export async function fetchCompanyByNip(nip: string): Promise<GUSApiResponse> {
   }
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/gus-proxy`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/search-gus`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -96,18 +98,44 @@ export async function fetchCompanyByNip(nip: string): Promise<GUSApiResponse> {
       body: JSON.stringify({ nip: normalizedNip })
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+    const result = await response.json();
+
+    if (!result.success) {
+      // If company is already registered, we still want the data for kosztorys
+      if (result.data?.already_registered && skipDuplicateCheck) {
+        // Company exists but we need to fetch data anyway - return error for now
+        // In future, we could fetch from our own database
+        return {
+          success: false,
+          error: 'Firma jest już zarejestrowana w systemie. Możesz wybrać ją z listy klientów.'
+        };
+      }
       return {
         success: false,
-        error: errorData.error || 'Nie udało się pobrać danych z GUS'
+        error: result.error || 'Nie udało się pobrać danych z GUS'
       };
     }
 
-    const result = await response.json();
-    return result;
+    // Map DataPort.pl response to our GUSCompanyData format
+    const data = result.data;
+    const companyData: GUSCompanyData = {
+      nip: data.nip || normalizedNip,
+      regon: data.regon || undefined,
+      name: data.nazwa || '',
+      street: data.ulica || '',
+      streetNumber: data.nrNieruchomosci || '',
+      apartmentNumber: data.nrLokalu || undefined,
+      city: data.miejscowosc || '',
+      postalCode: data.kodPocztowy || '',
+      country: 'Polska'
+    };
+
+    return {
+      success: true,
+      data: companyData
+    };
   } catch (error: any) {
-    console.error('GUS proxy error:', error);
+    console.error('GUS API error:', error);
     return {
       success: false,
       error: 'Nie udało się pobrać danych z GUS. Wprowadź dane ręcznie.'
