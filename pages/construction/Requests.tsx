@@ -87,6 +87,9 @@ interface RequestFormData {
   object_city: string;
   object_postal_code: string;
   object_country: string;
+  // Materials
+  main_material_side: string;
+  minor_material_side: string;
   // Other
   planned_response_date: string;
   notes: string;
@@ -117,6 +120,8 @@ const initialFormData: RequestFormData = {
   object_city: '',
   object_postal_code: '',
   object_country: 'Polska',
+  main_material_side: '',
+  minor_material_side: '',
   planned_response_date: '',
   notes: '',
   request_source: 'email',
@@ -524,6 +529,9 @@ export const RequestsPage: React.FC = () => {
           formData.object_postal_code,
           formData.object_city
         ].filter(Boolean).join(', ') || null,
+        // Materials
+        main_material_side: formData.main_material_side || null,
+        minor_material_side: formData.minor_material_side || null,
         // Other
         planned_response_date: formData.planned_response_date || null,
         notes: formData.notes.trim() || null,
@@ -658,6 +666,8 @@ export const RequestsPage: React.FC = () => {
         object_city: request.object_city || '',
         object_postal_code: request.object_postal_code || '',
         object_country: request.object_country || 'Polska',
+        main_material_side: (request as any).main_material_side || '',
+        minor_material_side: (request as any).minor_material_side || '',
         planned_response_date: request.planned_response_date || '',
         notes: request.notes || '',
         request_source: request.request_source || 'email',
@@ -1522,7 +1532,43 @@ export const RequestsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 4. Assignment */}
+              {/* 4. Materials */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-slate-400" />
+                  Materiały
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Główny</label>
+                    <select
+                      value={formData.main_material_side}
+                      onChange={e => setFormData(prev => ({ ...prev, main_material_side: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz --</option>
+                      <option value="investor">Po stronie Inwestora</option>
+                      <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                      <option value="company">Po stronie {currentUser?.company?.name || 'Firmy'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Drobny</label>
+                    <select
+                      value={formData.minor_material_side}
+                      onChange={e => setFormData(prev => ({ ...prev, minor_material_side: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz --</option>
+                      <option value="investor">Po stronie Inwestora</option>
+                      <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                      <option value="company">Po stronie {currentUser?.company?.name || 'Firmy'}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Assignment */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                   <Briefcase className="w-5 h-5 text-slate-400" />
@@ -1557,7 +1603,7 @@ export const RequestsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 5. Notes */}
+              {/* 6. Notes */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi od klienta</label>
                 <textarea
@@ -1761,8 +1807,32 @@ export const RequestsPage: React.FC = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Rodzaj prac:</span>
-                        <span className="font-medium">{INSTALLATION_TYPE_LABELS[selectedRequest.installation_types]}</span>
+                        <span className="font-medium">
+                          {selectedRequest.work_types && selectedRequest.work_types.length > 0
+                            ? selectedRequest.work_types.map(wt => wt.work_type?.name || wt.work_type?.code).join(', ')
+                            : INSTALLATION_TYPE_LABELS[selectedRequest.installation_types]}
+                        </span>
                       </div>
+                      {(selectedRequest as any).main_material_side && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Materiał Główny:</span>
+                          <span className="font-medium">
+                            {(selectedRequest as any).main_material_side === 'investor' && 'Po stronie Inwestora'}
+                            {(selectedRequest as any).main_material_side === 'client' && `Po stronie ${selectedRequest.client_name}`}
+                            {(selectedRequest as any).main_material_side === 'company' && 'Po stronie Firmy'}
+                          </span>
+                        </div>
+                      )}
+                      {(selectedRequest as any).minor_material_side && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Materiał Drobny:</span>
+                          <span className="font-medium">
+                            {(selectedRequest as any).minor_material_side === 'investor' && 'Po stronie Inwestora'}
+                            {(selectedRequest as any).minor_material_side === 'client' && `Po stronie ${selectedRequest.client_name}`}
+                            {(selectedRequest as any).minor_material_side === 'company' && 'Po stronie Firmy'}
+                          </span>
+                        </div>
+                      )}
                       {selectedRequest.request_source && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">Źródło zapytania:</span>

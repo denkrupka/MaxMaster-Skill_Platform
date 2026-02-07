@@ -19,10 +19,9 @@ const FORM_TEMPLATES: Record<KosztorysFormType, KosztorysFormTemplate> = {
     title: 'FORMULARZ WYKONYWANYCH PRAC - MIESZKANIA I BIUROWCE - IE',
     general_fields: [
       { code: 'apartments_count', label: 'Ilość mieszkań / powierzchnia', type: 'text', required: true, placeholder: 'np. 120 mieszkań, 8500 m²' },
-      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'text', required: true, placeholder: 'np. Cegła ceramiczna' },
-      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'text', required: true, placeholder: 'np. Gipskarton' },
-      { code: 'ceiling_height', label: 'Wysokość sufitu (m)', type: 'decimal', required: true, placeholder: '2.80' },
-      { code: 'consumable_material', label: 'Materiał eksploatacyjny', type: 'text', required: false, placeholder: 'Standard' }
+      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'ceiling_height', label: 'Wysokość sufitu (m)', type: 'decimal', required: true, placeholder: '2.80' }
     ],
     room_groups: [
       {
@@ -285,10 +284,9 @@ const FORM_TEMPLATES: Record<KosztorysFormType, KosztorysFormTemplate> = {
     title: 'FORMULARZ WYKONYWANYCH PRAC - MIESZKANIA I BIUROWCE - IT',
     general_fields: [
       { code: 'apartments_count', label: 'Ilość mieszkań / powierzchnia', type: 'text', required: true, placeholder: 'np. 120 mieszkań, 8500 m²' },
-      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'text', required: true, placeholder: 'np. Cegła ceramiczna' },
-      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'text', required: true, placeholder: 'np. Gipskarton' },
-      { code: 'ceiling_height', label: 'Wysokość sufitu (m)', type: 'decimal', required: true, placeholder: '2.80' },
-      { code: 'consumable_material', label: 'Materiał eksploatacyjny', type: 'text', required: false, placeholder: 'Standard' }
+      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'ceiling_height', label: 'Wysokość sufitu (m)', type: 'decimal', required: true, placeholder: '2.80' }
     ],
     room_groups: [
       {
@@ -403,11 +401,9 @@ const FORM_TEMPLATES: Record<KosztorysFormType, KosztorysFormTemplate> = {
     general_fields: [
       { code: 'hall_area', label: 'Powierzchnia hali (m²)', type: 'decimal', required: true, placeholder: 'np. 5000' },
       { code: 'office_area', label: 'Powierzchnia biur (m²)', type: 'decimal', required: false, placeholder: 'np. 500' },
-      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'text', required: true, placeholder: 'np. Płyty warstwowe' },
-      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'text', required: true, placeholder: 'np. Gipskarton' },
-      { code: 'hall_ceiling_height', label: 'Wysokość sufitu hali (m)', type: 'decimal', required: true, placeholder: '8.00' },
-      { code: 'office_ceiling_height', label: 'Wysokość sufitu biur (m)', type: 'decimal', required: false, placeholder: '3.00' },
-      { code: 'consumable_material', label: 'Materiał eksploatacyjny', type: 'text', required: false, placeholder: 'Standard' }
+      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'hall_ceiling_height', label: 'Wysokość Hali (m)', type: 'decimal', required: true, placeholder: '8.00' }
     ],
     room_groups: [
       {
@@ -505,9 +501,9 @@ const FORM_TEMPLATES: Record<KosztorysFormType, KosztorysFormTemplate> = {
     general_fields: [
       { code: 'hall_area', label: 'Powierzchnia hali (m²)', type: 'decimal', required: true, placeholder: 'np. 5000' },
       { code: 'office_area', label: 'Powierzchnia biur (m²)', type: 'decimal', required: false, placeholder: 'np. 500' },
-      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'text', required: true, placeholder: 'np. Płyty warstwowe' },
-      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'text', required: true, placeholder: 'np. Gipskarton' },
-      { code: 'hall_ceiling_height', label: 'Wysokość sufitu hali (m)', type: 'decimal', required: true, placeholder: '8.00' }
+      { code: 'ext_wall_type', label: 'Rodzaj ścian zewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'int_wall_type', label: 'Rodzaj ścian wewnętrznych', type: 'select', required: true, placeholder: 'Wybierz...' },
+      { code: 'hall_ceiling_height', label: 'Wysokość Hali (m)', type: 'decimal', required: true, placeholder: '8.00' }
     ],
     room_groups: [
       {
@@ -576,14 +572,89 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
   const [generating, setGenerating] = useState(false);
   const [generationResult, setGenerationResult] = useState<any>(null);
 
+  // Dictionary data for select fields
+  const [extWallTypes, setExtWallTypes] = useState<{ id: string; name: string }[]>([]);
+  const [intWallTypes, setIntWallTypes] = useState<{ id: string; name: string }[]>([]);
+
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasChangesRef = useRef(false);
 
   useEffect(() => {
     if (currentUser && requestId) {
       loadRequest();
+      loadDictionaries();
     }
   }, [currentUser, requestId]);
+
+  const loadDictionaries = async () => {
+    if (!currentUser) return;
+    try {
+      // Load external wall types
+      const { data: extWalls } = await supabase
+        .from('kosztorys_wall_types')
+        .select('id, name')
+        .eq('company_id', currentUser.company_id)
+        .eq('wall_category', 'external')
+        .eq('is_active', true)
+        .order('name');
+
+      if (extWalls && extWalls.length > 0) {
+        setExtWallTypes(extWalls);
+      } else {
+        // Fallback defaults
+        setExtWallTypes([
+          { id: 'plyta_warstwowa', name: 'Płyta warstwowa' },
+          { id: 'cegla_ceramiczna', name: 'Cegła ceramiczna' },
+          { id: 'beton', name: 'Beton' },
+          { id: 'pustak', name: 'Pustak' },
+          { id: 'silka', name: 'Silka' },
+          { id: 'inne', name: 'Inne' }
+        ]);
+      }
+
+      // Load internal wall types
+      const { data: intWalls } = await supabase
+        .from('kosztorys_wall_types')
+        .select('id, name')
+        .eq('company_id', currentUser.company_id)
+        .eq('wall_category', 'internal')
+        .eq('is_active', true)
+        .order('name');
+
+      if (intWalls && intWalls.length > 0) {
+        setIntWallTypes(intWalls);
+      } else {
+        // Fallback defaults
+        setIntWallTypes([
+          { id: 'gipskarton', name: 'Gipskarton' },
+          { id: 'cegla', name: 'Cegła' },
+          { id: 'pustak', name: 'Pustak' },
+          { id: 'beton', name: 'Beton' },
+          { id: 'silka', name: 'Silka' },
+          { id: 'inne', name: 'Inne' }
+        ]);
+      }
+    } catch (err) {
+      console.error('Error loading dictionaries:', err);
+      // Set fallback defaults
+      setExtWallTypes([
+        { id: 'plyta_warstwowa', name: 'Płyta warstwowa' },
+        { id: 'cegla_ceramiczna', name: 'Cegła ceramiczna' },
+        { id: 'beton', name: 'Beton' },
+        { id: 'pustak', name: 'Pustak' },
+        { id: 'silka', name: 'Silka' },
+        { id: 'inne', name: 'Inne' }
+      ]);
+      setIntWallTypes([
+        { id: 'gipskarton', name: 'Gipskarton' },
+        { id: 'cegla', name: 'Cegła' },
+        { id: 'pustak', name: 'Pustak' },
+        { id: 'beton', name: 'Beton' },
+        { id: 'silka', name: 'Silka' },
+        { id: 'inne', name: 'Inne' }
+      ]);
+    }
+  };
 
   useEffect(() => {
     // Auto-save every 30 seconds
@@ -989,17 +1060,33 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </label>
-                <input
-                  type={field.type === 'decimal' ? 'number' : 'text'}
-                  step={field.type === 'decimal' ? '0.01' : undefined}
-                  value={generalData[field.code as keyof typeof generalData] || ''}
-                  onChange={e => handleGeneralDataChange(
-                    field.code,
-                    field.type === 'decimal' ? parseFloat(e.target.value) || 0 : e.target.value
-                  )}
-                  placeholder={field.placeholder}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                {field.type === 'select' ? (
+                  <select
+                    value={generalData[field.code as keyof typeof generalData] || ''}
+                    onChange={e => handleGeneralDataChange(field.code, e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{field.placeholder || 'Wybierz...'}</option>
+                    {field.code === 'ext_wall_type' && extWallTypes.map(wt => (
+                      <option key={wt.id} value={wt.name}>{wt.name}</option>
+                    ))}
+                    {field.code === 'int_wall_type' && intWallTypes.map(wt => (
+                      <option key={wt.id} value={wt.name}>{wt.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field.type === 'decimal' ? 'number' : 'text'}
+                    step={field.type === 'decimal' ? '0.01' : undefined}
+                    value={generalData[field.code as keyof typeof generalData] || ''}
+                    onChange={e => handleGeneralDataChange(
+                      field.code,
+                      field.type === 'decimal' ? parseFloat(e.target.value) || 0 : e.target.value
+                    )}
+                    placeholder={field.placeholder}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -1065,14 +1152,14 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         </div>
 
         {/* Matrix */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
+          <div className="overflow-auto flex-1" style={{ maxHeight: 'calc(100vh - 400px)' }}>
             <table className="w-full border-collapse">
               {/* Header with work categories */}
-              <thead className="sticky top-0 z-30">
+              <thead className="sticky top-0 z-40 bg-white">
                 {/* Category row */}
                 <tr className="bg-slate-100">
-                  <th className="sticky left-0 z-20 bg-slate-100 min-w-[250px] px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-r border-slate-200">
+                  <th className="sticky left-0 z-50 bg-slate-100 min-w-[250px] px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     Pomieszczenie / Element
                   </th>
                   {template.work_categories.map((category, catIndex) => {
@@ -1104,7 +1191,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 </tr>
                 {/* Work types row */}
                 <tr className="bg-slate-50">
-                  <th className="sticky left-0 z-20 bg-slate-50 min-w-[250px] px-3 py-1 text-left text-xs text-slate-500 border-b border-r border-slate-200">
+                  <th className="sticky left-0 z-50 bg-slate-50 min-w-[250px] px-3 py-1 text-left text-xs text-slate-500 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
 
                   </th>
                   {template.work_categories.flatMap((category, catIndex) => {
@@ -1146,7 +1233,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                       onClick={() => toggleGroupExpand(group.code)}
                     >
                       <td
-                        className="sticky left-0 z-10 bg-amber-50 px-3 py-2 font-semibold text-slate-900 border-b border-r border-slate-200"
+                        className="sticky left-0 z-30 bg-amber-50 px-3 py-2 font-semibold text-slate-900 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
                         colSpan={1 + template.work_categories.reduce((acc, c) => acc + c.work_types.length, 0)}
                       >
                         <div className="flex items-center gap-2">
@@ -1166,7 +1253,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                     {/* Room rows */}
                     {expandedGroups.has(group.code) && group.rooms.map(room => (
                       <tr key={room.code} className="hover:bg-slate-50">
-                        <td className="sticky left-0 z-10 bg-white px-3 py-2 text-sm text-slate-700 border-b border-r border-slate-200">
+                        <td className="sticky left-0 z-30 bg-white px-3 py-2 text-sm text-slate-700 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                           <span className="pl-6">{room.name}</span>
                         </td>
                         {template.work_categories.flatMap((category, catIndex) => {
