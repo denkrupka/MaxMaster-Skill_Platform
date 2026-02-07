@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Plus, Search, Filter, Loader2, ChevronRight, Phone, Mail,
+  Plus, Search, Filter, Loader2, ChevronRight, ChevronLeft, Phone, Mail,
   Calendar, User, Building2, FileText, Clock, AlertCircle,
-  CheckCircle2, XCircle, Send, Eye, Pencil, Trash2, X,
+  CheckCircle2, XCircle, Send, Eye, Pencil, Trash2, X, Check,
   ChevronDown, MoreVertical, MapPin, FileSpreadsheet, Play,
   Calculator, ClipboardList, ArrowLeft, Download, UserPlus,
-  Star, Briefcase, Hash
+  Star, Briefcase, Hash, Zap
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -202,6 +202,8 @@ export const RequestsPage: React.FC = () => {
   const [checkingForm, setCheckingForm] = useState(false);
   // Template selection per work type (for multi-work-type requests)
   const [workTypeTemplates, setWorkTypeTemplates] = useState<Record<string, string>>({});
+  // Wizard step for multi-work-type selection (0 = main menu, 1+ = work type index)
+  const [wizardStep, setWizardStep] = useState(0);
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -2321,19 +2323,17 @@ export const RequestsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Form Selection Modal */}
+      {/* Form Selection Modal - Wizard */}
       {showFormSelectionModal && selectedRequest && (() => {
         // Get work types from relation or fallback to installation_types field
         let requestWorkTypes: { code: string; name: string }[] = [];
 
         if (selectedRequest.work_types && selectedRequest.work_types.length > 0) {
-          // Use work_types from relation
           requestWorkTypes = selectedRequest.work_types.map((wt: any) => ({
             code: wt.work_type?.code || wt.work_type_id,
             name: wt.work_type?.name || wt.work_type?.code || wt.work_type_id
           }));
         } else if (selectedRequest.installation_types) {
-          // Fallback: parse installation_types field (e.g., "IE,IT" or "IE")
           const types = selectedRequest.installation_types.split(',').map((t: string) => t.trim());
           requestWorkTypes = types.map((t: string) => ({
             code: t,
@@ -2344,197 +2344,279 @@ export const RequestsPage: React.FC = () => {
         const hasMultipleWorkTypes = requestWorkTypes.length > 1;
         const isIndustrial = selectedRequest.object_type === 'industrial';
 
-        // Available templates based on object type
-        const availableTemplates = isIndustrial
-          ? [
-              { code: 'PREM-IE', name: 'Przemysłowe - IE', desc: 'Instalacje elektryczne przemysłowe' },
-              { code: 'PREM-IT', name: 'Przemysłowe - IT', desc: 'Instalacje teletechniczne przemysłowe' }
-            ]
-          : [
-              { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - IE', desc: 'Instalacje elektryczne' },
-              { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - IT', desc: 'Instalacje teletechniczne' }
-            ];
+        // All available templates with work type compatibility
+        const allTemplates = [
+          { code: 'PREM-IE', name: 'Przemysłowe - IE', desc: 'Hale, magazyny, obiekty przemysłowe', forWorkTypes: ['IE'], forObjectTypes: ['industrial'] },
+          { code: 'PREM-IT', name: 'Przemysłowe - IT', desc: 'Teletechnika przemysłowa', forWorkTypes: ['IT'], forObjectTypes: ['industrial'] },
+          { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - IE', desc: 'Budynki mieszkalne i biurowe', forWorkTypes: ['IE'], forObjectTypes: ['residential', 'office'] },
+          { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - IT', desc: 'Teletechnika mieszkaniowa', forWorkTypes: ['IT'], forObjectTypes: ['residential', 'office'] }
+        ];
 
-        // Get recommended template for a work type code
+        // Get templates compatible with work type and object type
+        const getCompatibleTemplates = (workTypeCode: string) => {
+          const isIE = workTypeCode.toUpperCase().includes('IE');
+          const targetWorkType = isIE ? 'IE' : 'IT';
+          return allTemplates.filter(t =>
+            t.forWorkTypes.includes(targetWorkType) &&
+            (t.forObjectTypes.includes(selectedRequest.object_type) || t.forObjectTypes.includes('*'))
+          );
+        };
+
+        // Get recommended template for a work type
         const getRecommendedTemplate = (workTypeCode: string) => {
           const isIE = workTypeCode.toUpperCase().includes('IE');
           if (isIndustrial) return isIE ? 'PREM-IE' : 'PREM-IT';
           return isIE ? 'MIESZK-IE' : 'MIESZK-IT';
         };
 
-        // Check if all work types have templates selected
-        const allTemplatesSelected = hasMultipleWorkTypes
-          ? requestWorkTypes.every(wt => workTypeTemplates[wt.code])
-          : true;
+        // Current work type being configured (for wizard)
+        const currentWorkType = wizardStep > 0 && wizardStep <= requestWorkTypes.length
+          ? requestWorkTypes[wizardStep - 1]
+          : null;
 
-        const handleGoToFormulary = () => {
+        const compatibleTemplates = currentWorkType ? getCompatibleTemplates(currentWorkType.code) : [];
+
+        const closeModal = () => {
           setShowFormSelectionModal(false);
-          if (hasMultipleWorkTypes) {
-            // Encode templates for each work type
-            const templatesParam = encodeURIComponent(JSON.stringify(workTypeTemplates));
+          setWorkTypeTemplates({});
+          setWizardStep(0);
+        };
+
+        const handleGoToFormulary = (templates: Record<string, string>) => {
+          closeModal();
+          if (Object.keys(templates).length > 1) {
+            const templatesParam = encodeURIComponent(JSON.stringify(templates));
             window.location.hash = `#/construction/formulary/${selectedRequest.id}?templates=${templatesParam}`;
           } else {
-            const workTypeCode = requestWorkTypes[0]?.code || 'IE';
-            const template = getRecommendedTemplate(workTypeCode);
+            const template = Object.values(templates)[0] || getRecommendedTemplate(requestWorkTypes[0]?.code || 'IE');
             window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${template}`;
           }
         };
 
         const handleSelectRecommended = () => {
-          // Auto-select recommended template for each work type
           const recommended: Record<string, string> = {};
           requestWorkTypes.forEach(wt => {
             recommended[wt.code] = getRecommendedTemplate(wt.code);
           });
-          setWorkTypeTemplates(recommended);
+          handleGoToFormulary(recommended);
+        };
 
-          // If multiple work types, just set templates (don't navigate yet)
-          // If single, navigate directly
-          if (!hasMultipleWorkTypes) {
-            setShowFormSelectionModal(false);
-            const template = recommended[requestWorkTypes[0]?.code] || getRecommendedTemplate('IE');
-            window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${template}`;
+        const handleSelectTemplate = (templateCode: string) => {
+          if (!currentWorkType) return;
+
+          const newTemplates = { ...workTypeTemplates, [currentWorkType.code]: templateCode };
+          setWorkTypeTemplates(newTemplates);
+
+          // Move to next step or finish
+          if (wizardStep < requestWorkTypes.length) {
+            setWizardStep(wizardStep + 1);
+          } else {
+            handleGoToFormulary(newTemplates);
           }
         };
+
+        // Check if we're on the last step and all templates are selected
+        const isLastStepComplete = wizardStep === requestWorkTypes.length &&
+          requestWorkTypes.every(wt => workTypeTemplates[wt.code]);
 
         return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            {/* Header */}
             <div className="p-6 border-b border-slate-200">
-              <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
-              <p className="text-slate-600 mt-1">
-                {hasMultipleWorkTypes
-                  ? `Wybierz szablony dla każdego typu prac (${requestWorkTypes.length} typy)`
-                  : `Wybierz formularz dla: ${selectedRequest.investment_name}`
-                }
-              </p>
+              {wizardStep === 0 ? (
+                <>
+                  <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
+                  <p className="text-slate-600 mt-1">{selectedRequest.investment_name}</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-slate-900">Wybierz szablon</h2>
+                    <span className="text-sm text-slate-500">
+                      Krok {wizardStep} z {requestWorkTypes.length}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 mt-1">
+                    Dla: <span className="font-semibold text-blue-600">{currentWorkType?.name}</span>
+                  </p>
+                  {/* Progress dots */}
+                  {hasMultipleWorkTypes && (
+                    <div className="flex gap-2 mt-3">
+                      {requestWorkTypes.map((wt, idx) => (
+                        <div
+                          key={wt.code}
+                          className={`h-2 flex-1 rounded-full transition ${
+                            idx < wizardStep - 1 ? 'bg-green-500' :
+                            idx === wizardStep - 1 ? 'bg-blue-500' :
+                            'bg-slate-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Create new empty form */}
-              <button
-                onClick={() => {
-                  setShowFormSelectionModal(false);
-                  window.location.hash = `#/construction/formulary/${selectedRequest.id}?new=true`;
-                }}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-green-300 transition text-left group"
-              >
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
-                  <Plus className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-slate-900">Utwórz nowy formularz</div>
-                  <div className="text-sm text-slate-500">Rozpocznij od pustego formularza</div>
-                </div>
-              </button>
+            {/* Content */}
+            <div className="p-6">
+              {wizardStep === 0 ? (
+                /* Main menu */
+                <div className="space-y-3">
+                  {/* Create new empty form */}
+                  <button
+                    onClick={() => {
+                      closeModal();
+                      window.location.hash = `#/construction/formulary/${selectedRequest.id}?new=true`;
+                    }}
+                    className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-green-300 transition text-left group"
+                  >
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
+                      <Plus className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-slate-900">Utwórz nowy formularz</div>
+                      <div className="text-sm text-slate-500">Rozpocznij od pustego formularza</div>
+                    </div>
+                  </button>
 
-              {/* Recommended - auto-select best templates */}
-              <button
-                onClick={handleSelectRecommended}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition text-left group"
-              >
-                <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center group-hover:bg-blue-300 transition">
-                  <Star className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <div className="font-medium text-blue-900 flex items-center gap-2">
-                    Zalecany formularz
-                    <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded-full">Rekomendowany</span>
-                  </div>
-                  <div className="text-sm text-blue-600">
-                    {hasMultipleWorkTypes
-                      ? 'Automatycznie dopasuj szablony do każdego typu prac'
-                      : `Formularz dopasowany do typu obiektu: ${OBJECT_TYPE_LABELS[selectedRequest.object_type] || selectedRequest.object_type}`
-                    }
-                  </div>
-                </div>
-              </button>
+                  {/* Recommended - auto-select */}
+                  <button
+                    onClick={handleSelectRecommended}
+                    className="w-full flex items-center gap-4 p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition text-left group"
+                  >
+                    <div className="w-12 h-12 bg-blue-200 rounded-lg flex items-center justify-center group-hover:bg-blue-300 transition">
+                      <Zap className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-blue-900 flex items-center gap-2">
+                        Zalecany formularz
+                        <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded-full">Auto</span>
+                      </div>
+                      <div className="text-sm text-blue-600">
+                        {hasMultipleWorkTypes
+                          ? `Automatycznie dopasuje ${requestWorkTypes.length} szablonów`
+                          : `Dla: ${OBJECT_TYPE_LABELS[selectedRequest.object_type] || selectedRequest.object_type}`
+                        }
+                      </div>
+                    </div>
+                  </button>
 
-              {/* Multi-work-type template selection */}
-              {hasMultipleWorkTypes && (
-                <div className="pt-2 border-t border-slate-200">
-                  <div className="text-sm font-medium text-slate-700 mb-3">Wybierz szablon dla każdego typu prac:</div>
-                  <div className="space-y-3">
-                    {requestWorkTypes.map(wt => {
-                      const selectedTemplate = workTypeTemplates[wt.code];
+                  {/* Manual selection */}
+                  {hasMultipleWorkTypes ? (
+                    <button
+                      onClick={() => setWizardStep(1)}
+                      className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left group"
+                    >
+                      <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-slate-200 transition">
+                        <FileSpreadsheet className="w-6 h-6 text-slate-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-slate-900">Wybierz ręcznie</div>
+                        <div className="text-sm text-slate-500">
+                          Wybierz szablon dla każdego typu prac osobno
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-400 ml-auto" />
+                    </button>
+                  ) : (
+                    /* Single work type - show template list directly */
+                    <div className="pt-2">
+                      <div className="text-sm text-slate-500 mb-3 px-1">Lub wybierz inny szablon:</div>
+                      <div className="space-y-2">
+                        {getCompatibleTemplates(requestWorkTypes[0]?.code || 'IE').map(tmpl => (
+                          <button
+                            key={tmpl.code}
+                            onClick={() => handleGoToFormulary({ [requestWorkTypes[0]?.code || 'IE']: tmpl.code })}
+                            className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left"
+                          >
+                            <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                            <div>
+                              <div className="font-medium text-slate-900 text-sm">{tmpl.name}</div>
+                              <div className="text-xs text-slate-500">{tmpl.desc}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Template selection for current work type */
+                <div className="space-y-3">
+                  {compatibleTemplates.length > 0 ? (
+                    compatibleTemplates.map(tmpl => {
+                      const isSelected = workTypeTemplates[currentWorkType?.code || ''] === tmpl.code;
+                      const isRecommended = tmpl.code === getRecommendedTemplate(currentWorkType?.code || 'IE');
 
                       return (
-                        <div key={wt.code} className="p-3 bg-slate-50 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-slate-900">{wt.name}</span>
-                            {selectedTemplate && (
-                              <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full flex items-center gap-1">
-                                <Check className="w-3 h-3" />
-                                {availableTemplates.find(t => t.code === selectedTemplate)?.name}
-                              </span>
+                        <button
+                          key={tmpl.code}
+                          onClick={() => handleSelectTemplate(tmpl.code)}
+                          className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition text-left group ${
+                            isSelected
+                              ? 'border-green-500 bg-green-50'
+                              : isRecommended
+                              ? 'border-blue-200 bg-blue-50 hover:border-blue-400'
+                              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center transition ${
+                            isSelected ? 'bg-green-200' : isRecommended ? 'bg-blue-200' : 'bg-slate-100 group-hover:bg-slate-200'
+                          }`}>
+                            {isSelected ? (
+                              <Check className="w-6 h-6 text-green-600" />
+                            ) : (
+                              <FileSpreadsheet className={`w-6 h-6 ${isRecommended ? 'text-blue-600' : 'text-slate-500'}`} />
                             )}
                           </div>
-                          <div className="flex gap-2">
-                            {availableTemplates.map(tmpl => (
-                              <button
-                                key={tmpl.code}
-                                onClick={() => setWorkTypeTemplates(prev => ({ ...prev, [wt.code]: tmpl.code }))}
-                                className={`flex-1 px-3 py-2 text-sm rounded-lg border transition ${
-                                  selectedTemplate === tmpl.code
-                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                    : 'border-slate-200 hover:border-slate-300 hover:bg-white'
-                                }`}
-                              >
-                                {tmpl.code.split('-')[1]}
-                              </button>
-                            ))}
+                          <div className="flex-1">
+                            <div className="font-medium text-slate-900 flex items-center gap-2">
+                              {tmpl.name}
+                              {isRecommended && (
+                                <span className="text-xs px-2 py-0.5 bg-blue-200 text-blue-700 rounded-full">
+                                  Zalecany
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-slate-500">{tmpl.desc}</div>
                           </div>
-                        </div>
+                          <ChevronRight className={`w-5 h-5 ${isSelected ? 'text-green-500' : 'text-slate-300'}`} />
+                        </button>
                       );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Single work type - show template list */}
-              {!hasMultipleWorkTypes && (
-                <div className="pt-2">
-                  <div className="text-sm text-slate-500 mb-2 px-1">Lub wybierz inny formularz:</div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {availableTemplates.map(tmpl => (
-                      <button
-                        key={tmpl.code}
-                        onClick={() => {
-                          setShowFormSelectionModal(false);
-                          window.location.hash = `#/construction/formulary/${selectedRequest.id}?template=${tmpl.code}`;
-                        }}
-                        className="w-full flex items-center gap-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition text-left"
-                      >
-                        <FileSpreadsheet className="w-5 h-5 text-slate-400" />
-                        <div>
-                          <div className="font-medium text-slate-900 text-sm">{tmpl.name}</div>
-                          <div className="text-xs text-slate-500">{tmpl.desc}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                    })
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      Brak dostępnych szablonów dla tego typu prac
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
+            {/* Footer */}
             <div className="p-6 border-t border-slate-200 flex justify-between">
               <button
                 onClick={() => {
-                  setShowFormSelectionModal(false);
-                  setWorkTypeTemplates({});
+                  if (wizardStep > 0) {
+                    setWizardStep(wizardStep - 1);
+                  } else {
+                    closeModal();
+                  }
                 }}
                 className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
               >
-                <ArrowLeft className="w-4 h-4" />
-                Wróć
+                <ChevronLeft className="w-4 h-4" />
+                {wizardStep > 0 ? 'Wstecz' : 'Anuluj'}
               </button>
-              {hasMultipleWorkTypes && allTemplatesSelected && (
+              {isLastStepComplete && (
                 <button
-                  onClick={handleGoToFormulary}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg"
+                  onClick={() => handleGoToFormulary(workTypeTemplates)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg"
                 >
+                  <Check className="w-4 h-4" />
                   Przejdź do formularza
-                  <ChevronRight className="w-4 h-4" />
                 </button>
               )}
             </div>
