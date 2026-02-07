@@ -547,6 +547,15 @@ const FORM_TEMPLATES: Record<KosztorysFormType, KosztorysFormTemplate> = {
   }
 };
 
+// Empty template for creating from scratch
+const EMPTY_TEMPLATE: KosztorysFormTemplate = {
+  form_type: 'CUSTOM' as KosztorysFormType,
+  title: 'NOWY FORMULARZ',
+  general_fields: [],
+  room_groups: [],
+  work_categories: []
+};
+
 interface FormularyPageProps {
   requestId?: string;
 }
@@ -747,6 +756,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
       const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
       const templatesParam = urlParams.get('templates');
       const singleTemplate = urlParams.get('template');
+      const isNewEmpty = urlParams.get('new') === 'true';
       let workTypeTemplatesMap: Record<string, string> = {};
 
       if (templatesParam) {
@@ -768,9 +778,13 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
       for (const wt of workTypes) {
         // Determine form type for this work type
         let formType = workTypeTemplatesMap[wt.code] as KosztorysFormType;
-        if (!formType) {
+        if (!formType && !isNewEmpty) {
           formType = getFormType(requestData.object_type, wt.code);
         }
+
+        // Use empty template if new=true
+        const templateToUse = isNewEmpty ? EMPTY_TEMPLATE : (FORM_TEMPLATES[formType] || EMPTY_TEMPLATE);
+        const formTypeToSave = isNewEmpty ? 'CUSTOM' : formType;
 
         // Load existing form for this work type
         const { data: formData } = await supabase
@@ -781,11 +795,11 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
             answers:kosztorys_form_answers(*)
           `)
           .eq('request_id', requestId)
-          .eq('form_type', formType)
+          .eq('form_type', formTypeToSave)
           .eq('is_current', true)
           .maybeSingle();
 
-        if (formData) {
+        if (formData && !isNewEmpty) {
           const answerMap = new Map<string, boolean>();
           if (formData.answers) {
             formData.answers.forEach((a: KosztorysFormAnswer) => {
@@ -794,7 +808,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           }
           formsMap[wt.code] = {
             form: formData,
-            template: FORM_TEMPLATES[formType],
+            template: templateToUse,
             answers: answerMap,
             generalData: formData.general_data || {}
           };
@@ -804,7 +818,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
             .from('kosztorys_forms')
             .insert({
               request_id: requestId,
-              form_type: formType,
+              form_type: formTypeToSave,
               version: 1,
               is_current: true,
               status: 'draft',
@@ -816,7 +830,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           if (createError) throw createError;
           formsMap[wt.code] = {
             form: newForm,
-            template: FORM_TEMPLATES[formType],
+            template: templateToUse,
             answers: new Map(),
             generalData: {}
           };
@@ -839,6 +853,11 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         if (formsMap[firstWorkType].template) {
           const allGroups = new Set(formsMap[firstWorkType].template.room_groups.map((g: any) => g.code));
           setExpandedGroups(allGroups);
+        }
+
+        // Auto-enable edit mode for empty templates
+        if (isNewEmpty || formsMap[firstWorkType].template?.room_groups?.length === 0) {
+          setIsEditMode(true);
         }
       }
     } catch (err) {
@@ -1595,6 +1614,65 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
 
         {/* Matrix */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-0">
+          {/* Empty state when no data */}
+          {template.room_groups.length === 0 && template.work_categories.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+              <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <FileSpreadsheet className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Pusty formularz</h3>
+              <p className="text-slate-500 mb-6 max-w-md">
+                Ten formularz jest pusty. Użyj trybu edycji, aby dodać grupy pomieszczeń i kategorie prac.
+              </p>
+              {!isEditMode && (
+                <button
+                  onClick={() => setIsEditMode(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Włącz tryb edycji
+                </button>
+              )}
+              {isEditMode && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      if (!template) return;
+                      const newGroup = {
+                        code: `GROUP_${Date.now()}`,
+                        name: 'Nowa grupa',
+                        rooms: []
+                      };
+                      const newTemplate = { ...template, room_groups: [...template.room_groups, newGroup] };
+                      setTemplate(newTemplate);
+                      hasChangesRef.current = true;
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Dodaj grupę pomieszczeń
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!template) return;
+                      const newCategory = {
+                        code: `CAT_${Date.now()}`,
+                        name: 'Nowa kategoria',
+                        work_types: []
+                      };
+                      const newTemplate = { ...template, work_categories: [...template.work_categories, newCategory] };
+                      setTemplate(newTemplate);
+                      hasChangesRef.current = true;
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Dodaj kategorię prac
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
           <div className="overflow-auto flex-1" style={{ maxHeight: 'calc(100vh - 400px)' }}>
             <table className="w-full border-collapse">
               {/* Header with work categories */}
@@ -2159,6 +2237,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
               </tbody>
             </table>
           </div>
+          )}
         </div>
 
       </div>
