@@ -222,7 +222,7 @@ export const RequestsPage: React.FC = () => {
         .select('*')
         .eq('company_id', currentUser.company_id)
         .eq('is_active', true)
-        .order('sort_order');
+        .order('name');
       if (data) setObjectTypes(data);
     } catch (err) {
       console.error('Error loading object types:', err);
@@ -237,7 +237,7 @@ export const RequestsPage: React.FC = () => {
         .select('*, object_type:kosztorys_object_types(*)')
         .eq('company_id', currentUser.company_id)
         .eq('is_active', true)
-        .order('sort_order');
+        .order('name');
       if (data) setObjectCategories(data);
     } catch (err) {
       console.error('Error loading object categories:', err);
