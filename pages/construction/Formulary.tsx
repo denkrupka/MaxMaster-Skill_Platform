@@ -1011,23 +1011,49 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
             <span className="text-slate-600">
               Zaznaczono: <strong className="text-blue-600">{getMarkedCount()}</strong> pozycji
             </span>
-            <span className="text-slate-400">|</span>
-            <span className="text-slate-500">
-              Możliwych: {getTotalPossible()}
-            </span>
           </div>
           <div className="flex items-center gap-2">
             {validation.errors.length > 0 && (
-              <span className="flex items-center gap-1 text-red-600 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                {validation.errors.length} błędów
-              </span>
+              <div className="relative group">
+                <span className="flex items-center gap-1 text-red-600 text-sm cursor-help">
+                  <AlertCircle className="w-4 h-4" />
+                  {validation.errors.length} błędów
+                </span>
+                <div className="absolute right-0 top-full mt-2 hidden group-hover:block bg-white border border-red-200 shadow-lg rounded-lg p-3 w-72 z-50">
+                  <div className="text-xs font-semibold text-red-700 mb-2 border-b border-red-100 pb-1">
+                    Lista błędów:
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {validation.errors.map((err, i) => (
+                      <div key={i} className="text-xs text-red-600 flex items-start gap-1">
+                        <span className="text-red-400 mt-0.5">•</span>
+                        <span>{err}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
             {validation.warnings.length > 0 && (
-              <span className="flex items-center gap-1 text-amber-600 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                {validation.warnings.length} ostrzeżeń
-              </span>
+              <div className="relative group">
+                <span className="flex items-center gap-1 text-amber-600 text-sm cursor-help">
+                  <AlertCircle className="w-4 h-4" />
+                  {validation.warnings.length} ostrzeżeń
+                </span>
+                <div className="absolute right-0 top-full mt-2 hidden group-hover:block bg-white border border-amber-200 shadow-lg rounded-lg p-3 w-72 z-50">
+                  <div className="text-xs font-semibold text-amber-700 mb-2 border-b border-amber-100 pb-1">
+                    Lista ostrzeżeń:
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {validation.warnings.map((warn, i) => (
+                      <div key={i} className="text-xs text-amber-600 flex items-start gap-1">
+                        <span className="text-amber-400 mt-0.5">•</span>
+                        <span>{warn}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
             {validation.isValid && validation.warnings.length === 0 && (
               <span className="flex items-center gap-1 text-green-600 text-sm">
@@ -1043,40 +1069,71 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               {/* Header with work categories */}
-              <thead>
+              <thead className="sticky top-0 z-30">
                 {/* Category row */}
                 <tr className="bg-slate-100">
                   <th className="sticky left-0 z-20 bg-slate-100 min-w-[250px] px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-r border-slate-200">
                     Pomieszczenie / Element
                   </th>
-                  {template.work_categories.map(category => (
-                    <th
-                      key={category.code}
-                      colSpan={category.work_types.length}
-                      className="px-2 py-2 text-center text-xs font-semibold text-slate-700 border-b border-r border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50"
-                    >
-                      {category.name}
-                    </th>
-                  ))}
+                  {template.work_categories.map((category, catIndex) => {
+                    // Color palette for categories
+                    const categoryColors = [
+                      'bg-blue-100 text-blue-800',
+                      'bg-indigo-100 text-indigo-800',
+                      'bg-purple-100 text-purple-800',
+                      'bg-violet-100 text-violet-800',
+                      'bg-fuchsia-100 text-fuchsia-800',
+                      'bg-pink-100 text-pink-800',
+                      'bg-rose-100 text-rose-800',
+                      'bg-cyan-100 text-cyan-800',
+                      'bg-teal-100 text-teal-800',
+                      'bg-emerald-100 text-emerald-800'
+                    ];
+                    const colorClass = categoryColors[catIndex % categoryColors.length];
+                    return (
+                      <th
+                        key={category.code}
+                        colSpan={category.work_types.length}
+                        className={`px-2 py-2 text-center text-xs font-semibold border-b border-r border-slate-200 ${colorClass}`}
+                        data-category-index={catIndex}
+                      >
+                        {category.name}
+                      </th>
+                    );
+                  })}
                 </tr>
                 {/* Work types row */}
                 <tr className="bg-slate-50">
                   <th className="sticky left-0 z-20 bg-slate-50 min-w-[250px] px-3 py-1 text-left text-xs text-slate-500 border-b border-r border-slate-200">
 
                   </th>
-                  {template.work_categories.flatMap(category =>
-                    category.work_types.map(workType => (
+                  {template.work_categories.flatMap((category, catIndex) => {
+                    // Match category colors for work type cells
+                    const categoryBgColors = [
+                      'bg-blue-50',
+                      'bg-indigo-50',
+                      'bg-purple-50',
+                      'bg-violet-50',
+                      'bg-fuchsia-50',
+                      'bg-pink-50',
+                      'bg-rose-50',
+                      'bg-cyan-50',
+                      'bg-teal-50',
+                      'bg-emerald-50'
+                    ];
+                    const bgColorClass = categoryBgColors[catIndex % categoryBgColors.length];
+                    return category.work_types.map(workType => (
                       <th
                         key={workType.code}
-                        className="px-1 py-1 text-center min-w-[40px] border-b border-r border-slate-200 group relative"
+                        className={`px-1 py-2 text-center min-w-[80px] border-b border-r border-slate-200 group relative ${bgColorClass}`}
                         title={workType.description}
                       >
-                        <div className="text-[10px] text-slate-500 font-normal leading-tight writing-mode-vertical transform -rotate-45 origin-center h-16 flex items-end justify-center whitespace-nowrap overflow-hidden">
+                        <div className="text-[10px] text-slate-600 font-normal leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                           {workType.name}
                         </div>
                       </th>
-                    ))
-                  )}
+                    ));
+                  })}
                 </tr>
               </thead>
 
@@ -1112,8 +1169,22 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                         <td className="sticky left-0 z-10 bg-white px-3 py-2 text-sm text-slate-700 border-b border-r border-slate-200">
                           <span className="pl-6">{room.name}</span>
                         </td>
-                        {template.work_categories.flatMap(category =>
-                          category.work_types.map(workType => {
+                        {template.work_categories.flatMap((category, catIndex) => {
+                          // Light category background colors for cells
+                          const categoryBgColors = [
+                            'bg-blue-50/30',
+                            'bg-indigo-50/30',
+                            'bg-purple-50/30',
+                            'bg-violet-50/30',
+                            'bg-fuchsia-50/30',
+                            'bg-pink-50/30',
+                            'bg-rose-50/30',
+                            'bg-cyan-50/30',
+                            'bg-teal-50/30',
+                            'bg-emerald-50/30'
+                          ];
+                          const bgColorClass = categoryBgColors[catIndex % categoryBgColors.length];
+                          return category.work_types.map(workType => {
                             const isMarked = getCellValue(room.code, workType.code);
                             return (
                               <td
@@ -1121,7 +1192,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                                 className={`text-center p-1 border-b border-r border-slate-100 cursor-pointer transition-colors ${
                                   isMarked
                                     ? 'bg-green-100 hover:bg-green-200'
-                                    : 'hover:bg-blue-50'
+                                    : `${bgColorClass} hover:bg-blue-50`
                                 }`}
                                 onClick={() => handleCellClick(room.code, workType.code)}
                               >
@@ -1130,8 +1201,8 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                                 )}
                               </td>
                             );
-                          })
-                        )}
+                          });
+                        })}
                       </tr>
                     ))}
                   </React.Fragment>
@@ -1328,13 +1399,6 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         </div>
       )}
 
-      {/* CSS for vertical text */}
-      <style>{`
-        .writing-mode-vertical {
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
-        }
-      `}</style>
     </div>
   );
 };

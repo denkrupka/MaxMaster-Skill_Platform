@@ -55,21 +55,35 @@ const EMPTY_FORM: DepartmentFormData = {
 };
 
 // ---------------------------------------------------------------
-// Helper: generate Kod obiektu from name
+// Helper: generate Kod obiektu from city and name
+// Format: MIASTO\XXY\RR
+// MIASTO - город из адреса объекта (первые 3 буквы)
+// XX - первые 2 буквы первого слова названия инвестиции
+// Y - первая буква второго слова названия (если есть)
+// RR - последние 2 цифры года
+// Пример: "Osiedle Słoneczne" в Warszawa -> "WAR\OSS\26"
 // ---------------------------------------------------------------
-function generateKodObiektu(name: string): string {
-  const year = new Date().getFullYear().toString().slice(-2);
-  const words = name.trim().split(/\s+/).filter(Boolean);
+function generateKodObiektu(name: string, city?: string): string {
+  if (!name) return '';
 
-  let prefix = '';
-  if (words.length === 0) return '';
-  if (words.length === 1) {
-    prefix = words[0].substring(0, 2).toUpperCase();
-  } else {
-    prefix = (words[0][0] + words[1][0]).toUpperCase();
+  // City part (first 3 letters, uppercase, padded with X if needed)
+  const cityPart = city ? city.trim().toUpperCase().slice(0, 3).padEnd(3, 'X') : 'XXX';
+
+  // Name part
+  const words = name.trim().split(/\s+/).filter(w => w.length > 0);
+  let namePart = '';
+  if (words.length >= 2) {
+    // First 2 letters of first word + first letter of second word
+    namePart = (words[0].slice(0, 2) + words[1][0]).toUpperCase();
+  } else if (words.length === 1) {
+    // First 3 letters of the only word
+    namePart = words[0].slice(0, 3).toUpperCase();
   }
 
-  return `${prefix}${year}`;
+  // Year part (last 2 digits)
+  const year = String(new Date().getFullYear()).slice(-2);
+
+  return `${cityPart}\\${namePart}\\${year}`;
 }
 
 // ---------------------------------------------------------------
@@ -533,7 +547,7 @@ export const DepartmentsPage: React.FC = () => {
     // Determine kod_obiektu: use manual value or auto-generate
     const kodValue = form.kod_manual && form.kod_obiektu.trim()
       ? form.kod_obiektu.trim()
-      : generateKodObiektu(form.name);
+      : generateKodObiektu(form.name, form.address_city);
 
     const payload: Record<string, any> = {
       company_id: currentCompany.id,
@@ -1098,7 +1112,7 @@ export const DepartmentsPage: React.FC = () => {
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      value={form.kod_manual ? form.kod_obiektu : (form.name.trim() ? generateKodObiektu(form.name) : '')}
+                      value={form.kod_manual ? form.kod_obiektu : (form.name.trim() ? generateKodObiektu(form.name, form.address_city) : '')}
                       onChange={e => setForm(prev => ({ ...prev, kod_obiektu: e.target.value, kod_manual: true }))}
                       readOnly={!form.kod_manual}
                       placeholder="Auto"
@@ -1115,7 +1129,7 @@ export const DepartmentsPage: React.FC = () => {
                       if (form.kod_manual) {
                         setForm(prev => ({ ...prev, kod_manual: false, kod_obiektu: '' }));
                       } else {
-                        setForm(prev => ({ ...prev, kod_manual: true, kod_obiektu: generateKodObiektu(prev.name) }));
+                        setForm(prev => ({ ...prev, kod_manual: true, kod_obiektu: generateKodObiektu(prev.name, prev.address_city) }));
                       }
                     }}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition ${

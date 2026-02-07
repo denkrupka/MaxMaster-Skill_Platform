@@ -165,6 +165,11 @@ export const RequestsPage: React.FC = () => {
   const [objectTypes, setObjectTypes] = useState<KosztorysObjectTypeRecord[]>([]);
   const [objectCategories, setObjectCategories] = useState<KosztorysObjectCategoryRecord[]>([]);
 
+  // Work types (Rodzaj prac) - multi-select
+  const [workTypes, setWorkTypes] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [selectedWorkTypes, setSelectedWorkTypes] = useState<string[]>([]); // Selected work type IDs
+  const [showWorkTypesDropdown, setShowWorkTypesDropdown] = useState(false);
+
   // Address autocomplete
   const [companyAddressSuggestions, setCompanyAddressSuggestions] = useState<OSMAddress[]>([]);
   const [objectAddressSuggestions, setObjectAddressSuggestions] = useState<OSMAddress[]>([]);
@@ -180,6 +185,7 @@ export const RequestsPage: React.FC = () => {
       loadUsers();
       loadObjectTypes();
       loadObjectCategories();
+      loadWorkTypes();
     }
   }, [currentUser]);
 
@@ -192,7 +198,8 @@ export const RequestsPage: React.FC = () => {
           *,
           assigned_user:users!kosztorys_requests_assigned_user_id_fkey(id, first_name, last_name, email),
           created_by:users!kosztorys_requests_created_by_id_fkey(id, first_name, last_name),
-          contacts:kosztorys_request_contacts(*)
+          contacts:kosztorys_request_contacts(*),
+          work_types:kosztorys_request_work_types(work_type_id, work_type:kosztorys_work_types(id, code, name))
         `)
         .eq('company_id', currentUser.company_id)
         .order('created_at', { ascending: false });
@@ -237,6 +244,34 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
+  const loadWorkTypes = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('kosztorys_work_types')
+        .select('id, code, name')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('sort_order');
+      if (data) {
+        setWorkTypes(data);
+      } else {
+        // Fallback to default work types if table doesn't exist or is empty
+        setWorkTypes([
+          { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+          { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
+        ]);
+      }
+    } catch (err) {
+      console.error('Error loading work types:', err);
+      // Fallback to default work types
+      setWorkTypes([
+        { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+        { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
+      ]);
+    }
+  };
+
   const loadUsers = async () => {
     if (!currentUser) return;
     try {
@@ -258,24 +293,42 @@ export const RequestsPage: React.FC = () => {
     return `ZAP-${year}-${num}`;
   };
 
-  // Generate object code from name: "Warszawa Centrum" -> "WC26"
-  const generateObjectCode = (name: string): string => {
-    if (!name) return '';
-    const words = name.trim().split(/\s+/).filter(w => w.length > 0);
-    const initials = words.map(w => w[0].toUpperCase()).join('').slice(0, 4);
+  // Generate object code: MIASTO\XXY\RR
+  // MIASTO - город из адреса объекта (первые 3 буквы)
+  // XX - первые 2 буквы первого слова названия инвестиции
+  // Y - первая буква второго слова названия
+  // RR - последние 2 цифры года
+  // Пример: "Osiedle Słoneczne" в Warszawa -> "WAR\OSS\26"
+  const generateObjectCode = (city: string, investmentName: string): string => {
+    if (!investmentName) return '';
+
+    // City part - first 3 letters or "XXX" if empty
+    const cityPart = city ? city.trim().toUpperCase().slice(0, 3).padEnd(3, 'X') : 'XXX';
+
+    // Name part - XX from first word, Y from second word
+    const words = investmentName.trim().split(/\s+/).filter(w => w.length > 0);
+    let namePart = '';
+    if (words.length >= 2) {
+      namePart = (words[0].slice(0, 2) + words[1][0]).toUpperCase();
+    } else if (words.length === 1) {
+      namePart = words[0].slice(0, 3).toUpperCase();
+    }
+
+    // Year part
     const year = String(new Date().getFullYear()).slice(-2);
-    return `${initials}${year}`;
+
+    return `${cityPart}\\${namePart}\\${year}`;
   };
 
-  // Auto-generate object code when name changes
+  // Auto-generate object code when name or city changes
   useEffect(() => {
     if (formData.investment_name && !editingObjectCode && !editingRequest) {
       setFormData(prev => ({
         ...prev,
-        object_code: generateObjectCode(prev.investment_name)
+        object_code: generateObjectCode(prev.object_city, prev.investment_name)
       }));
     }
-  }, [formData.investment_name, editingObjectCode, editingRequest]);
+  }, [formData.investment_name, formData.object_city, editingObjectCode, editingRequest]);
 
   // Fetch company data from GUS by NIP
   const handleFetchGus = async () => {
@@ -519,6 +572,22 @@ export const RequestsPage: React.FC = () => {
         await supabase.from('kosztorys_request_contacts').insert(contactsData);
       }
 
+      // Save work types to junction table
+      // First, delete existing work types for this request
+      await supabase
+        .from('kosztorys_request_work_types')
+        .delete()
+        .eq('request_id', requestId);
+
+      // Then insert selected work types
+      if (selectedWorkTypes.length > 0) {
+        const workTypesData = selectedWorkTypes.map(workTypeId => ({
+          request_id: requestId,
+          work_type_id: workTypeId
+        }));
+        await supabase.from('kosztorys_request_work_types').insert(workTypesData);
+      }
+
       await loadRequests();
       handleCloseModal();
     } catch (err) {
@@ -620,16 +689,40 @@ export const RequestsPage: React.FC = () => {
       } else {
         setContacts([{ ...initialContactData }]);
       }
+
+      // Load selected work types from junction table
+      loadRequestWorkTypes(request.id);
     } else {
       setEditingRequest(null);
       setEditingObjectCode(false);
       setFormData({ ...initialFormData, assigned_user_id: currentUser?.id || '' });
       setContacts([{ ...initialContactData }]);
+      setSelectedWorkTypes([]);
     }
     setGusError(null);
     setShowCompanyAddressSuggestions(false);
     setShowObjectAddressSuggestions(false);
+    setShowWorkTypesDropdown(false);
     setShowModal(true);
+  };
+
+  const loadRequestWorkTypes = async (requestId: string) => {
+    try {
+      const { data } = await supabase
+        .from('kosztorys_request_work_types')
+        .select('work_type_id')
+        .eq('request_id', requestId);
+
+      if (data) {
+        setSelectedWorkTypes(data.map(d => d.work_type_id));
+      } else {
+        // Fallback: convert legacy installation_types to work type IDs
+        setSelectedWorkTypes([]);
+      }
+    } catch (err) {
+      console.error('Error loading request work types:', err);
+      setSelectedWorkTypes([]);
+    }
   };
 
   const handleCloseModal = () => {
@@ -638,9 +731,11 @@ export const RequestsPage: React.FC = () => {
     setEditingObjectCode(false);
     setFormData(initialFormData);
     setContacts([{ ...initialContactData }]);
+    setSelectedWorkTypes([]);
     setGusError(null);
     setShowCompanyAddressSuggestions(false);
     setShowObjectAddressSuggestions(false);
+    setShowWorkTypesDropdown(false);
   };
 
   const handleViewRequest = (request: KosztorysRequest) => {
@@ -867,7 +962,7 @@ export const RequestsPage: React.FC = () => {
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Numer</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Klient / Inwestycja</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Typ</th>
-                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Instalacje</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Rodzaj prac</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Status</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Termin</th>
                   <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Odpowiedzialny</th>
@@ -912,7 +1007,9 @@ export const RequestsPage: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm text-slate-600">
-                          {request.installation_types}
+                          {request.work_types && request.work_types.length > 0
+                            ? request.work_types.map(wt => wt.work_type?.code || wt.work_type_id).join(', ')
+                            : request.installation_types || '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -940,7 +1037,49 @@ export const RequestsPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <ChevronRight className="w-5 h-5 text-slate-400" />
+                        <div className="flex items-center gap-2">
+                          {request.status === 'new' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStatusChange(request, 'in_progress');
+                                setSelectedRequest(request);
+                                setShowPrepareOfferModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-1"
+                              title="Weź w pracę"
+                            >
+                              <Play className="w-3.5 h-3.5" />
+                              Weź w pracę
+                            </button>
+                          )}
+                          {request.status === 'in_progress' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRequest(request);
+                                setShowPrepareOfferModal(true);
+                              }}
+                              className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-1"
+                              title="Przygotuj ofertę"
+                            >
+                              <Calculator className="w-3.5 h-3.5" />
+                              Przygotuj
+                            </button>
+                          )}
+                          {!['new', 'in_progress'].includes(request.status) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewRequest(request);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                              title="Zobacz szczegóły"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1237,17 +1376,52 @@ export const RequestsPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Typ instalacji *</label>
-                    <select
-                      value={formData.installation_types}
-                      onChange={e => setFormData(prev => ({ ...prev, installation_types: e.target.value as KosztorysInstallationType }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {Object.entries(INSTALLATION_TYPE_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj prac *</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowWorkTypesDropdown(!showWorkTypesDropdown)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
+                      >
+                        <span className={selectedWorkTypes.length === 0 ? 'text-slate-400' : 'text-slate-900'}>
+                          {selectedWorkTypes.length === 0
+                            ? 'Wybierz rodzaj prac...'
+                            : workTypes
+                                .filter(wt => selectedWorkTypes.includes(wt.id))
+                                .map(wt => wt.code)
+                                .join(', ')}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showWorkTypesDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showWorkTypesDropdown && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                          {workTypes.map(wt => (
+                            <label
+                              key={wt.id}
+                              className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedWorkTypes.includes(wt.id)}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedWorkTypes(prev => [...prev, wt.id]);
+                                  } else {
+                                    setSelectedWorkTypes(prev => prev.filter(id => id !== wt.id));
+                                  }
+                                }}
+                                className="mr-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-slate-700">{wt.name}</span>
+                            </label>
+                          ))}
+                          {workTypes.length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-500">Brak typów prac</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
@@ -1444,18 +1618,221 @@ export const RequestsPage: React.FC = () => {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1">
-              {/* Status change - moved to top */}
-              <div className="mb-6 pb-6 border-b border-slate-200">
+              {/* Główny przycisk akcji - Weź w pracę otwiera Przygotuj ofertę */}
+              {selectedRequest.status === 'new' && (
+                <div className="mb-6">
+                  <button
+                    onClick={() => {
+                      handleStatusChange(selectedRequest, 'in_progress');
+                      setShowPrepareOfferModal(true);
+                    }}
+                    className="w-full px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-5 h-5" />
+                    Weź w pracę
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* Left column */}
+                <div className="space-y-6">
+                  {/* Blok: Dane Klienta */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-500" />
+                      Dane Klienta
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      {selectedRequest.nip && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">NIP:</span>
+                          <span className="font-mono font-medium">{selectedRequest.nip}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Nazwa firmy:</span>
+                        <span className="font-medium">{selectedRequest.client_name}</span>
+                      </div>
+                      {(selectedRequest.company_street || selectedRequest.company_city) && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Adres:</span>
+                          <span className="font-medium text-right">
+                            {[
+                              selectedRequest.company_street,
+                              selectedRequest.company_street_number
+                            ].filter(Boolean).join(' ')}
+                            {selectedRequest.company_city && (
+                              <>, {selectedRequest.company_postal_code} {selectedRequest.company_city}</>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {selectedRequest.internal_notes && (
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <span className="text-slate-500 text-xs block mb-1">Notatka wewnętrzna:</span>
+                          <p className="text-slate-700 bg-amber-50 p-2 rounded text-xs">{selectedRequest.internal_notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Blok: Przedstawiciel firmy */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <User className="w-5 h-5 text-green-500" />
+                      Przedstawiciel firmy
+                    </h3>
+                    {(() => {
+                      const primaryContact = selectedRequest.contacts?.find(c => c.is_primary) || selectedRequest.contacts?.[0];
+                      if (primaryContact) {
+                        return (
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Imię:</span>
+                              <span className="font-medium">{primaryContact.first_name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Nazwisko:</span>
+                              <span className="font-medium">{primaryContact.last_name}</span>
+                            </div>
+                            {primaryContact.phone && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Telefon:</span>
+                                <a href={`tel:${primaryContact.phone}`} className="text-blue-600 hover:underline font-medium">
+                                  {primaryContact.phone}
+                                </a>
+                              </div>
+                            )}
+                            {primaryContact.email && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Email:</span>
+                                <a href={`mailto:${primaryContact.email}`} className="text-blue-600 hover:underline font-medium">
+                                  {primaryContact.email}
+                                </a>
+                              </div>
+                            )}
+                            {primaryContact.position && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Stanowisko:</span>
+                                <span className="font-medium">{primaryContact.position}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      } else {
+                        // Fallback to legacy fields
+                        return (
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center gap-2">
+                              <span>{selectedRequest.contact_person}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-slate-400" />
+                              <a href={`tel:${selectedRequest.phone}`} className="text-blue-600 hover:underline">
+                                {selectedRequest.phone}
+                              </a>
+                            </div>
+                            {selectedRequest.email && (
+                              <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-slate-400" />
+                                <a href={`mailto:${selectedRequest.email}`} className="text-blue-600 hover:underline">
+                                  {selectedRequest.email}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                </div>
+
+                {/* Right column */}
+                <div className="space-y-6">
+                  {/* Blok: Parametry */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <FileSpreadsheet className="w-5 h-5 text-purple-500" />
+                      Parametry
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Typ obiektu:</span>
+                        <span className="font-medium">{OBJECT_TYPE_LABELS[selectedRequest.object_type]}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Rodzaj prac:</span>
+                        <span className="font-medium">{INSTALLATION_TYPE_LABELS[selectedRequest.installation_types]}</span>
+                      </div>
+                      {selectedRequest.request_source && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Źródło zapytania:</span>
+                          <span className="font-medium">{SOURCE_LABELS[selectedRequest.request_source]}</span>
+                        </div>
+                      )}
+                      {selectedRequest.object_code && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Kod obiektu:</span>
+                          <span className="font-mono font-medium bg-slate-200 px-2 py-0.5 rounded">{selectedRequest.object_code}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Blok: Terminy i odpowiedzialny */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-amber-500" />
+                      Terminy
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Data utworzenia:</span>
+                        <span className="font-medium">{formatDate(selectedRequest.created_at)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Planowana odpowiedź:</span>
+                        <span className={`font-medium px-2 py-0.5 rounded ${getDeadlineStyle(getDeadlineStatus(selectedRequest))}`}>
+                          {formatDate(selectedRequest.planned_response_date)}
+                          {isOverdue(selectedRequest) && ' (przeterminowane)'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-200">
+                        <span className="text-slate-500">Odpowiedzialny:</span>
+                        {selectedRequest.assigned_user ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-medium text-blue-700">
+                                {selectedRequest.assigned_user.first_name[0]}
+                                {selectedRequest.assigned_user.last_name[0]}
+                              </span>
+                            </div>
+                            <span className="font-medium">{selectedRequest.assigned_user.first_name} {selectedRequest.assigned_user.last_name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">Nie przypisano</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Uwagi klienta */}
+                  {selectedRequest.notes && (
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-slate-900 mb-3">Uwagi od klienta</h3>
+                      <p className="text-sm text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+                        {selectedRequest.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status change buttons */}
+              <div className="mt-6 pt-6 border-t border-slate-200">
                 <h3 className="font-semibold text-slate-900 mb-3">Realizacja</h3>
                 <div className="flex flex-wrap gap-2">
-                  {selectedRequest.status === 'new' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedRequest, 'in_progress')}
-                      className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200"
-                    >
-                      Weź w pracę
-                    </button>
-                  )}
                   {selectedRequest.status === 'in_progress' && (
                     <button
                       onClick={() => setShowPrepareOfferModal(true)}
@@ -1513,122 +1890,13 @@ export const RequestsPage: React.FC = () => {
                       Aktywuj
                     </button>
                   )}
-                  {!['closed', 'cancelled'].includes(selectedRequest.status) && (
+                  {!['closed', 'cancelled', 'new'].includes(selectedRequest.status) && (
                     <button
                       onClick={() => handleStatusChange(selectedRequest, 'cancelled')}
                       className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200"
                     >
                       Anuluj
                     </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                {/* Left column */}
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-slate-400" />
-                      Dane klienta
-                    </h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-slate-400" />
-                        <span>{selectedRequest.contact_person}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-slate-400" />
-                        <a href={`tel:${selectedRequest.phone}`} className="text-blue-600 hover:underline">
-                          {selectedRequest.phone}
-                        </a>
-                      </div>
-                      {selectedRequest.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="w-4 h-4 text-slate-400" />
-                          <a href={`mailto:${selectedRequest.email}`} className="text-blue-600 hover:underline">
-                            {selectedRequest.email}
-                          </a>
-                        </div>
-                      )}
-                      {selectedRequest.address && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-slate-400" />
-                          <span>{selectedRequest.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-semibold text-slate-900 mb-3">Parametry</h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Typ obiektu:</span>
-                        <span className="font-medium">{OBJECT_TYPE_LABELS[selectedRequest.object_type]}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Instalacje:</span>
-                        <span className="font-medium">{INSTALLATION_TYPE_LABELS[selectedRequest.installation_types]}</span>
-                      </div>
-                      {selectedRequest.request_source && (
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Źródło:</span>
-                          <span className="font-medium">{SOURCE_LABELS[selectedRequest.request_source]}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right column */}
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-slate-400" />
-                      Terminy
-                    </h3>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Data utworzenia:</span>
-                        <span className="font-medium">{formatDate(selectedRequest.created_at)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Planowana odpowiedź:</span>
-                        <span className={`font-medium px-2 py-0.5 rounded ${getDeadlineStyle(getDeadlineStatus(selectedRequest))}`}>
-                          {formatDate(selectedRequest.planned_response_date)}
-                          {isOverdue(selectedRequest) && ' (przeterminowane)'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-semibold text-slate-900 mb-3">Odpowiedzialny</h3>
-                    <div className="text-sm">
-                      {selectedRequest.assigned_user ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-blue-700">
-                              {selectedRequest.assigned_user.first_name[0]}
-                              {selectedRequest.assigned_user.last_name[0]}
-                            </span>
-                          </div>
-                          <span>{selectedRequest.assigned_user.first_name} {selectedRequest.assigned_user.last_name}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">Nie przypisano</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {selectedRequest.notes && (
-                    <div>
-                      <h3 className="font-semibold text-slate-900 mb-3">Uwagi</h3>
-                      <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
-                        {selectedRequest.notes}
-                      </p>
-                    </div>
                   )}
                 </div>
               </div>

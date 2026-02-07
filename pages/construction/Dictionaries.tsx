@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
   Wrench, Package, Monitor, FileText, Link2, ChevronDown,
-  Settings, AlertCircle, ChevronRight
+  Settings, AlertCircle, ChevronRight, ClipboardList, GripVertical,
+  Layers, FolderOpen
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -13,12 +14,20 @@ import type {
   KosztorysTemplateTask,
   KosztorysMappingRule,
   KosztorysFormType,
+  KosztorysFormTemplateDB,
+  KosztorysFormRoomGroupDB,
+  KosztorysFormRoomDB,
+  KosztorysFormWorkCategoryDB,
+  KosztorysFormWorkTypeDB,
+  KosztorysWorkTypeRecord,
 } from '../../types';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping';
+type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'formularze';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
+  { id: 'rodzaj_prac', label: 'Rodzaj prac', icon: ClipboardList },
+  { id: 'formularze', label: 'Formularze', icon: Layers },
   { id: 'work_types', label: 'Typy prac', icon: Wrench },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
@@ -113,7 +122,7 @@ export const DictionariesPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
 
-  const [activeTab, setActiveTab] = useState<TabType>('work_types');
+  const [activeTab, setActiveTab] = useState<TabType>('rodzaj_prac');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -153,6 +162,32 @@ export const DictionariesPage: React.FC = () => {
   // ============ Delete confirmations ============
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ type: string; id: string } | null>(null);
 
+  // ============ Rodzaj prac (request work types) ============
+  const [requestWorkTypes, setRequestWorkTypes] = useState<KosztorysWorkTypeRecord[]>([]);
+  const [requestWorkTypeDialog, setRequestWorkTypeDialog] = useState(false);
+  const [editingRequestWorkType, setEditingRequestWorkType] = useState<Partial<KosztorysWorkTypeRecord> | null>(null);
+  const [requestWorkTypeSearch, setRequestWorkTypeSearch] = useState('');
+
+  // ============ Formularze (form templates) ============
+  const [formTemplates, setFormTemplates] = useState<KosztorysFormTemplateDB[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<KosztorysFormTemplateDB | null>(null);
+  const [formRoomGroups, setFormRoomGroups] = useState<KosztorysFormRoomGroupDB[]>([]);
+  const [formRooms, setFormRooms] = useState<KosztorysFormRoomDB[]>([]);
+  const [formWorkCategories, setFormWorkCategories] = useState<KosztorysFormWorkCategoryDB[]>([]);
+  const [formWorkTypesDB, setFormWorkTypesDB] = useState<KosztorysFormWorkTypeDB[]>([]);
+  const [formTemplateDialog, setFormTemplateDialog] = useState(false);
+  const [roomGroupDialog, setRoomGroupDialog] = useState(false);
+  const [roomDialog, setRoomDialog] = useState(false);
+  const [workCategoryDialog, setWorkCategoryDialog] = useState(false);
+  const [workTypeDBDialog, setWorkTypeDBDialog] = useState(false);
+  const [editingFormTemplate, setEditingFormTemplate] = useState<Partial<KosztorysFormTemplateDB> | null>(null);
+  const [editingRoomGroup, setEditingRoomGroup] = useState<Partial<KosztorysFormRoomGroupDB> | null>(null);
+  const [editingRoom, setEditingRoom] = useState<Partial<KosztorysFormRoomDB> | null>(null);
+  const [editingWorkCategory, setEditingWorkCategory] = useState<Partial<KosztorysFormWorkCategoryDB> | null>(null);
+  const [editingWorkTypeDB, setEditingWorkTypeDB] = useState<Partial<KosztorysFormWorkTypeDB> | null>(null);
+  const [selectedRoomGroup, setSelectedRoomGroup] = useState<KosztorysFormRoomGroupDB | null>(null);
+  const [selectedWorkCategory, setSelectedWorkCategory] = useState<KosztorysFormWorkCategoryDB | null>(null);
+
   // ============ Загрузка данных ============
   useEffect(() => {
     if (currentUser) {
@@ -169,6 +204,8 @@ export const DictionariesPage: React.FC = () => {
         loadEquipment(),
         loadTemplateTasks(),
         loadMappingRules(),
+        loadRequestWorkTypes(),
+        loadFormTemplates(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -268,6 +305,101 @@ export const DictionariesPage: React.FC = () => {
     } catch (err) {
       console.error('Error loading mapping rules:', err);
       setMappingRules([]);
+    }
+  };
+
+  // Load request work types (Rodzaj prac for multi-select in requests)
+  const loadRequestWorkTypes = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_work_types')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setRequestWorkTypes(data || []);
+    } catch (err) {
+      console.error('Error loading request work types:', err);
+      setRequestWorkTypes([]);
+    }
+  };
+
+  // Load form templates (Formularze)
+  const loadFormTemplates = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_form_templates_db')
+        .select(`
+          *,
+          room_groups:kosztorys_form_room_groups_db(
+            *,
+            rooms:kosztorys_form_rooms_db(*)
+          ),
+          work_categories:kosztorys_form_work_categories_db(
+            *,
+            work_types:kosztorys_form_work_types_db(*)
+          )
+        `)
+        .eq('company_id', currentUser.company_id)
+        .order('form_type', { ascending: true });
+
+      if (error) throw error;
+      setFormTemplates(data || []);
+    } catch (err) {
+      console.error('Error loading form templates:', err);
+      setFormTemplates([]);
+    }
+  };
+
+  const loadFormTemplateDetails = async (templateId: string) => {
+    try {
+      // Load room groups
+      const { data: roomGroups } = await supabase
+        .from('kosztorys_form_room_groups_db')
+        .select('*')
+        .eq('template_id', templateId)
+        .order('sort_order');
+      setFormRoomGroups(roomGroups || []);
+
+      // Load rooms for all groups
+      if (roomGroups && roomGroups.length > 0) {
+        const groupIds = roomGroups.map(g => g.id);
+        const { data: rooms } = await supabase
+          .from('kosztorys_form_rooms_db')
+          .select('*')
+          .in('group_id', groupIds)
+          .order('sort_order');
+        setFormRooms(rooms || []);
+      } else {
+        setFormRooms([]);
+      }
+
+      // Load work categories
+      const { data: categories } = await supabase
+        .from('kosztorys_form_work_categories_db')
+        .select('*')
+        .eq('template_id', templateId)
+        .order('sort_order');
+      setFormWorkCategories(categories || []);
+
+      // Load work types for all categories
+      if (categories && categories.length > 0) {
+        const categoryIds = categories.map(c => c.id);
+        const { data: workTypesData } = await supabase
+          .from('kosztorys_form_work_types_db')
+          .select('*')
+          .in('category_id', categoryIds)
+          .order('sort_order');
+        setFormWorkTypesDB(workTypesData || []);
+      } else {
+        setFormWorkTypesDB([]);
+      }
+    } catch (err) {
+      console.error('Error loading form template details:', err);
     }
   };
 
@@ -685,6 +817,1051 @@ export const DictionariesPage: React.FC = () => {
       m.work_code?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
       m.form_type?.toLowerCase().includes(mappingSearch.toLowerCase())
     ), [mappingRules, mappingSearch]);
+
+  // Filtered request work types
+  const filteredRequestWorkTypes = useMemo(() =>
+    requestWorkTypes.filter(wt =>
+      wt.name?.toLowerCase().includes(requestWorkTypeSearch.toLowerCase()) ||
+      wt.code?.toLowerCase().includes(requestWorkTypeSearch.toLowerCase())
+    ), [requestWorkTypes, requestWorkTypeSearch]);
+
+  // ============ CRUD for request work types ============
+  const handleSaveRequestWorkType = async () => {
+    if (!editingRequestWorkType || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingRequestWorkType.id) {
+        const { error } = await supabase
+          .from('kosztorys_work_types')
+          .update({
+            code: editingRequestWorkType.code,
+            name: editingRequestWorkType.name,
+            description: editingRequestWorkType.description,
+            is_active: editingRequestWorkType.is_active,
+            sort_order: editingRequestWorkType.sort_order || 0,
+          })
+          .eq('id', editingRequestWorkType.id);
+
+        if (error) throw error;
+        showNotification('Rodzaj prac zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_work_types')
+          .insert({
+            code: editingRequestWorkType.code,
+            name: editingRequestWorkType.name,
+            description: editingRequestWorkType.description,
+            is_active: editingRequestWorkType.is_active ?? true,
+            sort_order: requestWorkTypes.length,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Rodzaj prac dodany', 'success');
+      }
+
+      setRequestWorkTypeDialog(false);
+      setEditingRequestWorkType(null);
+      await loadRequestWorkTypes();
+    } catch (error: any) {
+      console.error('Error saving request work type:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteRequestWorkType = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('kosztorys_work_types')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      showNotification('Rodzaj prac usunięty', 'success');
+      await loadRequestWorkTypes();
+    } catch (error: any) {
+      console.error('Error deleting request work type:', error);
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+  };
+
+  // ============ CRUD for form templates ============
+  const handleSaveFormTemplate = async () => {
+    if (!editingFormTemplate || !currentUser) return;
+    setSaving(true);
+
+    try {
+      if (editingFormTemplate.id) {
+        const { error } = await supabase
+          .from('kosztorys_form_templates_db')
+          .update({
+            form_type: editingFormTemplate.form_type,
+            title: editingFormTemplate.title,
+            object_type: editingFormTemplate.object_type,
+            is_active: editingFormTemplate.is_active,
+          })
+          .eq('id', editingFormTemplate.id);
+
+        if (error) throw error;
+        showNotification('Formularz zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_form_templates_db')
+          .insert({
+            form_type: editingFormTemplate.form_type,
+            title: editingFormTemplate.title,
+            object_type: editingFormTemplate.object_type,
+            is_active: editingFormTemplate.is_active ?? true,
+            company_id: currentUser.company_id,
+          });
+
+        if (error) throw error;
+        showNotification('Formularz dodany', 'success');
+      }
+
+      setFormTemplateDialog(false);
+      setEditingFormTemplate(null);
+      await loadFormTemplates();
+    } catch (error: any) {
+      console.error('Error saving form template:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveRoomGroup = async () => {
+    if (!editingRoomGroup || !selectedTemplate) return;
+    setSaving(true);
+
+    try {
+      if (editingRoomGroup.id) {
+        const { error } = await supabase
+          .from('kosztorys_form_room_groups_db')
+          .update({
+            code: editingRoomGroup.code,
+            name: editingRoomGroup.name,
+            color: editingRoomGroup.color,
+            sort_order: editingRoomGroup.sort_order || 0,
+          })
+          .eq('id', editingRoomGroup.id);
+
+        if (error) throw error;
+        showNotification('Grupa pomieszczeń zaktualizowana', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_form_room_groups_db')
+          .insert({
+            template_id: selectedTemplate.id,
+            code: editingRoomGroup.code,
+            name: editingRoomGroup.name,
+            color: editingRoomGroup.color || '#f59e0b',
+            sort_order: formRoomGroups.length,
+          });
+
+        if (error) throw error;
+        showNotification('Grupa pomieszczeń dodana', 'success');
+      }
+
+      setRoomGroupDialog(false);
+      setEditingRoomGroup(null);
+      await loadFormTemplateDetails(selectedTemplate.id);
+    } catch (error: any) {
+      console.error('Error saving room group:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveRoom = async () => {
+    if (!editingRoom || !selectedRoomGroup) return;
+    setSaving(true);
+
+    try {
+      if (editingRoom.id) {
+        const { error } = await supabase
+          .from('kosztorys_form_rooms_db')
+          .update({
+            code: editingRoom.code,
+            name: editingRoom.name,
+            sort_order: editingRoom.sort_order || 0,
+          })
+          .eq('id', editingRoom.id);
+
+        if (error) throw error;
+        showNotification('Pomieszczenie zaktualizowane', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_form_rooms_db')
+          .insert({
+            group_id: selectedRoomGroup.id,
+            code: editingRoom.code,
+            name: editingRoom.name,
+            sort_order: formRooms.filter(r => r.group_id === selectedRoomGroup.id).length,
+          });
+
+        if (error) throw error;
+        showNotification('Pomieszczenie dodane', 'success');
+      }
+
+      setRoomDialog(false);
+      setEditingRoom(null);
+      if (selectedTemplate) {
+        await loadFormTemplateDetails(selectedTemplate.id);
+      }
+    } catch (error: any) {
+      console.error('Error saving room:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveWorkCategory = async () => {
+    if (!editingWorkCategory || !selectedTemplate) return;
+    setSaving(true);
+
+    try {
+      if (editingWorkCategory.id) {
+        const { error } = await supabase
+          .from('kosztorys_form_work_categories_db')
+          .update({
+            code: editingWorkCategory.code,
+            name: editingWorkCategory.name,
+            color: editingWorkCategory.color,
+            sort_order: editingWorkCategory.sort_order || 0,
+          })
+          .eq('id', editingWorkCategory.id);
+
+        if (error) throw error;
+        showNotification('Kategoria prac zaktualizowana', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_form_work_categories_db')
+          .insert({
+            template_id: selectedTemplate.id,
+            code: editingWorkCategory.code,
+            name: editingWorkCategory.name,
+            color: editingWorkCategory.color || '#3b82f6',
+            sort_order: formWorkCategories.length,
+          });
+
+        if (error) throw error;
+        showNotification('Kategoria prac dodana', 'success');
+      }
+
+      setWorkCategoryDialog(false);
+      setEditingWorkCategory(null);
+      await loadFormTemplateDetails(selectedTemplate.id);
+    } catch (error: any) {
+      console.error('Error saving work category:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveWorkTypeDB = async () => {
+    if (!editingWorkTypeDB || !selectedWorkCategory) return;
+    setSaving(true);
+
+    try {
+      if (editingWorkTypeDB.id) {
+        const { error } = await supabase
+          .from('kosztorys_form_work_types_db')
+          .update({
+            code: editingWorkTypeDB.code,
+            name: editingWorkTypeDB.name,
+            description: editingWorkTypeDB.description,
+            sort_order: editingWorkTypeDB.sort_order || 0,
+          })
+          .eq('id', editingWorkTypeDB.id);
+
+        if (error) throw error;
+        showNotification('Typ pracy zaktualizowany', 'success');
+      } else {
+        const { error } = await supabase
+          .from('kosztorys_form_work_types_db')
+          .insert({
+            category_id: selectedWorkCategory.id,
+            code: editingWorkTypeDB.code,
+            name: editingWorkTypeDB.name,
+            description: editingWorkTypeDB.description,
+            sort_order: formWorkTypesDB.filter(wt => wt.category_id === selectedWorkCategory.id).length,
+          });
+
+        if (error) throw error;
+        showNotification('Typ pracy dodany', 'success');
+      }
+
+      setWorkTypeDBDialog(false);
+      setEditingWorkTypeDB(null);
+      if (selectedTemplate) {
+        await loadFormTemplateDetails(selectedTemplate.id);
+      }
+    } catch (error: any) {
+      console.error('Error saving work type:', error);
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ============ Render Rodzaj Prac Tab ============
+  const renderRodzajPracTab = () => (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Szukaj..."
+            value={requestWorkTypeSearch}
+            onChange={(e) => setRequestWorkTypeSearch(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <button
+          onClick={() => {
+            setEditingRequestWorkType({ is_active: true });
+            setRequestWorkTypeDialog(true);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Dodaj rodzaj prac
+        </button>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Kod</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Nazwa</th>
+              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-700">Opis</th>
+              <th className="text-center px-4 py-3 text-sm font-semibold text-slate-700">Status</th>
+              <th className="w-24"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filteredRequestWorkTypes.map(wt => (
+              <tr key={wt.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-mono text-sm">{wt.code}</td>
+                <td className="px-4 py-3 font-medium">{wt.name}</td>
+                <td className="px-4 py-3 text-sm text-slate-600">{wt.description || '—'}</td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                    wt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {wt.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2 justify-end">
+                    <button
+                      onClick={() => {
+                        setEditingRequestWorkType(wt);
+                        setRequestWorkTypeDialog(true);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm({ type: 'request_work_type', id: wt.id })}
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filteredRequestWorkTypes.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  Brak rodzajów prac. Kliknij "Dodaj rodzaj prac" aby dodać nowy.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Request Work Type Dialog */}
+      <Modal
+        isOpen={requestWorkTypeDialog}
+        onClose={() => {
+          setRequestWorkTypeDialog(false);
+          setEditingRequestWorkType(null);
+        }}
+        title={editingRequestWorkType?.id ? 'Edytuj rodzaj prac' : 'Nowy rodzaj prac'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingRequestWorkType?.code || ''}
+              onChange={(e) => setEditingRequestWorkType(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. IE, IT, HVAC"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingRequestWorkType?.name || ''}
+              onChange={(e) => setEditingRequestWorkType(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. IE - Elektryka"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingRequestWorkType?.description || ''}
+              onChange={(e) => setEditingRequestWorkType(prev => ({ ...prev, description: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              placeholder="Opcjonalny opis"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="rwt-active"
+              checked={editingRequestWorkType?.is_active ?? true}
+              onChange={(e) => setEditingRequestWorkType(prev => ({ ...prev, is_active: e.target.checked }))}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="rwt-active" className="text-sm text-slate-700">Aktywny</label>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setRequestWorkTypeDialog(false);
+                setEditingRequestWorkType(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveRequestWorkType}
+              disabled={saving || !editingRequestWorkType?.code || !editingRequestWorkType?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+
+  // ============ Render Formularze Tab ============
+  const renderFormularzeTab = () => (
+    <div>
+      {!selectedTemplate ? (
+        // Template list view
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-slate-900">Szablony formularzy</h3>
+            <button
+              onClick={() => {
+                setEditingFormTemplate({ is_active: true });
+                setFormTemplateDialog(true);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Dodaj formularz
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {formTemplates.map(template => (
+              <div
+                key={template.id}
+                className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
+                onClick={() => {
+                  setSelectedTemplate(template);
+                  loadFormTemplateDetails(template.id);
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="font-semibold text-slate-900">{template.form_type}</h4>
+                    <p className="text-sm text-slate-500 mt-1">{template.title}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    template.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {template.is_active ? 'Aktywny' : 'Nieaktywny'}
+                  </span>
+                </div>
+                <div className="mt-4 flex items-center gap-4 text-sm text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <FolderOpen className="w-4 h-4" />
+                    {template.room_groups?.length || 0} grup
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-4 h-4" />
+                    {template.work_categories?.length || 0} kategorii
+                  </span>
+                </div>
+              </div>
+            ))}
+            {formTemplates.length === 0 && (
+              <div className="col-span-full py-12 text-center text-slate-500">
+                Brak formularzy. Kliknij "Dodaj formularz" aby utworzyć nowy.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        // Template editor view
+        <div>
+          <div className="flex items-center gap-4 mb-6">
+            <button
+              onClick={() => {
+                setSelectedTemplate(null);
+                setFormRoomGroups([]);
+                setFormRooms([]);
+                setFormWorkCategories([]);
+                setFormWorkTypesDB([]);
+                setSelectedRoomGroup(null);
+                setSelectedWorkCategory(null);
+              }}
+              className="p-2 hover:bg-slate-100 rounded-lg"
+            >
+              <ChevronRight className="w-5 h-5 rotate-180" />
+            </button>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">{selectedTemplate.form_type}</h3>
+              <p className="text-sm text-slate-500">{selectedTemplate.title}</p>
+            </div>
+            <button
+              onClick={() => {
+                setEditingFormTemplate(selectedTemplate);
+                setFormTemplateDialog(true);
+              }}
+              className="ml-auto p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            {/* Left panel - Room groups */}
+            <div className="bg-white border border-slate-200 rounded-lg">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+                <h4 className="font-semibold text-slate-900">Grupy pomieszczeń</h4>
+                <button
+                  onClick={() => {
+                    setEditingRoomGroup({});
+                    setRoomGroupDialog(true);
+                  }}
+                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto">
+                {formRoomGroups.map(group => (
+                  <div key={group.id}>
+                    <div
+                      className={`px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 ${
+                        selectedRoomGroup?.id === group.id ? 'bg-blue-50' : ''
+                      }`}
+                      onClick={() => setSelectedRoomGroup(selectedRoomGroup?.id === group.id ? null : group)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: group.color || '#f59e0b' }}
+                        />
+                        <span className="font-medium">{group.name}</span>
+                        <span className="text-xs text-slate-400">({group.code})</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingRoomGroup(group);
+                            setRoomGroupDialog(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-blue-600"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <ChevronRight className={`w-4 h-4 text-slate-400 transition ${
+                          selectedRoomGroup?.id === group.id ? 'rotate-90' : ''
+                        }`} />
+                      </div>
+                    </div>
+                    {selectedRoomGroup?.id === group.id && (
+                      <div className="bg-slate-50 border-t border-slate-100">
+                        <div className="px-4 py-2 flex justify-between items-center border-b border-slate-100">
+                          <span className="text-xs font-medium text-slate-500">POMIESZCZENIA</span>
+                          <button
+                            onClick={() => {
+                              setEditingRoom({});
+                              setRoomDialog(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {formRooms.filter(r => r.group_id === group.id).map(room => (
+                          <div
+                            key={room.id}
+                            className="px-6 py-2 flex items-center justify-between hover:bg-slate-100"
+                          >
+                            <span className="text-sm">{room.name}</span>
+                            <button
+                              onClick={() => {
+                                setEditingRoom(room);
+                                setRoomDialog(true);
+                              }}
+                              className="p-1 text-slate-400 hover:text-blue-600"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {formRooms.filter(r => r.group_id === group.id).length === 0 && (
+                          <div className="px-6 py-2 text-xs text-slate-400">Brak pomieszczeń</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {formRoomGroups.length === 0 && (
+                  <div className="px-4 py-8 text-center text-slate-400 text-sm">
+                    Brak grup pomieszczeń
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right panel - Work categories */}
+            <div className="bg-white border border-slate-200 rounded-lg">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+                <h4 className="font-semibold text-slate-900">Kategorie prac</h4>
+                <button
+                  onClick={() => {
+                    setEditingWorkCategory({});
+                    setWorkCategoryDialog(true);
+                  }}
+                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="divide-y divide-slate-100 max-h-[400px] overflow-y-auto">
+                {formWorkCategories.map(category => (
+                  <div key={category.id}>
+                    <div
+                      className={`px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 ${
+                        selectedWorkCategory?.id === category.id ? 'bg-blue-50' : ''
+                      }`}
+                      onClick={() => setSelectedWorkCategory(selectedWorkCategory?.id === category.id ? null : category)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: category.color || '#3b82f6' }}
+                        />
+                        <span className="font-medium">{category.name}</span>
+                        <span className="text-xs text-slate-400">({category.code})</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingWorkCategory(category);
+                            setWorkCategoryDialog(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-blue-600"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <ChevronRight className={`w-4 h-4 text-slate-400 transition ${
+                          selectedWorkCategory?.id === category.id ? 'rotate-90' : ''
+                        }`} />
+                      </div>
+                    </div>
+                    {selectedWorkCategory?.id === category.id && (
+                      <div className="bg-slate-50 border-t border-slate-100">
+                        <div className="px-4 py-2 flex justify-between items-center border-b border-slate-100">
+                          <span className="text-xs font-medium text-slate-500">TYPY PRAC</span>
+                          <button
+                            onClick={() => {
+                              setEditingWorkTypeDB({});
+                              setWorkTypeDBDialog(true);
+                            }}
+                            className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {formWorkTypesDB.filter(wt => wt.category_id === category.id).map(workType => (
+                          <div
+                            key={workType.id}
+                            className="px-6 py-2 flex items-center justify-between hover:bg-slate-100"
+                          >
+                            <span className="text-sm">{workType.name}</span>
+                            <button
+                              onClick={() => {
+                                setEditingWorkTypeDB(workType);
+                                setWorkTypeDBDialog(true);
+                              }}
+                              className="p-1 text-slate-400 hover:text-blue-600"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                        {formWorkTypesDB.filter(wt => wt.category_id === category.id).length === 0 && (
+                          <div className="px-6 py-2 text-xs text-slate-400">Brak typów prac</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {formWorkCategories.length === 0 && (
+                  <div className="px-4 py-8 text-center text-slate-400 text-sm">
+                    Brak kategorii prac
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form Template Dialog */}
+      <Modal
+        isOpen={formTemplateDialog}
+        onClose={() => {
+          setFormTemplateDialog(false);
+          setEditingFormTemplate(null);
+        }}
+        title={editingFormTemplate?.id ? 'Edytuj formularz' : 'Nowy formularz'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Typ formularza *</label>
+            <select
+              value={editingFormTemplate?.form_type || ''}
+              onChange={(e) => setEditingFormTemplate(prev => ({ ...prev, form_type: e.target.value as KosztorysFormType }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Wybierz typ...</option>
+              {FORM_TYPES.map(ft => (
+                <option key={ft.value} value={ft.value}>{ft.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Tytuł *</label>
+            <input
+              type="text"
+              value={editingFormTemplate?.title || ''}
+              onChange={(e) => setEditingFormTemplate(prev => ({ ...prev, title: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Formularz mieszkania - elektryka"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
+            <input
+              type="text"
+              value={editingFormTemplate?.object_type || ''}
+              onChange={(e) => setEditingFormTemplate(prev => ({ ...prev, object_type: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. residential, industrial"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="ft-active"
+              checked={editingFormTemplate?.is_active ?? true}
+              onChange={(e) => setEditingFormTemplate(prev => ({ ...prev, is_active: e.target.checked }))}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="ft-active" className="text-sm text-slate-700">Aktywny</label>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setFormTemplateDialog(false);
+                setEditingFormTemplate(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveFormTemplate}
+              disabled={saving || !editingFormTemplate?.form_type || !editingFormTemplate?.title}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Room Group Dialog */}
+      <Modal
+        isOpen={roomGroupDialog}
+        onClose={() => {
+          setRoomGroupDialog(false);
+          setEditingRoomGroup(null);
+        }}
+        title={editingRoomGroup?.id ? 'Edytuj grupę' : 'Nowa grupa pomieszczeń'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingRoomGroup?.code || ''}
+              onChange={(e) => setEditingRoomGroup(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. GARAZ, KLATKI"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingRoomGroup?.name || ''}
+              onChange={(e) => setEditingRoomGroup(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Garaż podziemny"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kolor</label>
+            <input
+              type="color"
+              value={editingRoomGroup?.color || '#f59e0b'}
+              onChange={(e) => setEditingRoomGroup(prev => ({ ...prev, color: e.target.value }))}
+              className="w-full h-10 rounded-lg cursor-pointer"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setRoomGroupDialog(false);
+                setEditingRoomGroup(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveRoomGroup}
+              disabled={saving || !editingRoomGroup?.code || !editingRoomGroup?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Room Dialog */}
+      <Modal
+        isOpen={roomDialog}
+        onClose={() => {
+          setRoomDialog(false);
+          setEditingRoom(null);
+        }}
+        title={editingRoom?.id ? 'Edytuj pomieszczenie' : 'Nowe pomieszczenie'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingRoom?.code || ''}
+              onChange={(e) => setEditingRoom(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. GARAZ_OSW"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingRoom?.name || ''}
+              onChange={(e) => setEditingRoom(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Oświetlenie podstawowe"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setRoomDialog(false);
+                setEditingRoom(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveRoom}
+              disabled={saving || !editingRoom?.code || !editingRoom?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Work Category Dialog */}
+      <Modal
+        isOpen={workCategoryDialog}
+        onClose={() => {
+          setWorkCategoryDialog(false);
+          setEditingWorkCategory(null);
+        }}
+        title={editingWorkCategory?.id ? 'Edytuj kategorię' : 'Nowa kategoria prac'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingWorkCategory?.code || ''}
+              onChange={(e) => setEditingWorkCategory(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. OKAB, MONT"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingWorkCategory?.name || ''}
+              onChange={(e) => setEditingWorkCategory(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Okablowanie"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kolor</label>
+            <input
+              type="color"
+              value={editingWorkCategory?.color || '#3b82f6'}
+              onChange={(e) => setEditingWorkCategory(prev => ({ ...prev, color: e.target.value }))}
+              className="w-full h-10 rounded-lg cursor-pointer"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setWorkCategoryDialog(false);
+                setEditingWorkCategory(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveWorkCategory}
+              disabled={saving || !editingWorkCategory?.code || !editingWorkCategory?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Work Type DB Dialog */}
+      <Modal
+        isOpen={workTypeDBDialog}
+        onClose={() => {
+          setWorkTypeDBDialog(false);
+          setEditingWorkTypeDB(null);
+        }}
+        title={editingWorkTypeDB?.id ? 'Edytuj typ pracy' : 'Nowy typ pracy'}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
+            <input
+              type="text"
+              value={editingWorkTypeDB?.code || ''}
+              onChange={(e) => setEditingWorkTypeDB(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. KABEL_YKY"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <input
+              type="text"
+              value={editingWorkTypeDB?.name || ''}
+              onChange={(e) => setEditingWorkTypeDB(prev => ({ ...prev, name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Kabel YKY 5x10"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <textarea
+              value={editingWorkTypeDB?.description || ''}
+              onChange={(e) => setEditingWorkTypeDB(prev => ({ ...prev, description: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows={2}
+              placeholder="Opcjonalny opis"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <button
+              onClick={() => {
+                setWorkTypeDBDialog(false);
+                setEditingWorkTypeDB(null);
+              }}
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+            >
+              Anuluj
+            </button>
+            <button
+              onClick={handleSaveWorkTypeDB}
+              disabled={saving || !editingWorkTypeDB?.code || !editingWorkTypeDB?.name}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Zapisz
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
 
   // ============ Render Work Types Tab ============
   const renderWorkTypesTab = () => (
@@ -1880,6 +3057,8 @@ export const DictionariesPage: React.FC = () => {
             </div>
           ) : (
             <>
+              {activeTab === 'rodzaj_prac' && renderRodzajPracTab()}
+              {activeTab === 'formularze' && renderFormularzeTab()}
               {activeTab === 'work_types' && renderWorkTypesTab()}
               {activeTab === 'materials' && renderMaterialsTab()}
               {activeTab === 'equipment' && renderEquipmentTab()}
@@ -1926,6 +3105,7 @@ export const DictionariesPage: React.FC = () => {
                     else if (showDeleteConfirm.type === 'equipment') handleDeleteEquipment(showDeleteConfirm.id);
                     else if (showDeleteConfirm.type === 'template') handleDeleteTemplate(showDeleteConfirm.id);
                     else if (showDeleteConfirm.type === 'mapping') handleDeleteMapping(showDeleteConfirm.id);
+                    else if (showDeleteConfirm.type === 'request_work_type') handleDeleteRequestWorkType(showDeleteConfirm.id);
                   }}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >

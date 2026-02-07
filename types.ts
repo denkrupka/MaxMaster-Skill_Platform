@@ -1660,6 +1660,7 @@ export interface KosztorysRequest {
   contacts?: KosztorysRequestContact[];  // Multiple representatives
   object_type_record?: KosztorysObjectTypeRecord;
   object_category?: KosztorysObjectCategoryRecord;
+  work_types?: KosztorysRequestWorkType[];  // Selected work types (Rodzaj prac)
 }
 
 // Представитель компании (контакт)
@@ -2013,9 +2014,110 @@ export interface KosztorysFormTemplate {
 export interface KosztorysFormField {
   code: string;
   label: string;
-  type: 'text' | 'decimal' | 'integer';
+  type: 'text' | 'decimal' | 'integer' | 'select';
   required: boolean;
   placeholder?: string;
+  options?: string[]; // для select типа
+}
+
+// =====================================================
+// НОВЫЕ ТИПЫ ДЛЯ RODZAJ PRAC И РЕДАКТОРА ФОРМУЛЯРОВ
+// =====================================================
+
+// Тип работ (Rodzaj prac) - замена installation_types
+export interface KosztorysWorkTypeRecord {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Связь запроса с типами работ (многие-ко-многим)
+export interface KosztorysRequestWorkType {
+  id: string;
+  request_id: string;
+  work_type_id: string;
+  created_at: string;
+  work_type?: KosztorysWorkTypeRecord;
+}
+
+// Шаблон формуляра из БД
+export interface KosztorysFormTemplateDB {
+  id: string;
+  company_id: string;
+  form_type: KosztorysFormType;
+  title: string;
+  object_type?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  room_groups?: KosztorysFormRoomGroupDB[];
+  work_categories?: KosztorysFormWorkCategoryDB[];
+  general_fields?: KosztorysFormGeneralFieldDB[];
+}
+
+// Группа помещений из БД
+export interface KosztorysFormRoomGroupDB {
+  id: string;
+  template_id: string;
+  code: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+  rooms?: KosztorysFormRoomDB[];
+}
+
+// Помещение из БД
+export interface KosztorysFormRoomDB {
+  id: string;
+  group_id: string;
+  code: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+}
+
+// Категория работ из БД
+export interface KosztorysFormWorkCategoryDB {
+  id: string;
+  template_id: string;
+  code: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+  work_types?: KosztorysFormWorkTypeDB[];
+}
+
+// Тип работы в категории из БД
+export interface KosztorysFormWorkTypeDB {
+  id: string;
+  category_id: string;
+  code: string;
+  name: string;
+  description?: string;
+  sort_order: number;
+  created_at: string;
+}
+
+// Общее поле формуляра из БД
+export interface KosztorysFormGeneralFieldDB {
+  id: string;
+  template_id: string;
+  code: string;
+  label: string;
+  field_type: 'text' | 'decimal' | 'integer' | 'select';
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+  sort_order: number;
+  created_at: string;
 }
 
 // =====================================================
