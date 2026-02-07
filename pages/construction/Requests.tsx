@@ -1046,11 +1046,10 @@ export const RequestsPage: React.FC = () => {
                                 setSelectedRequest(request);
                                 setShowPrepareOfferModal(true);
                               }}
-                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition flex items-center gap-1"
+                              className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                               title="Weź w pracę"
                             >
-                              <Play className="w-3.5 h-3.5" />
-                              Weź w pracę
+                              <Play className="w-4 h-4" />
                             </button>
                           )}
                           {request.status === 'in_progress' && (
@@ -1060,11 +1059,10 @@ export const RequestsPage: React.FC = () => {
                                 setSelectedRequest(request);
                                 setShowPrepareOfferModal(true);
                               }}
-                              className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-1"
+                              className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
                               title="Przygotuj ofertę"
                             >
-                              <Calculator className="w-3.5 h-3.5" />
-                              Przygotuj
+                              <Calculator className="w-4 h-4" />
                             </button>
                           )}
                           {!['new', 'in_progress'].includes(request.status) && (
@@ -1073,7 +1071,7 @@ export const RequestsPage: React.FC = () => {
                                 e.stopPropagation();
                                 handleViewRequest(request);
                               }}
-                              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
                               title="Zobacz szczegóły"
                             >
                               <Eye className="w-4 h-4" />
