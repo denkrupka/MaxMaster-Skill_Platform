@@ -150,24 +150,8 @@ BEGIN
   END IF;
 END $$;
 
--- 5. Create notification types for construction modules
-INSERT INTO notification_types (code, name, description, channels, is_active) VALUES
-  ('estimate_created', 'Kosztorys utworzony', 'Powiadomienie o utworzeniu kosztorysu', '["email", "push"]'::jsonb, TRUE),
-  ('estimate_updated', 'Kosztorys zaktualizowany', 'Powiadomienie o zmianach w kosztorysie', '["push"]'::jsonb, TRUE),
-  ('offer_sent', 'Oferta wysłana', 'Powiadomienie o wysłaniu oferty', '["email", "push"]'::jsonb, TRUE),
-  ('offer_viewed', 'Oferta wyświetlona', 'Klient wyświetlił ofertę', '["push"]'::jsonb, TRUE),
-  ('offer_accepted', 'Oferta zaakceptowana', 'Klient zaakceptował ofertę', '["email", "push"]'::jsonb, TRUE),
-  ('offer_rejected', 'Oferta odrzucona', 'Klient odrzucił ofertę', '["email", "push"]'::jsonb, TRUE),
-  ('ticket_assigned', 'Zadanie przypisane', 'Przypisano zadanie do użytkownika', '["email", "push"]'::jsonb, TRUE),
-  ('ticket_status_changed', 'Status zadania zmieniony', 'Zmiana statusu zadania', '["push"]'::jsonb, TRUE),
-  ('ticket_comment', 'Nowy komentarz', 'Dodano komentarz do zadania', '["push"]'::jsonb, TRUE),
-  ('approval_requested', 'Prośba o zatwierdzenie', 'Nowa prośba o zatwierdzenie', '["email", "push"]'::jsonb, TRUE),
-  ('approval_approved', 'Zatwierdzone', 'Dokument został zatwierdzony', '["email", "push"]'::jsonb, TRUE),
-  ('approval_rejected', 'Odrzucone', 'Dokument został odrzucony', '["email", "push"]'::jsonb, TRUE),
-  ('act_created', 'Akt utworzony', 'Utworzono nowy akt wykonawczy', '["email", "push"]'::jsonb, TRUE),
-  ('order_delivered', 'Zamówienie dostarczone', 'Zamówienie zostało dostarczone', '["email", "push"]'::jsonb, TRUE),
-  ('resource_over_budget', 'Przekroczenie budżetu', 'Cena zasobu przekracza planowany budżet', '["email", "push"]'::jsonb, TRUE)
-ON CONFLICT (code) DO NOTHING;
+-- 5. Notification types (skipped - table does not exist in current schema)
+-- Construction module notifications will use the existing notifications system
 
 -- 6. Create audit_log table for all modules
 CREATE TABLE IF NOT EXISTS audit_log (
