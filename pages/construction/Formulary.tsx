@@ -608,6 +608,10 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
     generalData: Partial<KosztorysFormGeneralData>;
   }>>({});
 
+  // Template change modal
+  const [showTemplateChangeWarning, setShowTemplateChangeWarning] = useState(false);
+  const [showTemplateSelectModal, setShowTemplateSelectModal] = useState(false);
+
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasChangesRef = useRef(false);
 
@@ -1574,46 +1578,11 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   {wt.name || wt.code}
-                  {formsByWorkType[wt.code]?.template && (
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      activeWorkType === wt.code
-                        ? 'bg-blue-500 text-blue-100'
-                        : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {formsByWorkType[wt.code].template?.form_type}
-                    </span>
-                  )}
                 </button>
               ))}
               {/* Change template button */}
               <button
-                onClick={() => {
-                  // Show modal to change template for active work type
-                  const isIndustrial = request?.object_type === 'industrial';
-                  const templates = isIndustrial
-                    ? ['PREM-IE', 'PREM-IT']
-                    : ['MIESZK-IE', 'MIESZK-IT'];
-                  const currentTemplate = formsByWorkType[activeWorkType]?.template?.form_type;
-                  const newTemplate = templates.find(t => t !== currentTemplate) || templates[0];
-
-                  // Confirm and reload with new template
-                  if (confirm(`Zmienić szablon dla ${activeWorkType} na ${newTemplate}?`)) {
-                    const newTemplateObj = FORM_TEMPLATES[newTemplate as KosztorysFormType];
-                    setFormsByWorkType(prev => ({
-                      ...prev,
-                      [activeWorkType]: {
-                        ...prev[activeWorkType],
-                        template: newTemplateObj
-                      }
-                    }));
-                    setTemplate(newTemplateObj);
-                    if (newTemplateObj) {
-                      const allGroups = new Set(newTemplateObj.room_groups.map(g => g.code));
-                      setExpandedGroups(allGroups);
-                    }
-                    hasChangesRef.current = true;
-                  }
-                }}
+                onClick={() => setShowTemplateChangeWarning(true)}
                 className="ml-auto px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1"
                 title="Zmień szablon dla aktywnego typu prac"
               >
@@ -2632,6 +2601,141 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           </div>
         </div>
       )}
+
+      {/* Template Change Warning Modal */}
+      {showTemplateChangeWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <AlertCircle className="w-6 h-6 text-amber-500" />
+                Zmiana szablonu
+              </h2>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-700 mb-4">
+                Czy na pewno chcesz zmienić szablon dla <strong>{requestWorkTypes.find(wt => wt.code === activeWorkType)?.name || activeWorkType}</strong>?
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-amber-800">
+                    <strong>Uwaga!</strong> Wszystkie dane wprowadzone w bieżącym formularzu zostaną utracone.
+                    Ta operacja jest nieodwracalna.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowTemplateChangeWarning(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  setShowTemplateChangeWarning(false);
+                  setShowTemplateSelectModal(true);
+                }}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+              >
+                Tak, zmień szablon
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Select Modal */}
+      {showTemplateSelectModal && (() => {
+        const isIndustrial = request?.object_type === 'industrial';
+        const availableTemplates = isIndustrial
+          ? [
+              { code: 'PREM-IE', name: 'Przemysłowe - Instalacje elektryczne', desc: 'Hale produkcyjne, magazyny, obiekty przemysłowe' },
+              { code: 'PREM-IT', name: 'Przemysłowe - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla obiektów przemysłowych' }
+            ]
+          : [
+              { code: 'MIESZK-IE', name: 'Mieszkania / Biurowce - Instalacje elektryczne', desc: 'Budynki mieszkalne, biurowce, obiekty użyteczności publicznej' },
+              { code: 'MIESZK-IT', name: 'Mieszkania / Biurowce - Instalacje teletechniczne', desc: 'Systemy IT, teletechnika dla budynków mieszkalnych i biurowych' }
+            ];
+        const currentTemplateCode = formsByWorkType[activeWorkType]?.template?.form_type;
+
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+              <div className="p-6 border-b border-slate-200">
+                <h2 className="text-xl font-bold text-slate-900">Wybierz nowy szablon</h2>
+                <p className="text-slate-600 mt-1">
+                  Dla: <strong>{requestWorkTypes.find(wt => wt.code === activeWorkType)?.name || activeWorkType}</strong>
+                </p>
+              </div>
+              <div className="p-6 space-y-3">
+                {availableTemplates.map(tmpl => (
+                  <button
+                    key={tmpl.code}
+                    onClick={() => {
+                      // Change template
+                      const newTemplateObj = FORM_TEMPLATES[tmpl.code as KosztorysFormType];
+                      setFormsByWorkType(prev => ({
+                        ...prev,
+                        [activeWorkType]: {
+                          ...prev[activeWorkType],
+                          template: newTemplateObj,
+                          answers: new Map(), // Clear answers
+                          generalData: {} // Clear general data
+                        }
+                      }));
+                      setTemplate(newTemplateObj);
+                      setAnswers(new Map());
+                      setGeneralData({});
+                      if (newTemplateObj) {
+                        const allGroups = new Set(newTemplateObj.room_groups.map(g => g.code));
+                        setExpandedGroups(allGroups);
+                      }
+                      hasChangesRef.current = true;
+                      setShowTemplateSelectModal(false);
+                    }}
+                    disabled={tmpl.code === currentTemplateCode}
+                    className={`w-full flex items-start gap-4 p-4 rounded-xl border transition text-left ${
+                      tmpl.code === currentTemplateCode
+                        ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                        : 'border-slate-200 hover:bg-blue-50 hover:border-blue-300'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      tmpl.code === currentTemplateCode ? 'bg-slate-200' : 'bg-blue-100'
+                    }`}>
+                      <FileSpreadsheet className={`w-6 h-6 ${
+                        tmpl.code === currentTemplateCode ? 'text-slate-400' : 'text-blue-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-slate-900 flex items-center gap-2">
+                        {tmpl.name}
+                        {tmpl.code === currentTemplateCode && (
+                          <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full">
+                            Aktualny
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-slate-500 mt-1">{tmpl.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="p-6 border-t border-slate-200 flex justify-end">
+                <button
+                  onClick={() => setShowTemplateSelectModal(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Anuluj
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
