@@ -5,7 +5,7 @@ import {
   CheckCircle2, XCircle, Send, Eye, Pencil, Trash2, X, Check,
   ChevronDown, MoreVertical, MapPin, FileSpreadsheet, Play,
   Calculator, ClipboardList, ArrowLeft, Download, UserPlus,
-  Star, Briefcase, Hash, Zap
+  Star, Briefcase, Hash, Zap, Settings, RotateCcw
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -204,6 +204,16 @@ export const RequestsPage: React.FC = () => {
   const [workTypeTemplates, setWorkTypeTemplates] = useState<Record<string, string>>({});
   // Wizard step for multi-work-type selection (0 = main menu, 1+ = work type index)
   const [wizardStep, setWizardStep] = useState(0);
+  // Template management
+  const [showTemplateManagement, setShowTemplateManagement] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [templateFormData, setTemplateFormData] = useState({
+    name: '',
+    description: '',
+    work_types: [] as string[],
+    object_type: ''
+  });
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -434,6 +444,88 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
+  // Load saved templates from database
+  const loadSavedTemplates = async () => {
+    if (!currentUser) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_form_templates')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setSavedTemplates(data || []);
+    } catch (err) {
+      console.error('Error loading saved templates:', err);
+      setSavedTemplates([]);
+    }
+  };
+
+  // Update template
+  const handleUpdateTemplate = async () => {
+    if (!editingTemplate || !currentUser) return;
+
+    try {
+      const { error } = await supabase
+        .from('kosztorys_form_templates')
+        .update({
+          name: templateFormData.name,
+          object_type: templateFormData.object_type || null,
+          work_type: templateFormData.work_types.length === 1 ? templateFormData.work_types[0] : null,
+          template_data: {
+            ...editingTemplate.template_data,
+            description: templateFormData.description,
+            work_types: templateFormData.work_types
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingTemplate.id);
+
+      if (error) throw error;
+
+      // Reload templates
+      await loadSavedTemplates();
+      setEditingTemplate(null);
+    } catch (err) {
+      console.error('Error updating template:', err);
+      alert('Błąd podczas aktualizacji szablonu');
+    }
+  };
+
+  // Delete template
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Czy na pewno chcesz usunąć ten szablon?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('kosztorys_form_templates')
+        .update({ is_active: false })
+        .eq('id', templateId);
+
+      if (error) throw error;
+
+      // Reload templates
+      await loadSavedTemplates();
+      setEditingTemplate(null);
+    } catch (err) {
+      console.error('Error deleting template:', err);
+      alert('Błąd podczas usuwania szablonu');
+    }
+  };
+
+  // Open edit template modal
+  const openEditTemplate = (template: any) => {
+    setEditingTemplate(template);
+    setTemplateFormData({
+      name: template.name || '',
+      description: template.template_data?.description || '',
+      work_types: template.template_data?.work_types || (template.work_type ? [template.work_type] : []),
+      object_type: template.object_type || ''
+    });
+  };
+
   // Filter clients based on search query
   useEffect(() => {
     if (clientSearchQuery.trim().length >= 2) {
@@ -449,6 +541,13 @@ export const RequestsPage: React.FC = () => {
       setShowClientDropdown(false);
     }
   }, [clientSearchQuery, existingClients]);
+
+  // Load saved templates when template management is opened
+  useEffect(() => {
+    if (showTemplateManagement) {
+      loadSavedTemplates();
+    }
+  }, [showTemplateManagement]);
 
   const selectExistingClient = (client: ExistingClient) => {
     setFormData(prev => ({
@@ -1238,16 +1337,40 @@ export const RequestsPage: React.FC = () => {
                             </button>
                           )}
                           {request.status === 'in_progress' && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedRequest(request);
+                                  setShowPrepareOfferModal(true);
+                                }}
+                                className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                                title="Przygotuj ofertę"
+                              >
+                                <Calculator className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusChange(request, 'cancelled');
+                                }}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                                title="Anuluj zapytanie"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                          {request.status === 'cancelled' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedRequest(request);
-                                setShowPrepareOfferModal(true);
+                                handleStatusChange(request, 'in_progress');
                               }}
-                              className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                              title="Przygotuj ofertę"
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                              title="Przywróć zapytanie"
                             >
-                              <Calculator className="w-4 h-4" />
+                              <RotateCcw className="w-4 h-4" />
                             </button>
                           )}
                           {!['new', 'in_progress'].includes(request.status) && (
@@ -2121,77 +2244,6 @@ export const RequestsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Status change buttons */}
-              <div className="mt-6 pt-6 border-t border-slate-200">
-                <h3 className="font-semibold text-slate-900 mb-3">Realizacja</h3>
-                <div className="flex flex-wrap gap-2">
-                  {selectedRequest.status === 'in_progress' && (
-                    <button
-                      onClick={() => setShowPrepareOfferModal(true)}
-                      className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-200"
-                    >
-                      Przygotuj ofertę
-                    </button>
-                  )}
-                  {selectedRequest.status === 'form_filled' && (
-                    <button
-                      onClick={() => setShowPrepareOfferModal(true)}
-                      className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-200"
-                    >
-                      Przygotuj ofertę
-                    </button>
-                  )}
-                  {selectedRequest.status === 'estimate_generated' && (
-                    <>
-                      <button
-                        onClick={() => handleStatusChange(selectedRequest, 'estimate_approved')}
-                        className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200"
-                      >
-                        Zatwierdź
-                      </button>
-                      <button
-                        onClick={() => handleStatusChange(selectedRequest, 'estimate_revision')}
-                        className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-200"
-                      >
-                        Do poprawy
-                      </button>
-                    </>
-                  )}
-                  {selectedRequest.status === 'estimate_approved' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedRequest, 'kp_sent')}
-                      className="px-3 py-1.5 bg-cyan-100 text-cyan-700 rounded-lg text-sm font-medium hover:bg-cyan-200"
-                    >
-                      Wyślij KP
-                    </button>
-                  )}
-                  {selectedRequest.status === 'kp_sent' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedRequest, 'closed')}
-                      className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200"
-                    >
-                      Zamknij
-                    </button>
-                  )}
-                  {selectedRequest.status === 'cancelled' && (
-                    <button
-                      onClick={() => handleStatusChange(selectedRequest, 'new')}
-                      className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 flex items-center gap-1"
-                    >
-                      <Play className="w-4 h-4" />
-                      Aktywuj
-                    </button>
-                  )}
-                  {!['closed', 'cancelled', 'new'].includes(selectedRequest.status) && (
-                    <button
-                      onClick={() => handleStatusChange(selectedRequest, 'cancelled')}
-                      className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200"
-                    >
-                      Anuluj
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
 
             <div className="p-6 border-t border-slate-200 flex justify-between">
@@ -2380,6 +2432,8 @@ export const RequestsPage: React.FC = () => {
           setShowFormSelectionModal(false);
           setWorkTypeTemplates({});
           setWizardStep(0);
+          setShowTemplateManagement(false);
+          setEditingTemplate(null);
         };
 
         const handleGoToFormulary = (templates: Record<string, string>) => {
@@ -2424,9 +2478,29 @@ export const RequestsPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-slate-200">
-              {wizardStep === 0 ? (
+              {showTemplateManagement ? (
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-900">Zarządzanie szablonami</h2>
+                  <button
+                    onClick={() => setShowTemplateManagement(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg"
+                  >
+                    <X className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+              ) : wizardStep === 0 ? (
                 <>
-                  <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-slate-900">Wybierz formularz</h2>
+                    <button
+                      onClick={() => setShowTemplateManagement(true)}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                      title="Zarządzanie szablonami"
+                    >
+                      <Settings className="w-4 h-4" />
+                      <span className="hidden sm:inline">Szablony</span>
+                    </button>
+                  </div>
                   <p className="text-slate-600 mt-1">{selectedRequest.investment_name}</p>
                 </>
               ) : (
@@ -2461,7 +2535,166 @@ export const RequestsPage: React.FC = () => {
 
             {/* Content */}
             <div className="p-6">
-              {wizardStep === 0 ? (
+              {showTemplateManagement ? (
+                /* Template Management View */
+                <div className="space-y-3">
+                  {editingTemplate ? (
+                    /* Edit Template Form */
+                    <div className="space-y-4">
+                      {/* Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Nazwa szablonu
+                        </label>
+                        <input
+                          type="text"
+                          value={templateFormData.name}
+                          onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Opis
+                        </label>
+                        <textarea
+                          value={templateFormData.description}
+                          onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                          placeholder="Opis szablonu..."
+                        />
+                      </div>
+
+                      {/* Work Types */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Typy prac
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {workTypes.map((wt) => (
+                            <button
+                              key={wt.id}
+                              onClick={() => {
+                                const newTypes = templateFormData.work_types.includes(wt.code)
+                                  ? templateFormData.work_types.filter(t => t !== wt.code)
+                                  : [...templateFormData.work_types, wt.code];
+                                setTemplateFormData({ ...templateFormData, work_types: newTypes });
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border transition ${
+                                templateFormData.work_types.includes(wt.code)
+                                  ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                  : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                              }`}
+                            >
+                              {wt.code}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Object Type */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Typ obiektu
+                        </label>
+                        <select
+                          value={templateFormData.object_type}
+                          onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Wszystkie</option>
+                          <option value="industrial">Przemysłowe</option>
+                          <option value="residential">Mieszkaniowe</option>
+                          <option value="office">Biurowe</option>
+                        </select>
+                      </div>
+
+                      {/* Code (read-only) */}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Kod szablonu <span className="text-slate-400 font-normal">(automatyczny)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editingTemplate.form_type || 'CUSTOM'}
+                          readOnly
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
+                        />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          onClick={() => setEditingTemplate(null)}
+                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition"
+                        >
+                          Anuluj
+                        </button>
+                        <button
+                          onClick={handleUpdateTemplate}
+                          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                          Zapisz
+                        </button>
+                      </div>
+
+                      {/* Delete button */}
+                      <button
+                        onClick={() => handleDeleteTemplate(editingTemplate.id)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Usuń szablon
+                      </button>
+                    </div>
+                  ) : (
+                    /* Template List */
+                    <>
+                      {savedTemplates.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500">
+                          <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                          <p>Brak zapisanych szablonów</p>
+                          <p className="text-sm mt-1">Szablony można zapisać z poziomu formularza</p>
+                        </div>
+                      ) : (
+                        savedTemplates.map((tmpl) => (
+                          <button
+                            key={tmpl.id}
+                            onClick={() => openEditTemplate(tmpl)}
+                            className="w-full flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
+                          >
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition">
+                              <FileSpreadsheet className="w-5 h-5 text-slate-500 group-hover:text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                  {tmpl.form_type || 'CUSTOM'}
+                                </span>
+                                {tmpl.work_type && (
+                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                    {tmpl.work_type}
+                                  </span>
+                                )}
+                                {tmpl.object_type && (
+                                  <span className="text-xs text-slate-500">
+                                    {OBJECT_TYPE_LABELS[tmpl.object_type as KosztorysObjectType] || tmpl.object_type}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <Pencil className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                          </button>
+                        ))
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : wizardStep === 0 ? (
                 /* Main menu */
                 <div className="space-y-3">
                   {/* Create new empty form */}
@@ -2597,27 +2830,47 @@ export const RequestsPage: React.FC = () => {
 
             {/* Footer */}
             <div className="p-6 border-t border-slate-200 flex justify-between">
-              <button
-                onClick={() => {
-                  if (wizardStep > 0) {
-                    setWizardStep(wizardStep - 1);
-                  } else {
-                    closeModal();
-                  }
-                }}
-                className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                {wizardStep > 0 ? 'Wstecz' : 'Anuluj'}
-              </button>
-              {isLastStepComplete && (
+              {showTemplateManagement ? (
+                /* Template management footer */
                 <button
-                  onClick={() => handleGoToFormulary(workTypeTemplates)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg"
+                  onClick={() => {
+                    if (editingTemplate) {
+                      setEditingTemplate(null);
+                    } else {
+                      setShowTemplateManagement(false);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
-                  <Check className="w-4 h-4" />
-                  Przejdź do formularza
+                  <ChevronLeft className="w-4 h-4" />
+                  {editingTemplate ? 'Wstecz' : 'Powrót do wyboru'}
                 </button>
+              ) : (
+                /* Regular wizard footer */
+                <>
+                  <button
+                    onClick={() => {
+                      if (wizardStep > 0) {
+                        setWizardStep(wizardStep - 1);
+                      } else {
+                        closeModal();
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    {wizardStep > 0 ? 'Wstecz' : 'Anuluj'}
+                  </button>
+                  {isLastStepComplete && (
+                    <button
+                      onClick={() => handleGoToFormulary(workTypeTemplates)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg"
+                    >
+                      <Check className="w-4 h-4" />
+                      Przejdź do formularza
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
