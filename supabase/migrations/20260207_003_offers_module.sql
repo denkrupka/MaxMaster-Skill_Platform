@@ -44,11 +44,8 @@ CREATE TABLE IF NOT EXISTS offer_templates (
 );
 
 -- 3. Offers
-DO $$ BEGIN
-  CREATE TYPE offer_status AS ENUM ('draft', 'sent', 'accepted', 'rejected');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS offer_status CASCADE;
+CREATE TYPE offer_status AS ENUM ('draft', 'sent', 'accepted', 'rejected');
 
 CREATE TABLE IF NOT EXISTS offers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

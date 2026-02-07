@@ -16,11 +16,8 @@ CREATE TABLE IF NOT EXISTS project_working_days (
 );
 
 -- 2. Gantt Tasks (связаны с estimate_tasks или tickets)
-DO $$ BEGIN
-  CREATE TYPE gantt_task_source AS ENUM ('estimate', 'ticket', 'manual', 'milestone');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS gantt_task_source CASCADE;
+CREATE TYPE gantt_task_source AS ENUM ('estimate', 'ticket', 'manual', 'milestone');
 
 CREATE TABLE IF NOT EXISTS gantt_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,11 +50,8 @@ CREATE TABLE IF NOT EXISTS gantt_tasks (
 );
 
 -- 3. Gantt Dependencies
-DO $$ BEGIN
-  CREATE TYPE gantt_dependency_type AS ENUM ('FS', 'FF', 'SS', 'SF');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS gantt_dependency_type CASCADE;
+CREATE TYPE gantt_dependency_type AS ENUM ('FS', 'FF', 'SS', 'SF');
 
 CREATE TABLE IF NOT EXISTS gantt_dependencies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

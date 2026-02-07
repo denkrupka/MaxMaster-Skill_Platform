@@ -53,11 +53,9 @@ CREATE TABLE IF NOT EXISTS valuation_groups (
 );
 
 -- 3. Valuations (справочник расценок)
-DO $$ BEGIN
-  CREATE TYPE resource_type AS ENUM ('labor', 'material', 'equipment', 'overhead');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+-- Drop and recreate resource_type to ensure correct values
+DROP TYPE IF EXISTS resource_type CASCADE;
+CREATE TYPE resource_type AS ENUM ('labor', 'material', 'equipment', 'overhead');
 
 CREATE TABLE IF NOT EXISTS valuations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -87,11 +85,8 @@ CREATE TABLE IF NOT EXISTS estimate_stages (
 );
 
 -- 5. Estimate Tasks (позиции сметы)
-DO $$ BEGIN
-  CREATE TYPE estimate_calculate_mode AS ENUM ('manual', 'by_resources');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS estimate_calculate_mode CASCADE;
+CREATE TYPE estimate_calculate_mode AS ENUM ('manual', 'by_resources');
 
 CREATE TABLE IF NOT EXISTS estimate_tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

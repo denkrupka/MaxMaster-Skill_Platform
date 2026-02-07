@@ -5,11 +5,8 @@
 -- =====================================================
 
 -- 1. Resource Requests (заявки на ресурсы)
-DO $$ BEGIN
-  CREATE TYPE resource_request_status AS ENUM ('new', 'partial', 'ordered', 'received', 'cancelled');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS resource_request_status CASCADE;
+CREATE TYPE resource_request_status AS ENUM ('new', 'partial', 'ordered', 'received', 'cancelled');
 
 CREATE TABLE IF NOT EXISTS resource_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -34,23 +31,14 @@ CREATE TABLE IF NOT EXISTS resource_requests (
 );
 
 -- 2. Orders (заказы поставщикам)
-DO $$ BEGIN
-  CREATE TYPE order_status AS ENUM ('draft', 'sent', 'confirmed', 'shipped', 'delivered', 'cancelled');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS order_status CASCADE;
+CREATE TYPE order_status AS ENUM ('draft', 'sent', 'confirmed', 'shipped', 'delivered', 'cancelled');
 
-DO $$ BEGIN
-  CREATE TYPE order_delivery_status AS ENUM ('pending', 'partial', 'delivered');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS order_delivery_status CASCADE;
+CREATE TYPE order_delivery_status AS ENUM ('pending', 'partial', 'delivered');
 
-DO $$ BEGIN
-  CREATE TYPE order_payment_status AS ENUM ('unpaid', 'partial', 'paid');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS order_payment_status CASCADE;
+CREATE TYPE order_payment_status AS ENUM ('unpaid', 'partial', 'paid');
 
 CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,11 +109,8 @@ CREATE TABLE IF NOT EXISTS stock_balances (
 );
 
 -- 6. Stock Operations
-DO $$ BEGIN
-  CREATE TYPE stock_operation_type AS ENUM ('receipt', 'issue', 'transfer', 'inventory');
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-END $$;
+DROP TYPE IF EXISTS stock_operation_type CASCADE;
+CREATE TYPE stock_operation_type AS ENUM ('receipt', 'issue', 'transfer', 'inventory');
 
 CREATE TABLE IF NOT EXISTS stock_operations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
