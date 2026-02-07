@@ -17,6 +17,44 @@ import {
 import { fetchCompanyByNip, validateNip, formatNip, normalizeNip } from '../../lib/gusApi';
 import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmAutocomplete';
 
+// Phone number formatting - Polish format: +48 XXX XXX XXX
+const formatPhoneNumber = (value: string): string => {
+  // Remove all non-digits except +
+  const cleaned = value.replace(/[^\d+]/g, '');
+
+  // If starts with +48, format accordingly
+  if (cleaned.startsWith('+48')) {
+    const digits = cleaned.slice(3);
+    if (digits.length <= 3) return `+48 ${digits}`;
+    if (digits.length <= 6) return `+48 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+    return `+48 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+  }
+
+  // If starts with 48, add +
+  if (cleaned.startsWith('48') && cleaned.length > 2) {
+    const digits = cleaned.slice(2);
+    if (digits.length <= 3) return `+48 ${digits}`;
+    if (digits.length <= 6) return `+48 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+    return `+48 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+  }
+
+  // If just digits (Polish number without prefix)
+  if (/^\d+$/.test(cleaned)) {
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6, 9)}`;
+  }
+
+  return cleaned;
+};
+
+// Email validation
+const isValidEmail = (email: string): boolean => {
+  if (!email) return true; // Empty is OK (not required)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 // Status configuration
 const STATUS_CONFIG: Record<KosztorysRequestStatus, { label: string; color: string; bgColor: string; icon: React.FC<{ className?: string }> }> = {
   new: { label: 'Nowe', color: 'text-blue-700', bgColor: 'bg-blue-100', icon: FileText },
@@ -344,22 +382,49 @@ export const RequestsPage: React.FC = () => {
   const loadExistingClients = async () => {
     if (!currentUser) return;
     try {
-      const { data } = await supabase
+      // Load customers from contractors table
+      const { data: contractorsData } = await supabase
+        .from('contractors')
+        .select('name, nip, legal_address')
+        .eq('company_id', currentUser.company_id)
+        .eq('contractor_type', 'customer')
+        .is('deleted_at', null)
+        .order('name');
+
+      // Also load from previous requests for clients not in contractors
+      const { data: requestsData } = await supabase
         .from('kosztorys_requests')
         .select('client_name, nip, company_street, company_street_number, company_city, company_postal_code, company_country')
         .eq('company_id', currentUser.company_id)
         .order('client_name');
 
-      if (data) {
-        // Remove duplicates by client_name
-        const uniqueClients = data.reduce((acc: ExistingClient[], curr) => {
-          if (!acc.find(c => c.client_name.toLowerCase() === curr.client_name.toLowerCase())) {
-            acc.push(curr);
-          }
-          return acc;
-        }, []);
-        setExistingClients(uniqueClients);
+      const allClients: ExistingClient[] = [];
+
+      // Add contractors (customers)
+      if (contractorsData) {
+        contractorsData.forEach(c => {
+          allClients.push({
+            client_name: c.name,
+            nip: c.nip,
+            company_street: null,
+            company_street_number: null,
+            company_city: null,
+            company_postal_code: null,
+            company_country: 'Polska'
+          });
+        });
       }
+
+      // Add clients from requests (if not already in list)
+      if (requestsData) {
+        requestsData.forEach(r => {
+          if (!allClients.find(c => c.client_name.toLowerCase() === r.client_name.toLowerCase())) {
+            allClients.push(r);
+          }
+        });
+      }
+
+      setExistingClients(allClients);
     } catch (err) {
       console.error('Error loading existing clients:', err);
     }
@@ -1462,9 +1527,10 @@ export const RequestsPage: React.FC = () => {
                           <input
                             type="tel"
                             value={contact.phone}
-                            onChange={e => updateContact(index, 'phone', e.target.value)}
+                            onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="+48 xxx xxx xxx"
+                            placeholder="+48 XXX XXX XXX"
+                            maxLength={16}
                           />
                         </div>
                         <div>
@@ -1483,9 +1549,16 @@ export const RequestsPage: React.FC = () => {
                             type="email"
                             value={contact.email}
                             onChange={e => updateContact(index, 'email', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                            className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                              contact.email && !isValidEmail(contact.email)
+                                ? 'border-red-300 focus:ring-red-500'
+                                : 'border-slate-200 focus:ring-blue-500'
+                            }`}
                             placeholder="email@firma.pl"
                           />
+                          {contact.email && !isValidEmail(contact.email) && (
+                            <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                          )}
                         </div>
                       </div>
                     </div>

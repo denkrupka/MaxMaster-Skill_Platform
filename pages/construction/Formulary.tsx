@@ -1085,6 +1085,53 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
     setInlineAddValue('');
   };
 
+  // Delete functions for form structure
+  const deleteGroup = (groupCode: string) => {
+    if (!template || !isEditMode) return;
+    if (!confirm('Czy na pewno chcesz usunąć tę grupę i wszystkie jej elementy?')) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+    newTemplate.room_groups = newTemplate.room_groups.filter(g => g.code !== groupCode);
+    setTemplate(newTemplate);
+    hasChangesRef.current = true;
+  };
+
+  const deleteRoom = (groupCode: string, roomCode: string) => {
+    if (!template || !isEditMode) return;
+    if (!confirm('Czy na pewno chcesz usunąć ten element?')) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+    const group = newTemplate.room_groups.find(g => g.code === groupCode);
+    if (group) {
+      group.rooms = group.rooms.filter(r => r.code !== roomCode);
+    }
+    setTemplate(newTemplate);
+    hasChangesRef.current = true;
+  };
+
+  const deleteCategory = (categoryCode: string) => {
+    if (!template || !isEditMode) return;
+    if (!confirm('Czy na pewno chcesz usunąć tę kategorię i wszystkie jej rodzaje prac?')) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+    newTemplate.work_categories = newTemplate.work_categories.filter(c => c.code !== categoryCode);
+    setTemplate(newTemplate);
+    hasChangesRef.current = true;
+  };
+
+  const deleteWorkType = (categoryCode: string, workTypeCode: string) => {
+    if (!template || !isEditMode) return;
+    if (!confirm('Czy na pewno chcesz usunąć ten rodzaj pracy?')) return;
+
+    const newTemplate = JSON.parse(JSON.stringify(template)) as KosztorysFormTemplate;
+    const category = newTemplate.work_categories.find(c => c.code === categoryCode);
+    if (category) {
+      category.work_types = category.work_types.filter(w => w.code !== workTypeCode);
+    }
+    setTemplate(newTemplate);
+    hasChangesRef.current = true;
+  };
+
   const getMarkedCount = () => {
     let count = 0;
     answers.forEach(v => { if (v) count++; });
@@ -1427,7 +1474,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                       <th
                         key={category.code}
                         colSpan={category.work_types.length + (isEditMode ? 1 : 0)}
-                        className={`px-2 py-2 text-center text-xs font-semibold border-b border-r border-slate-200 ${colorClass} ${isEditMode ? 'cursor-pointer hover:opacity-80' : ''}`}
+                        className={`px-2 py-2 text-center text-xs font-semibold border-b border-r border-slate-200 ${colorClass} ${isEditMode ? 'cursor-pointer hover:opacity-80' : ''} group`}
                         data-category-index={catIndex}
                         onClick={(e) => {
                           if (!isEditing && isEditMode) {
@@ -1452,9 +1499,34 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                             <button onClick={saveEditing} className="p-0.5 hover:bg-white/50 rounded">
                               <Check className="w-3 h-3" />
                             </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cancelEditing();
+                                deleteCategory(category.code);
+                              }}
+                              className="p-0.5 hover:bg-red-100 rounded text-red-600"
+                              title="Usuń kategorię"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           </div>
                         ) : (
-                          category.name
+                          <div className="flex items-center justify-center gap-1">
+                            <span>{category.name}</span>
+                            {isEditMode && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteCategory(category.code);
+                                }}
+                                className="p-0.5 hover:bg-red-100 rounded text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Usuń kategorię"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </th>
                     );
@@ -1553,10 +1625,35 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                               <button onClick={saveEditing} className="p-0.5 hover:bg-white/50 rounded">
                                 <Check className="w-3 h-3" />
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  cancelEditing();
+                                  deleteWorkType(category.code, workType.code);
+                                }}
+                                className="p-0.5 hover:bg-red-100 rounded text-red-600"
+                                title="Usuń"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
                             </div>
                           ) : (
-                            <div className="text-[10px] text-slate-600 font-normal leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
-                              {workType.name}
+                            <div className="relative">
+                              <div className="text-[10px] text-slate-600 font-normal leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
+                                {workType.name}
+                              </div>
+                              {isEditMode && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteWorkType(category.code, workType.code);
+                                  }}
+                                  className="absolute -top-1 -right-1 p-0.5 bg-red-100 hover:bg-red-200 rounded text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Usuń"
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                              )}
                             </div>
                           )}
                         </th>
@@ -1654,6 +1751,17 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                               <button onClick={saveEditing} className="p-1 hover:bg-amber-200 rounded">
                                 <Check className="w-4 h-4 text-green-600" />
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  cancelEditing();
+                                  deleteGroup(group.code);
+                                }}
+                                className="p-1 hover:bg-red-200 rounded text-red-600"
+                                title="Usuń grupę"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           ) : (
                             <span
@@ -1674,17 +1782,29 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                             </span>
                           )}
                           {isEditMode && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineAdding({ type: 'room', parentCode: group.code });
-                                setInlineAddValue('');
-                              }}
-                              className="ml-auto p-1 hover:bg-amber-200 rounded text-amber-600 hover:text-amber-800"
-                              title="Dodaj element"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineAdding({ type: 'room', parentCode: group.code });
+                                  setInlineAddValue('');
+                                }}
+                                className="ml-auto p-1 hover:bg-amber-200 rounded text-amber-600 hover:text-amber-800"
+                                title="Dodaj element"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteGroup(group.code);
+                                }}
+                                className="p-1 hover:bg-red-200 rounded text-red-600"
+                                title="Usuń grupę"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -1718,16 +1838,30 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                               </button>
                             </div>
                           ) : (
-                            <span
-                              className={isEditMode ? "pl-6 hover:bg-slate-100 px-1 rounded cursor-text" : "pl-6 px-1"}
-                              onClick={() => {
-                                if (isEditMode) {
-                                  startEditing('room', room.code, room.name);
-                                }
-                              }}
-                            >
-                              {room.name}
-                            </span>
+                            <div className="flex items-center justify-between group">
+                              <span
+                                className={isEditMode ? "pl-6 hover:bg-slate-100 px-1 rounded cursor-text flex-1" : "pl-6 px-1 flex-1"}
+                                onClick={() => {
+                                  if (isEditMode) {
+                                    startEditing('room', room.code, room.name);
+                                  }
+                                }}
+                              >
+                                {room.name}
+                              </span>
+                              {isEditMode && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteRoom(group.code, room.code);
+                                  }}
+                                  className="p-1 hover:bg-red-100 rounded text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Usuń element"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                         {template.work_categories.flatMap((category, catIndex) => {
