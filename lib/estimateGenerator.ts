@@ -166,7 +166,7 @@ export async function generateEstimateFromForm(
         .from('kosztorys_price_lists')
         .select('*')
         .eq('id', priceListId)
-        .single();
+        .maybeSingle();
       priceList = pl;
     } else {
       // Находим активный прайс-лист по дате
@@ -180,7 +180,7 @@ export async function generateEstimateFromForm(
         .or(`valid_to.is.null,valid_to.gte.${today}`)
         .order('valid_from', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
       priceList = pl;
     }
 
@@ -195,11 +195,11 @@ export async function generateEstimateFromForm(
     }
 
     // Функция получения цены из прайс-листа
-    const getPrice = (itemType: string, itemCode: string, defaultPrice: number): number => {
+    const getPrice = (itemType: string, itemId: string, defaultPrice: number): number => {
       const priceItem = priceListItems.find(
-        pi => pi.item_type === itemType && pi.item_code === itemCode
+        pi => pi.item_type === itemType && pi.item_id === itemId
       );
-      return priceItem?.price ?? defaultPrice;
+      return priceItem?.unit_price ?? defaultPrice;
     };
 
     // 5. Обрабатываем каждый ответ формуляра
@@ -241,7 +241,7 @@ export async function generateEstimateFromForm(
       const quantity = answerValue * (rule.multiplier || 1) * (template.base_quantity || 1);
 
       // Получаем цену работы
-      const workPrice = getPrice('labor', template.code, template.work_type?.labor_hours * 50 || 0);
+      const workPrice = getPrice('work', template.id, template.work_type?.labor_hours * 50 || 0);
       const laborHours = (template.labor_hours || 0) * quantity;
 
       // Рассчитываем стоимость материалов для этой позиции
@@ -252,7 +252,7 @@ export async function generateEstimateFromForm(
           if (!material) continue;
 
           const matQuantity = quantity * (tm.quantity || 1);
-          const matPrice = getPrice('material', material.code, material.default_price || 0);
+          const matPrice = getPrice('material', material.id, material.default_price || 0);
           const matTotal = matQuantity * matPrice;
           materialCost += matTotal;
 
@@ -284,7 +284,7 @@ export async function generateEstimateFromForm(
           if (!eq) continue;
 
           const eqQuantity = quantity * (te.quantity || 1);
-          const eqPrice = getPrice('equipment', eq.code, eq.default_price || 0);
+          const eqPrice = getPrice('equipment', eq.id, eq.default_price || 0);
           const eqTotal = eqQuantity * eqPrice;
           equipmentCost += eqTotal;
 
