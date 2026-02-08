@@ -2623,29 +2623,27 @@ export const RequestsPage: React.FC = () => {
                 /* Template Management View */
                 <div className="space-y-3">
                   {editingTemplate ? (
-                    /* Edit Template Form */
-                    <div className="space-y-4">
+                    /* Edit Template Form - Compact */
+                    <div className="space-y-3">
                       {/* System template badge */}
                       {editingTemplate.isSystem && (
-                        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                          <FileSpreadsheet className="w-4 h-4 text-blue-600" />
                           <span className="text-sm text-blue-700">Szablon systemowy</span>
                         </div>
                       )}
 
                       {/* Name */}
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Nazwa szablonu
-                        </label>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa</label>
                         <input
                           type="text"
                           value={templateFormData.name}
                           onChange={(e) => !editingTemplate.isSystem && setTemplateFormData({ ...templateFormData, name: e.target.value })}
                           readOnly={editingTemplate.isSystem}
-                          className={`w-full px-3 py-2 border rounded-lg ${
+                          className={`w-full px-3 py-1.5 text-sm border rounded-lg ${
                             editingTemplate.isSystem
-                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              ? 'border-slate-200 bg-slate-50 text-slate-600'
                               : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                           }`}
                         />
@@ -2653,135 +2651,106 @@ export const RequestsPage: React.FC = () => {
 
                       {/* Description */}
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Opis
-                        </label>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Opis</label>
                         <textarea
                           value={templateFormData.description}
                           onChange={(e) => !editingTemplate.isSystem && setTemplateFormData({ ...templateFormData, description: e.target.value })}
                           readOnly={editingTemplate.isSystem}
-                          rows={3}
-                          className={`w-full px-3 py-2 border rounded-lg resize-none ${
+                          rows={2}
+                          className={`w-full px-3 py-1.5 text-sm border rounded-lg resize-none ${
                             editingTemplate.isSystem
-                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              ? 'border-slate-200 bg-slate-50 text-slate-600'
                               : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                           }`}
                           placeholder="Opis szablonu..."
                         />
                       </div>
 
-                      {/* Work Types */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                          Typy prac
-                        </label>
-                        <div className="flex flex-wrap gap-2">
+                      {/* Work Types & Object Type in row */}
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">Typy prac</label>
+                          <div className="flex flex-wrap gap-1">
+                            {editingTemplate.isSystem ? (
+                              templateFormData.work_types.map((wt) => (
+                                <span key={wt} className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700">
+                                  {wt}
+                                </span>
+                              ))
+                            ) : (
+                              workTypes.map((wt) => (
+                                <button
+                                  key={wt.id}
+                                  onClick={() => {
+                                    const newTypes = templateFormData.work_types.includes(wt.code)
+                                      ? templateFormData.work_types.filter(t => t !== wt.code)
+                                      : [...templateFormData.work_types, wt.code];
+                                    setTemplateFormData({ ...templateFormData, work_types: newTypes });
+                                  }}
+                                  className={`px-2 py-1 text-xs rounded border transition ${
+                                    templateFormData.work_types.includes(wt.code)
+                                      ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                      : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                                  }`}
+                                >
+                                  {wt.code}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-slate-500 mb-1">Typ obiektu</label>
                           {editingTemplate.isSystem ? (
-                            // Show as badges for system templates
-                            templateFormData.work_types.map((wt) => (
-                              <span
-                                key={wt}
-                                className="px-3 py-1.5 rounded-lg bg-blue-100 border border-blue-300 text-blue-700"
-                              >
-                                {wt}
-                              </span>
-                            ))
+                            <span className="inline-block px-2 py-1 text-xs rounded bg-slate-100 text-slate-600">
+                              {OBJECT_TYPE_LABELS[templateFormData.object_type as KosztorysObjectType] || 'Wszystkie'}
+                            </span>
                           ) : (
-                            // Interactive for saved templates
-                            workTypes.map((wt) => (
-                              <button
-                                key={wt.id}
-                                onClick={() => {
-                                  const newTypes = templateFormData.work_types.includes(wt.code)
-                                    ? templateFormData.work_types.filter(t => t !== wt.code)
-                                    : [...templateFormData.work_types, wt.code];
-                                  setTemplateFormData({ ...templateFormData, work_types: newTypes });
-                                }}
-                                className={`px-3 py-1.5 rounded-lg border transition ${
-                                  templateFormData.work_types.includes(wt.code)
-                                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                                    : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                                }`}
-                              >
-                                {wt.code}
-                              </button>
-                            ))
+                            <select
+                              value={templateFormData.object_type}
+                              onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
+                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="">Wszystkie</option>
+                              <option value="industrial">Przemysłowe</option>
+                              <option value="residential">Mieszkaniowe</option>
+                              <option value="office">Biurowe</option>
+                            </select>
                           )}
                         </div>
                       </div>
 
-                      {/* Object Type */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Typ obiektu
-                        </label>
-                        {editingTemplate.isSystem ? (
-                          <input
-                            type="text"
-                            value={OBJECT_TYPE_LABELS[templateFormData.object_type as KosztorysObjectType] || 'Wszystkie'}
-                            readOnly
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
-                          />
-                        ) : (
-                          <select
-                            value={templateFormData.object_type}
-                            onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Wszystkie</option>
-                            <option value="industrial">Przemysłowe</option>
-                            <option value="residential">Mieszkaniowe</option>
-                            <option value="office">Biurowe</option>
-                          </select>
-                        )}
-                      </div>
-
-                      {/* Code (read-only) */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          Kod szablonu <span className="text-slate-400 font-normal">(automatyczny)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={editingTemplate.form_type || 'CUSTOM'}
-                          readOnly
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
-                        />
-                      </div>
-
                       {/* Actions */}
-                      <div className="flex gap-3 pt-2">
+                      <div className="flex gap-2 pt-2 border-t border-slate-100">
                         <button
                           onClick={() => setEditingTemplate(null)}
-                          className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition"
+                          className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition"
                         >
                           {editingTemplate.isSystem ? 'Zamknij' : 'Anuluj'}
                         </button>
                         {!editingTemplate.isSystem && (
                           <button
                             onClick={handleUpdateTemplate}
-                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                           >
                             Zapisz
                           </button>
                         )}
+                        <button
+                          onClick={() => {
+                            if (editingTemplate.isSystem) {
+                              handleHideSystemTemplate(editingTemplate.form_type);
+                              setEditingTemplate(null);
+                            } else {
+                              handleDeleteTemplate(editingTemplate.id);
+                            }
+                          }}
+                          className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title={editingTemplate.isSystem ? 'Ukryj szablon' : 'Usuń szablon'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-
-                      {/* Delete button */}
-                      <button
-                        onClick={() => {
-                          if (editingTemplate.isSystem) {
-                            handleHideSystemTemplate(editingTemplate.form_type);
-                            setEditingTemplate(null);
-                          } else {
-                            handleDeleteTemplate(editingTemplate.id);
-                          }
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {editingTemplate.isSystem ? 'Ukryj szablon' : 'Usuń szablon'}
-                      </button>
                     </div>
                   ) : (
                     /* Template List - System + Saved */
@@ -2797,21 +2766,14 @@ export const RequestsPage: React.FC = () => {
                               <button
                                 key={tmpl.code}
                                 onClick={() => openSystemTemplate(tmpl)}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition text-left group"
+                                className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition text-left group"
                               >
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
-                                  <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
+                                  <FileSpreadsheet className="w-4 h-4 text-blue-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                      {tmpl.code}
-                                    </span>
-                                    <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
-                                      {tmpl.forWorkTypes.join(', ')}
-                                    </span>
-                                  </div>
+                                  <div className="font-medium text-slate-900 text-sm truncate">{tmpl.name}</div>
+                                  <div className="text-xs text-slate-500">{tmpl.forWorkTypes.join(', ')}</div>
                                 </div>
                                 <Eye className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
                               </button>
@@ -2831,22 +2793,15 @@ export const RequestsPage: React.FC = () => {
                               <button
                                 key={tmpl.id}
                                 onClick={() => openEditTemplate(tmpl)}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
+                                className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 hover:border-blue-300 transition text-left group"
                               >
-                                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
-                                  <FileSpreadsheet className="w-5 h-5 text-green-600" />
+                                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition">
+                                  <FileSpreadsheet className="w-4 h-4 text-green-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-slate-900 truncate">{tmpl.name}</div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
-                                      {tmpl.form_type || 'CUSTOM'}
-                                    </span>
-                                    {tmpl.work_type && (
-                                      <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded">
-                                        {tmpl.work_type}
-                                      </span>
-                                    )}
+                                  <div className="font-medium text-slate-900 text-sm truncate">{tmpl.name}</div>
+                                  <div className="text-xs text-slate-500">
+                                    {tmpl.work_type || tmpl.template_data?.work_types?.join(', ') || 'Wszystkie'}
                                   </div>
                                 </div>
                                 <Pencil className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
@@ -2866,22 +2821,17 @@ export const RequestsPage: React.FC = () => {
                             {allTemplates.filter(t => hiddenSystemTemplates.includes(t.code)).map((tmpl) => (
                               <div
                                 key={tmpl.code}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-100 text-left opacity-60"
+                                className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-slate-200 bg-slate-100 text-left opacity-60"
                               >
-                                <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
-                                  <FileSpreadsheet className="w-5 h-5 text-slate-400" />
+                                <div className="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center">
+                                  <FileSpreadsheet className="w-4 h-4 text-slate-400" />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-slate-500 truncate">{tmpl.name}</div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-500 rounded">
-                                      {tmpl.code}
-                                    </span>
-                                  </div>
+                                  <div className="font-medium text-slate-500 text-sm truncate">{tmpl.name}</div>
                                 </div>
                                 <button
                                   onClick={() => handleRestoreSystemTemplate(tmpl.code)}
-                                  className="p-2 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                                  className="p-1.5 text-green-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
                                   title="Przywróć szablon"
                                 >
                                   <RotateCcw className="w-4 h-4" />
