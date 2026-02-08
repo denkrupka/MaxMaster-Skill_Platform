@@ -87,6 +87,13 @@ export const EstimatesPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
 
+  // Tab state: 'projects' for project-based estimates, 'kosztorys' for kosztorysowanie estimates
+  const [activeTab, setActiveTab] = useState<'projects' | 'kosztorys'>('kosztorys');
+
+  // Kosztorys estimates state
+  const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
+  const [kosztorysLoading, setKosztorysLoading] = useState(false);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<StageWithChildren[]>([]);
@@ -130,6 +137,7 @@ export const EstimatesPage: React.FC = () => {
       loadProjects();
       loadUnitMeasures();
       loadValuations();
+      loadKosztorysEstimates();
     }
   }, [currentUser]);
 
@@ -138,6 +146,30 @@ export const EstimatesPage: React.FC = () => {
       loadEstimateData();
     }
   }, [selectedProject]);
+
+  const loadKosztorysEstimates = async () => {
+    if (!currentUser) return;
+    setKosztorysLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_estimates')
+        .select(`
+          *,
+          request:kosztorys_requests(id, investment_name, client_name, address)
+        `)
+        .eq('company_id', currentUser.company_id)
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error loading kosztorys estimates:', error);
+      } else {
+        setKosztorysEstimates(data || []);
+      }
+    } catch (err) {
+      console.error('Error loading kosztorys estimates:', err);
+    } finally {
+      setKosztorysLoading(false);
+    }
+  };
 
   const loadProjects = async () => {
     if (!currentUser) return;
@@ -560,61 +592,182 @@ export const EstimatesPage: React.FC = () => {
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Kosztorysowanie</h1>
-          <p className="text-slate-600 mt-1">Wybierz projekt, aby rozpocząć kosztorysowanie</p>
+          <p className="text-slate-600 mt-1">Przeglądaj i zarządzaj kosztorysami</p>
         </div>
 
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Szukaj projektu..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveTab('kosztorys')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+              activeTab === 'kosztorys'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Kosztorysy z zapytań
+          </button>
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+              activeTab === 'projects'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Kosztorysy projektowe
+          </button>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {projects
-              .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-              .map(project => (
-                <button
-                  key={project.id}
-                  onClick={() => setSelectedProject(project)}
-                  className="text-left p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition group"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: (project.color || '#3b82f6') + '20' }}
-                    >
-                      <Calculator className="w-5 h-5" style={{ color: project.color || '#3b82f6' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-slate-900 truncate group-hover:text-blue-600">
-                        {project.name}
-                      </h3>
-                      <p className="text-sm text-slate-500">{project.code || 'Brak kodu'}</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-500" />
-                  </div>
-                </button>
-              ))}
-          </div>
+        {/* Kosztorys Estimates Tab */}
+        {activeTab === 'kosztorys' && (
+          <>
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Szukaj kosztorysu..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {kosztorysLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            ) : kosztorysEstimates.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+                <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500">Brak kosztorysów. Wygeneruj kosztorys z formularza w module Zapytań.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nr</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Inwestycja</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Klient</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Netto</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Brutto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Data</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {kosztorysEstimates
+                      .filter(e =>
+                        e.estimate_number?.toLowerCase().includes(search.toLowerCase()) ||
+                        e.request?.investment_name?.toLowerCase().includes(search.toLowerCase()) ||
+                        e.request?.client_name?.toLowerCase().includes(search.toLowerCase())
+                      )
+                      .map(estimate => (
+                        <tr key={estimate.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 text-sm font-medium text-slate-900">{estimate.estimate_number}</td>
+                          <td className="px-4 py-3 text-sm text-slate-700">{estimate.request?.investment_name || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600">{estimate.request?.client_name || '-'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              estimate.status === 'approved' ? 'bg-green-100 text-green-700' :
+                              estimate.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-700' :
+                              estimate.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {estimate.status === 'draft' ? 'Wersja robocza' :
+                               estimate.status === 'pending_approval' ? 'Do akceptacji' :
+                               estimate.status === 'approved' ? 'Zaakceptowany' :
+                               estimate.status === 'rejected' ? 'Odrzucony' : estimate.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-900 text-right">
+                            {(estimate.subtotal_net || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
+                            {(estimate.total_gross || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500">
+                            {new Date(estimate.created_at).toLocaleDateString('pl-PL')}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => window.location.hash = `#/construction/estimate/${estimate.id}`}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              title="Otwórz"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
 
-        {projects.length === 0 && !loading && (
-          <div className="text-center py-12">
-            <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">Brak projektów. Utwórz projekt, aby rozpocząć kosztorysowanie.</p>
-          </div>
+        {/* Projects Tab */}
+        {activeTab === 'projects' && (
+          <>
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Szukaj projektu..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {projects
+                  .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
+                  .map(project => (
+                    <button
+                      key={project.id}
+                      onClick={() => setSelectedProject(project)}
+                      className="text-left p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: (project.color || '#3b82f6') + '20' }}
+                        >
+                          <Calculator className="w-5 h-5" style={{ color: project.color || '#3b82f6' }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-slate-900 truncate group-hover:text-blue-600">
+                            {project.name}
+                          </h3>
+                          <p className="text-sm text-slate-500">{project.code || 'Brak kodu'}</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-500" />
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            )}
+
+            {projects.length === 0 && !loading && (
+              <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+                <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-500">Brak projektów. Utwórz projekt, aby rozpocząć kosztorysowanie.</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     );
