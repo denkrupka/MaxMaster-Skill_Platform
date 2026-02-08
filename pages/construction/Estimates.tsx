@@ -3,9 +3,9 @@ import {
   Plus, X, Search, Calculator, ChevronRight, ChevronDown, Loader2,
   FolderOpen, FileText, Package, Users, Wrench, PieChart, Trash2,
   Pencil, Copy, Download, Upload, Eye, Settings, ArrowLeft,
-  DollarSign, Percent, MoreVertical, GripVertical, Check, AlertCircle,
-  Save, XCircle, Inbox, BookOpen, Wallet, Building2,
-  User, Calendar, Phone, Mail, Star, UserPlus, MapPin, Filter
+  DollarSign, Percent, GripVertical, Check, AlertCircle,
+  Save, XCircle, RotateCcw, Inbox, BookOpen, Wallet, Building2,
+  User, Calendar, Phone, Mail, Star, UserPlus, MapPin, Filter, Briefcase
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -256,6 +256,7 @@ export const EstimatesPage: React.FC = () => {
   // Kosztorys estimates state
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [kosztorysLoading, setKosztorysLoading] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   // Requests state
   const [requests, setRequests] = useState<KosztorysRequest[]>([]);
@@ -544,7 +545,8 @@ export const EstimatesPage: React.FC = () => {
           *,
           request:kosztorys_requests(id, investment_name, client_name, address, work_types:kosztorys_request_work_types(work_type:kosztorys_work_types(id, code, name)))
         `)
-        .eq('company_id', currentUser.company_id);
+        .eq('company_id', currentUser.company_id)
+        .eq('is_deleted', showDeleted);
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -1274,6 +1276,31 @@ export const EstimatesPage: React.FC = () => {
     setEditingObjectCode(false);
   };
 
+  // Soft delete/restore estimate
+  const handleSoftDeleteEstimate = async (estimateId: string) => {
+    try {
+      await supabase
+        .from('kosztorys_estimates')
+        .update({ is_deleted: true })
+        .eq('id', estimateId);
+      await loadKosztorysEstimates();
+    } catch (err) {
+      console.error('Error deleting estimate:', err);
+    }
+  };
+
+  const handleRestoreEstimate = async (estimateId: string) => {
+    try {
+      await supabase
+        .from('kosztorys_estimates')
+        .update({ is_deleted: false })
+        .eq('id', estimateId);
+      await loadKosztorysEstimates();
+    } catch (err) {
+      console.error('Error restoring estimate:', err);
+    }
+  };
+
   // Filter estimates
   const filteredEstimates = useMemo(() => {
     let filtered = kosztorysEstimates;
@@ -1326,6 +1353,12 @@ export const EstimatesPage: React.FC = () => {
     return filtered;
   }, [kosztorysEstimates, search, clientFilter, statusFilter, valueMinFilter, valueMaxFilter, dateFromFilter, dateToFilter]);
 
+  // Reload when showDeleted changes
+  useEffect(() => {
+    if (currentUser) {
+      loadKosztorysEstimates();
+    }
+  }, [showDeleted]);
 
   // Project selection view
   if (!selectedProject) {
@@ -1416,6 +1449,16 @@ export const EstimatesPage: React.FC = () => {
                 <Filter className="w-4 h-4" />
                 Filtry
               </button>
+
+              <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={e => setShowDeleted(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-blue-600"
+                />
+                Usunięte
+              </label>
 
               <button
                 onClick={() => setShowNewEstimateModal(true)}
@@ -1580,13 +1623,23 @@ export const EstimatesPage: React.FC = () => {
                           {new Date(estimate.created_at).toLocaleDateString('pl-PL')}
                         </td>
                         <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => {/* TODO: implement delete */}}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded"
-                            title="Akcje"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                          {showDeleted ? (
+                            <button
+                              onClick={() => handleRestoreEstimate(estimate.id)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                              title="Przywróć"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleSoftDeleteEstimate(estimate.id)}
+                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Usuń"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -2468,6 +2521,17 @@ export const EstimatesPage: React.FC = () => {
                     </select>
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Notatka wewnętrzna</label>
+                  <textarea
+                    value={formData.internal_notes}
+                    onChange={e => setFormData(prev => ({ ...prev, internal_notes: e.target.value }))}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Notatki widoczne tylko dla zespołu..."
+                  />
+                </div>
               </div>
 
               {/* 2. Representatives */}
@@ -2754,26 +2818,99 @@ export const EstimatesPage: React.FC = () => {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Termin odpowiedzi</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Kraj</label>
+                    <input
+                      type="text"
+                      value={formData.object_country}
+                      onChange={e => setFormData(prev => ({ ...prev, object_country: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Polska"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Materials */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-slate-400" />
+                  Materiały
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Główny</label>
+                    <select
+                      value={formData.main_material_side}
+                      onChange={e => setFormData(prev => ({ ...prev, main_material_side: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz --</option>
+                      <option value="investor">Po stronie Inwestora</option>
+                      <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                      <option value="company">Po stronie Firmy</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Drobny</label>
+                    <select
+                      value={formData.minor_material_side}
+                      onChange={e => setFormData(prev => ({ ...prev, minor_material_side: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz --</option>
+                      <option value="investor">Po stronie Inwestora</option>
+                      <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                      <option value="company">Po stronie Firmy</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Assignment */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-slate-400" />
+                  Odpowiedzialny
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Odpowiedzialny</label>
+                    <select
+                      value={formData.assigned_user_id}
+                      onChange={e => setFormData(prev => ({ ...prev, assigned_user_id: e.target.value }))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz --</option>
+                      {users.map(user => (
+                        <option key={user.id} value={user.id}>
+                          {user.first_name} {user.last_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Planowana data odpowiedzi</label>
                     <input
                       type="date"
                       value={formData.planned_response_date}
                       onChange={e => setFormData(prev => ({ ...prev, planned_response_date: e.target.value }))}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      min={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Dodatkowe uwagi..."
-                  />
-                </div>
+              {/* 6. Notes */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi od klienta</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Dodatkowe informacje od klienta..."
+                />
               </div>
             </div>
 
