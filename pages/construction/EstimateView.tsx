@@ -590,15 +590,6 @@ export const EstimateViewPage: React.FC = () => {
                       {totals.equipmentTotal.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                     </div>
                   </div>
-                  <div className="bg-slate-50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-                      <Clock className="w-4 h-4" />
-                      Roboczogodziny
-                    </div>
-                    <div className="text-xl font-bold text-slate-900">
-                      {totals.laborHours.toFixed(1)} h
-                    </div>
-                  </div>
                 </div>
 
                 <div className="border-t border-slate-200 pt-4 space-y-3">
@@ -610,45 +601,14 @@ export const EstimateViewPage: React.FC = () => {
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-600">Marża:</span>
-                      <input
-                        type="number"
-                        value={marginPercent}
-                        onChange={(e) => setMarginPercent(parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-slate-300 rounded text-right"
-                        step="0.5"
-                        min="0"
-                        max="100"
-                      />
-                      <span className="text-slate-500">%</span>
-                    </div>
-                    <span className="font-medium text-green-600">
-                      +{totals.marginAmount.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-600">Rabat:</span>
-                      <input
-                        type="number"
-                        value={discountPercent}
-                        onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-slate-300 rounded text-right"
-                        step="0.5"
-                        min="0"
-                        max="100"
-                      />
-                      <span className="text-slate-500">%</span>
-                    </div>
-                    <span className="font-medium text-red-600">
-                      -{totals.discountAmount.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                    <span className="text-slate-600">VAT ({estimate?.vat_rate || 23}%):</span>
+                    <span className="font-medium text-slate-700">
+                      {totals.vatAmount.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center pt-3 border-t border-slate-200 text-xl">
-                    <span className="font-semibold text-slate-900">RAZEM:</span>
+                    <span className="font-semibold text-slate-900">RAZEM BRUTTO:</span>
                     <span className="font-bold text-green-600">
                       {totals.grandTotal.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                     </span>
