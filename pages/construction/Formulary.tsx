@@ -1055,8 +1055,6 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         currentUser.id!
       );
 
-      setGenerationResult(result);
-
       if (result.success && result.estimateId) {
         // Update form status
         await supabase
@@ -1064,10 +1062,11 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           .update({ status: 'completed' })
           .eq('id', form.id);
 
-        // Navigate to estimates page after short delay
-        setTimeout(() => {
-          window.location.hash = `#/construction/estimates?request=${request.id}`;
-        }, 2000);
+        // Navigate directly to the estimate view page
+        window.location.hash = `#/construction/estimate/${result.estimateId}`;
+      } else {
+        // Only show result modal if there are errors
+        setGenerationResult(result);
       }
     } catch (error: any) {
       console.error('Error generating estimate:', error);
