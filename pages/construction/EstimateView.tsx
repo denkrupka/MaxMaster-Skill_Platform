@@ -65,8 +65,7 @@ export const EstimateViewPage: React.FC = () => {
           .from('kosztorys_estimates')
           .select(`
             *,
-            request:kosztorys_requests(*),
-            price_list:kosztorys_price_lists(*)
+            request:kosztorys_requests(*)
           `)
           .eq('id', estimateId)
           .single();
@@ -78,8 +77,7 @@ export const EstimateViewPage: React.FC = () => {
           .from('kosztorys_estimates')
           .select(`
             *,
-            request:kosztorys_requests(*),
-            price_list:kosztorys_price_lists(*)
+            request:kosztorys_requests(*)
           `)
           .eq('request_id', requestIdFromUrl)
           .order('version', { ascending: false })
@@ -91,8 +89,8 @@ export const EstimateViewPage: React.FC = () => {
 
       if (estimateData) {
         setEstimate(estimateData);
-        setMarginPercent(estimateData.margin_percent || 0);
-        setDiscountPercent(estimateData.discount_percent || 0);
+        setMarginPercent(0);
+        setDiscountPercent(0);
 
         // Load estimate items
         const { data: itemsData } = await supabase
@@ -102,12 +100,14 @@ export const EstimateViewPage: React.FC = () => {
           .order('position_number');
         setItems(itemsData || []);
 
-        // Load equipment items
+        // Load equipment items with equipment details
         const { data: eqData } = await supabase
           .from('kosztorys_estimate_equipment')
-          .select('*')
-          .eq('estimate_id', estimateData.id)
-          .order('position_number');
+          .select(`
+            *,
+            equipment:kosztorys_equipment(code, name, unit)
+          `)
+          .eq('estimate_id', estimateData.id);
         setEquipment(eqData || []);
       }
     } catch (error) {
@@ -125,45 +125,42 @@ export const EstimateViewPage: React.FC = () => {
 
   // Calculate totals
   const totals = useMemo(() => {
-    const workTotal = items.reduce((sum, item) => sum + (item.total_price || 0), 0);
-    const materialTotal = items.reduce((sum, item) => sum + (item.material_cost || 0), 0);
-    const equipmentTotal = equipment.reduce((sum, eq) => sum + (eq.total_price || 0), 0);
-    const laborHours = items.reduce((sum, item) => sum + (item.labor_hours || 0), 0);
+    const workTotal = items.reduce((sum, item) => sum + (item.total_work || 0), 0);
+    const materialTotal = items.reduce((sum, item) => sum + (item.total_material || 0), 0);
+    const equipmentTotal = equipment.reduce((sum, eq) => sum + (eq.total || 0), 0);
     const subtotal = workTotal + materialTotal + equipmentTotal;
-    const marginAmount = subtotal * (marginPercent / 100);
-    const afterMargin = subtotal + marginAmount;
-    const discountAmount = afterMargin * (discountPercent / 100);
-    const grandTotal = afterMargin - discountAmount;
+    const vatRate = estimate?.vat_rate || 23;
+    const vatAmount = subtotal * (vatRate / 100);
+    const grandTotal = subtotal + vatAmount;
 
     return {
       workTotal,
       materialTotal,
       equipmentTotal,
-      laborHours,
       subtotal,
-      marginAmount,
-      afterMargin,
-      discountAmount,
+      vatAmount,
       grandTotal,
     };
-  }, [items, equipment, marginPercent, discountPercent]);
+  }, [items, equipment, estimate]);
 
   const handleSave = async () => {
     if (!estimate) return;
     setSaving(true);
 
     try {
+      const subtotalNet = totals.workTotal + totals.materialTotal + totals.equipmentTotal;
+      const vatAmount = subtotalNet * (estimate.vat_rate || 23) / 100;
+      const totalGross = subtotalNet + vatAmount;
+
       const { error } = await supabase
         .from('kosztorys_estimates')
         .update({
-          work_total: totals.workTotal,
-          material_total: totals.materialTotal,
-          equipment_total: totals.equipmentTotal,
-          labor_hours_total: totals.laborHours,
-          grand_total: totals.subtotal,
-          margin_percent: marginPercent,
-          discount_percent: discountPercent,
-          final_total: totals.grandTotal,
+          total_works: totals.workTotal,
+          total_materials: totals.materialTotal,
+          total_equipment: totals.equipmentTotal,
+          subtotal_net: subtotalNet,
+          vat_amount: vatAmount,
+          total_gross: totalGross,
         })
         .eq('id', estimate.id);
 
@@ -178,15 +175,20 @@ export const EstimateViewPage: React.FC = () => {
 
   const handleUpdateItem = async (item: any) => {
     try {
+      const totalWork = item.quantity * (item.unit_price_work || 0);
+      const totalMaterial = item.quantity * (item.unit_price_material || 0);
+      const totalItem = totalWork + totalMaterial;
+
       const { error } = await supabase
         .from('kosztorys_estimate_items')
         .update({
-          work_name: item.work_name,
+          task_description: item.task_description,
           quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.quantity * item.unit_price,
-          labor_hours: item.labor_hours,
-          material_cost: item.material_cost,
+          unit_price_work: item.unit_price_work,
+          total_work: totalWork,
+          unit_price_material: item.unit_price_material,
+          total_material: totalMaterial,
+          total_item: totalItem,
         })
         .eq('id', item.id);
 
@@ -427,34 +429,34 @@ export const EstimateViewPage: React.FC = () => {
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nr</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Pomieszczenie</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa pracy</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jedn.</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Dział</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Opis pracy</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Ilość</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena jedn.</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Wartość</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">R-g</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena pracy</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Praca</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Materiały</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Razem</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {items.map((item, index) => (
                       <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm text-slate-500">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{item.room_name}</td>
-                        <td className="px-4 py-3 text-sm text-slate-900">{item.work_name}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{item.unit}</td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{item.position_number || index + 1}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{item.room_group}</td>
+                        <td className="px-4 py-3 text-sm text-slate-900">{item.task_description}</td>
                         <td className="px-4 py-3 text-sm text-slate-900 text-right">{item.quantity}</td>
                         <td className="px-4 py-3 text-sm text-slate-900 text-right">
-                          {item.unit_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          {item.unit_price_work?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
-                          {item.total_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          {item.total_work?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600 text-right">{item.labor_hours?.toFixed(1)}</td>
                         <td className="px-4 py-3 text-sm text-slate-600 text-right">
-                          {item.material_cost?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          {item.total_material?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
+                          {item.total_item?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button
@@ -521,15 +523,15 @@ export const EstimateViewPage: React.FC = () => {
                     {equipment.map((eq, index) => (
                       <tr key={eq.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm text-slate-500">{index + 1}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{eq.equipment_code}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{eq.equipment_name}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{eq.unit}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{eq.equipment?.code || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{eq.equipment?.name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{eq.equipment?.unit || '-'}</td>
                         <td className="px-4 py-3 text-sm text-slate-900 text-right">{eq.quantity}</td>
                         <td className="px-4 py-3 text-sm text-slate-900 text-right">
                           {eq.unit_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
-                          {eq.total_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                          {eq.total?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
                       </tr>
                     ))}
@@ -670,11 +672,11 @@ export const EstimateViewPage: React.FC = () => {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa pracy</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Opis pracy</label>
                 <input
                   type="text"
-                  value={editingItem.work_name || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, work_name: e.target.value })}
+                  value={editingItem.task_description || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, task_description: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                 />
               </div>
@@ -690,37 +692,25 @@ export const EstimateViewPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena pracy (jedn.)</label>
                   <input
                     type="number"
                     step="0.01"
-                    value={editingItem.unit_price || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, unit_price: parseFloat(e.target.value) })}
+                    value={editingItem.unit_price_work || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, unit_price_work: parseFloat(e.target.value) })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Roboczogodziny</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={editingItem.labor_hours || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, labor_hours: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Koszt materiałów</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editingItem.material_cost || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, material_cost: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cena materiałów (jedn.)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editingItem.unit_price_material || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, unit_price_material: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
