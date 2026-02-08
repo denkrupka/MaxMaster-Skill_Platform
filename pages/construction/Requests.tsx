@@ -2733,26 +2733,16 @@ export const RequestsPage: React.FC = () => {
                       <div className="flex gap-4">
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-slate-500 mb-1">Typy prac</label>
-                          <div className="flex flex-wrap gap-1">
+                          <select
+                            value={templateFormData.work_types[0] || ''}
+                            onChange={(e) => setTemplateFormData({ ...templateFormData, work_types: e.target.value ? [e.target.value] : [] })}
+                            className="w-full px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Wszystkie</option>
                             {workTypes.map((wt) => (
-                              <button
-                                key={wt.id}
-                                onClick={() => {
-                                  const newTypes = templateFormData.work_types.includes(wt.code)
-                                    ? templateFormData.work_types.filter(t => t !== wt.code)
-                                    : [...templateFormData.work_types, wt.code];
-                                  setTemplateFormData({ ...templateFormData, work_types: newTypes });
-                                }}
-                                className={`px-2 py-1 text-xs rounded border transition ${
-                                  templateFormData.work_types.includes(wt.code)
-                                    ? 'bg-blue-100 border-blue-300 text-blue-700'
-                                    : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                                }`}
-                              >
-                                {wt.code}
-                              </button>
+                              <option key={wt.id} value={wt.code}>{wt.code} - {wt.name}</option>
                             ))}
-                          </div>
+                          </select>
                         </div>
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-slate-500 mb-1">Typ obiektu</label>
