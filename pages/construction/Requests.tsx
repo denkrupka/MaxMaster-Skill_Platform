@@ -295,15 +295,15 @@ export const RequestsPage: React.FC = () => {
     if (!selectedRequest) return;
     setCheckingForm(true);
     try {
-      // Check if a form already exists for this request
-      const { data: existingForm } = await supabase
+      // Check if any forms already exist for this request
+      const { data: existingForms } = await supabase
         .from('kosztorys_forms')
         .select('id')
         .eq('request_id', selectedRequest.id)
         .eq('is_current', true)
-        .maybeSingle();
+        .limit(1);
 
-      if (existingForm) {
+      if (existingForms && existingForms.length > 0) {
         // Form exists, go directly to formulary
         setShowPrepareOfferModal(false);
         window.location.hash = `#/construction/formulary/${selectedRequest.id}`;
