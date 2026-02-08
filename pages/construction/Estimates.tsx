@@ -1684,6 +1684,634 @@ export const EstimatesPage: React.FC = () => {
             <PriceListsPage />
           </div>
         )}
+
+        {/* New Estimate Modal */}
+        {showNewEstimateModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-slate-900">Nowy kosztorys</h2>
+                <button onClick={handleCloseNewEstimateModal} className="p-2 hover:bg-slate-100 rounded-lg">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+                {/* 1. Client info */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-slate-400" />
+                    Dane klienta
+                  </h3>
+
+                  {/* NIP with GUS button */}
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">NIP</label>
+                      <input
+                        type="text"
+                        value={formData.nip}
+                        onChange={e => setFormData(prev => ({ ...prev, nip: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="XXX-XXX-XX-XX"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        onClick={handleFetchGus}
+                        disabled={gusLoading || !formData.nip}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {gusLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Pobierz z GUS
+                      </button>
+                    </div>
+                  </div>
+                  {gusError && (
+                    <p className="text-sm text-red-600">{gusError}</p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 relative">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
+                      <input
+                        type="text"
+                        value={formData.client_name}
+                        onChange={e => {
+                          setFormData(prev => ({ ...prev, client_name: e.target.value }));
+                          setClientSearchQuery(e.target.value);
+                        }}
+                        onFocus={() => {
+                          if (formData.client_name.length >= 2) {
+                            setClientSearchQuery(formData.client_name);
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => setShowClientDropdown(false), 200);
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Wyszukaj istniejącego lub wpisz nową nazwę..."
+                      />
+                      {showClientDropdown && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {filteredClients.length > 0 ? (
+                            <>
+                              <div className="px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b">
+                                Istniejący klienci
+                              </div>
+                              {filteredClients.map((client, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => selectExistingClient(client)}
+                                  className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0"
+                                >
+                                  <div className="font-medium text-slate-900">{client.client_name}</div>
+                                  <div className="text-xs text-slate-500 flex gap-2">
+                                    {client.nip && <span>NIP: {client.nip}</span>}
+                                    {client.company_city && <span>{client.company_city}</span>}
+                                  </div>
+                                </button>
+                              ))}
+                            </>
+                          ) : clientSearchQuery.length >= 2 && (
+                            <div className="px-3 py-3 text-sm text-slate-500 text-center">
+                              Nie znaleziono klienta. Możesz dodać nowego lub wyszukać w GUS.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Company address */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-2 relative">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Ulica</label>
+                      <input
+                        type="text"
+                        value={formData.company_street}
+                        onChange={e => handleCompanyStreetChange(e.target.value)}
+                        onFocus={() => companyAddressSuggestions.length > 0 && setShowCompanyAddressSuggestions(true)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="ul. Przykładowa"
+                      />
+                      {showCompanyAddressSuggestions && companyAddressSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {companyAddressSuggestions.map((addr, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => selectCompanyAddress(addr)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                            >
+                              <div className="font-medium">{addr.street} {addr.streetNumber}</div>
+                              <div className="text-slate-500 text-xs">{addr.postalCode} {addr.city}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Numer</label>
+                      <input
+                        type="text"
+                        value={formData.company_street_number}
+                        onChange={e => setFormData(prev => ({ ...prev, company_street_number: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="12A"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Kod pocztowy</label>
+                      <input
+                        type="text"
+                        value={formData.company_postal_code}
+                        onChange={e => setFormData(prev => ({ ...prev, company_postal_code: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="00-000"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Miasto</label>
+                      <input
+                        type="text"
+                        value={formData.company_city}
+                        onChange={e => setFormData(prev => ({ ...prev, company_city: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Warszawa"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Źródło zapytania</label>
+                      <select
+                        value={formData.request_source}
+                        onChange={e => setFormData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Notatka wewnętrzna</label>
+                    <textarea
+                      value={formData.internal_notes}
+                      onChange={e => setFormData(prev => ({ ...prev, internal_notes: e.target.value }))}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Notatki widoczne tylko dla zespołu..."
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Representatives */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <User className="w-5 h-5 text-slate-400" />
+                      Przedstawiciele firmy
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={addContact}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      Dodaj
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {contacts.map((contact, index) => (
+                      <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={contact.is_primary}
+                                onChange={() => updateContact(index, 'is_primary', true)}
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                                {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
+                                Główny kontakt
+                              </span>
+                            </label>
+                          </div>
+                          {contacts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeContact(index)}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                            <input
+                              type="text"
+                              value={contact.first_name}
+                              onChange={e => updateContact(index, 'first_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Jan"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                            <input
+                              type="text"
+                              value={contact.last_name}
+                              onChange={e => updateContact(index, 'last_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kowalski"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                            <input
+                              type="tel"
+                              value={contact.phone}
+                              onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="+48 XXX XXX XXX"
+                              maxLength={16}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                            <input
+                              type="text"
+                              value={contact.position}
+                              onChange={e => updateContact(index, 'position', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kierownik projektu"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={e => updateContact(index, 'email', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                                contact.email && !isValidEmail(contact.email)
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-200 focus:ring-blue-500'
+                              }`}
+                              placeholder="email@firma.pl"
+                            />
+                            {contact.email && !isValidEmail(contact.email) && (
+                              <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Object info */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-slate-400" />
+                    Obiekt
+                  </h3>
+                  <div className="grid grid-cols-6 gap-4">
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa obiektu *</label>
+                      <input
+                        type="text"
+                        value={formData.investment_name}
+                        onChange={e => setFormData(prev => ({ ...prev, investment_name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="np. Osiedle Słoneczne - Etap II"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Kod obiektu</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={formData.object_code}
+                          onChange={e => setFormData(prev => ({ ...prev, object_code: e.target.value }))}
+                          disabled={!editingObjectCode}
+                          className="w-full px-2 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 font-mono"
+                          placeholder="WC26"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditingObjectCode(!editingObjectCode)}
+                          className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg flex-shrink-0"
+                          title={editingObjectCode ? 'Auto-generuj' : 'Edytuj ręcznie'}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="col-span-2 relative">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj prac *</label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowWorkTypesDropdown(!showWorkTypesDropdown)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
+                        >
+                          <span className={selectedWorkTypes.length === 0 ? 'text-slate-400' : 'text-slate-900'}>
+                            {selectedWorkTypes.length === 0
+                              ? 'Wybierz rodzaj prac...'
+                              : workTypes
+                                  .filter(wt => selectedWorkTypes.includes(wt.id))
+                                  .map(wt => wt.code)
+                                  .join(', ')}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showWorkTypesDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showWorkTypesDropdown && (
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                            {workTypes.map(wt => (
+                              <label
+                                key={wt.id}
+                                className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedWorkTypes.includes(wt.id)}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setSelectedWorkTypes(prev => [...prev, wt.id]);
+                                    } else {
+                                      setSelectedWorkTypes(prev => prev.filter(id => id !== wt.id));
+                                    }
+                                  }}
+                                  className="mr-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-slate-700">{wt.name}</span>
+                              </label>
+                            ))}
+                            {workTypes.length === 0 && (
+                              <div className="px-3 py-2 text-sm text-slate-500">Brak typów prac</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
+                      <select
+                        value={formData.object_type}
+                        onChange={e => setFormData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                        {objectTypes.filter((t: any) => !['industrial', 'residential', 'office'].includes(t.code)).map((t: any) => (
+                          <option key={t.id} value={t.code}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-3">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
+                      <select
+                        value={formData.object_category_id}
+                        onChange={e => setFormData(prev => ({ ...prev, object_category_id: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Wybierz (opcjonalnie) --</option>
+                        {objectCategories.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Object address */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="col-span-2 relative">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Ulica</label>
+                      <input
+                        type="text"
+                        value={formData.object_street}
+                        onChange={e => handleObjectStreetChange(e.target.value)}
+                        onFocus={() => objectAddressSuggestions.length > 0 && setShowObjectAddressSuggestions(true)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="ul. Budowlana"
+                      />
+                      {showObjectAddressSuggestions && objectAddressSuggestions.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {objectAddressSuggestions.map((addr, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => selectObjectAddress(addr)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                            >
+                              <div className="font-medium">{addr.street} {addr.streetNumber}</div>
+                              <div className="text-slate-500 text-xs">{addr.postalCode} {addr.city}</div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Numer</label>
+                      <input
+                        type="text"
+                        value={formData.object_street_number}
+                        onChange={e => setFormData(prev => ({ ...prev, object_street_number: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Kod pocztowy</label>
+                      <input
+                        type="text"
+                        value={formData.object_postal_code}
+                        onChange={e => setFormData(prev => ({ ...prev, object_postal_code: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="00-000"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Miasto</label>
+                      <input
+                        type="text"
+                        value={formData.object_city}
+                        onChange={e => setFormData(prev => ({ ...prev, object_city: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Warszawa"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Kraj</label>
+                      <input
+                        type="text"
+                        value={formData.object_country}
+                        onChange={e => setFormData(prev => ({ ...prev, object_country: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Polska"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Materials */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-slate-400" />
+                    Materiały
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Główny</label>
+                      <select
+                        value={formData.main_material_side}
+                        onChange={e => setFormData(prev => ({ ...prev, main_material_side: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Wybierz --</option>
+                        <option value="investor">Po stronie Inwestora</option>
+                        <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                        <option value="company">Po stronie Firmy</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Drobny</label>
+                      <select
+                        value={formData.minor_material_side}
+                        onChange={e => setFormData(prev => ({ ...prev, minor_material_side: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Wybierz --</option>
+                        <option value="investor">Po stronie Inwestora</option>
+                        <option value="client">Po stronie {formData.client_name || 'Klienta'}</option>
+                        <option value="company">Po stronie Firmy</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Assignment */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Briefcase className="w-5 h-5 text-slate-400" />
+                    Odpowiedzialny
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Odpowiedzialny</label>
+                      <select
+                        value={formData.assigned_user_id}
+                        onChange={e => setFormData(prev => ({ ...prev, assigned_user_id: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Wybierz --</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.first_name} {user.last_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Planowana data odpowiedzi</label>
+                      <input
+                        type="date"
+                        value={formData.planned_response_date}
+                        onChange={e => setFormData(prev => ({ ...prev, planned_response_date: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi od klienta</label>
+                  <textarea
+                    value={formData.notes}
+                    onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Dodatkowe informacje od klienta..."
+                  />
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                <button
+                  onClick={handleCloseNewEstimateModal}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleSaveNewEstimate}
+                  disabled={saving || !formData.client_name.trim() || !formData.investment_name.trim()}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Utwórz i przejdź do formularza
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirmModal && estimateToDelete && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <Trash2 className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Usunąć kosztorys?</h3>
+                    <p className="text-sm text-slate-500">Ta operacja przeniesie kosztorys do usuniętych</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                  <p className="text-sm font-medium text-slate-900">{estimateToDelete.estimate_number}</p>
+                  <p className="text-sm text-slate-600">{estimateToDelete.request?.investment_name}</p>
+                  <p className="text-sm text-slate-500">{estimateToDelete.request?.client_name}</p>
+                </div>
+                <p className="text-sm text-slate-600">
+                  Kosztorys będzie można przywrócić z poziomu filtrów, zaznaczając opcję "Pokaż usunięte kosztorysy".
+                </p>
+              </div>
+              <div className="p-4 bg-slate-50 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirmModal(false);
+                    setEstimateToDelete(null);
+                  }}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                >
+                  Usuń kosztorys
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
