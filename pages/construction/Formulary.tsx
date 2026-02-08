@@ -602,8 +602,10 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
   const [templateName, setTemplateName] = useState('');
   const [templateObjectType, setTemplateObjectType] = useState<string>('');
   const [templateWorkType, setTemplateWorkType] = useState<string>('');
+  const [templateDescription, setTemplateDescription] = useState<string>('');
 
   // Dictionary data for select fields
+  const [workTypesForTemplate, setWorkTypesForTemplate] = useState<{ id: string; code: string; name: string }[]>([]);
   const [extWallTypes, setExtWallTypes] = useState<{ id: string; name: string }[]>([]);
   const [intWallTypes, setIntWallTypes] = useState<{ id: string; name: string }[]>([]);
 
@@ -679,6 +681,24 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           { id: 'inne', name: 'Inne' }
         ]);
       }
+
+      // Load work types for template modal
+      const { data: workTypesData } = await supabase
+        .from('kosztorys_work_types')
+        .select('id, code, name')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('code');
+
+      if (workTypesData && workTypesData.length > 0) {
+        setWorkTypesForTemplate(workTypesData);
+      } else {
+        // Fallback defaults
+        setWorkTypesForTemplate([
+          { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+          { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
+        ]);
+      }
     } catch (err) {
       console.error('Error loading dictionaries:', err);
       // Set fallback defaults
@@ -697,6 +717,10 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         { id: 'beton', name: 'Beton' },
         { id: 'silka', name: 'Silka' },
         { id: 'inne', name: 'Inne' }
+      ]);
+      setWorkTypesForTemplate([
+        { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+        { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
       ]);
     }
   };
@@ -2588,6 +2612,16 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                <textarea
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                  placeholder="Krótki opis szablonu..."
+                  rows={2}
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
                 <select
                   value={templateObjectType}
@@ -2606,9 +2640,10 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                   onChange={(e) => setTemplateWorkType(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="IE">IE - Elektryka</option>
-                  <option value="IT">IT - Teletechnika</option>
-                  <option value="IE,IT">IE + IT</option>
+                  <option value="">Wybierz...</option>
+                  {workTypesForTemplate.map((wt) => (
+                    <option key={wt.id} value={wt.code}>{wt.code} - {wt.name}</option>
+                  ))}
                 </select>
               </div>
               <div className="bg-slate-50 rounded-lg p-3">
@@ -2624,6 +2659,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                 onClick={() => {
                   setShowSaveTemplateModal(false);
                   setTemplateName('');
+                  setTemplateDescription('');
                 }}
                 className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
               >
@@ -2645,6 +2681,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                         work_type: templateWorkType,
                         template_data: {
                           title: template.title,
+                          description: templateDescription.trim() || null,
                           general_fields: template.general_fields,
                           room_groups: template.room_groups,
                           work_categories: template.work_categories
@@ -2660,6 +2697,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
 
                     setShowSaveTemplateModal(false);
                     setTemplateName('');
+                    setTemplateDescription('');
                     alert('Szablon został zapisany pomyślnie!');
                   } catch (err) {
                     console.error('Error saving template:', err);
