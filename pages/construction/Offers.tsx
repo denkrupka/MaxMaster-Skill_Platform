@@ -149,7 +149,7 @@ export const OffersPage: React.FC = () => {
           .from('kosztorys_estimates')
           .select('*, request:kosztorys_requests(investment_name, client_name)')
           .eq('company_id', currentUser.company_id)
-          .in('status', ['approved', 'sent'])
+          .in('status', ['draft', 'pending_approval', 'approved'])
           .order('created_at', { ascending: false })
       ]);
 

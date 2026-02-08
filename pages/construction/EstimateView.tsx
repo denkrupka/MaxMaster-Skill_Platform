@@ -61,19 +61,20 @@ export const EstimateViewPage: React.FC = () => {
       let estimateData: KosztorysEstimate | null = null;
 
       if (estimateId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('kosztorys_estimates')
           .select(`
             *,
             request:kosztorys_requests(*)
           `)
           .eq('id', estimateId)
-          .single();
+          .maybeSingle();
+        if (error) console.error('Error loading estimate:', error);
         estimateData = data;
         setRequest(data?.request || null);
       } else if (requestIdFromUrl) {
         // Load latest estimate for request
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('kosztorys_estimates')
           .select(`
             *,
@@ -82,7 +83,8 @@ export const EstimateViewPage: React.FC = () => {
           .eq('request_id', requestIdFromUrl)
           .order('version', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
+        if (error) console.error('Error loading estimate for request:', error);
         estimateData = data;
         setRequest(data?.request || null);
       }
