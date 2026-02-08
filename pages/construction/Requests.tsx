@@ -538,6 +538,27 @@ export const RequestsPage: React.FC = () => {
     });
   };
 
+  // Open system template for viewing/editing
+  const openSystemTemplate = (tmpl: { code: string; name: string; desc: string; forWorkTypes: string[]; forObjectTypes: string[] }) => {
+    setEditingTemplate({
+      isSystem: true,
+      id: tmpl.code,
+      form_type: tmpl.code,
+      name: tmpl.name,
+      template_data: {
+        description: tmpl.desc,
+        work_types: tmpl.forWorkTypes
+      },
+      object_type: tmpl.forObjectTypes[0] || ''
+    });
+    setTemplateFormData({
+      name: tmpl.name,
+      description: tmpl.desc,
+      work_types: tmpl.forWorkTypes,
+      object_type: tmpl.forObjectTypes[0] || ''
+    });
+  };
+
   // Hide/delete system template
   const handleHideSystemTemplate = async (templateCode: string) => {
     if (!currentUser) return;
@@ -2604,6 +2625,14 @@ export const RequestsPage: React.FC = () => {
                   {editingTemplate ? (
                     /* Edit Template Form */
                     <div className="space-y-4">
+                      {/* System template badge */}
+                      {editingTemplate.isSystem && (
+                        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                          <span className="text-sm text-blue-700">Szablon systemowy</span>
+                        </div>
+                      )}
+
                       {/* Name */}
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -2612,8 +2641,13 @@ export const RequestsPage: React.FC = () => {
                         <input
                           type="text"
                           value={templateFormData.name}
-                          onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          onChange={(e) => !editingTemplate.isSystem && setTemplateFormData({ ...templateFormData, name: e.target.value })}
+                          readOnly={editingTemplate.isSystem}
+                          className={`w-full px-3 py-2 border rounded-lg ${
+                            editingTemplate.isSystem
+                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          }`}
                         />
                       </div>
 
@@ -2624,9 +2658,14 @@ export const RequestsPage: React.FC = () => {
                         </label>
                         <textarea
                           value={templateFormData.description}
-                          onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                          onChange={(e) => !editingTemplate.isSystem && setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                          readOnly={editingTemplate.isSystem}
                           rows={3}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                          className={`w-full px-3 py-2 border rounded-lg resize-none ${
+                            editingTemplate.isSystem
+                              ? 'border-slate-200 bg-slate-50 text-slate-500'
+                              : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          }`}
                           placeholder="Opis szablonu..."
                         />
                       </div>
@@ -2637,24 +2676,37 @@ export const RequestsPage: React.FC = () => {
                           Typy prac
                         </label>
                         <div className="flex flex-wrap gap-2">
-                          {workTypes.map((wt) => (
-                            <button
-                              key={wt.id}
-                              onClick={() => {
-                                const newTypes = templateFormData.work_types.includes(wt.code)
-                                  ? templateFormData.work_types.filter(t => t !== wt.code)
-                                  : [...templateFormData.work_types, wt.code];
-                                setTemplateFormData({ ...templateFormData, work_types: newTypes });
-                              }}
-                              className={`px-3 py-1.5 rounded-lg border transition ${
-                                templateFormData.work_types.includes(wt.code)
-                                  ? 'bg-blue-100 border-blue-300 text-blue-700'
-                                  : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                              }`}
-                            >
-                              {wt.code}
-                            </button>
-                          ))}
+                          {editingTemplate.isSystem ? (
+                            // Show as badges for system templates
+                            templateFormData.work_types.map((wt) => (
+                              <span
+                                key={wt}
+                                className="px-3 py-1.5 rounded-lg bg-blue-100 border border-blue-300 text-blue-700"
+                              >
+                                {wt}
+                              </span>
+                            ))
+                          ) : (
+                            // Interactive for saved templates
+                            workTypes.map((wt) => (
+                              <button
+                                key={wt.id}
+                                onClick={() => {
+                                  const newTypes = templateFormData.work_types.includes(wt.code)
+                                    ? templateFormData.work_types.filter(t => t !== wt.code)
+                                    : [...templateFormData.work_types, wt.code];
+                                  setTemplateFormData({ ...templateFormData, work_types: newTypes });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border transition ${
+                                  templateFormData.work_types.includes(wt.code)
+                                    ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                    : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                                }`}
+                              >
+                                {wt.code}
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
 
@@ -2663,16 +2715,25 @@ export const RequestsPage: React.FC = () => {
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                           Typ obiektu
                         </label>
-                        <select
-                          value={templateFormData.object_type}
-                          onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Wszystkie</option>
-                          <option value="industrial">Przemysłowe</option>
-                          <option value="residential">Mieszkaniowe</option>
-                          <option value="office">Biurowe</option>
-                        </select>
+                        {editingTemplate.isSystem ? (
+                          <input
+                            type="text"
+                            value={OBJECT_TYPE_LABELS[templateFormData.object_type as KosztorysObjectType] || 'Wszystkie'}
+                            readOnly
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
+                          />
+                        ) : (
+                          <select
+                            value={templateFormData.object_type}
+                            onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Wszystkie</option>
+                            <option value="industrial">Przemysłowe</option>
+                            <option value="residential">Mieszkaniowe</option>
+                            <option value="office">Biurowe</option>
+                          </select>
+                        )}
                       </div>
 
                       {/* Code (read-only) */}
@@ -2694,23 +2755,32 @@ export const RequestsPage: React.FC = () => {
                           onClick={() => setEditingTemplate(null)}
                           className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition"
                         >
-                          Anuluj
+                          {editingTemplate.isSystem ? 'Zamknij' : 'Anuluj'}
                         </button>
-                        <button
-                          onClick={handleUpdateTemplate}
-                          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                        >
-                          Zapisz
-                        </button>
+                        {!editingTemplate.isSystem && (
+                          <button
+                            onClick={handleUpdateTemplate}
+                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                          >
+                            Zapisz
+                          </button>
+                        )}
                       </div>
 
                       {/* Delete button */}
                       <button
-                        onClick={() => handleDeleteTemplate(editingTemplate.id)}
+                        onClick={() => {
+                          if (editingTemplate.isSystem) {
+                            handleHideSystemTemplate(editingTemplate.form_type);
+                            setEditingTemplate(null);
+                          } else {
+                            handleDeleteTemplate(editingTemplate.id);
+                          }
+                        }}
                         className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                       >
                         <Trash2 className="w-4 h-4" />
-                        Usuń szablon
+                        {editingTemplate.isSystem ? 'Ukryj szablon' : 'Usuń szablon'}
                       </button>
                     </div>
                   ) : (
@@ -2724,11 +2794,12 @@ export const RequestsPage: React.FC = () => {
                           </div>
                           <div className="space-y-2">
                             {allTemplates.filter(t => !hiddenSystemTemplates.includes(t.code)).map((tmpl) => (
-                              <div
+                              <button
                                 key={tmpl.code}
-                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 text-left"
+                                onClick={() => openSystemTemplate(tmpl)}
+                                className="w-full flex items-center gap-4 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition text-left group"
                               >
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
                                   <FileSpreadsheet className="w-5 h-5 text-blue-600" />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -2742,14 +2813,8 @@ export const RequestsPage: React.FC = () => {
                                     </span>
                                   </div>
                                 </div>
-                                <button
-                                  onClick={() => handleHideSystemTemplate(tmpl.code)}
-                                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                  title="Ukryj szablon"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
+                                <Eye className="w-4 h-4 text-slate-400 group-hover:text-blue-500" />
+                              </button>
                             ))}
                           </div>
                         </div>
