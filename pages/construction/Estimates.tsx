@@ -4,7 +4,7 @@ import {
   FolderOpen, FileText, Package, Users, Wrench, PieChart, Trash2,
   Pencil, Copy, Download, Upload, Eye, Settings, ArrowLeft,
   DollarSign, Percent, MoreVertical, GripVertical, Check, AlertCircle,
-  Save, XCircle, RotateCcw, Inbox, BookOpen, Wallet, Building2,
+  Save, XCircle, Inbox, BookOpen, Wallet, Building2,
   User, Calendar, Phone, Mail, Star, UserPlus, MapPin, Filter
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
@@ -15,6 +15,7 @@ import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmA
 // Lazy-loaded components for tabs
 import { DictionariesPage } from './Dictionaries';
 import { PriceListsPage } from './PriceLists';
+import { RequestsPage } from './Requests';
 import {
   Project, EstimateStage, EstimateTask, EstimateResource,
   EstimateMarkup, UnitMeasure, Valuation, ValuationGroup, ResourceType,
@@ -255,7 +256,6 @@ export const EstimatesPage: React.FC = () => {
   // Kosztorys estimates state
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [kosztorysLoading, setKosztorysLoading] = useState(false);
-  const [showDeleted, setShowDeleted] = useState(false);
 
   // Requests state
   const [requests, setRequests] = useState<KosztorysRequest[]>([]);
@@ -545,12 +545,6 @@ export const EstimatesPage: React.FC = () => {
           request:kosztorys_requests(id, investment_name, client_name, address, work_types:kosztorys_request_work_types(work_type:kosztorys_work_types(id, code, name)))
         `)
         .eq('company_id', currentUser.company_id);
-
-      if (showDeleted) {
-        query = query.not('deleted_at', 'is', null);
-      } else {
-        query = query.is('deleted_at', null);
-      }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
@@ -981,30 +975,6 @@ export const EstimatesPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Soft delete/restore estimate
-  const handleSoftDeleteEstimate = async (estimateId: string) => {
-    try {
-      await supabase
-        .from('kosztorys_estimates')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', estimateId);
-      await loadKosztorysEstimates();
-    } catch (err) {
-      console.error('Error deleting estimate:', err);
-    }
-  };
-
-  const handleRestoreEstimate = async (estimateId: string) => {
-    try {
-      await supabase
-        .from('kosztorys_estimates')
-        .update({ deleted_at: null })
-        .eq('id', estimateId);
-      await loadKosztorysEstimates();
-    } catch (err) {
-      console.error('Error restoring estimate:', err);
-    }
-  };
 
   // Address search with debounce
   const debouncedCompanyAddressSearch = useCallback(
@@ -1356,12 +1326,6 @@ export const EstimatesPage: React.FC = () => {
     return filtered;
   }, [kosztorysEstimates, search, clientFilter, statusFilter, valueMinFilter, valueMaxFilter, dateFromFilter, dateToFilter]);
 
-  // Reload when showDeleted changes
-  useEffect(() => {
-    if (currentUser) {
-      loadKosztorysEstimates();
-    }
-  }, [showDeleted]);
 
   // Project selection view
   if (!selectedProject) {
@@ -1452,16 +1416,6 @@ export const EstimatesPage: React.FC = () => {
                 <Filter className="w-4 h-4" />
                 Filtry
               </button>
-
-              <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showDeleted}
-                  onChange={e => setShowDeleted(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600"
-                />
-                Usunięte
-              </label>
 
               <button
                 onClick={() => setShowNewEstimateModal(true)}
@@ -1626,23 +1580,13 @@ export const EstimatesPage: React.FC = () => {
                           {new Date(estimate.created_at).toLocaleDateString('pl-PL')}
                         </td>
                         <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                          {showDeleted ? (
-                            <button
-                              onClick={() => handleRestoreEstimate(estimate.id)}
-                              className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                              title="Przywróć"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleSoftDeleteEstimate(estimate.id)}
-                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Usuń"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => {/* TODO: implement delete */}}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded"
+                            title="Akcje"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1655,17 +1599,8 @@ export const EstimatesPage: React.FC = () => {
 
         {/* Requests Tab - inline content from RequestsPage */}
         {activeMainTab === 'requests' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="text-center py-8">
-              <Inbox className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-600 mb-4">Moduł zapytań jest dostępny bezpośrednio w tej zakładce.</p>
-              <button
-                onClick={() => window.location.hash = '#/construction/requests'}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                Otwórz pełny moduł zapytań
-              </button>
-            </div>
+          <div className="-m-6">
+            <RequestsPage />
           </div>
         )}
 
