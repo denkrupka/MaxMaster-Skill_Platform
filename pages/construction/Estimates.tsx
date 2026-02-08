@@ -277,6 +277,8 @@ export const EstimatesPage: React.FC = () => {
 
   // New estimate modal state
   const [showNewEstimateModal, setShowNewEstimateModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [estimateToDelete, setEstimateToDelete] = useState<any>(null);
   const [formData, setFormData] = useState<RequestFormData>(initialFormData);
   const [contacts, setContacts] = useState<ContactFormData[]>([{ ...initialContactData }]);
   const [gusLoading, setGusLoading] = useState(false);
@@ -1277,15 +1279,24 @@ export const EstimatesPage: React.FC = () => {
   };
 
   // Soft delete/restore estimate
-  const handleSoftDeleteEstimate = async (estimateId: string) => {
+  const openDeleteConfirm = (estimate: any) => {
+    setEstimateToDelete(estimate);
+    setShowDeleteConfirmModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!estimateToDelete) return;
     try {
       await supabase
         .from('kosztorys_estimates')
         .update({ is_deleted: true })
-        .eq('id', estimateId);
+        .eq('id', estimateToDelete.id);
       await loadKosztorysEstimates();
     } catch (err) {
       console.error('Error deleting estimate:', err);
+    } finally {
+      setShowDeleteConfirmModal(false);
+      setEstimateToDelete(null);
     }
   };
 
@@ -1441,24 +1452,15 @@ export const EstimatesPage: React.FC = () => {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition ${
-                  showFilters || clientFilter || statusFilter !== 'all' || valueMinFilter || valueMaxFilter || dateFromFilter || dateToFilter
+                  showFilters || clientFilter || statusFilter !== 'all' || valueMinFilter || valueMaxFilter || dateFromFilter || dateToFilter || showDeleted
                     ? 'bg-blue-50 border-blue-200 text-blue-700'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <Filter className="w-4 h-4" />
                 Filtry
+                {showDeleted && <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">usunięte</span>}
               </button>
-
-              <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showDeleted}
-                  onChange={e => setShowDeleted(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600"
-                />
-                Usunięte
-              </label>
 
               <button
                 onClick={() => setShowNewEstimateModal(true)}
@@ -1536,7 +1538,18 @@ export const EstimatesPage: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showDeleted}
+                      onChange={e => setShowDeleted(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-red-600"
+                    />
+                    <span className={showDeleted ? 'text-red-600 font-medium' : ''}>
+                      Pokaż usunięte kosztorysy
+                    </span>
+                  </label>
                   <button
                     onClick={() => {
                       setClientFilter('');
@@ -1545,6 +1558,7 @@ export const EstimatesPage: React.FC = () => {
                       setValueMaxFilter('');
                       setDateFromFilter('');
                       setDateToFilter('');
+                      setShowDeleted(false);
                     }}
                     className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900"
                   >
@@ -1633,7 +1647,7 @@ export const EstimatesPage: React.FC = () => {
                             </button>
                           ) : (
                             <button
-                              onClick={() => handleSoftDeleteEstimate(estimate.id)}
+                              onClick={() => openDeleteConfirm(estimate)}
                               className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
                               title="Usuń"
                             >
@@ -2928,6 +2942,50 @@ export const EstimatesPage: React.FC = () => {
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Utwórz i przejdź do formularza
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmModal && estimateToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Usunąć kosztorys?</h3>
+                  <p className="text-sm text-slate-500">Ta operacja przeniesie kosztorys do usuniętych</p>
+                </div>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                <p className="text-sm font-medium text-slate-900">{estimateToDelete.estimate_number}</p>
+                <p className="text-sm text-slate-600">{estimateToDelete.request?.investment_name}</p>
+                <p className="text-sm text-slate-500">{estimateToDelete.request?.client_name}</p>
+              </div>
+              <p className="text-sm text-slate-600">
+                Kosztorys będzie można przywrócić z poziomu filtrów, zaznaczając opcję "Pokaż usunięte kosztorysy".
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  setEstimateToDelete(null);
+                }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+              >
+                Usuń kosztorys
               </button>
             </div>
           </div>
