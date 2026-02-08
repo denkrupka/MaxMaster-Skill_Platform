@@ -1905,9 +1905,6 @@ export interface KosztorysPriceListItem {
   unit_price: number;
 }
 
-// Тип коштoриса
-export type KosztorysEstimateType = 'inwestorski' | 'wykonawczy';
-
 // Смета (Kosztorys)
 export interface KosztorysEstimate {
   id: string;
@@ -1916,7 +1913,6 @@ export interface KosztorysEstimate {
   company_id: string;
   estimate_number: string;          // KSZ-YYYY-NNNNN
   version: number;
-  estimate_type: KosztorysEstimateType;  // Тип: inwestorski или wykonawczy
   status: 'draft' | 'pending_approval' | 'approved' | 'rejected';
   vat_rate: number;
   total_works: number;

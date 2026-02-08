@@ -21,7 +21,7 @@ import {
   EstimateMarkup, UnitMeasure, Valuation, ValuationGroup, ResourceType,
   KosztorysRequest, KosztorysRequestStatus, KosztorysObjectType,
   KosztorysInstallationType, KosztorysRequestSource, User as UserType,
-  KosztorysRequestContact, KosztorysEstimate, KosztorysEstimateItem
+  KosztorysRequestContact
 } from '../../types';
 
 // Status configuration
@@ -257,17 +257,6 @@ export const EstimatesPage: React.FC = () => {
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [kosztorysLoading, setKosztorysLoading] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
-
-  // Open tabs for estimates (like browser tabs) - eKosztorysowanie style
-  const [openTabs, setOpenTabs] = useState<{ id: string; name: string; estimateNumber: string }[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [selectedEstimateIds, setSelectedEstimateIds] = useState<Set<string>>(new Set());
-  const [estimateTypeFilter, setEstimateTypeFilter] = useState<string>('all');
-
-  // Active estimate data (for tab view)
-  const [activeEstimate, setActiveEstimate] = useState<KosztorysEstimate | null>(null);
-  const [activeEstimateItems, setActiveEstimateItems] = useState<KosztorysEstimateItem[]>([]);
-  const [activeEstimateLoading, setActiveEstimateLoading] = useState(false);
 
   // Requests state
   const [requests, setRequests] = useState<KosztorysRequest[]>([]);
@@ -617,49 +606,6 @@ export const EstimatesPage: React.FC = () => {
       console.error('Error loading valuations:', err);
     }
   };
-
-  // Load active estimate data when tab is selected
-  const loadActiveEstimate = async (estimateId: string) => {
-    setActiveEstimateLoading(true);
-    try {
-      const { data: estimateData, error: estimateError } = await supabase
-        .from('kosztorys_estimates')
-        .select(`
-          *,
-          request:kosztorys_requests(*)
-        `)
-        .eq('id', estimateId)
-        .single();
-
-      if (estimateError) throw estimateError;
-      setActiveEstimate(estimateData);
-
-      // Load estimate items
-      const { data: itemsData } = await supabase
-        .from('kosztorys_estimate_items')
-        .select('*')
-        .eq('estimate_id', estimateId)
-        .order('position_number');
-
-      setActiveEstimateItems(itemsData || []);
-    } catch (err) {
-      console.error('Error loading active estimate:', err);
-      setActiveEstimate(null);
-      setActiveEstimateItems([]);
-    } finally {
-      setActiveEstimateLoading(false);
-    }
-  };
-
-  // Load estimate when tab changes
-  useEffect(() => {
-    if (activeTabId) {
-      loadActiveEstimate(activeTabId);
-    } else {
-      setActiveEstimate(null);
-      setActiveEstimateItems([]);
-    }
-  }, [activeTabId]);
 
   const loadEstimateData = async () => {
     if (!selectedProject) return;
@@ -1033,28 +979,6 @@ export const EstimatesPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Bulk export selected estimates to CSV
-  const handleBulkExport = async () => {
-    if (selectedEstimateIds.size === 0) return;
-
-    const selectedEstimates = kosztorysEstimates.filter(e => selectedEstimateIds.has(e.id));
-
-    let csv = 'Numer;Nazwa inwestycji;Klient;Rodzaj;Wartość netto;VAT;Wartość brutto;Data utworzenia;Data modyfikacji\n';
-
-    selectedEstimates.forEach(estimate => {
-      csv += `"${estimate.estimate_number || ''}";"${estimate.request?.investment_name || ''}";"${estimate.request?.client_name || ''}";"${estimate.estimate_type === 'wykonawczy' ? 'Wykonawczy' : 'Inwestorski'}";"${(estimate.total_net || 0).toFixed(2)}";"${(estimate.total_vat || 0).toFixed(2)}";"${(estimate.total_gross || 0).toFixed(2)}";"${new Date(estimate.created_at).toLocaleDateString('pl-PL')}";"${new Date(estimate.updated_at).toLocaleDateString('pl-PL')}"\n`;
-    });
-
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `kosztorysy_export_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    setSelectedEstimateIds(new Set()); // Clear selection after export
-  };
 
   // Address search with debounce
   const debouncedCompanyAddressSearch = useCallback(
@@ -1388,63 +1312,6 @@ export const EstimatesPage: React.FC = () => {
     }
   };
 
-  // Tab management functions (eKosztorysowanie style)
-  const openEstimateTab = (estimate: any) => {
-    const tabExists = openTabs.find(t => t.id === estimate.id);
-    if (!tabExists) {
-      setOpenTabs(prev => [...prev, {
-        id: estimate.id,
-        name: estimate.request?.investment_name || estimate.estimate_number,
-        estimateNumber: estimate.estimate_number
-      }]);
-    }
-    setActiveTabId(estimate.id);
-  };
-
-  const closeTab = (tabId: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    setOpenTabs(prev => prev.filter(t => t.id !== tabId));
-    if (activeTabId === tabId) {
-      const remainingTabs = openTabs.filter(t => t.id !== tabId);
-      setActiveTabId(remainingTabs.length > 0 ? remainingTabs[remainingTabs.length - 1].id : null);
-    }
-  };
-
-  // Selection management
-  const toggleEstimateSelection = (id: string) => {
-    setSelectedEstimateIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedEstimateIds.size === filteredEstimates.length) {
-      setSelectedEstimateIds(new Set());
-    } else {
-      setSelectedEstimateIds(new Set(filteredEstimates.map(e => e.id)));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedEstimateIds.size === 0) return;
-    try {
-      await supabase
-        .from('kosztorys_estimates')
-        .update({ is_deleted: true })
-        .in('id', Array.from(selectedEstimateIds));
-      setSelectedEstimateIds(new Set());
-      await loadKosztorysEstimates();
-    } catch (err) {
-      console.error('Error deleting estimates:', err);
-    }
-  };
-
   // Filter estimates
   const filteredEstimates = useMemo(() => {
     let filtered = kosztorysEstimates;
@@ -1494,13 +1361,8 @@ export const EstimatesPage: React.FC = () => {
       filtered = filtered.filter(e => new Date(e.created_at) <= to);
     }
 
-    // Filter by estimate type
-    if (estimateTypeFilter !== 'all') {
-      filtered = filtered.filter(e => e.estimate_type === estimateTypeFilter);
-    }
-
     return filtered;
-  }, [kosztorysEstimates, search, clientFilter, statusFilter, valueMinFilter, valueMaxFilter, dateFromFilter, dateToFilter, estimateTypeFilter]);
+  }, [kosztorysEstimates, search, clientFilter, statusFilter, valueMinFilter, valueMaxFilter, dateFromFilter, dateToFilter]);
 
   // Reload when showDeleted changes
   useEffect(() => {
@@ -1574,169 +1436,8 @@ export const EstimatesPage: React.FC = () => {
         {/* Estimates Tab */}
         {activeMainTab === 'estimates' && (
           <>
-            {/* eKosztorysowanie style tabs bar */}
-            {openTabs.length > 0 && (
-              <div className="mb-4 bg-slate-700 rounded-t-lg px-2 py-1 flex items-center gap-1 overflow-x-auto">
-                <button
-                  onClick={() => setActiveTabId(null)}
-                  className={`flex items-center gap-1 px-3 py-2 rounded-t text-sm transition ${
-                    activeTabId === null
-                      ? 'bg-white text-slate-900'
-                      : 'text-white hover:bg-white/10'
-                  }`}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.3 5.1C12.2 5 12.1 5 12 5s-.2 0-.3.1L4.5 10.7l.6.8.9-.7V17c0 .3.1.5.3.7.2.2.4.3.7.3h10c.3 0 .5-.1.7-.3.2-.2.3-.4.3-.7v-6.2l.9.7.6-.8-7.2-5.6zM13 17h-2v-4h2v4zm1 0v-4c0-.3-.1-.5-.3-.7-.2-.2-.4-.3-.7-.3h-2c-.3 0-.5.1-.7.3-.2.2-.3.4-.3.7v4H7v-7l5-3.9 5 3.9v7h-3z"/>
-                  </svg>
-                </button>
-                {openTabs.map(tab => (
-                  <div
-                    key={tab.id}
-                    onClick={() => setActiveTabId(tab.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-t text-sm cursor-pointer transition ${
-                      activeTabId === tab.id
-                        ? 'bg-white text-slate-900'
-                        : 'text-white hover:bg-white/10'
-                    }`}
-                  >
-                    <span className="max-w-[150px] truncate">{tab.name || 'Untitled'}</span>
-                    <button
-                      onClick={(e) => closeTab(tab.id, e)}
-                      className="p-0.5 hover:bg-slate-200 rounded"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setShowNewEstimateModal(true)}
-                  className="p-2 text-white hover:bg-white/10 rounded"
-                  title="Nowy kosztorys"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {/* Show estimate view if tab is selected */}
-            {activeTabId !== null ? (
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                {activeEstimateLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                  </div>
-                ) : activeEstimate ? (
-                  <>
-                    {/* Header */}
-                    <div className="p-4 border-b border-slate-200 bg-slate-50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-lg font-semibold text-slate-900">
-                            {activeEstimate.request?.investment_name || activeEstimate.estimate_number}
-                          </h2>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
-                            <span>Nr: {activeEstimate.estimate_number}</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              activeEstimate.estimate_type === 'wykonawczy' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
-                            }`}>
-                              {activeEstimate.estimate_type === 'wykonawczy' ? 'Wykonawczy' : 'Inwestorski'}
-                            </span>
-                            <span>{activeEstimate.request?.client_name}</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              // Export single estimate
-                              let csv = 'Pozycja;Opis;Jednostka;Ilość;Cena jedn.;Wartość netto;VAT;Wartość brutto\n';
-                              activeEstimateItems.forEach(item => {
-                                csv += `"${item.position_number}";"${item.description || ''}";"${item.unit || ''}";"${item.quantity || 0}";"${(item.unit_price || 0).toFixed(2)}";"${(item.net_value || 0).toFixed(2)}";"${(item.vat_value || 0).toFixed(2)}";"${(item.gross_value || 0).toFixed(2)}"\n`;
-                              });
-                              const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-                              const url = URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = `${activeEstimate.estimate_number}_${new Date().toISOString().split('T')[0]}.csv`;
-                              link.click();
-                              URL.revokeObjectURL(url);
-                            }}
-                            className="px-3 py-1.5 text-sm border border-slate-200 rounded hover:bg-slate-50 flex items-center gap-1"
-                          >
-                            <Download className="w-4 h-4" /> Export CSV
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Items table */}
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200">
-                        <thead className="bg-slate-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase w-16">Poz.</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Opis</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase w-20">Jedn.</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase w-20">Ilość</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase w-28">Netto</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase w-28">Brutto</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {activeEstimateItems.length > 0 ? (
-                            activeEstimateItems.map((item, idx) => (
-                              <tr key={item.id} className="hover:bg-slate-50">
-                                <td className="px-4 py-3 text-sm text-slate-600">{item.position_number || idx + 1}</td>
-                                <td className="px-4 py-3 text-sm text-slate-900">{item.description || '-'}</td>
-                                <td className="px-4 py-3 text-sm text-slate-600 text-center">{item.unit || '-'}</td>
-                                <td className="px-4 py-3 text-sm text-slate-900 text-right">{(item.quantity || 0).toFixed(2)}</td>
-                                <td className="px-4 py-3 text-sm text-slate-900 text-right">{(item.unit_price || 0).toFixed(2)} PLN</td>
-                                <td className="px-4 py-3 text-sm text-slate-900 text-right">{(item.net_value || 0).toFixed(2)} PLN</td>
-                                <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">{(item.gross_value || 0).toFixed(2)} PLN</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                                Brak pozycji w kosztorysie
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Summary */}
-                    <div className="p-4 bg-slate-50 border-t border-slate-200">
-                      <div className="flex justify-end">
-                        <div className="w-64 space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Wartość netto:</span>
-                            <span className="font-medium">{(activeEstimate.total_net || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">VAT ({activeEstimate.vat_rate || 23}%):</span>
-                            <span className="font-medium">{(activeEstimate.total_vat || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN</span>
-                          </div>
-                          <div className="flex justify-between text-base pt-2 border-t border-slate-200">
-                            <span className="font-semibold text-slate-900">Razem brutto:</span>
-                            <span className="font-bold text-slate-900">{(activeEstimate.total_gross || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2 })} PLN</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-12 text-slate-500">
-                    <AlertCircle className="w-12 h-12 mx-auto mb-4 text-slate-300" />
-                    <p>Nie udało się załadować kosztorysu</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Search and actions */}
-                <div className="mb-4 flex flex-wrap gap-3 items-center">
+            {/* Search and actions */}
+            <div className="mb-4 flex flex-wrap gap-3 items-center">
               <div className="relative flex-1 min-w-[250px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
@@ -1751,7 +1452,7 @@ export const EstimatesPage: React.FC = () => {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition ${
-                  showFilters || clientFilter || statusFilter !== 'all' || estimateTypeFilter !== 'all' || valueMinFilter || valueMaxFilter || dateFromFilter || dateToFilter || showDeleted
+                  showFilters || clientFilter || statusFilter !== 'all' || valueMinFilter || valueMaxFilter || dateFromFilter || dateToFilter || showDeleted
                     ? 'bg-blue-50 border-blue-200 text-blue-700'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
@@ -1796,18 +1497,6 @@ export const EstimatesPage: React.FC = () => {
                       <option value="pending_approval">Do akceptacji</option>
                       <option value="approved">Zaakceptowany</option>
                       <option value="rejected">Odrzucony</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj</label>
-                    <select
-                      value={estimateTypeFilter}
-                      onChange={e => setEstimateTypeFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    >
-                      <option value="all">Wszystkie</option>
-                      <option value="inwestorski">Inwestorski</option>
-                      <option value="wykonawczy">Wykonawczy</option>
                     </select>
                   </div>
                   <div>
@@ -1865,7 +1554,6 @@ export const EstimatesPage: React.FC = () => {
                     onClick={() => {
                       setClientFilter('');
                       setStatusFilter('all');
-                      setEstimateTypeFilter('all');
                       setValueMinFilter('');
                       setValueMaxFilter('');
                       setDateFromFilter('');
@@ -1903,83 +1591,52 @@ export const EstimatesPage: React.FC = () => {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                {/* Action bar for selected items */}
-                {selectedEstimateIds.size > 0 && (
-                  <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
-                    <span className="text-sm text-blue-700">
-                      Zaznaczono: <strong>{selectedEstimateIds.size}</strong> {selectedEstimateIds.size === 1 ? 'kosztorys' : 'kosztorysów'}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleBulkExport}
-                        className="px-3 py-1.5 text-sm bg-white border border-blue-200 text-blue-700 rounded hover:bg-blue-50"
-                      >
-                        <Download className="w-4 h-4 inline mr-1" />
-                        Export CSV
-                      </button>
-                      <button
-                        onClick={handleBulkDelete}
-                        className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
-                      >
-                        <Trash2 className="w-4 h-4 inline mr-1" />
-                        Usuń
-                      </button>
-                    </div>
-                  </div>
-                )}
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-3 py-3 w-10">
-                        <input
-                          type="checkbox"
-                          checked={selectedEstimateIds.size === filteredEstimates.length && filteredEstimates.length > 0}
-                          onChange={toggleSelectAll}
-                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                        />
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase w-[40%]">Nazwa</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nr</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Inwestycja</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Klient</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Netto</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Brutto</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Data</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Rodzaj</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Wartość łącznie</th>
-                      <th className="px-4 py-3 w-10"></th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {filteredEstimates.map(estimate => (
                       <tr
                         key={estimate.id}
-                        className={`hover:bg-slate-50 cursor-pointer ${selectedEstimateIds.has(estimate.id) ? 'bg-blue-50' : ''}`}
-                        onClick={() => openEstimateTab(estimate)}
+                        className="hover:bg-slate-50 cursor-pointer"
+                        onClick={() => window.location.hash = `#/construction/estimate/${estimate.id}`}
                       >
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedEstimateIds.has(estimate.id)}
-                            onChange={() => toggleEstimateSelection(estimate.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-900">{estimate.estimate_number}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{estimate.request?.investment_name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{estimate.request?.client_name || '-'}</td>
                         <td className="px-4 py-3">
-                          <div className="text-sm font-medium text-slate-900">
-                            {estimate.request?.investment_name || estimate.estimate_number}
-                          </div>
-                          <div className="text-xs text-slate-500">{estimate.request?.client_name || '-'}</div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {new Date(estimate.created_at).toLocaleDateString('pl-PL')} / {new Date(estimate.updated_at).toLocaleDateString('pl-PL')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${
-                            estimate.estimate_type === 'wykonawczy' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            estimate.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            estimate.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-700' :
+                            estimate.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-slate-100 text-slate-600'
                           }`}>
-                            {estimate.estimate_type === 'wykonawczy' ? 'Wykonawczy' : 'Inwestorski'}
+                            {estimate.status === 'draft' ? 'Wersja robocza' :
+                             estimate.status === 'pending_approval' ? 'Do akceptacji' :
+                             estimate.status === 'approved' ? 'Zaakceptowany' :
+                             estimate.status === 'rejected' ? 'Odrzucony' : estimate.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
-                          {(estimate.total_gross || 0).toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PLN
+                        <td className="px-4 py-3 text-sm text-slate-900 text-right">
+                          {(estimate.subtotal_net || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
                         </td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
+                          {(estimate.total_gross || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-500">
+                          {new Date(estimate.created_at).toLocaleDateString('pl-PL')}
+                        </td>
+                        <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                           {showDeleted ? (
                             <button
                               onClick={() => handleRestoreEstimate(estimate.id)}
@@ -1991,7 +1648,7 @@ export const EstimatesPage: React.FC = () => {
                           ) : (
                             <button
                               onClick={() => openDeleteConfirm(estimate)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
                               title="Usuń"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -2003,8 +1660,6 @@ export const EstimatesPage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            )}
-              </>
             )}
           </>
         )}
