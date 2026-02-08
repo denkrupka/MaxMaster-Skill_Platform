@@ -1055,15 +1055,20 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
         currentUser.id!
       );
 
-      if (result.success && result.estimateId) {
+      if (result.success) {
         // Update form status
         await supabase
           .from('kosztorys_forms')
           .update({ status: 'completed' })
           .eq('id', form.id);
 
-        // Navigate directly to the estimate view page
-        window.location.hash = `#/construction/estimate/${result.estimateId}`;
+        // Navigate directly to the estimate view page or estimates list
+        if (result.estimateId) {
+          window.location.hash = `#/construction/estimate/${result.estimateId}`;
+        } else {
+          // No items generated, go to estimates list for this request
+          window.location.hash = `#/construction/estimates?request=${request.id}`;
+        }
       } else {
         // Only show result modal if there are errors
         setGenerationResult(result);
