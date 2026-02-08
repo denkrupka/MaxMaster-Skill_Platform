@@ -1622,7 +1622,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
               </div>
               <h3 className="text-lg font-semibold text-slate-900 mb-2">Pusty formularz</h3>
               <p className="text-slate-500 mb-6 max-w-md">
-                Ten formularz jest pusty. Użyj trybu edycji, aby dodać grupy pomieszczeń i kategorie prac.
+                Ten formularz jest pusty. Użyj trybu edycji, aby dodać działy i kategorie prac.
               </p>
               {!isEditMode && (
                 <button
@@ -1650,7 +1650,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
                     className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition"
                   >
                     <Plus className="w-4 h-4" />
-                    Dodaj grupę pomieszczeń
+                    Dodaj dział
                   </button>
                   <button
                     onClick={() => {
@@ -2521,7 +2521,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
             <div className="p-6 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">
-                {showAddModal.type === 'group' && 'Dodaj grupę pomieszczeń'}
+                {showAddModal.type === 'group' && 'Dodaj dział'}
                 {showAddModal.type === 'room' && 'Dodaj element'}
                 {showAddModal.type === 'category' && 'Dodaj kategorię prac'}
                 {showAddModal.type === 'workType' && 'Dodaj rodzaj pracy'}
@@ -2614,7 +2614,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
               <div className="bg-slate-50 rounded-lg p-3">
                 <div className="text-xs text-slate-500 mb-1">Szablon zawiera:</div>
                 <div className="text-sm text-slate-700">
-                  <span className="font-medium">{template?.room_groups.length || 0}</span> grup pomieszczeń,{' '}
+                  <span className="font-medium">{template?.room_groups.length || 0}</span> działów,{' '}
                   <span className="font-medium">{template?.work_categories.length || 0}</span> kategorii prac
                 </div>
               </div>
