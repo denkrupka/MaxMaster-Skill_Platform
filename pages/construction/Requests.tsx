@@ -475,27 +475,80 @@ export const RequestsPage: React.FC = () => {
     }
   };
 
-  // Update template
+  // Update template (works for both saved and system templates)
   const handleUpdateTemplate = async () => {
     if (!editingTemplate || !currentUser) return;
 
     try {
-      const { error } = await supabase
-        .from('kosztorys_form_templates')
-        .update({
-          name: templateFormData.name,
-          object_type: templateFormData.object_type || null,
-          work_type: templateFormData.work_types.length === 1 ? templateFormData.work_types[0] : null,
-          template_data: {
-            ...editingTemplate.template_data,
-            description: templateFormData.description,
-            work_types: templateFormData.work_types
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', editingTemplate.id);
+      if (editingTemplate.isSystem) {
+        // For system templates, create or update a customization record
+        // First check if customization already exists
+        const { data: existing } = await supabase
+          .from('kosztorys_form_templates')
+          .select('id')
+          .eq('company_id', currentUser.company_id)
+          .eq('form_type', editingTemplate.form_type)
+          .eq('is_active', true)
+          .maybeSingle();
 
-      if (error) throw error;
+        if (existing) {
+          // Update existing customization
+          const { error } = await supabase
+            .from('kosztorys_form_templates')
+            .update({
+              name: templateFormData.name,
+              object_type: templateFormData.object_type || null,
+              work_type: templateFormData.work_types.length === 1 ? templateFormData.work_types[0] : null,
+              template_data: {
+                description: templateFormData.description,
+                work_types: templateFormData.work_types,
+                isSystemCustomization: true
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existing.id);
+
+          if (error) throw error;
+        } else {
+          // Create new customization for system template
+          const { error } = await supabase
+            .from('kosztorys_form_templates')
+            .insert({
+              company_id: currentUser.company_id,
+              name: templateFormData.name,
+              form_type: editingTemplate.form_type,
+              object_type: templateFormData.object_type || null,
+              work_type: templateFormData.work_types.length === 1 ? templateFormData.work_types[0] : null,
+              template_data: {
+                description: templateFormData.description,
+                work_types: templateFormData.work_types,
+                isSystemCustomization: true
+              },
+              is_active: true,
+              created_by_id: currentUser.id
+            });
+
+          if (error) throw error;
+        }
+      } else {
+        // For saved templates, update normally
+        const { error } = await supabase
+          .from('kosztorys_form_templates')
+          .update({
+            name: templateFormData.name,
+            object_type: templateFormData.object_type || null,
+            work_type: templateFormData.work_types.length === 1 ? templateFormData.work_types[0] : null,
+            template_data: {
+              ...editingTemplate.template_data,
+              description: templateFormData.description,
+              work_types: templateFormData.work_types
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingTemplate.id);
+
+        if (error) throw error;
+      }
 
       // Reload templates
       await loadSavedTemplates();
@@ -540,22 +593,32 @@ export const RequestsPage: React.FC = () => {
 
   // Open system template for viewing/editing
   const openSystemTemplate = (tmpl: { code: string; name: string; desc: string; forWorkTypes: string[]; forObjectTypes: string[] }) => {
+    // Check if there's a customization saved for this system template
+    const customization = savedTemplates.find(t =>
+      t.form_type === tmpl.code && t.template_data?.isSystemCustomization
+    );
+
+    const name = customization?.name || tmpl.name;
+    const description = customization?.template_data?.description || tmpl.desc;
+    const workTypes = customization?.template_data?.work_types || tmpl.forWorkTypes;
+    const objectType = customization?.object_type || tmpl.forObjectTypes[0] || '';
+
     setEditingTemplate({
       isSystem: true,
       id: tmpl.code,
       form_type: tmpl.code,
-      name: tmpl.name,
+      name: name,
       template_data: {
-        description: tmpl.desc,
-        work_types: tmpl.forWorkTypes
+        description: description,
+        work_types: workTypes
       },
-      object_type: tmpl.forObjectTypes[0] || ''
+      object_type: objectType
     });
     setTemplateFormData({
-      name: tmpl.name,
-      description: tmpl.desc,
-      work_types: tmpl.forWorkTypes,
-      object_type: tmpl.forObjectTypes[0] || ''
+      name: name,
+      description: description,
+      work_types: workTypes,
+      object_type: objectType
     });
   };
 
@@ -2671,52 +2734,38 @@ export const RequestsPage: React.FC = () => {
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-slate-500 mb-1">Typy prac</label>
                           <div className="flex flex-wrap gap-1">
-                            {editingTemplate.isSystem ? (
-                              templateFormData.work_types.map((wt) => (
-                                <span key={wt} className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700">
-                                  {wt}
-                                </span>
-                              ))
-                            ) : (
-                              workTypes.map((wt) => (
-                                <button
-                                  key={wt.id}
-                                  onClick={() => {
-                                    const newTypes = templateFormData.work_types.includes(wt.code)
-                                      ? templateFormData.work_types.filter(t => t !== wt.code)
-                                      : [...templateFormData.work_types, wt.code];
-                                    setTemplateFormData({ ...templateFormData, work_types: newTypes });
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded border transition ${
-                                    templateFormData.work_types.includes(wt.code)
-                                      ? 'bg-blue-100 border-blue-300 text-blue-700'
-                                      : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
-                                  }`}
-                                >
-                                  {wt.code}
-                                </button>
-                              ))
-                            )}
+                            {workTypes.map((wt) => (
+                              <button
+                                key={wt.id}
+                                onClick={() => {
+                                  const newTypes = templateFormData.work_types.includes(wt.code)
+                                    ? templateFormData.work_types.filter(t => t !== wt.code)
+                                    : [...templateFormData.work_types, wt.code];
+                                  setTemplateFormData({ ...templateFormData, work_types: newTypes });
+                                }}
+                                className={`px-2 py-1 text-xs rounded border transition ${
+                                  templateFormData.work_types.includes(wt.code)
+                                    ? 'bg-blue-100 border-blue-300 text-blue-700'
+                                    : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'
+                                }`}
+                              >
+                                {wt.code}
+                              </button>
+                            ))}
                           </div>
                         </div>
                         <div className="flex-1">
                           <label className="block text-xs font-medium text-slate-500 mb-1">Typ obiektu</label>
-                          {editingTemplate.isSystem ? (
-                            <span className="inline-block px-2 py-1 text-xs rounded bg-slate-100 text-slate-600">
-                              {OBJECT_TYPE_LABELS[templateFormData.object_type as KosztorysObjectType] || 'Wszystkie'}
-                            </span>
-                          ) : (
-                            <select
-                              value={templateFormData.object_type}
-                              onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
-                              className="w-full px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="">Wszystkie</option>
-                              <option value="industrial">Przemysłowe</option>
-                              <option value="residential">Mieszkaniowe</option>
-                              <option value="office">Biurowe</option>
-                            </select>
-                          )}
+                          <select
+                            value={templateFormData.object_type}
+                            onChange={(e) => setTemplateFormData({ ...templateFormData, object_type: e.target.value })}
+                            className="w-full px-2 py-1 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Wszystkie</option>
+                            <option value="industrial">Przemysłowe</option>
+                            <option value="residential">Mieszkaniowe</option>
+                            <option value="office">Biurowe</option>
+                          </select>
                         </div>
                       </div>
 
@@ -2726,16 +2775,14 @@ export const RequestsPage: React.FC = () => {
                           onClick={() => setEditingTemplate(null)}
                           className="flex-1 px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition"
                         >
-                          {editingTemplate.isSystem ? 'Zamknij' : 'Anuluj'}
+                          Anuluj
                         </button>
-                        {!editingTemplate.isSystem && (
-                          <button
-                            onClick={handleUpdateTemplate}
-                            className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                          >
-                            Zapisz
-                          </button>
-                        )}
+                        <button
+                          onClick={handleUpdateTemplate}
+                          className="flex-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                          Zapisz
+                        </button>
                         <button
                           onClick={() => {
                             if (editingTemplate.isSystem) {
@@ -2782,14 +2829,14 @@ export const RequestsPage: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Saved templates */}
-                      {savedTemplates.length > 0 && (
+                      {/* Saved templates (excluding system customizations) */}
+                      {savedTemplates.filter(t => !t.template_data?.isSystemCustomization).length > 0 && (
                         <div>
                           <div className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2 px-1">
                             Zapisane szablony
                           </div>
                           <div className="space-y-2">
-                            {savedTemplates.map((tmpl) => (
+                            {savedTemplates.filter(t => !t.template_data?.isSystemCustomization).map((tmpl) => (
                               <button
                                 key={tmpl.id}
                                 onClick={() => openEditTemplate(tmpl)}
