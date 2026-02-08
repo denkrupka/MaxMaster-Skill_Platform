@@ -464,11 +464,11 @@ export async function generateAndSaveEstimate(
   // Сначала генерируем
   const result = await generateEstimateFromForm(formId, requestId, companyId, priceListId);
 
-  if (!result.success || result.items.length === 0) {
+  if (!result.success) {
     return result;
   }
 
-  // Затем сохраняем
+  // Затем сохраняем (даже если нет позиций - создаем пустой коштрис)
   const saveResult = await saveGeneratedEstimate(
     requestId,
     formId,
