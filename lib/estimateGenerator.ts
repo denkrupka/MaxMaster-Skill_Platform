@@ -361,6 +361,22 @@ export async function saveGeneratedEstimate(
   priceListId?: string
 ): Promise<{ success: boolean; estimateId?: string; error?: string }> {
   try {
+    // Generate estimate number
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const estimateNumber = `KSZ-${year}${month}${day}-${random}`;
+
+    // Calculate totals
+    const subtotalNet = generationResult.totals.workTotal +
+                        generationResult.totals.materialTotal +
+                        generationResult.totals.equipmentTotal;
+    const vatRate = 23;
+    const vatAmount = subtotalNet * (vatRate / 100);
+    const totalGross = subtotalNet + vatAmount;
+
     // Создаем смету
     const { data: estimate, error: estimateError } = await supabase
       .from('kosztorys_estimates')
@@ -368,18 +384,17 @@ export async function saveGeneratedEstimate(
         request_id: requestId,
         form_id: formId,
         company_id: companyId,
-        price_list_id: priceListId,
+        estimate_number: estimateNumber,
         created_by_id: createdById,
         status: 'draft',
         version: 1,
-        work_total: generationResult.totals.workTotal,
-        material_total: generationResult.totals.materialTotal,
-        equipment_total: generationResult.totals.equipmentTotal,
-        labor_hours_total: generationResult.totals.laborHoursTotal,
-        grand_total: generationResult.totals.grandTotal,
-        margin_percent: 0,
-        discount_percent: 0,
-        final_total: generationResult.totals.grandTotal,
+        vat_rate: vatRate,
+        total_works: generationResult.totals.workTotal,
+        total_materials: generationResult.totals.materialTotal,
+        total_equipment: generationResult.totals.equipmentTotal,
+        subtotal_net: subtotalNet,
+        vat_amount: vatAmount,
+        total_gross: totalGross,
       })
       .select()
       .single();
@@ -393,18 +408,17 @@ export async function saveGeneratedEstimate(
       const estimateItems = generationResult.items.map((item, index) => ({
         estimate_id: estimate.id,
         position_number: index + 1,
-        work_type_id: item.work_type_id,
-        work_code: item.work_code,
-        work_name: item.work_name,
-        room_code: item.room_code,
-        room_name: item.room_name,
-        unit: item.unit,
+        room_group: item.room_name || 'Ogólne',
+        installation_element: item.work_code || 'Pozycja',
+        task_description: item.work_name || 'Prace',
         quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.total_price,
-        labor_hours: item.labor_hours,
-        material_cost: item.material_cost,
-        equipment_cost: item.equipment_cost,
+        unit_price_work: item.unit_price,
+        total_work: item.total_price,
+        unit_price_material: item.material_cost > 0 && item.quantity > 0 ? item.material_cost / item.quantity : 0,
+        total_material: item.material_cost,
+        total_item: item.total_price + item.material_cost + item.equipment_cost,
+        source: 'auto',
+        template_task_id: item.source_template_id || null,
       }));
 
       const { error: itemsError } = await supabase
@@ -418,16 +432,12 @@ export async function saveGeneratedEstimate(
 
     // Добавляем оборудование сметы
     if (generationResult.equipment.length > 0) {
-      const equipmentItems = generationResult.equipment.map((eq, index) => ({
+      const equipmentItems = generationResult.equipment.map((eq) => ({
         estimate_id: estimate.id,
-        position_number: index + 1,
         equipment_id: eq.equipment_id,
-        equipment_code: eq.equipment_code,
-        equipment_name: eq.equipment_name,
-        unit: eq.unit,
         quantity: eq.quantity,
         unit_price: eq.unit_price,
-        total_price: eq.total_price,
+        total: eq.total_price,
       }));
 
       const { error: eqError } = await supabase
