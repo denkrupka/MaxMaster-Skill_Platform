@@ -91,6 +91,125 @@ const LEFT_NAV_ITEMS = [
   { id: 'wydruki', label: 'Wydruki', icon: Printer },
 ];
 
+// KNR Catalog structure
+interface CatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  type: 'catalog' | 'chapter' | 'table' | 'position';
+  children?: CatalogItem[];
+  unit?: string;
+  norms?: { type: KosztorysResourceType; value: number; unit: string }[];
+}
+
+// Sample KNR catalog data (based on eKosztorysowanie screenshots)
+const KNR_CATALOG: CatalogItem[] = [
+  {
+    id: 'knnr5',
+    code: 'KNNR 5',
+    name: 'Instalacje elektryczne i sieci zewnętrzne',
+    type: 'catalog',
+    children: [
+      {
+        id: 'knnr5-07',
+        code: '(Rozdział 07)',
+        name: 'Elektroenergetyczne linie kablowe',
+        type: 'chapter',
+        children: [
+          {
+            id: 'knnr5-0701',
+            code: 'KNNR 5 0701',
+            name: 'Kopanie rowów dla kabli',
+            type: 'table',
+            children: [
+              {
+                id: 'knnr5-0701-01',
+                code: 'KNNR 5 0701-01',
+                name: 'Kopanie rowów dla kabli w sposób ręczny w gruncie kat. I-II',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'labor', value: 1.35, unit: 'r-g' }],
+              },
+              {
+                id: 'knnr5-0701-02',
+                code: 'KNNR 5 0701-02',
+                name: 'Kopanie rowów dla kabli w sposób ręczny w gruncie kat. III',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'labor', value: 1.65, unit: 'r-g' }],
+              },
+              {
+                id: 'knnr5-0701-03',
+                code: 'KNNR 5 0701-03',
+                name: 'Kopanie rowów dla kabli w sposób ręczny w gruncie kat. IV',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'labor', value: 2.10, unit: 'r-g' }],
+              },
+              {
+                id: 'knnr5-0701-04',
+                code: 'KNNR 5 0701-04',
+                name: 'Kopanie rowów dla kabli w sposób mechaniczny w gruncie kat. I-II',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'equipment', value: 0.15, unit: 'm-g' }],
+              },
+            ],
+          },
+          {
+            id: 'knnr5-0702',
+            code: 'KNNR 5 0702',
+            name: 'Zasypywanie rowów dla kabli',
+            type: 'table',
+            children: [
+              {
+                id: 'knnr5-0702-01',
+                code: 'KNNR 5 0702-01',
+                name: 'Zasypywanie rowów dla kabli wykonanych ręcznie w gruncie kat. I-II',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'labor', value: 0.89, unit: 'r-g' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'knr2-02',
+    code: 'KNR 2-02',
+    name: 'Konstrukcje budowlane',
+    type: 'catalog',
+    children: [
+      {
+        id: 'knr2-02-01',
+        code: '(Rozdział 01)',
+        name: 'Roboty ziemne',
+        type: 'chapter',
+        children: [
+          {
+            id: 'knr2-02-0101',
+            code: 'KNR 2-02 0101',
+            name: 'Wykopy',
+            type: 'table',
+            children: [
+              {
+                id: 'knr2-02-0101-01',
+                code: 'KNR 2-02 0101-01',
+                name: 'Wykopy jamiste o głęb. do 1,5 m w gruncie kat. I-II',
+                type: 'position',
+                unit: 'm3',
+                norms: [{ type: 'labor', value: 1.20, unit: 'r-g' }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
 // Resource type configuration
 const RESOURCE_TYPE_CONFIG: Record<KosztorysResourceType, {
   label: string;
@@ -539,6 +658,13 @@ export const KosztorysEditorPage: React.FC = () => {
   const [leftPanelMode, setLeftPanelMode] = useState<LeftPanelMode>('overview');
   const [exportPages, setExportPages] = useState<ExportPage[]>(DEFAULT_EXPORT_PAGES);
   const [activeNavItem, setActiveNavItem] = useState<string>('kosztorysy');
+
+  // Catalog browser state
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [expandedCatalogItems, setExpandedCatalogItems] = useState<Set<string>>(new Set());
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
+  const [catalogQuantity, setCatalogQuantity] = useState('10');
+  const [catalogMultiplier, setCatalogMultiplier] = useState('1');
 
   // Form state for new items
   const [newPositionForm, setNewPositionForm] = useState({
@@ -1221,6 +1347,155 @@ export const KosztorysEditorPage: React.FC = () => {
     }));
   };
 
+  // Toggle catalog item expand
+  const toggleCatalogItem = (itemId: string) => {
+    setExpandedCatalogItems(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(itemId)) {
+        newExpanded.delete(itemId);
+      } else {
+        newExpanded.add(itemId);
+      }
+      return newExpanded;
+    });
+  };
+
+  // Filter catalog items by search
+  const filterCatalogItems = (items: CatalogItem[], search: string): CatalogItem[] => {
+    if (!search.trim()) return items;
+    const lowerSearch = search.toLowerCase();
+
+    return items.reduce((acc: CatalogItem[], item) => {
+      const matchesCode = item.code.toLowerCase().includes(lowerSearch);
+      const matchesName = item.name.toLowerCase().includes(lowerSearch);
+
+      if (item.children) {
+        const filteredChildren = filterCatalogItems(item.children, search);
+        if (filteredChildren.length > 0 || matchesCode || matchesName) {
+          acc.push({ ...item, children: filteredChildren.length > 0 ? filteredChildren : item.children });
+        }
+      } else if (matchesCode || matchesName) {
+        acc.push(item);
+      }
+
+      return acc;
+    }, []);
+  };
+
+  // Render catalog tree
+  const renderCatalogTree = (items: CatalogItem[], level: number): React.ReactNode => {
+    const filteredItems = level === 0 ? filterCatalogItems(items, catalogSearch) : items;
+
+    return filteredItems.map(item => {
+      const isExpanded = expandedCatalogItems.has(item.id);
+      const hasChildren = item.children && item.children.length > 0;
+      const isSelected = selectedCatalogItem?.id === item.id;
+      const isPosition = item.type === 'position';
+
+      return (
+        <div key={item.id}>
+          <div
+            className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
+              isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'
+            } ${isPosition ? 'border border-slate-200' : ''}`}
+            style={{ paddingLeft: `${level * 12 + 8}px` }}
+            onClick={() => {
+              if (hasChildren) {
+                toggleCatalogItem(item.id);
+              }
+              if (isPosition) {
+                setSelectedCatalogItem(item);
+              }
+            }}
+          >
+            {hasChildren ? (
+              <button className="p-0.5 -ml-1 hover:bg-slate-200 rounded flex-shrink-0">
+                {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              </button>
+            ) : isPosition ? (
+              <FileText className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
+            ) : (
+              <div className="w-4" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className={`font-mono ${isPosition ? 'text-blue-600' : 'text-slate-600'}`}>
+                {item.code}
+              </div>
+              <div className={`text-slate-500 ${level > 1 ? 'truncate' : ''}`} title={item.name}>
+                {item.name}
+              </div>
+            </div>
+          </div>
+          {hasChildren && isExpanded && (
+            <div>{renderCatalogTree(item.children!, level + 1)}</div>
+          )}
+        </div>
+      );
+    });
+  };
+
+  // Insert position from catalog
+  const insertFromCatalog = (catalogItem: CatalogItem) => {
+    if (!catalogItem || catalogItem.type !== 'position') return;
+
+    const unit = UNITS_REFERENCE.find(u => u.unit === catalogItem.unit) || UNITS_REFERENCE[0];
+    const newPosition = createNewPosition(
+      catalogItem.code,
+      catalogItem.name,
+      unit.unit,
+      unit.index
+    );
+
+    // Add measurement
+    const quantity = parseFloat(catalogQuantity) || 0;
+    if (quantity > 0) {
+      newPosition.measurements = addMeasurementEntry(
+        newPosition.measurements,
+        catalogQuantity,
+        'Przedmiar'
+      );
+    }
+
+    // Set multiplication factor
+    newPosition.multiplicationFactor = parseFloat(catalogMultiplier) || 1;
+
+    // Add resources from catalog norms
+    if (catalogItem.norms) {
+      for (const norm of catalogItem.norms) {
+        const resourceUnit = UNITS_REFERENCE.find(u => u.unit === norm.unit) || UNITS_REFERENCE[0];
+        const resource = createNewResource(
+          norm.type,
+          norm.type === 'labor' ? 'Robotnicy' : norm.type === 'equipment' ? 'Sprzęt' : 'Materiał',
+          norm.value,
+          0, // Price will be set later
+          resourceUnit.unit,
+          resourceUnit.index
+        );
+        newPosition.resources.push(resource);
+      }
+    }
+
+    // Add to estimate
+    const newData = { ...estimateData };
+    newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
+    newData.root = {
+      ...newData.root,
+      positionIds: [...newData.root.positionIds, newPosition.id],
+    };
+
+    updateEstimateData(newData);
+    setLeftPanelMode('overview');
+
+    setEditorState(prev => ({
+      ...prev,
+      selectedItemId: newPosition.id,
+      selectedItemType: 'position',
+      expandedPositions: new Set([...prev.expandedPositions, newPosition.id]),
+    }));
+
+    showNotificationMessage(`Dodano pozycję: ${catalogItem.code}`, 'success');
+  };
+
   // Export to CSV
   const handleExportCSV = () => {
     if (!estimate || !calculationResult) return;
@@ -1553,10 +1828,22 @@ export const KosztorysEditorPage: React.FC = () => {
           Dział
         </button>
         <button
-          onClick={() => handleAddPosition(null)}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded"
+          onClick={() => setLeftPanelMode('catalog')}
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            leftPanelMode === 'catalog'
+              ? 'bg-blue-600 text-white'
+              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+          }`}
         >
           <span className="bg-blue-500 text-white text-xs px-1 rounded">KNR</span>
+          Pozycja
+        </button>
+        <button
+          onClick={() => handleAddPosition(null)}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+          title="Wstaw pozycję nieskatalogowaną"
+        >
+          <Plus className="w-4 h-4" />
           Pozycja
         </button>
         <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -2039,6 +2326,84 @@ export const KosztorysEditorPage: React.FC = () => {
                     Drukuj
                   </button>
                 </div>
+              </div>
+            )}
+
+            {leftPanelMode === 'catalog' && (
+              <div className="flex flex-col h-full">
+                {/* Search */}
+                <div className="p-3 border-b border-slate-200">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Szukaj pozycji..."
+                      value={catalogSearch}
+                      onChange={e => setCatalogSearch(e.target.value)}
+                      className="w-full pl-8 pr-8 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    {catalogSearch && (
+                      <button
+                        onClick={() => setCatalogSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded"
+                      >
+                        <X className="w-3 h-3 text-slate-400" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Catalog tree */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  <div className="text-xs text-slate-500 px-2 mb-2">
+                    <div className="flex items-center justify-between">
+                      <span>Podstawa</span>
+                      <span>Opis</span>
+                    </div>
+                  </div>
+                  {renderCatalogTree(KNR_CATALOG, 0)}
+                </div>
+
+                {/* Insert position form */}
+                {selectedCatalogItem?.type === 'position' && (
+                  <div className="p-3 border-t border-slate-200 bg-slate-50">
+                    <p className="text-xs text-slate-600 mb-2 truncate" title={selectedCatalogItem.name}>
+                      {selectedCatalogItem.code}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <label className="text-xs text-slate-500">Ilość</label>
+                        <input
+                          type="number"
+                          value={catalogQuantity}
+                          onChange={e => setCatalogQuantity(e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div className="w-16">
+                        <label className="text-xs text-slate-500">{selectedCatalogItem.unit}</label>
+                        <div className="px-2 py-1.5 text-sm bg-slate-100 rounded text-center">
+                          {selectedCatalogItem.unit}
+                        </div>
+                      </div>
+                      <div className="w-20">
+                        <label className="text-xs text-slate-500">Krotność</label>
+                        <input
+                          type="number"
+                          value={catalogMultiplier}
+                          onChange={e => setCatalogMultiplier(e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => insertFromCatalog(selectedCatalogItem)}
+                      className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Wstaw
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
