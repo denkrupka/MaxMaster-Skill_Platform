@@ -3177,8 +3177,10 @@ export interface KosztorysEditorState {
   expandedSections: Set<string>;
   expandedPositions: Set<string>;
   clipboard: {
-    type: 'section' | 'position' | 'resource' | null;
-    data: any;
+    id: string;
+    type: 'section' | 'position' | 'resource';
+    action: 'copy' | 'cut';
+    data?: any;
   } | null;
   isDirty: boolean;
   lastSaved: string | null;

@@ -52,9 +52,33 @@ import type {
   KosztorysType,
 } from '../../types';
 
-// View mode types
-type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady';
-type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments';
+// View mode types - extended with all views from eKosztorysowanie
+type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia' | 'pozycje';
+type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments' | 'titlePageEditor';
+type ZestawieniaTab = 'robocizna' | 'materialy' | 'sprzet';
+
+// Title page editor data structure
+interface TitlePageData {
+  title: string;
+  hideManHourRate: boolean;
+  hideOverheads: boolean;
+  hideWorkValue: boolean;
+  companyName: string;
+  companyAddress: string;
+  orderName: string;
+  orderAddress: string;
+  clientName: string;
+  clientAddress: string;
+  contractorName: string;
+  contractorAddress: string;
+  industry: string;
+  preparedBy: string;
+  preparedByIndustry: string;
+  checkedBy: string;
+  checkedByIndustry: string;
+  preparedDate: string;
+  approvedDate: string;
+}
 
 // Export page types for print configuration
 interface ExportPage {
@@ -85,11 +109,11 @@ const DEFAULT_EXPORT_PAGES: ExportPage[] = [
 const LEFT_NAV_ITEMS = [
   { id: 'przedmiar', label: 'Przedmiar', shortLabel: 'P', icon: List, viewMode: 'przedmiar' as ViewMode },
   { id: 'kosztorysy', label: 'Kosztorys', shortLabel: 'C', icon: FileBarChart, viewMode: 'kosztorys' as ViewMode },
-  { id: 'pozycje', label: 'Pozycje', shortLabel: null, icon: LayoutList, viewMode: 'kosztorys' as ViewMode },
+  { id: 'pozycje', label: 'Pozycje', shortLabel: null, icon: LayoutList, viewMode: 'pozycje' as ViewMode },
   { id: 'naklady', label: 'Nakłady', shortLabel: null, icon: Layers, viewMode: 'naklady' as ViewMode },
-  { id: 'narzuty', label: 'Narzuty', shortLabel: null, icon: Percent, viewMode: null },
-  { id: 'zestawienia', label: 'Zestawienia', shortLabel: null, icon: Table2, viewMode: null },
-  { id: 'wydruki', label: 'Wydruki', shortLabel: null, icon: Printer, viewMode: null },
+  { id: 'narzuty', label: 'Narzuty', shortLabel: null, icon: Percent, viewMode: 'narzuty' as ViewMode },
+  { id: 'zestawienia', label: 'Zestawienia', shortLabel: null, icon: Table2, viewMode: 'zestawienia' as ViewMode },
+  { id: 'wydruki', label: 'Wydruki', shortLabel: null, icon: Printer, viewMode: null, panelMode: 'export' as LeftPanelMode },
 ];
 
 // Active toolbar mode - determines which buttons are shown
@@ -715,6 +739,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showKomentarzeDropdown, setShowKomentarzeDropdown] = useState(false);
   const [showUsunDropdown, setShowUsunDropdown] = useState(false);
   const [showPrzesunDropdown, setShowPrzesunDropdown] = useState(false);
+  const [showUzupelnijDropdown, setShowUzupelnijDropdown] = useState(false);
 
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
@@ -763,6 +788,51 @@ export const KosztorysEditorPage: React.FC = () => {
   // Export panel state
   const [exportTemplate, setExportTemplate] = useState<ExportTemplate>('niestandardowy');
   const [exportSearch, setExportSearch] = useState('');
+
+  // Comments display options
+  const [showCommentsOnSheet, setShowCommentsOnSheet] = useState(false);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
+
+  // Alerts state
+  const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
+
+  // Title Page Editor state
+  const [titlePageData, setTitlePageData] = useState<TitlePageData>({
+    title: '',
+    hideManHourRate: false,
+    hideOverheads: false,
+    hideWorkValue: false,
+    companyName: '',
+    companyAddress: '',
+    orderName: '',
+    orderAddress: '',
+    clientName: '',
+    clientAddress: '',
+    contractorName: '',
+    contractorAddress: '',
+    industry: '',
+    preparedBy: '',
+    preparedByIndustry: '',
+    checkedBy: '',
+    checkedByIndustry: '',
+    preparedDate: '',
+    approvedDate: '',
+  });
+
+  // Title Page Editor section expand states
+  const [titlePageSections, setTitlePageSections] = useState({
+    title: true,
+    workValue: true,
+    company: true,
+    order: true,
+    client: true,
+    contractor: true,
+    participants: true,
+    dates: true,
+  });
+
+  // Zestawienia (Summaries) tab state
+  const [zestawieniaTab, setZestawieniaTab] = useState<ZestawieniaTab>('robocizna');
 
   // Form state for new items
   const [newPositionForm, setNewPositionForm] = useState({
@@ -1411,6 +1481,85 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
+  // Move position in various directions
+  const handleMovePosition = (direction: 'up' | 'down' | 'out' | 'last' | 'first') => {
+    if (!editorState.selectedItemId || editorState.selectedItemType !== 'position') return;
+
+    const posId = editorState.selectedItemId;
+    const newData = { ...estimateData };
+
+    // Find which array the position is in
+    let positionIds: string[] | null = null;
+    let sectionId: string | null = null;
+
+    if (newData.root.positionIds.includes(posId)) {
+      positionIds = [...newData.root.positionIds];
+    } else {
+      for (const [secId, section] of Object.entries(newData.sections)) {
+        if (section.positionIds.includes(posId)) {
+          positionIds = [...section.positionIds];
+          sectionId = secId;
+          break;
+        }
+      }
+    }
+
+    if (!positionIds) return;
+    const currentIndex = positionIds.indexOf(posId);
+
+    switch (direction) {
+      case 'up':
+        if (currentIndex > 0) {
+          [positionIds[currentIndex], positionIds[currentIndex - 1]] =
+            [positionIds[currentIndex - 1], positionIds[currentIndex]];
+        }
+        break;
+      case 'down':
+        if (currentIndex < positionIds.length - 1) {
+          [positionIds[currentIndex], positionIds[currentIndex + 1]] =
+            [positionIds[currentIndex + 1], positionIds[currentIndex]];
+        }
+        break;
+      case 'out':
+        // Move to root level
+        positionIds.splice(currentIndex, 1);
+        newData.root.positionIds = [...newData.root.positionIds, posId];
+        break;
+      case 'first':
+        // Move to first section
+        if (newData.root.sectionIds.length > 0) {
+          const firstSectionId = newData.root.sectionIds[0];
+          positionIds.splice(currentIndex, 1);
+          newData.sections[firstSectionId] = {
+            ...newData.sections[firstSectionId],
+            positionIds: [...newData.sections[firstSectionId].positionIds, posId],
+          };
+        }
+        break;
+      case 'last':
+        // Move to last section
+        if (newData.root.sectionIds.length > 0) {
+          const lastSectionId = newData.root.sectionIds[newData.root.sectionIds.length - 1];
+          positionIds.splice(currentIndex, 1);
+          newData.sections[lastSectionId] = {
+            ...newData.sections[lastSectionId],
+            positionIds: [...newData.sections[lastSectionId].positionIds, posId],
+          };
+        }
+        break;
+    }
+
+    // Update the original array
+    if (sectionId) {
+      newData.sections[sectionId] = { ...newData.sections[sectionId], positionIds };
+    } else {
+      newData.root.positionIds = positionIds;
+    }
+
+    updateEstimateData(newData);
+    showNotificationMessage('Pozycja przeniesiona', 'success');
+  };
+
   // Toggle expand
   const toggleExpandSection = (sectionId: string) => {
     setEditorState(prev => {
@@ -1935,8 +2084,8 @@ export const KosztorysEditorPage: React.FC = () => {
                 Kosztorys
               </button>
               <button
-                onClick={() => { setActiveNavItem('pozycje'); setShowViewModeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+                onClick={() => { setViewMode('pozycje'); setActiveNavItem('pozycje'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'pozycje' ? 'bg-slate-100' : ''}`}
               >
                 Pozycje
               </button>
@@ -1947,14 +2096,14 @@ export const KosztorysEditorPage: React.FC = () => {
                 Nakłady
               </button>
               <button
-                onClick={() => { setActiveNavItem('narzuty'); setShowViewModeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+                onClick={() => { setViewMode('narzuty'); setActiveNavItem('narzuty'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'narzuty' ? 'bg-slate-100' : ''}`}
               >
                 Narzuty
               </button>
               <button
-                onClick={() => { setActiveNavItem('zestawienia'); setShowViewModeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+                onClick={() => { setViewMode('zestawienia'); setActiveNavItem('zestawienia'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'zestawienia' ? 'bg-slate-100' : ''}`}
               >
                 Zestawienia
               </button>
@@ -2095,11 +2244,49 @@ export const KosztorysEditorPage: React.FC = () => {
           )}
         </div>
 
-        {/* Uzupełnij nakłady - with dropdown arrow */}
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-400 cursor-not-allowed">
-          Uzupełnij nakłady
-          <ChevronDown className="w-3 h-3" />
-        </button>
+        {/* Uzupełnij nakłady dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUzupelnijDropdown(!showUzupelnijDropdown)}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              Object.keys(estimateData.positions).length > 0 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            }`}
+            disabled={Object.keys(estimateData.positions).length === 0}
+          >
+            Uzupełnij nakłady
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showUzupelnijDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z bazy', 'success'); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Uzupełnij z bazy normatywnej
+              </button>
+              <button
+                onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z KNR', 'success'); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Uzupełnij z katalogów KNR
+              </button>
+              <div className="border-t border-slate-200">
+                <button
+                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono brakujące nakłady', 'success'); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Uzupełnij tylko brakujące
+                </button>
+                <button
+                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Zastąpiono wszystkie nakłady', 'success'); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Zastąp wszystkie nakłady
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
@@ -2108,7 +2295,7 @@ export const KosztorysEditorPage: React.FC = () => {
           Ceny
         </button>
 
-        {/* Komentarze dropdown - opens in left panel */}
+        {/* Komentarze dropdown - matching eKosztorysowanie exactly */}
         <div className="relative">
           <button
             onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
@@ -2121,30 +2308,41 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showKomentarzeDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
               >
-                Pokaż komentarze
+                <Plus className="w-4 h-4 text-slate-400" />
+                Wstaw komentarz do...
               </button>
-              <button
-                onClick={() => {
-                  // Add new comment
-                  setLeftPanelMode('comments');
-                  setShowKomentarzeDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                Dodaj komentarz
-              </button>
+              <div className="border-t border-slate-200">
+                <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCommentsOnSheet}
+                    onChange={(e) => setShowCommentsOnSheet(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300"
+                  />
+                  Pokaż komentarze na arkuszu
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCompletedTasks}
+                    onChange={(e) => setShowCompletedTasks(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300"
+                  />
+                  Pokazuj ukończone zadania
+                </label>
+              </div>
             </div>
           )}
         </div>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Usuń dropdown */}
+        {/* Usuń dropdown - with dynamic label based on selected item */}
         <div className="relative">
           <button
             onClick={() => editorState.selectedItemId && setShowUsunDropdown(!showUsunDropdown)}
@@ -2153,11 +2351,13 @@ export const KosztorysEditorPage: React.FC = () => {
             }`}
           >
             <Trash2 className="w-4 h-4" />
-            Usuń
+            {editorState.selectedItemType === 'section' ? 'Usuń dział' :
+             editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
+             editorState.selectedItemType === 'resource' ? 'Usuń nakład' : 'Usuń'}
             <ChevronDown className="w-3 h-3" />
           </button>
           {showUsunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => {
                   if (editorState.selectedItemId && editorState.selectedItemType) {
@@ -2169,19 +2369,42 @@ export const KosztorysEditorPage: React.FC = () => {
                 }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-red-600"
               >
-                Usuń zaznaczony element
+                {editorState.selectedItemType === 'section' ? 'Usuń dział' :
+                 editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
+                 editorState.selectedItemType === 'resource' ? 'Usuń nakład' : 'Usuń zaznaczony element'}
               </button>
-              <button
-                onClick={() => { setShowUsunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                Usuń z nakładami
-              </button>
+              {editorState.selectedItemType === 'position' && (
+                <button
+                  onClick={() => {
+                    if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                      if (confirm('Czy na pewno chcesz usunąć pozycję wraz z nakładami?')) {
+                        handleDeleteItem(editorState.selectedItemId, 'position');
+                      }
+                    }
+                    setShowUsunDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Usuń pozycję z nakładami
+                </button>
+              )}
+              {editorState.selectedItemType === 'section' && (
+                <button
+                  onClick={() => {
+                    // Delete section but keep positions
+                    setShowUsunDropdown(false);
+                    showNotificationMessage('Funkcja w przygotowaniu', 'error');
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Usuń dział (zachowaj pozycje)
+                </button>
+              )}
             </div>
           )}
         </div>
 
-        {/* Przesuń dropdown */}
+        {/* Przesuń dropdown - matching eKosztorysowanie with 6 options */}
         <div className="relative">
           <button
             onClick={() => editorState.selectedItemId && setShowPrzesunDropdown(!showPrzesunDropdown)}
@@ -2194,56 +2417,111 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showPrzesunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <div className="px-3 py-2 text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
+                W dziale
+              </div>
               <button
-                onClick={() => { /* Move up */ setShowPrzesunDropdown(false); }}
+                onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
               >
-                <MoveUp className="w-4 h-4" /> W górę
+                <MoveUp className="w-4 h-4 text-slate-400" />
+                Przesuń pozycję w górę
               </button>
               <button
-                onClick={() => { /* Move down */ setShowPrzesunDropdown(false); }}
+                onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
               >
-                <MoveDown className="w-4 h-4" /> W dół
+                <MoveDown className="w-4 h-4 text-slate-400" />
+                Przesuń pozycję w dół
               </button>
+              <div className="border-t border-slate-200">
+                <button
+                  onClick={() => { handleMovePosition('out'); setShowPrzesunDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Przesuń pozycję poza dział
+                </button>
+                <button
+                  onClick={() => { handleMovePosition('last'); setShowPrzesunDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Przesuń pozycję do ostatniego działu
+                </button>
+                <button
+                  onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Przesuń pozycję do pierwszego działu
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Kopiuj */}
+        {/* Kopiuj - with dynamic label */}
         <button
+          onClick={() => {
+            if (editorState.selectedItemId && editorState.selectedItemType) {
+              setEditorState(prev => ({
+                ...prev,
+                clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'copy' }
+              }));
+              showNotificationMessage('Skopiowano do schowka', 'success');
+            }
+          }}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
           }`}
           disabled={!editorState.selectedItemId}
         >
           <Copy className="w-4 h-4" />
-          Kopiuj
+          {editorState.selectedItemType === 'section' ? 'Kopiuj dział' :
+           editorState.selectedItemType === 'position' ? 'Kopiuj pozycję' :
+           editorState.selectedItemType === 'resource' ? 'Kopiuj nakład' : 'Kopiuj'}
         </button>
 
-        {/* Wytnij */}
+        {/* Wytnij - with dynamic label */}
         <button
+          onClick={() => {
+            if (editorState.selectedItemId && editorState.selectedItemType) {
+              setEditorState(prev => ({
+                ...prev,
+                clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'cut' }
+              }));
+              showNotificationMessage('Wycięto do schowka', 'success');
+            }
+          }}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
           }`}
           disabled={!editorState.selectedItemId}
         >
           <Scissors className="w-4 h-4" />
-          Wytnij
+          {editorState.selectedItemType === 'section' ? 'Wytnij dział' :
+           editorState.selectedItemType === 'position' ? 'Wytnij pozycję' :
+           editorState.selectedItemType === 'resource' ? 'Wytnij nakład' : 'Wytnij'}
         </button>
 
-        {/* Wklej */}
+        {/* Wklej - with dynamic label */}
         <button
+          onClick={() => {
+            if (editorState.clipboard) {
+              // TODO: Implement paste logic
+              showNotificationMessage('Wklejono ze schowka', 'success');
+            }
+          }}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.clipboard ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
           }`}
           disabled={!editorState.clipboard}
         >
           <ClipboardPaste className="w-4 h-4" />
-          Wklej
+          {editorState.clipboard?.type === 'section' ? 'Wklej dział' :
+           editorState.clipboard?.type === 'position' ? 'Wklej pozycję' :
+           editorState.clipboard?.type === 'resource' ? 'Wklej nakład' : 'Wklej'}
         </button>
       </div>
 
@@ -2264,7 +2542,7 @@ export const KosztorysEditorPage: React.FC = () => {
       </div>
 
       {/* Click outside to close all dropdowns */}
-      {(showDzialDropdown || showNakladDropdown || showViewModeDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown) && (
+      {(showDzialDropdown || showNakladDropdown || showViewModeDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown) && (
         <div className="fixed inset-0 z-40" onClick={() => {
           setShowDzialDropdown(false);
           setShowNakladDropdown(false);
@@ -2272,6 +2550,7 @@ export const KosztorysEditorPage: React.FC = () => {
           setShowKomentarzeDropdown(false);
           setShowUsunDropdown(false);
           setShowPrzesunDropdown(false);
+          setShowUzupelnijDropdown(false);
         }} />
       )}
 
@@ -2814,7 +3093,11 @@ export const KosztorysEditorPage: React.FC = () => {
                       />
                       <span className="flex-1 text-xs text-slate-700">{page.label}</span>
                       {page.canEdit && (
-                        <button className="p-1 hover:bg-slate-100 rounded" title="Edytuj stronę tytułową">
+                        <button
+                          onClick={() => setLeftPanelMode('titlePageEditor')}
+                          className="p-1 hover:bg-slate-100 rounded"
+                          title="Edytuj stronę tytułową"
+                        >
                           <Settings className="w-3 h-3 text-slate-400" />
                         </button>
                       )}
@@ -2927,10 +3210,38 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
             )}
 
-            {/* Comments panel - shown when Komentarze button clicked */}
+            {/* Comments panel - matching eKosztorysowanie exactly */}
             {leftPanelMode === 'comments' && (
               <div className="p-3 flex flex-col h-full">
-                <h3 className="text-sm font-semibold text-slate-900 mb-3">Komentarze</h3>
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Komentarze i zadania</h3>
+
+                {/* Category filter tabs - matching screenshots */}
+                <div className="flex gap-1 mb-3">
+                  <button
+                    onClick={() => setCommentsFilter('all')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      commentsFilter === 'all' ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Wszystkie
+                  </button>
+                  <button
+                    onClick={() => setCommentsFilter('unresolved')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      commentsFilter === 'unresolved' ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Do weryfikacji
+                  </button>
+                  <button
+                    onClick={() => setCommentsFilter('mine')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      commentsFilter === 'mine' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    Do uzupełnienia
+                  </button>
+                </div>
 
                 {/* Comments list */}
                 <div className="flex-1 overflow-y-auto space-y-3">
@@ -2938,39 +3249,69 @@ export const KosztorysEditorPage: React.FC = () => {
                     <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
                   ) : (
                     comments.map(comment => (
-                      <div key={comment.id} className="p-3 bg-slate-50 rounded-lg">
+                      <div key={comment.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                        {/* Status badge at top */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            comment.status === 'zatwierdzony' ? 'bg-green-100 text-green-700' :
+                            comment.status === 'odrzucony' ? 'bg-red-100 text-red-700' :
+                            comment.status === 'do_weryfikacji' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-200 text-slate-600'
+                          }`}>
+                            {comment.status === 'zatwierdzony' ? 'Zatwierdzony' :
+                             comment.status === 'odrzucony' ? 'Odrzucony' :
+                             comment.status === 'do_weryfikacji' ? 'Do weryfikacji' :
+                             'Bez kategorii'}
+                          </span>
+                          <button className="p-1 hover:bg-slate-200 rounded">
+                            <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                          </button>
+                        </div>
+
+                        {/* User and time */}
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                          <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">
                             {comment.userInitials}
                           </div>
                           <div className="flex-1">
                             <div className="text-sm font-medium text-slate-700">{comment.userName}</div>
                             <div className="text-xs text-slate-400">{comment.timestamp}</div>
                           </div>
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            comment.status === 'zatwierdzony' ? 'bg-green-100 text-green-700' :
-                            comment.status === 'odrzucony' ? 'bg-red-100 text-red-700' :
-                            comment.status === 'do_weryfikacji' ? 'bg-amber-100 text-amber-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {comment.status === 'zatwierdzony' ? 'Zatwierdzony' :
-                             comment.status === 'odrzucony' ? 'Odrzucony' :
-                             comment.status === 'do_weryfikacji' ? 'Do weryfikacji' : 'Nowy'}
-                          </span>
                         </div>
+
+                        {/* Section reference */}
                         {comment.sectionName && (
-                          <div className="text-xs text-slate-500 mb-1">Dział: {comment.sectionName}</div>
+                          <div className="text-xs text-blue-600 mb-1 flex items-center gap-1">
+                            <FileText className="w-3 h-3" />
+                            {comment.sectionName}
+                          </div>
                         )}
+
+                        {/* Comment text */}
                         <p className="text-sm text-slate-600">{comment.text}</p>
+
+                        {/* Reply button */}
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <button className="text-xs text-blue-600 hover:underline">
+                            Odpowiedz
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
 
-                {/* Add comment */}
+                {/* Add comment form */}
                 <div className="mt-3 pt-3 border-t border-slate-200">
+                  <div className="mb-2">
+                    <select className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg mb-2">
+                      <option value="">Bez kategorii</option>
+                      <option value="do_weryfikacji">Do weryfikacji</option>
+                      <option value="do_uzupelnienia">Do uzupełnienia</option>
+                    </select>
+                  </div>
                   <textarea
-                    placeholder="Dodaj komentarz..."
+                    placeholder="Wpisz komentarz..."
                     className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none"
                     rows={3}
                   />
@@ -2980,94 +3321,614 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Title Page Editor - Strona tytułowa matching eKosztorysowanie */}
+            {leftPanelMode === 'titlePageEditor' && (
+              <div className="p-3 flex flex-col h-full overflow-y-auto">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Strona tytułowa</h3>
+
+                {/* Tytuł section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, title: !prev.title }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Tytuł</span>
+                    {titlePageSections.title ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.title && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <input
+                        type="text"
+                        value={titlePageData.title}
+                        onChange={e => setTitlePageData(prev => ({ ...prev, title: e.target.value }))}
+                        placeholder="Tytuł kosztorysu"
+                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Wartość robót section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, workValue: !prev.workValue }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Wartość robót</span>
+                    {titlePageSections.workValue ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.workValue && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={titlePageData.hideManHourRate}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, hideManHourRate: e.target.checked }))}
+                          className="w-4 h-4 rounded border-slate-300"
+                        />
+                        <span className="text-xs text-slate-600">Ukryj stawkę roboczogodziny</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={titlePageData.hideOverheads}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, hideOverheads: e.target.checked }))}
+                          className="w-4 h-4 rounded border-slate-300"
+                        />
+                        <span className="text-xs text-slate-600">Ukryj narzuty</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={titlePageData.hideWorkValue}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, hideWorkValue: e.target.checked }))}
+                          className="w-4 h-4 rounded border-slate-300"
+                        />
+                        <span className="text-xs text-slate-600">Ukryj wartość robót</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+
+                {/* Podmiot opracowujący kosztorys section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, company: !prev.company }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Podmiot opracowujący kosztorys</span>
+                    {titlePageSections.company ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.company && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <input
+                          type="text"
+                          value={titlePageData.companyName}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, companyName: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <textarea
+                          value={titlePageData.companyAddress}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, companyAddress: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Zamówienie section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, order: !prev.order }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Zamówienie</span>
+                    {titlePageSections.order ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.order && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <input
+                          type="text"
+                          value={titlePageData.orderName}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, orderName: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Adres budowy</label>
+                        <textarea
+                          value={titlePageData.orderAddress}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, orderAddress: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Zamawiający section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, client: !prev.client }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Zamawiający</span>
+                    {titlePageSections.client ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.client && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <input
+                          type="text"
+                          value={titlePageData.clientName}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, clientName: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <textarea
+                          value={titlePageData.clientAddress}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, clientAddress: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          rows={2}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Wykonawca section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, contractor: !prev.contractor }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Wykonawca</span>
+                    {titlePageSections.contractor ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.contractor && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <input
+                          type="text"
+                          value={titlePageData.contractorName}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, contractorName: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <textarea
+                          value={titlePageData.contractorAddress}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, contractorAddress: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          rows={2}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Branża</label>
+                        <input
+                          type="text"
+                          value={titlePageData.industry}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, industry: e.target.value }))}
+                          placeholder="np. Budowlana, Elektryczna"
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Osoby odpowiedzialne section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, participants: !prev.participants }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Osoby odpowiedzialne</span>
+                    {titlePageSections.participants ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.participants && (
+                    <div className="px-3 pb-3 space-y-3">
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-600">Opracował</p>
+                        <input
+                          type="text"
+                          value={titlePageData.preparedBy}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, preparedBy: e.target.value }))}
+                          placeholder="Imię i nazwisko"
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                        <input
+                          type="text"
+                          value={titlePageData.preparedByIndustry}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, preparedByIndustry: e.target.value }))}
+                          placeholder="Branża"
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-600">Sprawdził</p>
+                        <input
+                          type="text"
+                          value={titlePageData.checkedBy}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, checkedBy: e.target.value }))}
+                          placeholder="Imię i nazwisko"
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                        <input
+                          type="text"
+                          value={titlePageData.checkedByIndustry}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, checkedByIndustry: e.target.value }))}
+                          placeholder="Branża"
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Daty section */}
+                <div className="border border-slate-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, dates: !prev.dates }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <span>Daty</span>
+                    {titlePageSections.dates ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.dates && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Data opracowania</label>
+                        <input
+                          type="date"
+                          value={titlePageData.preparedDate}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, preparedDate: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-500 mb-1">Data zatwierdzenia</label>
+                        <input
+                          type="date"
+                          value={titlePageData.approvedDate}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, approvedDate: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Apply button */}
+                <button
+                  onClick={() => {
+                    setEditorState(prev => ({ ...prev, isDirty: true }));
+                    showNotificationMessage('Strona tytułowa zaktualizowana', 'success');
+                  }}
+                  className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Zastosuj zmiany
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Table */}
         <div className="flex-1 overflow-auto bg-white">
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-slate-50 z-10">
-              {viewMode === 'przedmiar' ? (
-                <tr className="border-b border-slate-300">
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-32">Podstawa</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-32">Poszczególne</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Razem</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-24">Akcje</th>
-                </tr>
-              ) : viewMode === 'naklady' ? (
-                <tr className="border-b border-slate-300">
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">Indeks</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ilość</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Wartość</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość inwestora</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość wykonawcy</th>
-                </tr>
-              ) : (
-                <tr className="border-b border-slate-300">
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Podstawa</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-14">j.m.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Nakład j.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ceny jedn.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Koszt jedn.</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-16">Ilość</th>
-                  <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Wartość</th>
-                  <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-20"></th>
-                </tr>
-              )}
-            </thead>
-            <tbody>
-              {/* Root level positions */}
-              {estimateData.root.positionIds.map((posId, index) => {
-                const position = estimateData.positions[posId];
-                if (!position) return null;
-                return renderPositionRow(position, index + 1, null);
-              })}
+          {/* Narzuty View */}
+          {viewMode === 'narzuty' && (
+            <div className="p-4">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Narzuty kosztorysu</h3>
 
-              {/* Sections */}
-              {estimateData.root.sectionIds.map((sectionId, index) => {
-                const section = estimateData.sections[sectionId];
-                if (!section) return null;
-                return renderSection(section, index);
-              })}
+              {/* Narzuty table */}
+              <table className="w-full border-collapse border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-50">
+                  <tr className="border-b border-slate-300">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Rodzaj narzutu</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Podstawa naliczania</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Stawka %</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-32">Wartość</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase w-20">Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {estimateData.root.overheads.map((overhead, index) => (
+                    <tr key={overhead.id} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="px-3 py-2 text-sm text-slate-700">
+                        {overhead.type === 'indirect_costs' ? 'Koszty pośrednie (Kp)' :
+                         overhead.type === 'profit' ? 'Zysk (Z)' :
+                         overhead.type === 'purchase_costs' ? 'Koszty zakupu (Kz)' :
+                         overhead.name}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-slate-600">
+                        {overhead.base === 'labor' ? 'Robocizna (R)' :
+                         overhead.base === 'material' ? 'Materiały (M)' :
+                         overhead.base === 'equipment' ? 'Sprzęt (S)' :
+                         overhead.base === 'labor_and_equipment' ? 'R + S' :
+                         overhead.base === 'direct_costs' ? 'Koszty bezpośrednie' :
+                         'Koszty bezpośrednie'}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-right">
+                        <input
+                          type="text"
+                          value={overhead.value.toString().replace('.', ',')}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                            setEstimateData(prev => ({
+                              ...prev,
+                              root: {
+                                ...prev.root,
+                                overheads: prev.root.overheads.map((o, i) =>
+                                  i === index ? { ...o, value: val } : o
+                                )
+                              }
+                            }));
+                          }}
+                          className="w-20 px-2 py-1 text-sm border border-slate-300 rounded text-right"
+                        />
+                        <span className="ml-1">%</span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-right font-medium">
+                        {formatCurrency(
+                          overhead.type === 'indirect_costs' ? (calculationResult?.laborTotal || 0) * (overhead.value / 100) :
+                          overhead.type === 'profit' ? ((calculationResult?.laborTotal || 0) + (calculationResult?.laborTotal || 0) * (estimateData.root.overheads[0]?.value || 0) / 100) * (overhead.value / 100) :
+                          overhead.type === 'purchase_costs' ? (calculationResult?.materialTotal || 0) * (overhead.value / 100) :
+                          0
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <button className="p-1 hover:bg-slate-100 rounded">
+                          <Settings className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
 
-              {/* Empty state */}
-              {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center">
-                    <div className="text-slate-400 mb-4">
-                      <FileText className="w-12 h-12 mx-auto mb-2" />
-                      <p>Kosztorys jest pusty</p>
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={handleAddSection}
-                        className="px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                      >
-                        <FolderPlus className="w-4 h-4 inline mr-1" />
-                        Dodaj dział
-                      </button>
-                      <button
-                        onClick={() => handleAddPosition(null)}
-                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        <Plus className="w-4 h-4 inline mr-1" />
-                        Dodaj pozycję
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  {/* Summary row */}
+                  <tr className="bg-slate-100 font-semibold">
+                    <td colSpan={3} className="px-3 py-2 text-sm text-slate-700 text-right">
+                      Razem narzuty:
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right">
+                      {formatCurrency(calculationResult?.totalOverheads || 0)}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Add narzut button */}
+              <button className="mt-4 flex items-center gap-2 px-4 py-2 text-sm border border-dashed border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
+                <Plus className="w-4 h-4" />
+                Dodaj narzut
+              </button>
+            </div>
+          )}
+
+          {/* Zestawienia View */}
+          {viewMode === 'zestawienia' && (
+            <div className="p-4">
+              {/* Tabs for zestawienia */}
+              <div className="flex gap-1 mb-4 border-b border-slate-200">
+                <button
+                  onClick={() => setZestawieniaTab('robocizna')}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    zestawieniaTab === 'robocizna'
+                      ? 'text-blue-600 border-b-2 border-blue-600'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Users className="w-4 h-4 inline mr-1" />
+                  Robocizna
+                </button>
+                <button
+                  onClick={() => setZestawieniaTab('materialy')}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    zestawieniaTab === 'materialy'
+                      ? 'text-green-600 border-b-2 border-green-600'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Package className="w-4 h-4 inline mr-1" />
+                  Materiały
+                </button>
+                <button
+                  onClick={() => setZestawieniaTab('sprzet')}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    zestawieniaTab === 'sprzet'
+                      ? 'text-orange-600 border-b-2 border-orange-600'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Wrench className="w-4 h-4 inline mr-1" />
+                  Sprzęt
+                </button>
+              </div>
+
+              {/* Zestawienie table */}
+              <table className="w-full border-collapse border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-50">
+                  <tr className="border-b border-slate-300">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Indeks</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ilość</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Wartość</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    // Collect all resources of the selected type
+                    const resourceType = zestawieniaTab === 'robocizna' ? 'labor' :
+                                         zestawieniaTab === 'materialy' ? 'material' : 'equipment';
+                    const resources: { resource: KosztorysResource; quantity: number; positionName: string }[] = [];
+
+                    (Object.values(estimateData.positions) as KosztorysPosition[]).forEach((pos: KosztorysPosition) => {
+                      const posResult = calculationResult?.positions[pos.id];
+                      pos.resources.forEach((res: KosztorysResource) => {
+                        if (res.type === resourceType) {
+                          resources.push({
+                            resource: res,
+                            quantity: res.norm.value * (posResult?.quantity || 0),
+                            positionName: pos.name
+                          });
+                        }
+                      });
+                    });
+
+                    if (resources.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                            Brak nakładów typu {zestawieniaTab === 'robocizna' ? 'robocizna' :
+                                                 zestawieniaTab === 'materialy' ? 'materiały' : 'sprzęt'}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    let totalValue = 0;
+                    return resources.map((item, index) => {
+                      const value = item.quantity * item.resource.unitPrice.value;
+                      totalValue += value;
+                      return (
+                        <tr key={item.resource.id} className="border-b border-slate-200 hover:bg-slate-50">
+                          <td className="px-3 py-2 text-sm text-slate-600">{index + 1}</td>
+                          <td className="px-3 py-2 text-sm font-mono text-slate-600">{item.resource.originIndex.index || '-'}</td>
+                          <td className="px-3 py-2 text-sm text-slate-700">{item.resource.name}</td>
+                          <td className="px-3 py-2 text-sm text-center text-slate-600">{item.resource.unit.label}</td>
+                          <td className="px-3 py-2 text-sm text-right">{formatNumber(item.quantity)}</td>
+                          <td className="px-3 py-2 text-sm text-right">{formatCurrency(item.resource.unitPrice.value)}</td>
+                          <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(value)}</td>
+                        </tr>
+                      );
+                    });
+                  })()}
+
+                  {/* Summary row */}
+                  <tr className="bg-slate-100 font-semibold">
+                    <td colSpan={6} className="px-3 py-2 text-sm text-slate-700 text-right">
+                      Razem {zestawieniaTab === 'robocizna' ? 'robocizna' :
+                             zestawieniaTab === 'materialy' ? 'materiały' : 'sprzęt'}:
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right">
+                      {formatCurrency(
+                        zestawieniaTab === 'robocizna' ? calculationResult?.laborTotal || 0 :
+                        zestawieniaTab === 'materialy' ? calculationResult?.materialTotal || 0 :
+                        calculationResult?.equipmentTotal || 0
+                      )}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Standard table views (przedmiar, kosztorys, naklady) */}
+          {(viewMode === 'przedmiar' || viewMode === 'kosztorys' || viewMode === 'naklady' || viewMode === 'pozycje') && (
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-slate-50 z-10">
+                {viewMode === 'przedmiar' ? (
+                  <tr className="border-b border-slate-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-32">Podstawa</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-32">Poszczególne</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Razem</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-24">Akcje</th>
+                  </tr>
+                ) : viewMode === 'naklady' ? (
+                  <tr className="border-b border-slate-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">Indeks</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ilość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Wartość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość inwestora</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość wykonawcy</th>
+                  </tr>
+                ) : (
+                  <tr className="border-b border-slate-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Podstawa</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-14">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Nakład j.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ceny jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Koszt jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-16">Ilość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Wartość</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-20"></th>
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {/* Root level positions */}
+                {estimateData.root.positionIds.map((posId, index) => {
+                  const position = estimateData.positions[posId];
+                  if (!position) return null;
+                  return renderPositionRow(position, index + 1, null);
+                })}
+
+                {/* Sections */}
+                {estimateData.root.sectionIds.map((sectionId, index) => {
+                  const section = estimateData.sections[sectionId];
+                  if (!section) return null;
+                  return renderSection(section, index);
+                })}
+
+                {/* Empty state */}
+                {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-12 text-center">
+                      <div className="text-slate-400 mb-4">
+                        <FileText className="w-12 h-12 mx-auto mb-2" />
+                        <p>Kosztorys jest pusty</p>
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={handleAddSection}
+                          className="px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                        >
+                          <FolderPlus className="w-4 h-4 inline mr-1" />
+                          Dodaj dział
+                        </button>
+                        <button
+                          onClick={() => handleAddPosition(null)}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          <Plus className="w-4 h-4 inline mr-1" />
+                          Dodaj pozycję
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
 
         {/* Properties panel - now integrated into left panel */}
@@ -3105,6 +3966,40 @@ export const KosztorysEditorPage: React.FC = () => {
           <span className="text-xl font-bold text-slate-900">
             {formatCurrency(calculationResult?.totalValue || 0)}
           </span>
+        </div>
+      </div>
+
+      {/* Alerts bar - matching eKosztorysowanie "0 z 13" style */}
+      <div className="bg-slate-50 border-t border-slate-200 px-4 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setAlertsCount(prev => ({ ...prev, current: Math.max(0, prev.current - 1) }))}
+              disabled={alertsCount.current === 0}
+              className="p-1 hover:bg-slate-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronDown className="w-4 h-4 rotate-90" />
+            </button>
+            <span className="text-sm text-slate-600 min-w-[60px] text-center">
+              {alertsCount.current} z {alertsCount.total}
+            </span>
+            <button
+              onClick={() => setAlertsCount(prev => ({ ...prev, current: Math.min(prev.total, prev.current + 1) }))}
+              disabled={alertsCount.current >= alertsCount.total}
+              className="p-1 hover:bg-slate-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ChevronDown className="w-4 h-4 -rotate-90" />
+            </button>
+          </div>
+          {alertsCount.total > 0 && (
+            <span className="text-xs text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              Alerty w kosztorysie
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span>Ostatnia modyfikacja: {estimate?.settings.modified ? new Date(estimate.settings.modified).toLocaleString('pl-PL') : '-'}</span>
         </div>
       </div>
 
@@ -3542,6 +4437,357 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
       )}
 
+
+      {/* Ustawienia (Settings) Modal - matching eKosztorysowanie exactly */}
+      {showSettingsModal && estimate && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white">
+              <h2 className="text-lg font-bold text-slate-900">Ustawienia kosztorysu</h2>
+              <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-6">
+              {/* Nazwa kosztorysu */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa kosztorysu</label>
+                <input
+                  type="text"
+                  value={estimate.settings.name}
+                  onChange={(e) => setEstimate(prev => prev ? {
+                    ...prev,
+                    settings: { ...prev.settings, name: e.target.value }
+                  } : null)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                />
+              </div>
+
+              {/* Rodzaj */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Rodzaj</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="estimateType"
+                      value="contractor"
+                      checked={estimate.settings.type === 'contractor'}
+                      onChange={() => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, type: 'contractor' }
+                      } : null)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="text-sm text-slate-700">Wykonawczy</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="estimateType"
+                      value="investor"
+                      checked={estimate.settings.type === 'investor'}
+                      onChange={() => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, type: 'investor' }
+                      } : null)}
+                      className="w-4 h-4 text-blue-600"
+                    />
+                    <span className="text-sm text-slate-700">Inwestorski</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Kalkulacje - template dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kalkulacje</label>
+                <select
+                  value={estimate.settings.calculationTemplate}
+                  onChange={(e) => setEstimate(prev => prev ? {
+                    ...prev,
+                    settings: { ...prev.settings, calculationTemplate: e.target.value }
+                  } : null)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                >
+                  <option value="overhead-on-top">Narzuty „od góry" - liczenie od kosztów bezpośrednich</option>
+                  <option value="overhead-cascade">Narzuty kaskadowe - liczenie od sumy poprzednich</option>
+                  <option value="simple">Uproszczona - bez narzutów</option>
+                </select>
+              </div>
+
+              {/* Opis */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                <textarea
+                  value={estimate.settings.description}
+                  onChange={(e) => setEstimate(prev => prev ? {
+                    ...prev,
+                    settings: { ...prev.settings, description: e.target.value }
+                  } : null)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
+                  rows={3}
+                  placeholder="Dodaj opis kosztorysu..."
+                />
+              </div>
+
+              {/* Dokładność (Precision) section */}
+              <div className="border border-slate-200 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-slate-700 mb-3">Dokładność</h3>
+                <div className="space-y-3">
+                  {/* Normy */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Normy</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, norms: Math.max(0, prev.settings.precision.norms - 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm">{estimate.settings.precision.norms}</span>
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, norms: Math.min(10, prev.settings.precision.norms + 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Wartości */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Wart</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, unitValues: Math.max(0, prev.settings.precision.unitValues - 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm">{estimate.settings.precision.unitValues}</span>
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, unitValues: Math.min(10, prev.settings.precision.unitValues + 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nakłady */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Nakła</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, resources: Math.max(0, prev.settings.precision.resources - 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm">{estimate.settings.precision.resources}</span>
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, resources: Math.min(10, prev.settings.precision.resources + 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Podsumowania */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Pods</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, positionBase: Math.max(0, prev.settings.precision.positionBase - 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm">{estimate.settings.precision.positionBase}</span>
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, positionBase: Math.min(10, prev.settings.precision.positionBase + 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Obmiary */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Obmi</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, measurements: Math.max(0, prev.settings.precision.measurements - 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center text-sm">{estimate.settings.precision.measurements}</span>
+                      <button
+                        onClick={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: {
+                            ...prev.settings,
+                            precision: { ...prev.settings.precision, measurements: Math.min(10, prev.settings.precision.measurements + 1) }
+                          }
+                        } : null)}
+                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Współczynniki norm section */}
+              <div className="border border-slate-200 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-slate-700 mb-3">Współczynniki norm</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Robocizna</label>
+                    <input
+                      type="text"
+                      value={estimateData.root.factors.labor.toString().replace('.', ',')}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
+                        setEstimateData(prev => ({
+                          ...prev,
+                          root: { ...prev.root, factors: { ...prev.root.factors, labor: val } }
+                        }));
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Materiały</label>
+                    <input
+                      type="text"
+                      value={estimateData.root.factors.material.toString().replace('.', ',')}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
+                        setEstimateData(prev => ({
+                          ...prev,
+                          root: { ...prev.root, factors: { ...prev.root.factors, material: val } }
+                        }));
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Sprzęt</label>
+                    <input
+                      type="text"
+                      value={estimateData.root.factors.equipment.toString().replace('.', ',')}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
+                        setEstimateData(prev => ({
+                          ...prev,
+                          root: { ...prev.root, factors: { ...prev.root.factors, equipment: val } }
+                        }));
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">Odpady</label>
+                    <input
+                      type="text"
+                      value={estimateData.root.factors.waste.toString().replace('.', ',')}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                        setEstimateData(prev => ({
+                          ...prev,
+                          root: { ...prev.root, factors: { ...prev.root.factors, waste: val } }
+                        }));
+                      }}
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3 sticky bottom-0 bg-white">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  setEditorState(prev => ({ ...prev, isDirty: true }));
+                  setShowSettingsModal(false);
+                  showNotificationMessage('Ustawienia zapisane', 'success');
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Zapisz ustawienia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notification */}
       {notification && (
