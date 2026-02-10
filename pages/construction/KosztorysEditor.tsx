@@ -54,7 +54,7 @@ import type {
 
 // View mode types
 type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady';
-type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog';
+type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments';
 
 // Export page types for print configuration
 interface ExportPage {
@@ -1901,31 +1901,19 @@ export const KosztorysEditorPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-slate-100">
-      {/* Toolbar Row 1 - EXACT match to eKosztorysowanie.pl screenshot 0067 */}
-      <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex items-center gap-0.5">
-        {/* Mode button - single button showing current mode */}
+      {/* Toolbar Row 1 - matching eKosztorysowanie.pl */}
+      <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex items-center gap-0.5 flex-wrap">
+        {/* Mode button - Kosztorys/Nakłady/Wydruki */}
         <button
-          onClick={() => setActiveNavItem(viewMode === 'kosztorys' ? 'przedmiar' : 'kosztorysy')}
+          onClick={() => {
+            const modes: ViewMode[] = ['kosztorys', 'naklady', 'przedmiar'];
+            const currentIndex = modes.indexOf(viewMode);
+            setViewMode(modes[(currentIndex + 1) % modes.length]);
+          }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded"
         >
           <Menu className="w-4 h-4" />
           {viewMode === 'przedmiar' ? 'Przedmiar' : viewMode === 'naklady' ? 'Nakłady' : 'Kosztorys'}
-        </button>
-
-        {/* Monitor icon */}
-        <button className="p-1.5 text-slate-500 hover:bg-slate-100 rounded">
-          <Monitor className="w-4 h-4" />
-        </button>
-
-        <div className="w-px h-6 bg-slate-200 mx-1" />
-
-        {/* Drukuj */}
-        <button
-          onClick={() => { setLeftPanelMode('export'); setActiveNavItem('wydruki'); }}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
-        >
-          <Printer className="w-4 h-4" />
-          Drukuj
         </button>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -1941,70 +1929,73 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showDzialDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Dział główny</button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center"><ChevronRight className="w-4 h-4 mr-2" />Poddział</button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Dział z pozycjami</button>
-              <div className="border-t border-slate-100 my-1" />
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Dział pusty</button>
-              <button onClick={() => { setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Kopiuj strukturę działów</button>
+            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Dział</button>
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-6">Poddział</button>
             </div>
           )}
         </div>
 
-        {/* KNR Pozycja */}
-        <button
-          onClick={() => setLeftPanelMode('catalog')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-          }`}
-        >
-          <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
-          Pozycja
-          <ChevronDown className="w-3 h-3" />
-        </button>
-
-        <div className="w-px h-6 bg-slate-200 mx-1" />
+        {/* KNR Pozycja dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+            }`}
+          >
+            <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
+            Pozycja
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
 
         {/* Nakład dropdown */}
         <div className="relative">
           <button
             onClick={() => editorState.selectedItemType === 'position' && setShowNakladDropdown(!showNakladDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemType === 'position' ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'
+              editorState.selectedItemType === 'position' ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
             }`}
+            disabled={editorState.selectedItemType !== 'position'}
           >
             <Layers className="w-4 h-4" />
             Nakład
             <ChevronDown className="w-3 h-3" />
           </button>
-          {showNakladDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'labor'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"><span className="w-5 h-5 bg-blue-100 text-blue-700 rounded flex items-center justify-center text-xs font-bold">R</span>Robocizna</button>
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"><span className="w-5 h-5 bg-green-100 text-green-700 rounded flex items-center justify-center text-xs font-bold">M</span>Materiał</button>
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'equipment'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"><span className="w-5 h-5 bg-orange-100 text-orange-700 rounded flex items-center justify-center text-xs font-bold">S</span>Sprzęt</button>
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"><span className="w-5 h-5 bg-slate-200 text-slate-700 rounded flex items-center justify-center text-xs font-bold">O</span>Odpady</button>
+          {showNakladDropdown && editorState.selectedItemId && editorState.selectedItemType === 'position' && (
+            <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'labor'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded flex items-center justify-center text-xs font-bold">R</span>Robocizna
+              </button>
+              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="w-5 h-5 bg-green-100 text-green-700 rounded flex items-center justify-center text-xs font-bold">M</span>Materiał
+              </button>
+              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'equipment'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="w-5 h-5 bg-orange-100 text-orange-700 rounded flex items-center justify-center text-xs font-bold">S</span>Sprzęt
+              </button>
             </div>
           )}
         </div>
 
-        {/* Uzupełnij nakłady */}
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
+        {/* Uzupełnij nakłady - no dropdown, just text */}
+        <button className="px-2 py-1.5 text-sm text-slate-400 cursor-not-allowed">
           Uzupełnij nakłady
-          <ChevronDown className="w-3 h-3" />
         </button>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Ceny */}
+        {/* Ceny - no dropdown */}
         <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
           Ceny
         </button>
 
-        {/* Komentarze */}
+        {/* Komentarze - opens in left panel */}
         <button
-          onClick={() => setShowCommentsPanel(!showCommentsPanel)}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${showCommentsPanel ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
+          onClick={() => setLeftPanelMode(leftPanelMode === 'comments' ? 'overview' : 'comments')}
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+          }`}
         >
           <MessageSquare className="w-4 h-4" />
           Komentarze
@@ -2013,39 +2004,68 @@ export const KosztorysEditorPage: React.FC = () => {
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Usuń */}
+        {/* Usuń - with confirmation */}
         <button
-          onClick={() => editorState.selectedItemId && confirm('Usunąć?') && handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType!)}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'}`}
+          onClick={() => {
+            if (editorState.selectedItemId && editorState.selectedItemType) {
+              if (confirm('Czy na pewno chcesz usunąć ten element?')) {
+                handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType);
+              }
+            }
+          }}
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+          }`}
+          disabled={!editorState.selectedItemId}
         >
           <Trash2 className="w-4 h-4" />
           Usuń
           <ChevronDown className="w-3 h-3" />
         </button>
 
-        {/* Przesuń */}
-        <button className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'}`}>
-          <MoveUp className="w-4 h-4" />
-          Przesuń
-          <ChevronDown className="w-3 h-3" />
-        </button>
+        {/* Przesuń dropdown */}
+        <div className="relative">
+          <button
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            }`}
+            disabled={!editorState.selectedItemId}
+          >
+            <MoveUp className="w-4 h-4" />
+            Przesuń
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
 
-        <div className="w-px h-6 bg-slate-200 mx-1" />
-
-        {/* Kopiuj */}
-        <button className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'}`}>
+        {/* Kopiuj - no dropdown */}
+        <button
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+          }`}
+          disabled={!editorState.selectedItemId}
+        >
           <Copy className="w-4 h-4" />
           Kopiuj
         </button>
 
-        {/* Wytnij */}
-        <button className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'}`}>
+        {/* Wytnij - no dropdown */}
+        <button
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+          }`}
+          disabled={!editorState.selectedItemId}
+        >
           <Scissors className="w-4 h-4" />
           Wytnij
         </button>
 
-        {/* Wklej */}
-        <button className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${editorState.clipboard ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400'}`}>
+        {/* Wklej - no dropdown */}
+        <button
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            editorState.clipboard ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+          }`}
+          disabled={!editorState.clipboard}
+        >
           <ClipboardPaste className="w-4 h-4" />
           Wklej
         </button>
@@ -2081,7 +2101,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <button
               onClick={() => setLeftPanelMode('overview')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
-                leftPanelMode === 'overview' || leftPanelMode === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
+                leftPanelMode === 'overview' || leftPanelMode === 'catalog' || leftPanelMode === 'comments' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Przegląd
@@ -2641,6 +2661,60 @@ export const KosztorysEditorPage: React.FC = () => {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Comments panel - shown when Komentarze button clicked */}
+            {leftPanelMode === 'comments' && (
+              <div className="p-3 flex flex-col h-full">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Komentarze</h3>
+
+                {/* Comments list */}
+                <div className="flex-1 overflow-y-auto space-y-3">
+                  {comments.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
+                  ) : (
+                    comments.map(comment => (
+                      <div key={comment.id} className="p-3 bg-slate-50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">
+                            {comment.userInitials}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-slate-700">{comment.userName}</div>
+                            <div className="text-xs text-slate-400">{comment.timestamp}</div>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            comment.status === 'zatwierdzony' ? 'bg-green-100 text-green-700' :
+                            comment.status === 'odrzucony' ? 'bg-red-100 text-red-700' :
+                            comment.status === 'do_weryfikacji' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {comment.status === 'zatwierdzony' ? 'Zatwierdzony' :
+                             comment.status === 'odrzucony' ? 'Odrzucony' :
+                             comment.status === 'do_weryfikacji' ? 'Do weryfikacji' : 'Nowy'}
+                          </span>
+                        </div>
+                        {comment.sectionName && (
+                          <div className="text-xs text-slate-500 mb-1">Dział: {comment.sectionName}</div>
+                        )}
+                        <p className="text-sm text-slate-600">{comment.text}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add comment */}
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <textarea
+                    placeholder="Dodaj komentarz..."
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none"
+                    rows={3}
+                  />
+                  <button className="mt-2 w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Dodaj komentarz
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -3205,128 +3279,6 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
       )}
 
-      {/* Comments Panel (side panel) */}
-      {showCommentsPanel && (
-        <div className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-xl z-40 flex flex-col" style={{ marginTop: '120px' }}>
-          {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-slate-200">
-            <h3 className="font-semibold text-slate-900">Komentarze</h3>
-            <button
-              onClick={() => setShowCommentsPanel(false)}
-              className="p-1 hover:bg-slate-100 rounded"
-            >
-              <X className="w-4 h-4 text-slate-500" />
-            </button>
-          </div>
-
-          {/* Filter dropdown */}
-          <div className="p-3 border-b border-slate-200">
-            <div className="flex items-center gap-2">
-              <select
-                value={commentsFilter}
-                onChange={(e) => setCommentsFilter(e.target.value as 'all' | 'mine' | 'unresolved')}
-                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
-              >
-                <option value="all">Wszystkie komentarze</option>
-                <option value="mine">Moje komentarze</option>
-                <option value="unresolved">Do weryfikacji</option>
-              </select>
-              <button className="p-2 hover:bg-slate-100 rounded">
-                <Filter className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-          </div>
-
-          {/* User search */}
-          <div className="px-3 py-2">
-            <input
-              type="text"
-              placeholder="Znajdź użytkownika"
-              value={commentsSearch}
-              onChange={(e) => setCommentsSearch(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
-            />
-          </div>
-
-          {/* Comments list */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-4">
-            {comments.map(comment => (
-              <div key={comment.id} className="space-y-2">
-                {/* Section label */}
-                {comment.sectionName && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-500">{comment.sectionName}</span>
-                    <button className="p-1 hover:bg-slate-100 rounded">
-                      <Clock className="w-3 h-3 text-slate-400" />
-                    </button>
-                  </div>
-                )}
-
-                {/* User info */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
-                    {comment.userInitials}
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">{comment.userName}</span>
-                </div>
-
-                {/* Comment with timestamp */}
-                <div className="pl-9">
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                    <span>{comment.userName}</span>
-                    <span>{comment.timestamp}</span>
-                  </div>
-                  <p className="text-sm text-slate-700">{comment.text}</p>
-
-                  {/* Status dropdown */}
-                  <div className="mt-2 flex items-center gap-2">
-                    <select
-                      value={comment.status}
-                      onChange={(e) => {
-                        const newComments = comments.map(c =>
-                          c.id === comment.id
-                            ? { ...c, status: e.target.value as KosztorysComment['status'] }
-                            : c
-                        );
-                        setComments(newComments);
-                      }}
-                      className={`text-xs px-2 py-1 rounded-full border ${
-                        comment.status === 'do_weryfikacji' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                        comment.status === 'zatwierdzony' ? 'bg-green-50 text-green-700 border-green-200' :
-                        comment.status === 'odrzucony' ? 'bg-red-50 text-red-700 border-red-200' :
-                        'bg-slate-50 text-slate-700 border-slate-200'
-                      }`}
-                    >
-                      <option value="nowy">Nowy</option>
-                      <option value="do_weryfikacji">Do weryfikacji</option>
-                      <option value="zatwierdzony">Zatwierdzony</option>
-                      <option value="odrzucony">Odrzucony</option>
-                    </select>
-                    <select
-                      value={comment.userId}
-                      className="text-xs px-2 py-1 rounded border border-slate-200"
-                    >
-                      <option value="user1">Denys Krupka</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Add comment */}
-          <div className="p-3 border-t border-slate-200">
-            <textarea
-              placeholder="Dodaj komentarz..."
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none"
-              rows={2}
-            />
-            <button className="mt-2 w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              Dodaj komentarz
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Notification */}
       {notification && (
