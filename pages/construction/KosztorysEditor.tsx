@@ -563,20 +563,169 @@ export const KosztorysEditorPage: React.FC = () => {
   const loadEstimate = async (id: string) => {
     setLoading(true);
     try {
+      // Load from existing kosztorys_estimates table
       const { data, error } = await supabase
-        .from('kosztorys_cost_estimates')
-        .select('*')
+        .from('kosztorys_estimates')
+        .select(`
+          *,
+          request:kosztorys_requests(id, investment_name, client_name, address),
+          items:kosztorys_estimate_items(*),
+          equipment_items:kosztorys_estimate_equipment(*, equipment:kosztorys_equipment(*))
+        `)
         .eq('id', id)
         .single();
 
       if (error) throw error;
 
       if (data) {
-        setEstimate(data);
-        setEstimateData(data.data || createEmptyEstimateData());
-        // Expand all sections by default
-        const sectionIds = new Set((data.data?.root?.sectionIds || []) as string[]);
-        setEditorState(prev => ({ ...prev, expandedSections: sectionIds }));
+        const now = new Date().toISOString();
+
+        // Convert existing estimate to new format
+        const convertedEstimate: KosztorysCostEstimate = {
+          id: data.id,
+          company_id: data.company_id,
+          created_by_id: data.created_by_id,
+          settings: {
+            type: 'contractor',
+            name: data.request?.investment_name || `Kosztorys ${data.estimate_number}`,
+            description: data.request?.client_name || '',
+            created: data.created_at,
+            modified: data.updated_at || now,
+            defaultCurrency: 'PLN',
+            calculationTemplate: 'overhead-on-top',
+            print: {
+              pages: [],
+              titlePage: {
+                companyInfo: { name: '', address: '', contacts: [] },
+                documentTitle: `Kosztorys ${data.estimate_number}`,
+                showCostFields: true,
+                showManHourRate: true,
+                showOverheadsCosts: true,
+                orderDetails: {
+                  orderName: data.request?.investment_name || '',
+                  constructionSiteAddress: data.request?.address || ''
+                },
+                clientDetails: {
+                  clientName: data.request?.client_name || '',
+                  clientAddress: ''
+                },
+                contractorDetails: { contractorName: '', contractorAddress: '', industry: '' },
+                participants: {
+                  preparedBy: '', preparedAt: '', preparedByIndustry: '',
+                  checkedBy: '', checkedAt: '', checkedByIndustry: '',
+                },
+              },
+            },
+            precision: {
+              norms: 6, resources: 2, measurements: 2, unitValues: 2,
+              positionBase: 2, costEstimateBase: 2, roundingMethod: 'default',
+            },
+          },
+          data: createEmptyEstimateData(),
+          totalLabor: data.total_works || 0,
+          totalMaterial: data.total_materials || 0,
+          totalEquipment: data.total_equipment || 0,
+          totalOverhead: 0,
+          totalValue: data.total_gross || 0,
+          created_at: data.created_at,
+          updated_at: data.updated_at || now,
+        };
+
+        // Convert existing items to positions
+        const positions: Record<string, KosztorysPosition> = {};
+        const positionIds: string[] = [];
+
+        if (data.items && data.items.length > 0) {
+          for (const item of data.items) {
+            const posId = item.id;
+            positionIds.push(posId);
+
+            // Create measurement from quantity
+            let measurements = createEmptyMeasurements();
+            if (item.quantity > 0) {
+              measurements = addMeasurementEntry(measurements, String(item.quantity), 'Ilość');
+            }
+
+            // Create resources from item data
+            const resources: KosztorysResource[] = [];
+
+            // Add labor resource if there's work cost
+            if (item.unit_price_work > 0) {
+              resources.push({
+                id: `${posId}-labor`,
+                name: 'Robocizna',
+                index: null,
+                originIndex: { type: 'custom', index: '' },
+                type: 'labor',
+                factor: 1,
+                norm: { type: 'absolute', value: 1 },
+                unit: { label: 'r-g', unitIndex: '149' },
+                unitPrice: { value: item.unit_price_work, currency: 'PLN' },
+                group: null,
+                marker: null,
+                investorTotal: false,
+              });
+            }
+
+            // Add material resource if there's material cost
+            if (item.unit_price_material > 0) {
+              resources.push({
+                id: `${posId}-material`,
+                name: item.material_name || 'Materiał',
+                index: null,
+                originIndex: { type: 'custom', index: '' },
+                type: 'material',
+                factor: 1,
+                norm: { type: 'absolute', value: 1 },
+                unit: { label: 'szt.', unitIndex: '020' },
+                unitPrice: { value: item.unit_price_material, currency: 'PLN' },
+                group: null,
+                marker: null,
+                investorTotal: false,
+              });
+            }
+
+            positions[posId] = {
+              id: posId,
+              base: '',
+              originBase: '',
+              name: item.task_description || 'Pozycja',
+              marker: item.room_group || null,
+              unit: { label: 'szt.', unitIndex: '020' },
+              measurements,
+              multiplicationFactor: 1,
+              resources,
+              factors: createDefaultFactors(),
+              overheads: [],
+              unitPrice: { value: 0, currency: 'PLN' },
+            };
+          }
+        }
+
+        // Update estimate data with converted positions
+        convertedEstimate.data = {
+          root: {
+            sectionIds: [],
+            positionIds,
+            factors: createDefaultFactors(),
+            overheads: [
+              createDefaultIndirectCostsOverhead(65),
+              createDefaultProfitOverhead(10),
+              createDefaultPurchaseCostsOverhead(5),
+            ],
+          },
+          sections: {},
+          positions,
+        };
+
+        setEstimate(convertedEstimate);
+        setEstimateData(convertedEstimate.data);
+
+        // Expand all positions by default
+        setEditorState(prev => ({
+          ...prev,
+          expandedPositions: new Set(positionIds),
+        }));
       }
     } catch (error) {
       console.error('Error loading estimate:', error);
@@ -665,44 +814,73 @@ export const KosztorysEditorPage: React.FC = () => {
         totalValue: 0,
       };
 
-      const estimateToSave = {
-        ...estimate,
-        data: estimateData,
-        settings: {
-          ...estimate.settings,
-          modified: new Date().toISOString(),
-        },
-        totalLabor: totals.totalLabor,
-        totalMaterial: totals.totalMaterial,
-        totalEquipment: totals.totalEquipment,
-        totalOverhead: totals.totalOverheads,
-        totalValue: totals.totalValue,
-        updated_at: new Date().toISOString(),
-      };
-
+      // Save to existing kosztorys_estimates table
       if (estimate.id) {
+        // Calculate VAT
+        const subtotalNet = totals.totalLabor + totals.totalMaterial + totals.totalEquipment;
+        const vatRate = 23;
+        const vatAmount = subtotalNet * (vatRate / 100);
+        const totalGross = subtotalNet + vatAmount;
+
         const { error } = await supabase
-          .from('kosztorys_cost_estimates')
-          .update(estimateToSave)
+          .from('kosztorys_estimates')
+          .update({
+            total_works: totals.totalLabor,
+            total_materials: totals.totalMaterial,
+            total_equipment: totals.totalEquipment,
+            subtotal_net: subtotalNet,
+            vat_amount: vatAmount,
+            total_gross: totalGross,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', estimate.id);
 
         if (error) throw error;
-      } else {
-        const { data, error } = await supabase
-          .from('kosztorys_cost_estimates')
-          .insert({
-            ...estimateToSave,
-            company_id: currentUser.company_id,
-            created_by_id: currentUser.id,
-          })
-          .select()
-          .single();
 
-        if (error) throw error;
-        if (data) {
-          setEstimate(data);
-          navigate(`/construction/kosztorys/${data.id}`, { replace: true });
+        // Also update/sync individual items
+        // Delete existing items and recreate from positions
+        await supabase
+          .from('kosztorys_estimate_items')
+          .delete()
+          .eq('estimate_id', estimate.id);
+
+        // Insert new items from positions
+        const itemsToInsert = Object.values(estimateData.positions).map((pos, index) => {
+          const posResult = calculationResult?.positions[pos.id];
+          const laborResource = pos.resources.find(r => r.type === 'labor');
+          const materialResource = pos.resources.find(r => r.type === 'material');
+
+          return {
+            estimate_id: estimate.id,
+            position_number: index + 1,
+            room_group: pos.marker || '',
+            installation_element: '',
+            task_description: pos.name,
+            material_name: materialResource?.name || null,
+            unit_id: 1,
+            quantity: posResult?.quantity || 0,
+            unit_price_work: laborResource?.unitPrice.value || 0,
+            total_work: posResult?.laborTotal || 0,
+            unit_price_material: materialResource?.unitPrice.value || 0,
+            total_material: posResult?.materialTotal || 0,
+            total_item: (posResult?.laborTotal || 0) + (posResult?.materialTotal || 0),
+            source: 'manual',
+            is_deleted: false,
+          };
+        });
+
+        if (itemsToInsert.length > 0) {
+          const { error: itemsError } = await supabase
+            .from('kosztorys_estimate_items')
+            .insert(itemsToInsert);
+
+          if (itemsError) console.error('Error saving items:', itemsError);
         }
+      } else {
+        // Creating new estimate - show notification that save is not supported for new estimates yet
+        showNotificationMessage('Tworzenie nowych kosztorysów z edytora nie jest jeszcze obsługiwane. Utwórz kosztorys przez formularz.', 'error');
+        setSaving(false);
+        return;
       }
 
       setEditorState(prev => ({ ...prev, isDirty: false, lastSaved: new Date().toISOString() }));
