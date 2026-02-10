@@ -7,13 +7,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Menu, Printer, Plus, FolderPlus, FileText, Hash, Layers,
-  ChevronDown, ChevronRight, Trash2, Copy, ClipboardPaste,
+  ChevronDown, ChevronRight, ChevronUp, Trash2, Copy, ClipboardPaste,
   Scissors, MoveUp, MoveDown, Settings, Eye, CheckCircle2,
-  AlertCircle, Save, Download, Upload, RefreshCw, X,
+  AlertCircle, Save, Download, Upload, RefreshCw, X, Home,
   Calculator, Users, Package, Wrench, Percent, DollarSign,
-  MessageSquare, Search, Filter, MoreHorizontal, Loader2,
-  ArrowLeft, FileSpreadsheet, Clock, List, LayoutList,
-  GripVertical, FileBarChart, FilePieChart, Table2, BookOpen
+  MessageSquare, Search, Filter, MoreHorizontal, Loader2, Monitor,
+  ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
+  GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -80,16 +80,20 @@ const DEFAULT_EXPORT_PAGES: ExportPage[] = [
   { id: 'p9', type: 'zestawienie_sprzetu', label: 'Zestawienie sprzętu', enabled: true },
 ];
 
-// Left navigation items
+// Left navigation items - matching eKosztorysowanie exactly
+// P = Przedmiar, icons match the portal
 const LEFT_NAV_ITEMS = [
-  { id: 'przedmiar', label: 'Przedmiar', icon: FileText },
-  { id: 'kosztorysy', label: 'Kosztorysy', icon: FileBarChart },
-  { id: 'pozycje', label: 'Pozycje', icon: List },
-  { id: 'naklady', label: 'Nakłady', icon: Layers },
-  { id: 'narzuty', label: 'Narzuty', icon: Percent },
-  { id: 'zestawienia', label: 'Zestawienia', icon: Table2 },
-  { id: 'wydruki', label: 'Wydruki', icon: Printer },
+  { id: 'przedmiar', label: 'Przedmiar', shortLabel: 'P', icon: List, viewMode: 'przedmiar' as ViewMode },
+  { id: 'kosztorysy', label: 'Kosztorys', shortLabel: 'C', icon: FileBarChart, viewMode: 'kosztorys' as ViewMode },
+  { id: 'pozycje', label: 'Pozycje', shortLabel: null, icon: LayoutList, viewMode: 'kosztorys' as ViewMode },
+  { id: 'naklady', label: 'Nakłady', shortLabel: null, icon: Layers, viewMode: 'naklady' as ViewMode },
+  { id: 'narzuty', label: 'Narzuty', shortLabel: null, icon: Percent, viewMode: null },
+  { id: 'zestawienia', label: 'Zestawienia', shortLabel: null, icon: Table2, viewMode: null },
+  { id: 'wydruki', label: 'Wydruki', shortLabel: null, icon: Printer, viewMode: null },
 ];
+
+// Active toolbar mode - determines which buttons are shown
+type ToolbarMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'wydruki';
 
 // KNR Catalog structure
 interface CatalogItem {
@@ -2324,77 +2328,84 @@ export const KosztorysEditorPage: React.FC = () => {
             {leftPanelMode === 'properties' && selectedItem && (
               <div className="p-4">
                 {editorState.selectedItemType === 'section' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    {/* Nazwa działu - matching eKosztorysowanie layout */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa działu</label>
+                      <label className="block text-sm text-slate-700 mb-1">Nazwa działu</label>
                       <input
                         type="text"
                         value={(selectedItem as KosztorysSection).name}
                         onChange={e => handleUpdateSelectedItem({ name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                       />
                     </div>
+
+                    {/* Opis działu with expand button */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Opis działu</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm text-slate-700">Opis działu</label>
+                        <button className="p-0.5 hover:bg-slate-100 rounded">
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </div>
                       <textarea
                         value={(selectedItem as KosztorysSection).description}
                         onChange={e => handleUpdateSelectedItem({ description: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        rows={3}
+                        placeholder="Opis działu"
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-none"
+                        rows={2}
                       />
                     </div>
-                    <div className="pt-4 border-t border-slate-200">
-                      <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                        <ChevronDown className="w-4 h-4" />
-                        Współczynniki norm
-                      </h4>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-xs text-slate-500">Robocizna</label>
+
+                    {/* Współczynniki norm - expandable section matching screenshot */}
+                    <div className="border-t border-slate-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-3">
+                        <span>Współczynniki norm</span>
+                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                      </button>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Robocizna</label>
                           <input
-                            type="number"
-                            step="0.01"
-                            value={(selectedItem as KosztorysSection).factors.labor}
+                            type="text"
+                            value={(selectedItem as KosztorysSection).factors.labor.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
-                              factors: { ...(selectedItem as KosztorysSection).factors, labor: parseFloat(e.target.value) || 1 }
+                              factors: { ...(selectedItem as KosztorysSection).factors, labor: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs text-slate-500">Materiały</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Materiały</label>
                           <input
-                            type="number"
-                            step="0.01"
-                            value={(selectedItem as KosztorysSection).factors.material}
+                            type="text"
+                            value={(selectedItem as KosztorysSection).factors.material.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
-                              factors: { ...(selectedItem as KosztorysSection).factors, material: parseFloat(e.target.value) || 1 }
+                              factors: { ...(selectedItem as KosztorysSection).factors, material: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs text-slate-500">Sprzęt</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Sprzęt</label>
                           <input
-                            type="number"
-                            step="0.01"
-                            value={(selectedItem as KosztorysSection).factors.equipment}
+                            type="text"
+                            value={(selectedItem as KosztorysSection).factors.equipment.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
-                              factors: { ...(selectedItem as KosztorysSection).factors, equipment: parseFloat(e.target.value) || 1 }
+                              factors: { ...(selectedItem as KosztorysSection).factors, equipment: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs text-slate-500">Odpady</label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Odpady</label>
                           <input
-                            type="number"
-                            step="0.1"
-                            value={(selectedItem as KosztorysSection).factors.waste}
+                            type="text"
+                            value={(selectedItem as KosztorysSection).factors.waste.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
-                              factors: { ...(selectedItem as KosztorysSection).factors, waste: parseFloat(e.target.value) || 0 }
+                              factors: { ...(selectedItem as KosztorysSection).factors, waste: parseFloat(e.target.value.replace(',', '.')) || 0 }
                             })}
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
                           />
                         </div>
                       </div>
