@@ -210,8 +210,9 @@ const KNR_CATALOG: CatalogItem[] = [
   },
 ];
 
-// Resource type configuration
-const RESOURCE_TYPE_CONFIG: Record<KosztorysResourceType, {
+// Resource type configuration (extended with waste type)
+type ExtendedResourceType = KosztorysResourceType | 'waste';
+const RESOURCE_TYPE_CONFIG: Record<ExtendedResourceType, {
   label: string;
   shortLabel: string;
   color: string;
@@ -221,7 +222,43 @@ const RESOURCE_TYPE_CONFIG: Record<KosztorysResourceType, {
   labor: { label: 'Robocizna', shortLabel: 'R', color: 'text-blue-700', bgColor: 'bg-blue-100', icon: Users },
   material: { label: 'Materiał', shortLabel: 'M', color: 'text-green-700', bgColor: 'bg-green-100', icon: Package },
   equipment: { label: 'Sprzęt', shortLabel: 'S', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: Wrench },
+  waste: { label: 'Odpady', shortLabel: 'O', color: 'text-slate-700', bgColor: 'bg-slate-100', icon: Trash2 },
 };
+
+// Export template types
+type ExportTemplate = 'kosztorys_inwestorski' | 'przedmiar_robot' | 'niestandardowy';
+
+// Comment type for the comments panel
+interface KosztorysComment {
+  id: string;
+  userId: string;
+  userName: string;
+  userInitials: string;
+  text: string;
+  timestamp: string;
+  sectionId?: string;
+  sectionName?: string;
+  status: 'do_weryfikacji' | 'zatwierdzony' | 'odrzucony' | 'nowy';
+}
+
+// Price update dialog settings
+interface PriceUpdateSettings {
+  applyToLabor: boolean;
+  applyToMaterial: boolean;
+  applyToEquipment: boolean;
+  applyToWaste: boolean;
+  unitPositionPrices: boolean;
+  emptyUnitPrices: boolean;
+  objectPrices: boolean;
+  onlyZeroPrices: boolean;
+  skipStepProcess: boolean;
+  expression: {
+    field: 'cena' | 'wartosc';
+    operation: 'add' | 'subtract' | 'multiply' | 'divide';
+    value: string;
+  };
+  zeroPrices: boolean;
+}
 
 // Units reference
 const UNITS_REFERENCE = [
@@ -665,6 +702,59 @@ export const KosztorysEditorPage: React.FC = () => {
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
   const [catalogQuantity, setCatalogQuantity] = useState('10');
   const [catalogMultiplier, setCatalogMultiplier] = useState('1');
+
+  // Dropdown states
+  const [showDzialDropdown, setShowDzialDropdown] = useState(false);
+  const [showNakladDropdown, setShowNakladDropdown] = useState(false);
+  const [showKNRDropdown, setShowKNRDropdown] = useState(false);
+
+  // Ceny (Prices) dialog state
+  const [showCenyDialog, setShowCenyDialog] = useState(false);
+  const [cenyDialogTab, setCenyDialogTab] = useState<'wstaw' | 'zmien'>('wstaw');
+  const [priceUpdateSettings, setPriceUpdateSettings] = useState<PriceUpdateSettings>({
+    applyToLabor: false,
+    applyToMaterial: false,
+    applyToEquipment: false,
+    applyToWaste: false,
+    unitPositionPrices: false,
+    emptyUnitPrices: false,
+    objectPrices: false,
+    onlyZeroPrices: false,
+    skipStepProcess: true,
+    expression: { field: 'cena', operation: 'add', value: '' },
+    zeroPrices: false,
+  });
+
+  // Comments panel state
+  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [commentsFilter, setCommentsFilter] = useState<'all' | 'mine' | 'unresolved'>('all');
+  const [commentsSearch, setCommentsSearch] = useState('');
+  const [comments, setComments] = useState<KosztorysComment[]>([
+    {
+      id: '1',
+      userId: 'user1',
+      userName: 'Denys Krupka',
+      userInitials: 'DK',
+      text: 'testowy',
+      timestamp: '18:31',
+      sectionName: 'Dział 1.1',
+      status: 'nowy',
+    },
+    {
+      id: '2',
+      userId: 'user1',
+      userName: 'Denys Krupka',
+      userInitials: 'DK',
+      text: 'sprawdzić',
+      timestamp: '18:26',
+      sectionName: 'Dział 1',
+      status: 'do_weryfikacji',
+    },
+  ]);
+
+  // Export panel state
+  const [exportTemplate, setExportTemplate] = useState<ExportTemplate>('niestandardowy');
+  const [exportSearch, setExportSearch] = useState('');
 
   // Form state for new items
   const [newPositionForm, setNewPositionForm] = useState({
@@ -1563,10 +1653,16 @@ export const KosztorysEditorPage: React.FC = () => {
               {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
           </td>
-          <td className="px-2 py-2 text-sm font-medium text-blue-700">
-            {positionNumber}
+          <td className="px-2 py-2 text-sm">
+            <div className="font-medium text-blue-700">{positionNumber}</div>
             {position.base && (
-              <div className="text-xs text-slate-500 font-mono mt-0.5">{position.base}</div>
+              <div className="text-xs text-slate-600 font-mono mt-0.5">{position.base}</div>
+            )}
+            {/* Cena zakładowa button - as seen in screenshots */}
+            {viewMode === 'przedmiar' && (
+              <button className="mt-1 px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded hover:bg-slate-200">
+                Cena zakładowa
+              </button>
             )}
           </td>
           <td className="px-2 py-2 text-sm">
@@ -1613,9 +1709,9 @@ export const KosztorysEditorPage: React.FC = () => {
           </td>
         </tr>
 
-        {/* Resources rows */}
+        {/* Resources rows - with R/M/S/O indicators matching eKosztorysowanie */}
         {isExpanded && position.resources.map((resource, index) => {
-          const config = RESOURCE_TYPE_CONFIG[resource.type];
+          const config = RESOURCE_TYPE_CONFIG[resource.type] || RESOURCE_TYPE_CONFIG.material;
           const resResult = result?.resources.find(r => r.id === resource.id);
           const isResourceSelected = editorState.selectedItemId === resource.id;
 
@@ -1625,35 +1721,43 @@ export const KosztorysEditorPage: React.FC = () => {
               className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
               onClick={() => selectItem(resource.id, 'resource')}
             >
-              <td className="px-2 py-1.5"></td>
-              <td className="px-2 py-1.5 text-sm">
-                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium ${config.bgColor} ${config.color}`}>
-                  {config.shortLabel}
-                </span>
+              <td className="px-2 py-1.5">
+                {/* Resource index number */}
+                <span className="text-xs text-slate-400">{index + 1}</span>
               </td>
               <td className="px-2 py-1.5 text-sm">
-                <div className="flex items-center gap-2 pl-4">
-                  <span className="text-slate-500 font-mono text-xs">{resource.originIndex.index || index + 1}</span>
+                {/* R/M/S/O badge - prominent display */}
+                <div className="flex items-center gap-1">
+                  <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${config.bgColor} ${config.color}`}>
+                    {config.shortLabel}
+                  </span>
+                  <span className="text-slate-500 font-mono text-xs">{resource.originIndex.index || ''}</span>
+                </div>
+              </td>
+              <td className="px-2 py-1.5 text-sm">
+                <div className="pl-2">
                   <span className="text-slate-700">{resource.name}</span>
                 </div>
-                {/* Formula display like eKosztorysowanie: 1.1 · 1.1 · 1 · 0.89 */}
-                <div className="text-xs text-slate-400 pl-4 mt-0.5 font-mono">
-                  {resource.factor !== 1 && `${formatNumber(resource.factor, 2)} · `}
-                  {formatNumber(resource.norm.value, 2)} · {position.multiplicationFactor !== 1 ? `${formatNumber(position.multiplicationFactor, 2)} · ` : ''}{formatNumber(quantity, 2)}
+                {/* Formula display like eKosztorysowanie: 1.1 · 1.1 · 1 · 1.35 */}
+                <div className="text-xs text-slate-400 pl-2 mt-0.5 font-mono">
+                  {resource.factor !== 1 ? `${formatNumber(resource.factor, 1)} · ` : ''}
+                  {formatNumber(resource.norm.value, 1)} ·
+                  {position.multiplicationFactor !== 1 ? ` ${formatNumber(position.multiplicationFactor, 1)} · ` : ' '}
+                  1 · {formatNumber(quantity, 2)}
                 </div>
               </td>
               <td className="px-2 py-1.5 text-sm text-center text-slate-500">{resource.unit.label}</td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-500">
-                {formatNumber(resResult?.calculatedQuantity || 0, 4)}
+              <td className="px-2 py-1.5 text-sm text-right text-slate-500 font-mono">
+                {formatNumber(resResult?.calculatedQuantity || resource.norm.value, 7)}
               </td>
               <td className="px-2 py-1.5 text-sm text-right text-slate-500">
-                {formatNumber(resource.unitPrice.value)}
+                {formatNumber(resource.unitPrice.value, 2)}
               </td>
               <td className="px-2 py-1.5 text-sm text-right text-slate-500">
                 {formatNumber(resResult?.calculatedQuantity || 0, 2)}
               </td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-600">
-                {formatNumber(resResult?.calculatedValue || 0)}
+              <td className="px-2 py-1.5 text-sm text-right font-medium text-slate-700">
+                {formatNumber(resResult?.calculatedValue || 0, 2)}
               </td>
               <td className="px-2 py-1.5 text-sm">
                 <button
@@ -1673,19 +1777,40 @@ export const KosztorysEditorPage: React.FC = () => {
           );
         })}
 
-        {/* Position summary row */}
-        {isExpanded && result && (
-          <tr className="bg-slate-50 border-b border-slate-200">
-            <td colSpan={5}></td>
-            <td colSpan={2} className="px-2 py-1.5 text-xs text-slate-600">
-              <div>Razem koszty bezpośrednie</div>
-              <div>Razem z narzutami</div>
-              <div>Cena jednostkowa</div>
+        {/* RAZEM row for measurement */}
+        {isExpanded && position.measurements.rootIds.length > 0 && (
+          <tr className="border-b border-slate-100 bg-slate-50/50">
+            <td colSpan={4}></td>
+            <td colSpan={2} className="px-2 py-1.5 text-xs text-right text-slate-500 font-medium">
+              RAZEM
             </td>
-            <td className="px-2 py-1.5 text-sm text-right font-medium">
-              <div>{formatNumber(result.directCostsTotal)}</div>
-              <div>{formatNumber(result.totalWithOverheads)}</div>
-              <div>{formatNumber(result.unitCost)}</div>
+            <td className="px-2 py-1.5 text-sm text-right font-medium text-slate-700">
+              {formatNumber(quantity, 1)}
+            </td>
+            <td colSpan={2}></td>
+          </tr>
+        )}
+
+        {/* Position summary row - Razem koszty bezpośrednie */}
+        {isExpanded && result && (
+          <tr className="bg-slate-100 border-b border-slate-200">
+            <td colSpan={5}></td>
+            <td colSpan={2} className="px-2 py-2 text-xs text-slate-600">
+              <div className="flex justify-between">
+                <span>Razem koszty bezpośrednie</span>
+                <span className="font-medium">{formatNumber(result.directCostsTotal, 4)}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span>Razem z narzutami</span>
+                <span className="font-medium">{formatNumber(result.totalWithOverheads, 2)}</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span>Cena jednostkowa</span>
+                <span className="font-medium">{formatNumber(result.unitCost, 2)}</span>
+              </div>
+            </td>
+            <td className="px-2 py-2 text-sm text-right font-bold text-slate-900">
+              {formatNumber(result.totalWithOverheads, 2)}
             </td>
             <td></td>
           </tr>
@@ -1765,10 +1890,10 @@ export const KosztorysEditorPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-slate-100">
-      {/* Toolbar */}
+      {/* Toolbar - matches eKosztorysowanie.pl exactly */}
       <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex items-center gap-1 flex-wrap">
-        {/* View mode buttons */}
-        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 mr-2">
+        {/* View mode toggle: Przedmiar/Kosztorys */}
+        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 mr-1">
           <button
             onClick={() => setViewMode('przedmiar')}
             className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -1791,87 +1916,165 @@ export const KosztorysEditorPage: React.FC = () => {
             <FileBarChart className="w-4 h-4" />
             Kosztorys
           </button>
-          <button
-            onClick={() => setViewMode('naklady')}
-            className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
-              viewMode === 'naklady'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-800'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            Nakłady
-          </button>
         </div>
+
         <div className="w-px h-6 bg-slate-200 mx-1" />
+
+        {/* Drukuj button */}
         <button
-          onClick={() => navigate('/construction/estimates')}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
-        >
-          <Menu className="w-4 h-4" />
-          Lista
-        </button>
-        <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button
-          onClick={() => window.print()}
+          onClick={() => setLeftPanelMode('export')}
           className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
         >
           <Printer className="w-4 h-4" />
           Drukuj
         </button>
+
         <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button
-          onClick={handleAddSection}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
-        >
-          <FolderPlus className="w-4 h-4" />
-          Dział
-        </button>
-        <button
-          onClick={() => setLeftPanelMode('catalog')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            leftPanelMode === 'catalog'
-              ? 'bg-blue-600 text-white'
-              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-          }`}
-        >
-          <span className="bg-blue-500 text-white text-xs px-1 rounded">KNR</span>
-          Pozycja
-        </button>
-        <button
-          onClick={() => handleAddPosition(null)}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
-          title="Wstaw pozycję nieskatalogowaną"
-        >
-          <Plus className="w-4 h-4" />
-          Pozycja
-        </button>
+
+        {/* +Dział dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowDzialDropdown(!showDzialDropdown)}
+            className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+          >
+            <Plus className="w-4 h-4" />
+            Dział
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showDzialDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { handleAddSection(); setShowDzialDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Dział główny
+              </button>
+              <button
+                onClick={() => { handleAddSection(); setShowDzialDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Poddział
+              </button>
+              <button
+                onClick={() => { handleAddSection(); setShowDzialDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Dział z pozycjami
+              </button>
+              <hr className="my-1" />
+              <button
+                onClick={() => { handleAddSection(); setShowDzialDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Dział pusty
+              </button>
+              <button
+                onClick={() => { handleAddSection(); setShowDzialDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Kopiuj strukturę działów
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* KNR Pozycja button with dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setLeftPanelMode('catalog')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              leftPanelMode === 'catalog'
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
+          >
+            <span className="text-xs font-bold px-1 bg-blue-500 text-white rounded">KNR</span>
+            Pozycja
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
+
         <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button
-          onClick={() => editorState.selectedItemType === 'position' && editorState.selectedItemId && handleAddResource(editorState.selectedItemId)}
-          disabled={editorState.selectedItemType !== 'position'}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"
-        >
-          <Hash className="w-4 h-4" />
-          Nakład
-        </button>
+
+        {/* Nakład dropdown with R/M/S/O/Odpady options */}
+        <div className="relative">
+          <button
+            onClick={() => setShowNakladDropdown(!showNakladDropdown)}
+            disabled={editorState.selectedItemType !== 'position'}
+            className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"
+          >
+            <Layers className="w-4 h-4" />
+            Nakład
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showNakladDropdown && editorState.selectedItemType === 'position' && editorState.selectedItemId && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { handleAddResource(editorState.selectedItemId!, 'labor'); setShowNakladDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded flex items-center justify-center text-xs font-bold">R</span>
+                Robocizna
+              </button>
+              <button
+                onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <span className="w-5 h-5 bg-green-100 text-green-700 rounded flex items-center justify-center text-xs font-bold">M</span>
+                Materiał
+              </button>
+              <button
+                onClick={() => { handleAddResource(editorState.selectedItemId!, 'equipment'); setShowNakladDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <span className="w-5 h-5 bg-orange-100 text-orange-700 rounded flex items-center justify-center text-xs font-bold">S</span>
+                Sprzęt
+              </button>
+              <button
+                onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <span className="w-5 h-5 bg-slate-100 text-slate-700 rounded flex items-center justify-center text-xs font-bold">O</span>
+                Odpady
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Uzupełnij nakłady */}
         <button
           className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
           onClick={() => setShowOverheadsModal(true)}
         >
-          <Layers className="w-4 h-4" />
           Uzupełnij nakłady
+          <ChevronDown className="w-3 h-3" />
         </button>
+
         <div className="w-px h-6 bg-slate-200 mx-1" />
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
-          <DollarSign className="w-4 h-4" />
+
+        {/* Ceny button */}
+        <button
+          onClick={() => setShowCenyDialog(true)}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+        >
           Ceny
         </button>
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
+
+        {/* Komentarze button */}
+        <button
+          onClick={() => setShowCommentsPanel(!showCommentsPanel)}
+          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+            showCommentsPanel ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
           <MessageSquare className="w-4 h-4" />
           Komentarze
+          <ChevronDown className="w-3 h-3" />
         </button>
+
         <div className="w-px h-6 bg-slate-200 mx-1" />
+
+        {/* Usuń button */}
         <button
           onClick={() => {
             if (editorState.selectedItemId && confirm('Czy na pewno chcesz usunąć zaznaczony element?')) {
@@ -1879,47 +2082,63 @@ export const KosztorysEditorPage: React.FC = () => {
             }
           }}
           disabled={!editorState.selectedItemId}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40"
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Trash2 className="w-4 h-4" />
           Usuń
         </button>
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40">
+
+        {/* Przesuń button */}
+        <button
+          disabled={!editorState.selectedItemId}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <MoveUp className="w-4 h-4" />
           Przesuń
         </button>
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40">
-          <Scissors className="w-4 h-4" />
-          Wytnij
-        </button>
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40">
+
+        <div className="w-px h-6 bg-slate-200 mx-1" />
+
+        {/* Kopiuj button */}
+        <button
+          disabled={!editorState.selectedItemId}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <Copy className="w-4 h-4" />
           Kopiuj
         </button>
-        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40">
+
+        {/* Wytnij button */}
+        <button
+          disabled={!editorState.selectedItemId}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Scissors className="w-4 h-4" />
+          Wytnij
+        </button>
+
+        {/* Wklej button */}
+        <button
+          disabled={!editorState.clipboard}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <ClipboardPaste className="w-4 h-4" />
           Wklej
         </button>
 
         <div className="flex-1" />
 
+        {/* Right side buttons */}
         <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
-          <Calculator className="w-4 h-4" />
+          <RefreshCw className="w-4 h-4" />
           Sprawdź kosztorys
         </button>
         <button
-          onClick={() => setLeftPanelMode('export')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${leftPanelMode === 'export' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
-        >
-          <Printer className="w-4 h-4" />
-          Wydruki
-        </button>
-        <button
-          onClick={() => setLeftPanelMode(leftPanelMode === 'properties' ? 'overview' : 'properties')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${leftPanelMode === 'properties' ? 'bg-blue-100 text-blue-700' : 'text-slate-600 hover:bg-slate-100'}`}
+          onClick={() => setShowSettingsModal(true)}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
         >
           <Eye className="w-4 h-4" />
-          Właściwości
+          Opcje widoku
         </button>
         <button
           onClick={() => setShowSettingsModal(true)}
@@ -1930,16 +2149,24 @@ export const KosztorysEditorPage: React.FC = () => {
         </button>
       </div>
 
+      {/* Click outside to close dropdowns */}
+      {(showDzialDropdown || showNakladDropdown) && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => { setShowDzialDropdown(false); setShowNakladDropdown(false); }}
+        />
+      )}
+
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left panel - Navigation and Properties */}
         <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
-          {/* Tab headers */}
+          {/* Tab headers - Przegląd / Właściwości */}
           <div className="flex border-b border-slate-200">
             <button
               onClick={() => setLeftPanelMode('overview')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
-                leftPanelMode === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
+                leftPanelMode === 'overview' || leftPanelMode === 'catalog' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Przegląd
@@ -1954,54 +2181,142 @@ export const KosztorysEditorPage: React.FC = () => {
             </button>
           </div>
 
+          {/* Navigation items - 7 items matching eKosztorysowanie */}
+          {leftPanelMode === 'overview' && (
+            <div className="border-b border-slate-200">
+              {LEFT_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeNavItem === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveNavItem(item.id);
+                      if (item.id === 'wydruki') {
+                        setLeftPanelMode('export');
+                      } else if (item.id === 'przedmiar') {
+                        setViewMode('przedmiar');
+                      } else if (item.id === 'kosztorysy') {
+                        setViewMode('kosztorys');
+                      } else if (item.id === 'naklady') {
+                        setViewMode('naklady');
+                      }
+                    }}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left hover:bg-slate-50 ${
+                      isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* Panel content based on mode */}
           <div className="flex-1 overflow-y-auto">
             {leftPanelMode === 'overview' && (
-              <div className="p-2">
-                {/* Navigation items */}
-                <nav className="space-y-0.5">
-                  {LEFT_NAV_ITEMS.map(item => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setActiveNavItem(item.id);
-                        if (item.id === 'przedmiar') setViewMode('przedmiar');
-                        else if (item.id === 'kosztorysy') setViewMode('kosztorys');
-                        else if (item.id === 'naklady') setViewMode('naklady');
-                        else if (item.id === 'wydruki') setLeftPanelMode('export');
-                      }}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg ${
-                        activeNavItem === item.id
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <item.icon className="w-4 h-4" />
-                      {item.label}
-                    </button>
-                  ))}
-                </nav>
+              <div className="flex flex-col h-full">
+                {/* Search in estimate */}
+                <div className="p-3 border-b border-slate-200">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Szukaj w kosztorysie"
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
 
-                {/* Separator */}
-                <div className="my-4 border-t border-slate-200" />
+                {/* Estimate structure tree */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  <p className="text-xs text-slate-500 px-2 mb-2">Kosztorys: {estimate?.settings.name || 'Kosztowys'}</p>
+
+                  {/* Sections tree */}
+                  {estimateData.root.sectionIds.map(sectionId => {
+                    const section = estimateData.sections[sectionId];
+                    if (!section) return null;
+                    const isSectionExpanded = editorState.expandedSections.has(sectionId);
+
+                    return (
+                      <div key={sectionId}>
+                        <button
+                          onClick={() => {
+                            toggleExpandSection(sectionId);
+                            selectItem(sectionId, 'section');
+                          }}
+                          className={`w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-slate-50 ${
+                            editorState.selectedItemId === sectionId ? 'bg-blue-50 text-blue-700' : ''
+                          }`}
+                        >
+                          {isSectionExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          <span className="truncate">{section.ordinalNumber} {section.name}</span>
+                        </button>
+
+                        {isSectionExpanded && section.positionIds.map(posId => {
+                          const position = estimateData.positions[posId];
+                          if (!position) return null;
+                          return (
+                            <button
+                              key={posId}
+                              onClick={() => selectItem(posId, 'position')}
+                              className={`w-full flex items-center gap-1 pl-6 pr-2 py-1 text-xs text-left rounded hover:bg-slate-50 ${
+                                editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-slate-600'
+                              }`}
+                            >
+                              <FileText className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate">{position.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+
+                  {/* Root positions */}
+                  {estimateData.root.positionIds.map((posId, index) => {
+                    const position = estimateData.positions[posId];
+                    if (!position) return null;
+                    return (
+                      <button
+                        key={posId}
+                        onClick={() => selectItem(posId, 'position')}
+                        className={`w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-slate-50 ${
+                          editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : ''
+                        }`}
+                      >
+                        <FileText className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{index + 1}. {position.name}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Empty state */}
+                  {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-4">Kosztorys jest pusty</p>
+                  )}
+                </div>
 
                 {/* Quick add buttons */}
-                <p className="text-xs text-slate-400 uppercase tracking-wider px-3 mb-2">Szybkie akcje</p>
-                <div className="space-y-1">
-                  <button
-                    onClick={handleAddSection}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
-                  >
-                    <FolderPlus className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-600">Dodaj dział</span>
-                  </button>
-                  <button
-                    onClick={() => handleAddPosition(null)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
-                  >
-                    <FileText className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-600">Dodaj pozycję</span>
-                  </button>
+                <div className="p-2 border-t border-slate-200">
+                  <div className="space-y-1">
+                    <button
+                      onClick={handleAddSection}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
+                    >
+                      <FolderPlus className="w-4 h-4 text-slate-400" />
+                      <span className="text-slate-600">Dodaj dział</span>
+                    </button>
+                    <button
+                      onClick={() => handleAddPosition(null)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
+                    >
+                      <FileText className="w-4 h-4 text-slate-400" />
+                      <span className="text-slate-600">Dodaj pozycję</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -2269,33 +2584,63 @@ export const KosztorysEditorPage: React.FC = () => {
             )}
 
             {leftPanelMode === 'export' && (
-              <div className="p-3">
+              <div className="p-3 flex flex-col h-full">
                 <h3 className="text-sm font-semibold text-slate-900 mb-3">Eksportuj kosztorys</h3>
-                <p className="text-xs text-slate-500 mb-3">Kolejność stron</p>
+
+                {/* Zawartość section */}
+                <p className="text-xs text-slate-500 mb-2">Zawartość</p>
+
+                {/* Template dropdown - Szablon */}
+                <p className="text-xs text-slate-500 mb-1">Szablon</p>
+                <select
+                  value={exportTemplate}
+                  onChange={(e) => setExportTemplate(e.target.value as ExportTemplate)}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg mb-3"
+                >
+                  <option value="niestandardowy">Niestandardowy</option>
+                  <option value="kosztorys_inwestorski">Kosztorys inwestorski</option>
+                  <option value="przedmiar_robot">Przedmiar robót</option>
+                </select>
+
+                {/* Search field */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Wyszukaj..."
+                    value={exportSearch}
+                    onChange={(e) => setExportSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-300 rounded-lg"
+                  />
+                </div>
 
                 {/* Draggable export pages list */}
-                <div className="space-y-2">
-                  {exportPages.map((page, index) => (
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {exportPages
+                    .filter(p => !exportSearch || p.label.toLowerCase().includes(exportSearch.toLowerCase()))
+                    .map((page, index) => (
                     <div
                       key={page.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border ${
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-grab ${
                         page.enabled ? 'border-slate-300 bg-white' : 'border-slate-200 bg-slate-50 opacity-60'
                       }`}
+                      draggable
                     >
-                      <GripVertical className="w-4 h-4 text-slate-400 cursor-grab" />
+                      <GripVertical className="w-4 h-4 text-slate-400" />
                       <input
                         type="checkbox"
                         checked={page.enabled}
                         onChange={() => {
                           const newPages = [...exportPages];
-                          newPages[index] = { ...page, enabled: !page.enabled };
+                          const actualIndex = exportPages.findIndex(p => p.id === page.id);
+                          newPages[actualIndex] = { ...page, enabled: !page.enabled };
                           setExportPages(newPages);
                         }}
                         className="w-4 h-4 rounded border-slate-300"
                       />
                       <span className="flex-1 text-xs text-slate-700">{page.label}</span>
                       {page.canEdit && (
-                        <button className="p-1 hover:bg-slate-100 rounded">
+                        <button className="p-1 hover:bg-slate-100 rounded" title="Edytuj stronę tytułową">
                           <Settings className="w-3 h-3 text-slate-400" />
                         </button>
                       )}
@@ -2305,6 +2650,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           setExportPages(newPages);
                         }}
                         className="p-1 hover:bg-slate-100 rounded"
+                        title="Usuń"
                       >
                         <X className="w-3 h-3 text-slate-400" />
                       </button>
@@ -2312,8 +2658,8 @@ export const KosztorysEditorPage: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Add page and print buttons */}
-                <div className="mt-4 flex gap-2">
+                {/* Add page and print buttons - fixed at bottom */}
+                <div className="mt-4 pt-3 border-t border-slate-200 flex gap-2">
                   <button className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
                     <Plus className="w-4 h-4" />
                     Dodaj
@@ -2714,6 +3060,378 @@ export const KosztorysEditorPage: React.FC = () => {
                 Dodaj nakład
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ceny (Prices Update) Dialog */}
+      {showCenyDialog && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full shadow-xl">
+            {/* Dialog header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900">Uaktualnij ceny w kosztorysie</h2>
+              <button onClick={() => setShowCenyDialog(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
+              <button
+                onClick={() => setCenyDialogTab('wstaw')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  cenyDialogTab === 'wstaw'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Wstaw ceny
+              </button>
+              <button
+                onClick={() => setCenyDialogTab('zmien')}
+                className={`px-6 py-3 text-sm font-medium ${
+                  cenyDialogTab === 'zmien'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Zmień ceny
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="p-4 space-y-4">
+              {/* Zastosuj do section */}
+              <div>
+                <p className="text-sm text-slate-600 mb-2">Zastosuj do</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={priceUpdateSettings.applyToLabor}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToLabor: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-sm text-slate-700">Robocizna</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={priceUpdateSettings.applyToMaterial}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToMaterial: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-sm text-slate-700">Materiały</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={priceUpdateSettings.applyToEquipment}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToEquipment: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-sm text-slate-700">Sprzęt</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={priceUpdateSettings.applyToWaste}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToWaste: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-sm text-slate-700">Odpady</span>
+                    </label>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={priceUpdateSettings.unitPositionPrices}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, unitPositionPrices: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300"
+                      />
+                      <span className="text-sm text-slate-700">Ceny jednostkowe pozycji</span>
+                    </label>
+                    {cenyDialogTab === 'wstaw' && (
+                      <>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={priceUpdateSettings.emptyUnitPrices}
+                            onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, emptyUnitPrices: e.target.checked }))}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
+                          <span className="text-sm text-slate-700">Puste ceny jednostkowe pozycji</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={priceUpdateSettings.objectPrices}
+                            onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, objectPrices: e.target.checked }))}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
+                          <span className="text-sm text-slate-700">Ceny obiektów</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={priceUpdateSettings.onlyZeroPrices}
+                            onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, onlyZeroPrices: e.target.checked }))}
+                            className="w-4 h-4 rounded border-slate-300"
+                          />
+                          <span className="text-sm text-slate-700">Uaktualnij tylko ceny zerowe</span>
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {cenyDialogTab === 'wstaw' && (
+                <>
+                  {/* Źródła cen section */}
+                  <div className="border border-slate-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                      <span>Źródła cen</span>
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="w-4 h-4 text-slate-400" />
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Opcje wyszukiwania cen */}
+                  <div className="border border-slate-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                      <span>Opcje wyszukiwania cen</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Zaawansowane */}
+                  <div className="border border-slate-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                      <span>Zaawansowane</span>
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Skip step process checkbox */}
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={priceUpdateSettings.skipStepProcess}
+                      onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, skipStepProcess: e.target.checked }))}
+                      className="w-4 h-4 rounded border-slate-300"
+                    />
+                    <span className="text-sm text-slate-700">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
+                  </label>
+                </>
+              )}
+
+              {cenyDialogTab === 'zmien' && (
+                <>
+                  {/* Wyrażenie section */}
+                  <div>
+                    <p className="text-sm text-slate-600 mb-2">Wyrażenie</p>
+                    <div className="flex gap-2">
+                      <select
+                        value={priceUpdateSettings.expression.field}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({
+                          ...prev,
+                          expression: { ...prev.expression, field: e.target.value as 'cena' | 'wartosc' }
+                        }))}
+                        className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                      >
+                        <option value="cena">Cena</option>
+                        <option value="wartosc">Wartość</option>
+                      </select>
+                      <select
+                        value={priceUpdateSettings.expression.operation}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({
+                          ...prev,
+                          expression: { ...prev.expression, operation: e.target.value as 'add' | 'subtract' | 'multiply' | 'divide' }
+                        }))}
+                        className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                      >
+                        <option value="add">Dodaj (+)</option>
+                        <option value="subtract">Odejmij (-)</option>
+                        <option value="multiply">Pomnóż (*)</option>
+                        <option value="divide">Podziel (/)</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={priceUpdateSettings.expression.value}
+                        onChange={(e) => setPriceUpdateSettings(prev => ({
+                          ...prev,
+                          expression: { ...prev.expression, value: e.target.value }
+                        }))}
+                        placeholder="Wartość"
+                        className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Wyzeruj ceny checkbox */}
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={priceUpdateSettings.zeroPrices}
+                      onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, zeroPrices: e.target.checked }))}
+                      className="w-4 h-4 rounded border-slate-300"
+                    />
+                    <span className="text-sm text-slate-700">Wyzeruj ceny</span>
+                  </label>
+                </>
+              )}
+            </div>
+
+            {/* Dialog footer */}
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowCenyDialog(false)}
+                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  showNotificationMessage(
+                    cenyDialogTab === 'wstaw' ? 'Rozpoczęto wstawianie cen...' : 'Zastosowano zmiany cen',
+                    'success'
+                  );
+                  setShowCenyDialog(false);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                {cenyDialogTab === 'wstaw' ? 'Rozpocznij wstawianie' : 'Zastosuj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comments Panel (side panel) */}
+      {showCommentsPanel && (
+        <div className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-xl z-40 flex flex-col" style={{ marginTop: '120px' }}>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b border-slate-200">
+            <h3 className="font-semibold text-slate-900">Komentarze</h3>
+            <button
+              onClick={() => setShowCommentsPanel(false)}
+              className="p-1 hover:bg-slate-100 rounded"
+            >
+              <X className="w-4 h-4 text-slate-500" />
+            </button>
+          </div>
+
+          {/* Filter dropdown */}
+          <div className="p-3 border-b border-slate-200">
+            <div className="flex items-center gap-2">
+              <select
+                value={commentsFilter}
+                onChange={(e) => setCommentsFilter(e.target.value as 'all' | 'mine' | 'unresolved')}
+                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+              >
+                <option value="all">Wszystkie komentarze</option>
+                <option value="mine">Moje komentarze</option>
+                <option value="unresolved">Do weryfikacji</option>
+              </select>
+              <button className="p-2 hover:bg-slate-100 rounded">
+                <Filter className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+          </div>
+
+          {/* User search */}
+          <div className="px-3 py-2">
+            <input
+              type="text"
+              placeholder="Znajdź użytkownika"
+              value={commentsSearch}
+              onChange={(e) => setCommentsSearch(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg"
+            />
+          </div>
+
+          {/* Comments list */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {comments.map(comment => (
+              <div key={comment.id} className="space-y-2">
+                {/* Section label */}
+                {comment.sectionName && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">{comment.sectionName}</span>
+                    <button className="p-1 hover:bg-slate-100 rounded">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                    </button>
+                  </div>
+                )}
+
+                {/* User info */}
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-medium">
+                    {comment.userInitials}
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">{comment.userName}</span>
+                </div>
+
+                {/* Comment with timestamp */}
+                <div className="pl-9">
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                    <span>{comment.userName}</span>
+                    <span>{comment.timestamp}</span>
+                  </div>
+                  <p className="text-sm text-slate-700">{comment.text}</p>
+
+                  {/* Status dropdown */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <select
+                      value={comment.status}
+                      onChange={(e) => {
+                        const newComments = comments.map(c =>
+                          c.id === comment.id
+                            ? { ...c, status: e.target.value as KosztorysComment['status'] }
+                            : c
+                        );
+                        setComments(newComments);
+                      }}
+                      className={`text-xs px-2 py-1 rounded-full border ${
+                        comment.status === 'do_weryfikacji' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                        comment.status === 'zatwierdzony' ? 'bg-green-50 text-green-700 border-green-200' :
+                        comment.status === 'odrzucony' ? 'bg-red-50 text-red-700 border-red-200' :
+                        'bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      <option value="nowy">Nowy</option>
+                      <option value="do_weryfikacji">Do weryfikacji</option>
+                      <option value="zatwierdzony">Zatwierdzony</option>
+                      <option value="odrzucony">Odrzucony</option>
+                    </select>
+                    <select
+                      value={comment.userId}
+                      className="text-xs px-2 py-1 rounded border border-slate-200"
+                    >
+                      <option value="user1">Denys Krupka</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Add comment */}
+          <div className="p-3 border-t border-slate-200">
+            <textarea
+              placeholder="Dodaj komentarz..."
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none"
+              rows={2}
+            />
+            <button className="mt-2 w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              Dodaj komentarz
+            </button>
           </div>
         </div>
       )}

@@ -9,6 +9,14 @@ export default defineConfig(({ mode }) => {
       build: {
         target: 'esnext',
       },
+      optimizeDeps: {
+        esbuildOptions: {
+          target: 'esnext',
+        },
+      },
+      esbuild: {
+        target: 'esnext',
+      },
       server: {
         port: 3000,
         host: '0.0.0.0',
