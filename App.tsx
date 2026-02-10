@@ -122,7 +122,8 @@ import { CompanyRegisterPage } from './pages/CompanyRegister';
 import {
   EstimatesPage, OffersPage, DrawingsPage,
   DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage,
-  RequestsPage, FormularyPage, DictionariesPage, PriceListsPage, EstimateViewPage
+  RequestsPage, FormularyPage, DictionariesPage, PriceListsPage, EstimateViewPage,
+  KosztorysEditorPage
 } from './pages/construction';
 
 const ProtectedRoute = ({ children, allowedRoles, checkTrial = false, noLayout = false, requiredModule }: { children?: React.ReactNode, allowedRoles?: Role[], checkTrial?: boolean, noLayout?: boolean, requiredModule?: 'recruitment' | 'skills' | 'time_attendance' | 'time_off' | 'work_schedule' | 'tasks_projects' | 'reports_payroll' | 'estimates' | 'offers' | 'drawings' | 'dms' | 'gantt' | 'finance' | 'procurement' | 'approvals' }) => {
@@ -454,6 +455,8 @@ export default function App() {
           <Route path="/construction/price-lists" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="estimates"><PriceListsPage /></ProtectedRoute>} />
           <Route path="/construction/estimate/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
           <Route path="/construction/estimate" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
+          <Route path="/construction/kosztorys/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
+          <Route path="/construction/kosztorys" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
 
           {/* Sales CRM Routes - also accessible by SuperAdmin in simulation mode */}
           <Route path="/sales/dashboard" element={<ProtectedRoute allowedRoles={[Role.SALES, Role.SUPERADMIN]}><SalesDashboard /></ProtectedRoute>} />

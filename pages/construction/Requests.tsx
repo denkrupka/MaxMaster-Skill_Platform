@@ -2283,6 +2283,44 @@ export const RequestsPage: React.FC = () => {
                       }
                     })()}
                   </div>
+
+                  {/* Blok: Dane Obiektu */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-indigo-500" />
+                      Dane Obiektu
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Nazwa obiektu:</span>
+                        <span className="font-medium">{selectedRequest.investment_name}</span>
+                      </div>
+                      {((selectedRequest as any).object_street || (selectedRequest as any).object_city) && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Adres:</span>
+                          <span className="font-medium text-right">
+                            {[
+                              (selectedRequest as any).object_street,
+                              (selectedRequest as any).object_street_number
+                            ].filter(Boolean).join(' ')}
+                            {(selectedRequest as any).object_city && (
+                              <>, {(selectedRequest as any).object_postal_code} {(selectedRequest as any).object_city}</>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {selectedRequest.object_code && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Kod obiektu:</span>
+                          <span className="font-mono font-medium bg-slate-200 px-2 py-0.5 rounded">{selectedRequest.object_code}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Typ obiektu:</span>
+                        <span className="font-medium">{OBJECT_TYPE_LABELS[selectedRequest.object_type]}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Right column */}
@@ -2294,10 +2332,6 @@ export const RequestsPage: React.FC = () => {
                       Parametry
                     </h3>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Typ obiektu:</span>
-                        <span className="font-medium">{OBJECT_TYPE_LABELS[selectedRequest.object_type]}</span>
-                      </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Rodzaj prac:</span>
                         <span className="font-medium">
@@ -2330,12 +2364,6 @@ export const RequestsPage: React.FC = () => {
                         <div className="flex justify-between">
                           <span className="text-slate-500">Źródło zapytania:</span>
                           <span className="font-medium">{SOURCE_LABELS[selectedRequest.request_source]}</span>
-                        </div>
-                      )}
-                      {selectedRequest.object_code && (
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Kod obiektu:</span>
-                          <span className="font-mono font-medium bg-slate-200 px-2 py-0.5 rounded">{selectedRequest.object_code}</span>
                         </div>
                       )}
                     </div>

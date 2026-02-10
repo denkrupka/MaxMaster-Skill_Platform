@@ -14,3 +14,4 @@ export { FormularyPage } from './Formulary';
 export { DictionariesPage } from './Dictionaries';
 export { PriceListsPage } from './PriceLists';
 export { EstimateViewPage } from './EstimateView';
+export { KosztorysEditorPage } from './KosztorysEditor';

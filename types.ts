@@ -2763,3 +2763,423 @@ export interface ProjectFolder {
   children?: ProjectFolder[];
   projects_count?: number;
 }
+
+// =====================================================
+// МОДУЛЬ: СМЕТИРОВАНИЕ (KOSZTORYSOWANIE) - eKosztorysowanie Style
+// Полный модуль сметирования по образцу ekosztorysowanie.pl
+// =====================================================
+
+// Типы сметы
+export type KosztorysType = 'investor' | 'contractor' | 'offer';
+
+// Валюта
+export type KosztorysCurrency = 'PLN' | 'EUR' | 'USD';
+
+// Тип ресурса
+export type KosztorysResourceType = 'labor' | 'material' | 'equipment';
+
+// Тип накладных
+export type KosztorysOverheadType = 'percentage' | 'fixed';
+
+// Тип нормы
+export type KosztorysNormType = 'absolute' | 'relative';
+
+// Способ округления
+export type KosztorysRoundingMethod = 'default' | 'PN-70/N-02120';
+
+// Шаблон расчёта
+export type KosztorysCalculationTemplate = 'overhead-on-top' | 'overhead-included';
+
+// Тип источника индекса
+export type KosztorysOriginIndexType = 'ETO' | 'KNNR' | 'KNR' | 'KSNR' | 'custom';
+
+// =====================================================
+// Настройки точности (Precision Settings)
+// =====================================================
+export interface KosztorysPrecisionSettings {
+  norms: number;          // Точность норм (6-7 знаков)
+  resources: number;      // Точность ресурсов (2 знака)
+  measurements: number;   // Точность обмеров (2-3 знака)
+  unitValues: number;     // Точность ед. значений (2 знака)
+  positionBase: number;   // Точность позиции (1-2 знака)
+  costEstimateBase: number;  // Точность сметы (2 знака)
+  roundingMethod: KosztorysRoundingMethod;
+}
+
+// =====================================================
+// Настройки печати (Print Settings)
+// =====================================================
+export type KosztorysPrintPageType =
+  | 'title'
+  | 'detailed-cost-calculations'
+  | 'simplified-cost-estimate.offer'
+  | 'assembled-elements'
+  | 'measurements'
+  | 'cost-estimate.offer'
+  | 'cost-estimate.investor'
+  | 'labor-list'
+  | 'equipment-list'
+  | 'material-list';
+
+export interface KosztorysPrintPage {
+  type: 'predefined';
+  name: KosztorysPrintPageType;
+  enabled: boolean;
+}
+
+export interface KosztorysTitlePageSettings {
+  companyInfo: {
+    name: string;
+    address: string;
+    contacts: string[];
+  };
+  documentTitle: string;
+  showCostFields: boolean;
+  showManHourRate: boolean;
+  showOverheadsCosts: boolean;
+  orderDetails: {
+    orderName: string;
+    constructionSiteAddress: string;
+  };
+  clientDetails: {
+    clientName: string;
+    clientAddress: string;
+  };
+  contractorDetails: {
+    contractorName: string;
+    contractorAddress: string;
+    industry: string;
+  };
+  participants: {
+    preparedBy: string;
+    preparedAt: string;
+    preparedByIndustry: string;
+    checkedBy: string;
+    checkedAt: string;
+    checkedByIndustry: string;
+  };
+}
+
+export interface KosztorysPrintSettings {
+  pages: KosztorysPrintPage[];
+  titlePage: KosztorysTitlePageSettings;
+}
+
+// =====================================================
+// Коэффициенты (Factors)
+// =====================================================
+export interface KosztorysFactors {
+  labor: number;       // Коэффициент на робочизну (r-g)
+  material: number;    // Коэффициент на материалы
+  equipment: number;   // Коэффициент на оборудование
+  waste: number;       // Коэффициент на отходы (в %)
+}
+
+// =====================================================
+// Накладные расходы (Overhead)
+// =====================================================
+export interface KosztorysOverhead {
+  id: string;
+  name: string;        // "Koszty pośrednie (Kp)", "Zysk (Z)", "Koszty zakupu (Kz)"
+  type: KosztorysOverheadType;
+  value: number;       // Процент или фиксированная сумма
+  appliesTo: KosztorysResourceType[];  // На что начисляется
+  order: number;       // Порядок применения
+}
+
+// =====================================================
+// Единица измерения (Unit)
+// =====================================================
+export interface KosztorysUnit {
+  label: string;      // "m3", "r-g", "szt."
+  unitIndex: string;  // "060", "149", "020"
+}
+
+// =====================================================
+// Денежное значение (Money)
+// =====================================================
+export interface KosztorysMoney {
+  value: number;
+  currency: KosztorysCurrency;
+}
+
+// =====================================================
+// Обмеры (Measurements)
+// =====================================================
+export interface KosztorysMeasurementEntry {
+  id: string;
+  type: 'expression' | 'value';
+  expression: string;        // Формула: "10*2.5" или "0"
+  description: string | null;
+}
+
+export interface KosztorysMeasurements {
+  rootIds: string[];
+  entries: Record<string, KosztorysMeasurementEntry>;
+}
+
+// =====================================================
+// Ресурс (Resource) - КЛЮЧЕВОЙ ОБЪЕКТ ДЛЯ РАСЧЁТОВ
+// =====================================================
+export interface KosztorysResource {
+  id: string;
+  name: string;              // "robotnicy", "kabel YKY 3x2.5"
+  index: string | null;      // Индекс в каталоге
+  originIndex: {
+    type: KosztorysOriginIndexType;
+    index: string;
+  };
+
+  type: KosztorysResourceType;
+  factor: number;            // Коэффициент ресурса
+
+  norm: {
+    type: KosztorysNormType;
+    value: number;           // Норма расхода (1.35 r-g на единицу)
+  };
+
+  unit: KosztorysUnit;
+  unitPrice: KosztorysMoney;          // Цена за единицу (51.86 PLN/r-g)
+
+  group: string | null;      // Группа ресурсов
+  marker: string | null;
+  investorTotal: boolean;    // Для инвесторской сметы
+
+  // Вычисляемые поля
+  calculatedQuantity?: number;
+  calculatedValue?: number;
+}
+
+// =====================================================
+// Позиция сметы (Position) - ГЛАВНЫЙ ОБЪЕКТ
+// =====================================================
+export interface KosztorysPosition {
+  id: string;
+  base: string;              // Норматив: "KNNR 5 0701-01"
+  originBase: string;        // Исходный норматив
+  name: string;              // "Kopanie rowów dla kabli..."
+  marker: string | null;     // Маркер/тег
+
+  unit: KosztorysUnit;                // Единица измерения
+  measurements: KosztorysMeasurements; // Обмеры
+  multiplicationFactor: number;  // Множитель позиции
+
+  resources: KosztorysResource[];     // Ресурсы (труд, материалы, техника)
+  factors: KosztorysFactors;          // Коэффициенты позиции
+  overheads: KosztorysOverhead[];     // Накладные позиции
+
+  unitPrice: KosztorysMoney;          // Цена за единицу (для упрощённых смет)
+
+  // Вычисляемые поля
+  quantity?: number;
+  totalLabor?: number;
+  totalMaterial?: number;
+  totalEquipment?: number;
+  totalDirect?: number;       // Koszty bezpośrednie
+  totalWithOverheads?: number; // Razem z narzutami
+  unitCost?: number;          // Cena jednostkowa
+}
+
+// =====================================================
+// Раздел сметы (Section)
+// =====================================================
+export interface KosztorysSection {
+  id: string;
+  name: string;
+  description: string;
+  ordinalNumber: string;     // "1", "1.1", "1.1.1"
+  positionIds: string[];      // Позиции в разделе
+  subsectionIds: string[];    // Подразделы
+  factors: KosztorysFactors;           // Коэффициенты раздела
+  overheads: KosztorysOverhead[];      // Накладные раздела
+
+  // Вычисляемые поля
+  totalLabor?: number;
+  totalMaterial?: number;
+  totalEquipment?: number;
+  totalValue?: number;
+}
+
+// =====================================================
+// Корневые данные сметы (Root Data)
+// =====================================================
+export interface KosztorysRootData {
+  sectionIds: string[];      // ID разделов верхнего уровня
+  positionIds: string[];     // ID позиций вне разделов
+  factors: KosztorysFactors;           // Глобальные коэффициенты
+  overheads: KosztorysOverhead[];      // Накладные расходы
+}
+
+// =====================================================
+// Данные сметы (Cost Estimate Data)
+// =====================================================
+export interface KosztorysCostEstimateData {
+  root: KosztorysRootData;
+  sections: Record<string, KosztorysSection>;
+  positions: Record<string, KosztorysPosition>;
+}
+
+// =====================================================
+// Настройки сметы (Cost Estimate Settings)
+// =====================================================
+export interface KosztorysCostEstimateSettings {
+  type: KosztorysType;                 // Тип сметы
+  name: string;                        // Название
+  description: string;                 // Описание
+  created: string;                     // ISO datetime
+  modified: string;
+  defaultCurrency: KosztorysCurrency;
+
+  print: KosztorysPrintSettings;
+  precision: KosztorysPrecisionSettings;
+  calculationTemplate: KosztorysCalculationTemplate;
+}
+
+// =====================================================
+// Смета (Cost Estimate) - ГЛАВНАЯ СУЩНОСТЬ
+// =====================================================
+export interface KosztorysCostEstimate {
+  id: string;
+  company_id: string;
+  created_by_id: string;
+
+  settings: KosztorysCostEstimateSettings;
+  data: KosztorysCostEstimateData;
+
+  // Итоги
+  totalLabor: number;
+  totalMaterial: number;
+  totalEquipment: number;
+  totalOverhead: number;
+  totalValue: number;
+
+  created_at: string;
+  updated_at: string;
+}
+
+// =====================================================
+// Каталог нормативов
+// =====================================================
+export interface KosztorysCatalog {
+  id: string;
+  code: string;              // KNNR, KNR, KSNR
+  name: string;
+  description?: string;
+}
+
+export interface KosztorysCatalogItem {
+  id: string;
+  catalog_id: string;
+  code: string;              // "KNNR 5 0701-01"
+  name: string;
+  unit: KosztorysUnit;
+  defaultResources: KosztorysResource[];
+}
+
+// =====================================================
+// Шаблон накладных расходов
+// =====================================================
+export interface KosztorysOverheadTemplate {
+  id: string;
+  company_id: string;
+  name: string;
+  type: KosztorysOverheadType;
+  value: number;
+  appliesToLabor: boolean;
+  appliesToMaterial: boolean;
+  appliesToEquipment: boolean;
+  isDefault: boolean;
+}
+
+// =====================================================
+// Комментарий / Задача к смете
+// =====================================================
+export type KosztorysTaskCategory = 'none' | 'needs_verification' | 'price_check' | 'measurement_check';
+export type KosztorysTaskStatus = 'todo' | 'in_progress' | 'done';
+
+export interface KosztorysThread {
+  id: string;
+  costEstimateId: string;
+  anchorId: string | null;   // ID позиции или раздела
+  taskCategory: KosztorysTaskCategory;
+  taskStatus: KosztorysTaskStatus;
+  content: string;
+  assigneeId: string | null;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string | null;
+  comments?: KosztorysThreadComment[];
+}
+
+export interface KosztorysThreadComment {
+  id: string;
+  threadId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+}
+
+// =====================================================
+// Справочник единиц измерения (Units)
+// =====================================================
+export interface KosztorysUnitReference {
+  id: number;
+  index: string;   // "020", "033", "040"...
+  unit: string;    // "szt.", "kg", "m"
+  name: string;    // "sztuka", "kilogram", "metr"
+  lang: string;    // "pl"
+}
+
+// =====================================================
+// Результат расчёта позиции
+// =====================================================
+export interface KosztorysPositionCalculationResult {
+  quantity: number;
+  laborTotal: number;
+  materialTotal: number;
+  equipmentTotal: number;
+  directCostsTotal: number;
+  overheadsTotal: number;
+  totalWithOverheads: number;
+  unitCost: number;
+  resources: {
+    id: string;
+    calculatedQuantity: number;
+    calculatedValue: number;
+  }[];
+}
+
+// =====================================================
+// Результат расчёта сметы
+// =====================================================
+export interface KosztorysCostEstimateCalculationResult {
+  totalLabor: number;
+  totalMaterial: number;
+  totalEquipment: number;
+  totalDirect: number;
+  totalOverheads: number;
+  totalValue: number;
+  sections: Record<string, {
+    totalLabor: number;
+    totalMaterial: number;
+    totalEquipment: number;
+    totalValue: number;
+  }>;
+  positions: Record<string, KosztorysPositionCalculationResult>;
+}
+
+// =====================================================
+// UI состояние редактора
+// =====================================================
+export interface KosztorysEditorState {
+  selectedItemId: string | null;
+  selectedItemType: 'section' | 'position' | 'resource' | null;
+  expandedSections: Set<string>;
+  expandedPositions: Set<string>;
+  clipboard: {
+    type: 'section' | 'position' | 'resource' | null;
+    data: any;
+  } | null;
+  isDirty: boolean;
+  lastSaved: string | null;
+}

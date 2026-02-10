@@ -1463,6 +1463,13 @@ export const EstimatesPage: React.FC = () => {
               </button>
 
               <button
+                onClick={() => window.location.hash = '#/construction/kosztorys'}
+                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition"
+              >
+                <Calculator className="w-4 h-4" />
+                Edytor KNR
+              </button>
+              <button
                 onClick={() => setShowNewEstimateModal(true)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
               >
