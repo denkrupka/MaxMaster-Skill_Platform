@@ -711,6 +711,10 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
   const [showNakladDropdown, setShowNakladDropdown] = useState(false);
   const [showKNRDropdown, setShowKNRDropdown] = useState(false);
+  const [showViewModeDropdown, setShowViewModeDropdown] = useState(false);
+  const [showKomentarzeDropdown, setShowKomentarzeDropdown] = useState(false);
+  const [showUsunDropdown, setShowUsunDropdown] = useState(false);
+  const [showPrzesunDropdown, setShowPrzesunDropdown] = useState(false);
 
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
@@ -1901,24 +1905,81 @@ export const KosztorysEditorPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-slate-100">
-      {/* Toolbar Row 1 - matching eKosztorysowanie.pl */}
+      {/* Toolbar Row 1 - matching eKosztorysowanie.pl exactly */}
       <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex items-center gap-0.5 flex-wrap">
-        {/* Mode button - Kosztorys/Nakłady/Wydruki */}
+        {/* Kosztorys dropdown - View Mode selector with 7 items */}
+        <div className="relative">
+          <button
+            onClick={() => setShowViewModeDropdown(!showViewModeDropdown)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded"
+          >
+            <Menu className="w-4 h-4" />
+            Kosztorys
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showViewModeDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { setViewMode('przedmiar'); setActiveNavItem('przedmiar'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 ${viewMode === 'przedmiar' ? 'bg-slate-100' : ''}`}
+              >
+                <span className="w-4 text-slate-500 font-medium">P</span>
+                Przedmiar
+                {viewMode === 'przedmiar' && <span className="ml-auto w-2 h-2 bg-red-500 rounded-full"></span>}
+              </button>
+              <button
+                onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 ${viewMode === 'kosztorys' ? 'bg-slate-100' : ''}`}
+              >
+                <span className="w-4 text-slate-500 font-medium">C</span>
+                Kosztorys
+              </button>
+              <button
+                onClick={() => { setActiveNavItem('pozycje'); setShowViewModeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+              >
+                Pozycje
+              </button>
+              <button
+                onClick={() => { setViewMode('naklady'); setActiveNavItem('naklady'); setShowViewModeDropdown(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'naklady' ? 'bg-slate-100' : ''}`}
+              >
+                Nakłady
+              </button>
+              <button
+                onClick={() => { setActiveNavItem('narzuty'); setShowViewModeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+              >
+                Narzuty
+              </button>
+              <button
+                onClick={() => { setActiveNavItem('zestawienia'); setShowViewModeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+              >
+                Zestawienia
+              </button>
+              <button
+                onClick={() => { setActiveNavItem('wydruki'); setLeftPanelMode('export'); setShowViewModeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
+              >
+                Wydruki
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Drukuj button */}
         <button
-          onClick={() => {
-            const modes: ViewMode[] = ['kosztorys', 'naklady', 'przedmiar'];
-            const currentIndex = modes.indexOf(viewMode);
-            setViewMode(modes[(currentIndex + 1) % modes.length]);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded"
+          onClick={() => setLeftPanelMode('export')}
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
         >
-          <Menu className="w-4 h-4" />
-          {viewMode === 'przedmiar' ? 'Przedmiar' : viewMode === 'naklady' ? 'Nakłady' : 'Kosztorys'}
+          <Printer className="w-4 h-4" />
+          Drukuj
         </button>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* + Dział dropdown */}
+        {/* + Dział dropdown - 5 items matching screenshot */}
         <div className="relative">
           <button
             onClick={() => setShowDzialDropdown(!showDzialDropdown)}
@@ -1929,14 +1990,27 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showDzialDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">Dział</button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-6">Poddział</button>
+            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">
+                Dodaj nowy
+              </button>
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="text-slate-400">→</span> Poddział na początku
+              </button>
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="text-slate-400">→</span> Poddział na końcu
+              </button>
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="text-slate-400">←</span> Dział powyżej
+              </button>
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
+                <span className="text-slate-400">←</span> Dział poniżej
+              </button>
             </div>
           )}
         </div>
 
-        {/* KNR Pozycja dropdown */}
+        {/* KNR Pozycja - opens catalog browser in left panel */}
         <div className="relative">
           <button
             onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
@@ -1950,94 +2024,196 @@ export const KosztorysEditorPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Nakład dropdown */}
+        {/* Nakład dropdown - 5 items matching screenshot */}
         <div className="relative">
           <button
-            onClick={() => editorState.selectedItemType === 'position' && setShowNakladDropdown(!showNakladDropdown)}
+            onClick={() => setShowNakladDropdown(!showNakladDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
               editorState.selectedItemType === 'position' ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
             }`}
-            disabled={editorState.selectedItemType !== 'position'}
           >
             <Layers className="w-4 h-4" />
             Nakład
             <ChevronDown className="w-3 h-3" />
           </button>
-          {showNakladDropdown && editorState.selectedItemId && editorState.selectedItemType === 'position' && (
-            <div className="absolute top-full left-0 mt-1 w-36 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'labor'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="w-5 h-5 bg-blue-100 text-blue-700 rounded flex items-center justify-center text-xs font-bold">R</span>Robocizna
+          {showNakladDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => {
+                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                    handleAddResource(editorState.selectedItemId, 'labor');
+                  }
+                  setShowNakladDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Dodaj nowy
               </button>
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'material'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="w-5 h-5 bg-green-100 text-green-700 rounded flex items-center justify-center text-xs font-bold">M</span>Materiał
+              <button
+                onClick={() => {
+                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                    handleAddResource(editorState.selectedItemId, 'labor');
+                  }
+                  setShowNakladDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Robocizna
               </button>
-              <button onClick={() => { handleAddResource(editorState.selectedItemId!, 'equipment'); setShowNakladDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="w-5 h-5 bg-orange-100 text-orange-700 rounded flex items-center justify-center text-xs font-bold">S</span>Sprzęt
+              <button
+                onClick={() => {
+                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                    handleAddResource(editorState.selectedItemId, 'material');
+                  }
+                  setShowNakladDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Materiały
+              </button>
+              <button
+                onClick={() => {
+                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                    handleAddResource(editorState.selectedItemId, 'equipment');
+                  }
+                  setShowNakladDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Sprzęt
+              </button>
+              <button
+                onClick={() => {
+                  // Odpady (waste) - would need new resource type
+                  setShowNakladDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Odpady
               </button>
             </div>
           )}
         </div>
 
-        {/* Uzupełnij nakłady - no dropdown, just text */}
-        <button className="px-2 py-1.5 text-sm text-slate-400 cursor-not-allowed">
+        {/* Uzupełnij nakłady - with dropdown arrow */}
+        <button className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-400 cursor-not-allowed">
           Uzupełnij nakłady
+          <ChevronDown className="w-3 h-3" />
         </button>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Ceny - no dropdown */}
+        {/* Ceny - opens dialog */}
         <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
           Ceny
         </button>
 
-        {/* Komentarze - opens in left panel */}
-        <button
-          onClick={() => setLeftPanelMode(leftPanelMode === 'comments' ? 'overview' : 'comments')}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          Komentarze
-          <ChevronDown className="w-3 h-3" />
-        </button>
+        {/* Komentarze dropdown - opens in left panel */}
+        <div className="relative">
+          <button
+            onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Komentarze
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showKomentarzeDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Pokaż komentarze
+              </button>
+              <button
+                onClick={() => {
+                  // Add new comment
+                  setLeftPanelMode('comments');
+                  setShowKomentarzeDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Dodaj komentarz
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-6 bg-slate-200 mx-1" />
 
-        {/* Usuń - with confirmation */}
-        <button
-          onClick={() => {
-            if (editorState.selectedItemId && editorState.selectedItemType) {
-              if (confirm('Czy na pewno chcesz usunąć ten element?')) {
-                handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType);
-              }
-            }
-          }}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
-          }`}
-          disabled={!editorState.selectedItemId}
-        >
-          <Trash2 className="w-4 h-4" />
-          Usuń
-          <ChevronDown className="w-3 h-3" />
-        </button>
+        {/* Usuń dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => editorState.selectedItemId && setShowUsunDropdown(!showUsunDropdown)}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            Usuń
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showUsunDropdown && editorState.selectedItemId && (
+            <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => {
+                  if (editorState.selectedItemId && editorState.selectedItemType) {
+                    if (confirm('Czy na pewno chcesz usunąć ten element?')) {
+                      handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType);
+                    }
+                  }
+                  setShowUsunDropdown(false);
+                }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-red-600"
+              >
+                Usuń zaznaczony element
+              </button>
+              <button
+                onClick={() => { setShowUsunDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                Usuń z nakładami
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Przesuń dropdown */}
         <div className="relative">
           <button
+            onClick={() => editorState.selectedItemId && setShowPrzesunDropdown(!showPrzesunDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
               editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
             }`}
-            disabled={!editorState.selectedItemId}
           >
             <MoveUp className="w-4 h-4" />
             Przesuń
             <ChevronDown className="w-3 h-3" />
           </button>
+          {showPrzesunDropdown && editorState.selectedItemId && (
+            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { /* Move up */ setShowPrzesunDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <MoveUp className="w-4 h-4" /> W górę
+              </button>
+              <button
+                onClick={() => { /* Move down */ setShowPrzesunDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                <MoveDown className="w-4 h-4" /> W dół
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Kopiuj - no dropdown */}
+        <div className="w-px h-6 bg-slate-200 mx-1" />
+
+        {/* Kopiuj */}
         <button
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
@@ -2048,7 +2224,7 @@ export const KosztorysEditorPage: React.FC = () => {
           Kopiuj
         </button>
 
-        {/* Wytnij - no dropdown */}
+        {/* Wytnij */}
         <button
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
@@ -2059,7 +2235,7 @@ export const KosztorysEditorPage: React.FC = () => {
           Wytnij
         </button>
 
-        {/* Wklej - no dropdown */}
+        {/* Wklej */}
         <button
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
             editorState.clipboard ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
@@ -2071,7 +2247,7 @@ export const KosztorysEditorPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Toolbar Row 2 - right side only */}
+      {/* Toolbar Row 2 - right side actions */}
       <div className="bg-white border-b border-slate-200 px-2 py-1 flex items-center justify-end gap-1">
         <button className="flex items-center gap-1 px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded">
           <RefreshCw className="w-4 h-4" />
@@ -2087,9 +2263,16 @@ export const KosztorysEditorPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Click outside to close dropdowns */}
-      {(showDzialDropdown || showNakladDropdown) && (
-        <div className="fixed inset-0 z-40" onClick={() => { setShowDzialDropdown(false); setShowNakladDropdown(false); }} />
+      {/* Click outside to close all dropdowns */}
+      {(showDzialDropdown || showNakladDropdown || showViewModeDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown) && (
+        <div className="fixed inset-0 z-40" onClick={() => {
+          setShowDzialDropdown(false);
+          setShowNakladDropdown(false);
+          setShowViewModeDropdown(false);
+          setShowKomentarzeDropdown(false);
+          setShowUsunDropdown(false);
+          setShowPrzesunDropdown(false);
+        }} />
       )}
 
       {/* Main content */}
@@ -2314,61 +2497,141 @@ export const KosztorysEditorPage: React.FC = () => {
                 )}
 
                 {editorState.selectedItemType === 'position' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    {/* Podstawa - with eye icon matching eKosztorysowanie */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Podstawa (norma)</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-sm text-slate-700">Podstawa</label>
+                        <button className="p-0.5 hover:bg-slate-100 rounded">
+                          <Eye className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={(selectedItem as KosztorysPosition).base}
                         onChange={e => handleUpdateSelectedItem({ base: e.target.value, originBase: e.target.value })}
-                        placeholder="np. KNNR 5 0702-01"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                        placeholder=""
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
                       />
                     </div>
+
+                    {/* Opis - textarea */}
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa nakładu</label>
+                      <label className="text-sm text-slate-700 mb-1 block">Opis</label>
                       <textarea
                         value={(selectedItem as KosztorysPosition).name}
                         onChange={e => handleUpdateSelectedItem({ name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                        rows={2}
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-none"
+                        rows={3}
                       />
                     </div>
-                    {selectedPositionResult && (
-                      <div className="pt-4 border-t border-slate-200 space-y-2">
-                        <h4 className="text-sm font-medium text-slate-700">Podsumowanie pozycji</h4>
-                        <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Ilość:</span>
-                            <span className="font-medium">{formatNumber(selectedPositionResult.quantity)} {(selectedItem as KosztorysPosition).unit.label}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Robocizna:</span>
-                            <span className="font-medium">{formatCurrency(selectedPositionResult.laborTotal)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Materiały:</span>
-                            <span className="font-medium">{formatCurrency(selectedPositionResult.materialTotal)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Sprzęt:</span>
-                            <span className="font-medium">{formatCurrency(selectedPositionResult.equipmentTotal)}</span>
-                          </div>
-                          <div className="flex justify-between pt-2 border-t border-slate-200">
-                            <span className="text-slate-600">Razem koszty bezpośrednie:</span>
-                            <span className="font-bold">{formatCurrency(selectedPositionResult.directCostsTotal)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Razem z narzutami:</span>
-                            <span className="font-bold text-blue-600">{formatCurrency(selectedPositionResult.totalWithOverheads)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-600">Cena jednostkowa:</span>
-                            <span className="font-bold">{formatCurrency(selectedPositionResult.unitCost)}</span>
-                          </div>
+
+                    {/* Przedmiar - expandable section matching screenshot */}
+                    <div className="border-t border-slate-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-2">
+                        <span>Przedmiar</span>
+                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={selectedPositionResult?.quantity?.toString().replace('.', ',') || '0'}
+                          onChange={e => {
+                            const pos = selectedItem as KosztorysPosition;
+                            const val = parseFloat(e.target.value.replace(',', '.')) || 0;
+                            // Update measurement
+                            let measurements = pos.measurements;
+                            if (measurements.rootIds.length === 0) {
+                              measurements = addMeasurementEntry(measurements, String(val), 'Ilość');
+                            } else {
+                              measurements = updateMeasurementEntry(measurements, measurements.rootIds[0], String(val));
+                            }
+                            handleUpdateSelectedItem({ measurements });
+                          }}
+                          className="w-20 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                        />
+                        <button className="p-1 hover:bg-slate-100 rounded">
+                          <Expand className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <select
+                          value={(selectedItem as KosztorysPosition).unit.unitIndex}
+                          onChange={e => {
+                            const unit = UNITS_REFERENCE.find(u => u.index === e.target.value);
+                            if (unit) handleUpdateSelectedItem({ unit: { label: unit.unit, unitIndex: unit.index } });
+                          }}
+                          className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-sm"
+                        >
+                          {UNITS_REFERENCE.map(u => (
+                            <option key={u.index} value={u.index}>{u.unit}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Krotność */}
+                    <div>
+                      <label className="text-sm text-slate-700 mb-1 block">Krotność</label>
+                      <input
+                        type="text"
+                        value={(selectedItem as KosztorysPosition).multiplicationFactor.toString().replace('.', ',')}
+                        onChange={e => handleUpdateSelectedItem({ multiplicationFactor: parseFloat(e.target.value.replace(',', '.')) || 1 })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                      />
+                    </div>
+
+                    {/* Współczynniki norm - expandable section */}
+                    <div className="border-t border-slate-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-3">
+                        <span>Współczynniki norm</span>
+                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                      </button>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Robocizna</label>
+                          <input
+                            type="text"
+                            value={(selectedItem as KosztorysPosition).factors.labor.toString().replace('.', ',')}
+                            onChange={e => handleUpdateSelectedItem({
+                              factors: { ...(selectedItem as KosztorysPosition).factors, labor: parseFloat(e.target.value.replace(',', '.')) || 1 }
+                            })}
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Materiały</label>
+                          <input
+                            type="text"
+                            value={(selectedItem as KosztorysPosition).factors.material.toString().replace('.', ',')}
+                            onChange={e => handleUpdateSelectedItem({
+                              factors: { ...(selectedItem as KosztorysPosition).factors, material: parseFloat(e.target.value.replace(',', '.')) || 1 }
+                            })}
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Sprzęt</label>
+                          <input
+                            type="text"
+                            value={(selectedItem as KosztorysPosition).factors.equipment.toString().replace('.', ',')}
+                            onChange={e => handleUpdateSelectedItem({
+                              factors: { ...(selectedItem as KosztorysPosition).factors, equipment: parseFloat(e.target.value.replace(',', '.')) || 1 }
+                            })}
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <label className="text-sm text-slate-600">Odpady</label>
+                          <input
+                            type="text"
+                            value={(selectedItem as KosztorysPosition).factors.waste.toString().replace('.', ',')}
+                            onChange={e => handleUpdateSelectedItem({
+                              factors: { ...(selectedItem as KosztorysPosition).factors, waste: parseFloat(e.target.value.replace(',', '.')) || 0 }
+                            })}
+                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                          />
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
