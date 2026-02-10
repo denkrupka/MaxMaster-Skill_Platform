@@ -1062,8 +1062,8 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
           .update({ status: 'completed' })
           .eq('id', form.id);
 
-        // Navigate directly to the estimate view page
-        window.location.hash = `#/construction/estimate/${result.estimateId}`;
+        // Navigate directly to the estimate editor
+        window.location.hash = `#/construction/kosztorys/${result.estimateId}`;
       } else {
         // Show result modal if there are errors
         setGenerationResult(result);

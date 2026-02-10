@@ -122,7 +122,7 @@ import { CompanyRegisterPage } from './pages/CompanyRegister';
 import {
   EstimatesPage, OffersPage, DrawingsPage,
   DMSPage, GanttPage, FinancePage, ProcurementPage, ApprovalsPage,
-  RequestsPage, FormularyPage, DictionariesPage, PriceListsPage, EstimateViewPage,
+  RequestsPage, FormularyPage, DictionariesPage, PriceListsPage,
   KosztorysEditorPage
 } from './pages/construction';
 
@@ -453,8 +453,6 @@ export default function App() {
           <Route path="/construction/formulary/:requestId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><FormularyPage /></ProtectedRoute>} />
           <Route path="/construction/dictionaries" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="estimates"><DictionariesPage /></ProtectedRoute>} />
           <Route path="/construction/price-lists" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR]} requiredModule="estimates"><PriceListsPage /></ProtectedRoute>} />
-          <Route path="/construction/estimate/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
-          <Route path="/construction/estimate" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><EstimateViewPage /></ProtectedRoute>} />
           <Route path="/construction/kosztorys/:estimateId" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
           <Route path="/construction/kosztorys" element={<ProtectedRoute allowedRoles={[Role.COMPANY_ADMIN, Role.HR, Role.COORDINATOR]} requiredModule="estimates"><KosztorysEditorPage /></ProtectedRoute>} />
 

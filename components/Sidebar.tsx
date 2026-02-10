@@ -288,7 +288,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="hr-construction" icon={HardHat} label="Budowlanka">
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
-                   <NavItem to="/construction/kosztorys" icon={FileSpreadsheet} label="Edytor KNR" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
                    <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
                    <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
@@ -319,7 +318,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <div className="my-2 border-t border-slate-100"></div>
                  <CollapsibleNavGroup groupId="construction-modules" icon={HardHat} label="Budowlanka">
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
-                   <NavItem to="/construction/kosztorys" icon={FileSpreadsheet} label="Edytor KNR" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
                    <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
                    <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
