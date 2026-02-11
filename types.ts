@@ -3176,6 +3176,7 @@ export interface KosztorysEditorState {
   selectedItemType: 'section' | 'position' | 'resource' | null;
   expandedSections: Set<string>;
   expandedPositions: Set<string>;
+  expandedSubsections: Set<string>;
   clipboard: {
     id: string;
     type: 'section' | 'position' | 'resource';

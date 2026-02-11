@@ -323,6 +323,7 @@ const initialEditorState: KosztorysEditorState = {
   selectedItemType: null,
   expandedSections: new Set(),
   expandedPositions: new Set(),
+  expandedSubsections: new Set(),
   clipboard: null,
   isDirty: false,
   lastSaved: null,
@@ -723,8 +724,12 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddPositionModal, setShowAddPositionModal] = useState(false);
   const [showAddResourceModal, setShowAddResourceModal] = useState(false);
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
   const [targetPositionId, setTargetPositionId] = useState<string | null>(null);
+
+  // Drag and drop state for sections
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
 
   // View modes
   const [viewMode, setViewMode] = useState<ViewMode>('kosztorys');
@@ -1275,6 +1280,41 @@ export const KosztorysEditorPage: React.FC = () => {
     setEditorState(prev => ({ ...prev, isDirty: true }));
   };
 
+  // Reorder sections via drag-and-drop
+  const handleSectionReorder = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+
+    const sectionIds = [...estimateData.root.sectionIds];
+    const draggedIndex = sectionIds.indexOf(draggedId);
+    const targetIndex = sectionIds.indexOf(targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    // Remove dragged item and insert at target position
+    sectionIds.splice(draggedIndex, 1);
+    sectionIds.splice(targetIndex, 0, draggedId);
+
+    // Update ordinal numbers
+    const updatedSections = { ...estimateData.sections };
+    sectionIds.forEach((id, index) => {
+      if (updatedSections[id]) {
+        updatedSections[id] = {
+          ...updatedSections[id],
+          ordinalNumber: String(index + 1),
+        };
+      }
+    });
+
+    updateEstimateData({
+      ...estimateData,
+      root: {
+        ...estimateData.root,
+        sectionIds,
+      },
+      sections: updatedSections,
+    });
+  };
+
   // Add section
   const handleAddSection = () => {
     const sectionIds = estimateData.root.sectionIds;
@@ -1619,6 +1659,108 @@ export const KosztorysEditorPage: React.FC = () => {
       }
       return { ...prev, expandedPositions: newExpanded };
     });
+  };
+
+  const toggleExpandSubsection = (subsectionId: string) => {
+    setEditorState(prev => {
+      const newExpanded = new Set(prev.expandedSubsections);
+      if (newExpanded.has(subsectionId)) {
+        newExpanded.delete(subsectionId);
+      } else {
+        newExpanded.add(subsectionId);
+      }
+      return { ...prev, expandedSubsections: newExpanded };
+    });
+  };
+
+  // Render section/subsection tree recursively
+  const renderSectionTree = (sectionId: string, depth: number = 0): React.ReactNode => {
+    const section = estimateData.sections[sectionId];
+    if (!section) return null;
+
+    const isSectionExpanded = editorState.expandedSections.has(sectionId);
+    const hasSubsections = section.subsectionIds && section.subsectionIds.length > 0;
+    const hasPositions = section.positionIds && section.positionIds.length > 0;
+    const paddingLeft = 8 + depth * 16; // 8px base + 16px per depth level
+
+    return (
+      <div
+        key={sectionId}
+        draggable={depth === 0}
+        onDragStart={(e) => {
+          if (depth === 0) {
+            setDraggedSectionId(sectionId);
+            e.dataTransfer.effectAllowed = 'move';
+          }
+        }}
+        onDragEnd={() => setDraggedSectionId(null)}
+        onDragOver={(e) => {
+          if (depth === 0) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+          }
+        }}
+        onDrop={(e) => {
+          if (depth === 0 && draggedSectionId && draggedSectionId !== sectionId) {
+            e.preventDefault();
+            handleSectionReorder(draggedSectionId, sectionId);
+            setDraggedSectionId(null);
+          }
+        }}
+        className={`${draggedSectionId === sectionId ? 'opacity-50' : ''}`}
+      >
+        <div
+          className={`flex items-center gap-1 pr-2 py-1.5 text-sm rounded hover:bg-gray-50 ${
+            editorState.selectedItemId === sectionId ? 'bg-blue-50 text-blue-700' : ''
+          }`}
+          style={{ paddingLeft: `${paddingLeft}px` }}
+        >
+          {depth === 0 && (
+            <GripVertical className="w-4 h-4 text-gray-400 cursor-grab flex-shrink-0" />
+          )}
+          <button
+            onClick={() => {
+              toggleExpandSection(sectionId);
+              selectItem(sectionId, 'section');
+            }}
+            className="flex items-center gap-1 flex-1 text-left"
+          >
+            {(hasSubsections || hasPositions) ? (
+              isSectionExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
+            ) : (
+              <span className="w-4" />
+            )}
+            <span className="truncate">{section.ordinalNumber}. {section.name}</span>
+          </button>
+        </div>
+
+        {isSectionExpanded && (
+          <>
+            {/* Subsections */}
+            {section.subsectionIds?.map(subsectionId => renderSectionTree(subsectionId, depth + 1))}
+
+            {/* Positions in this section */}
+            {section.positionIds.map((posId, posIndex) => {
+              const position = estimateData.positions[posId];
+              if (!position) return null;
+              return (
+                <button
+                  key={posId}
+                  onClick={() => selectItem(posId, 'position')}
+                  className={`w-full flex items-center gap-1 pr-2 py-1 text-xs text-left rounded hover:bg-gray-50 ${
+                    editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
+                  }`}
+                  style={{ paddingLeft: `${paddingLeft + 24}px` }}
+                >
+                  <FileText className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">d.{section.ordinalNumber}.{posIndex + 1} {position.base || position.name}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
   };
 
   // Select item
@@ -2225,557 +2367,449 @@ export const KosztorysEditorPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Header - eKosztorysowanie style */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {/* Home button */}
+      {/* Top Action Bar - new design */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* Powrót button */}
           <button
-            onClick={() => navigate('/construction/estimates')}
-            className="p-1.5 hover:bg-blue-500 rounded transition-colors"
-            title="Strona główna"
+            onClick={() => {
+              if (editorState.isDirty) {
+                setShowExitConfirmModal(true);
+              } else {
+                navigate('/construction/estimates');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
           >
-            <Home className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
+            Powrót
           </button>
 
-          {/* Logo */}
-          <div className="flex items-center">
-            <span className="text-lg font-light">e</span>
-            <span className="text-lg font-bold text-yellow-400">KOSZTORYS</span>
-            <span className="text-lg font-light">OWANIE</span>
-          </div>
-
-          {/* Current estimate dropdown */}
-          <div className="relative ml-4">
-            <button className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/30 rounded hover:bg-blue-500/50 text-sm">
-              <span className="max-w-[200px] truncate">{estimate?.settings.name || 'Kosztorys'}</span>
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Add new estimate */}
+          {/* Zapisz button */}
           <button
-            onClick={() => navigate('/construction/estimates/new')}
-            className="p-1.5 hover:bg-blue-500 rounded transition-colors"
-            title="Nowy kosztorys"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            <Plus className="w-5 h-5" />
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Zapisz
           </button>
-        </div>
 
-        {/* Right side icons */}
-        <div className="flex items-center gap-1">
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Pomoc">
-            <HelpCircle className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Zrzut ekranu">
-            <Camera className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Zakładki">
-            <Flag className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Historia schowka">
-            <Clipboard className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Profil użytkownika">
-            <User className="w-5 h-5" />
-          </button>
-          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Rozszerzenia">
-            <Puzzle className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar Row - matching eKosztorysowanie.pl exactly */}
-      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-0.5 flex-wrap">
-          {/* Kosztorys button - switches to Kosztorys view (no dropdown per 3.2.1) */}
-        <button
-          onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
-        >
-          <Menu className="w-4 h-4" />
-          Kosztorys
-        </button>
-
-        {/* Drukuj button - no icon per documentation line 151 */}
-        <button
-          onClick={() => setShowPrintDialog(true)}
-          className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-        >
-          Drukuj
-        </button>
-
-        <div className="w-px h-6 bg-gray-200 mx-1" />
-
-        {/* + Dział dropdown - 5 items matching screenshot */}
-        <div className="relative">
-          <button
-            onClick={() => setShowDzialDropdown(!showDzialDropdown)}
-            className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-          >
-            <Plus className="w-4 h-4" />
-            Dział
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showDzialDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-                + Dział
-              </button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-                + Poddział
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* KNR Pozycja - opens catalog browser in left panel with dropdown */}
-        <div className="relative">
-          <div className="flex">
+          {/* Widok dropdown */}
+          <div className="relative">
             <button
-              onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
-              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded-l ${
-                leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-              }`}
+              onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
             >
-              <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
-              Pozycja
-            </button>
-            <button
-              onClick={() => setShowKNRDropdown(!showKNRDropdown)}
-              className={`px-1 py-1.5 text-sm rounded-r border-l ${
-                leftPanelMode === 'catalog' ? 'bg-blue-600 text-white border-blue-500' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'
-              }`}
-            >
+              <Eye className="w-4 h-4" />
+              Widok
               <ChevronDown className="w-3 h-3" />
             </button>
           </div>
-          {showKNRDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+
+          {/* Weryfikuj button */}
+          <button
+            onClick={handleSprawdzKosztorys}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
+          >
+            <Sparkles className="w-4 h-4" />
+            Weryfikuj
+          </button>
+        </div>
+
+        {/* Right side - unsaved changes indicator */}
+        <div className="flex items-center gap-2">
+          {editorState.isDirty && (
+            <span className="text-sm text-amber-600 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" />
+              Niezapisane zmiany
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Toolbar Row 1 - always visible */}
+      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-0.5 flex-wrap">
+          {/* Kosztorys button - switches to Kosztorys view */}
+          <button
+            onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
+          >
+            <Menu className="w-4 h-4" />
+            Kosztorys
+          </button>
+
+          {/* Drukuj button */}
+          <button
+            onClick={() => setShowPrintDialog(true)}
+            className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Drukuj
+          </button>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
+          {/* + Dział dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDzialDropdown(!showDzialDropdown)}
+              className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <Plus className="w-4 h-4" />
+              Dział
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showDzialDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                  + Dział
+                </button>
+                <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                  + Poddział
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* KNR Pozycja dropdown */}
+          <div className="relative">
+            <div className="flex">
               <button
-                onClick={() => { setLeftPanelMode('catalog'); setShowKNRDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
+                className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded-l ${
+                  leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                }`}
               >
                 <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
                 Pozycja
               </button>
               <button
-                onClick={() => { handleAddUncataloguedPosition(); setShowKNRDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                onClick={() => setShowKNRDropdown(!showKNRDropdown)}
+                className={`px-1 py-1.5 text-sm rounded-r border-l ${
+                  leftPanelMode === 'catalog' ? 'bg-blue-600 text-white border-blue-500' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'
+                }`}
               >
-                Wstaw pozycję nieskatalogowaną
+                <ChevronDown className="w-3 h-3" />
               </button>
             </div>
-          )}
-        </div>
-
-        {/* Nakład dropdown - per documentation 3.2.4 uses 📋 clipboard icon */}
-        <div className="relative">
-          <button
-            onClick={() => setShowNakladDropdown(!showNakladDropdown)}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemType === 'position' ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Clipboard className="w-4 h-4" />
-            Nakład
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showNakladDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => {
-                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
-                    handleAddResource(editorState.selectedItemId, 'labor');
-                  }
-                  setShowNakladDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Robocizna
-              </button>
-              <button
-                onClick={() => {
-                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
-                    handleAddResource(editorState.selectedItemId, 'material');
-                  }
-                  setShowNakladDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Materiały
-              </button>
-              <button
-                onClick={() => {
-                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
-                    handleAddResource(editorState.selectedItemId, 'equipment');
-                  }
-                  setShowNakladDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Sprzęt
-              </button>
-              <button
-                onClick={() => {
-                  // Odpady (waste) - would need new resource type
-                  setShowNakladDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Odpady
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Uzupełnij nakłady dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowUzupelnijDropdown(!showUzupelnijDropdown)}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              Object.keys(estimateData.positions).length > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-            }`}
-            disabled={Object.keys(estimateData.positions).length === 0}
-          >
-            Uzupełnij nakłady
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showUzupelnijDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z bazy', 'success'); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Uzupełnij z bazy normatywnej
-              </button>
-              <button
-                onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z KNR', 'success'); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Uzupełnij z katalogów KNR
-              </button>
-              <div className="border-t border-gray-200">
+            {showKNRDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <button
-                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono brakujące nakłady', 'success'); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  onClick={() => { setLeftPanelMode('catalog'); setShowKNRDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                 >
-                  Uzupełnij tylko brakujące
+                  <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
+                  Pozycja
                 </button>
                 <button
-                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Zastąpiono wszystkie nakłady', 'success'); }}
+                  onClick={() => { handleAddUncataloguedPosition(); setShowKNRDropdown(false); }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  Zastąp wszystkie nakłady
+                  Wstaw pozycję nieskatalogowaną
                 </button>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="w-px h-6 bg-gray-200 mx-1" />
-
-        {/* Ceny - opens dialog */}
-        <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">
-          Ceny
-        </button>
-
-        {/* Komentarze dropdown - matching eKosztorysowanie exactly */}
-        <div className="relative">
-          <button
-            onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Komentarze
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showKomentarzeDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Wszystkie komentarze
-              </button>
-              <button
-                onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Wstaw komentarz do...
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="w-px h-6 bg-gray-200 mx-1" />
-
-        {/* Usuń dropdown - with dynamic label based on selected item */}
-        <div className="relative">
-          <button
-            onClick={() => editorState.selectedItemId && setShowUsunDropdown(!showUsunDropdown)}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Trash2 className="w-4 h-4" />
-            Usuń
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showUsunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => {
-                  if (editorState.selectedItemId && editorState.selectedItemType) {
-                    if (confirm('Czy na pewno chcesz usunąć ten element?')) {
-                      handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType);
-                    }
-                  }
-                  setShowUsunDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
-              >
-                {editorState.selectedItemType === 'section' ? 'Usuń dział' :
-                 editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
-                 editorState.selectedItemType === 'resource' ? 'Usuń nakład' : 'Usuń zaznaczony element'}
-              </button>
-              {editorState.selectedItemType === 'position' && (
+          {/* Nakład dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNakladDropdown(!showNakladDropdown)}
+              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+                editorState.selectedItemType === 'position' ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              <Clipboard className="w-4 h-4" />
+              Nakład
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showNakladDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <button
                   onClick={() => {
                     if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
-                      if (confirm('Czy na pewno chcesz usunąć pozycję wraz z nakładami?')) {
-                        handleDeleteItem(editorState.selectedItemId, 'position');
-                      }
+                      handleAddResource(editorState.selectedItemId, 'labor');
                     }
-                    setShowUsunDropdown(false);
+                    setShowNakladDropdown(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  Usuń pozycję z nakładami
+                  Robocizna
                 </button>
-              )}
-              {editorState.selectedItemType === 'section' && (
                 <button
                   onClick={() => {
-                    // Delete section but keep positions
-                    setShowUsunDropdown(false);
-                    showNotificationMessage('Funkcja w przygotowaniu', 'error');
+                    if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                      handleAddResource(editorState.selectedItemId, 'material');
+                    }
+                    setShowNakladDropdown(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  Usuń dział (zachowaj pozycje)
+                  Materiały
                 </button>
-              )}
-            </div>
-          )}
-        </div>
+                <button
+                  onClick={() => {
+                    if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                      handleAddResource(editorState.selectedItemId, 'equipment');
+                    }
+                    setShowNakladDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Sprzęt
+                </button>
+                <button
+                  onClick={() => {
+                    setShowNakladDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Odpady
+                </button>
+              </div>
+            )}
+          </div>
 
-        {/* Przesuń dropdown - matching eKosztorysowanie with 6 options */}
-        <div className="relative">
-          <button
-            onClick={() => editorState.selectedItemId && setShowPrzesunDropdown(!showPrzesunDropdown)}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <MoveUp className="w-4 h-4" />
-            Przesuń
-            <ChevronDown className="w-3 h-3" />
+          {/* Uzupełnij dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowUzupelnijDropdown(!showUzupelnijDropdown)}
+              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+                Object.keys(estimateData.positions).length > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
+              }`}
+              disabled={Object.keys(estimateData.positions).length === 0}
+            >
+              Uzupełnij
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showUzupelnijDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z bazy', 'success'); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Uzupełnij z bazy normatywnej
+                </button>
+                <button
+                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z KNR', 'success'); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Uzupełnij z katalogów KNR
+                </button>
+                <div className="border-t border-gray-200">
+                  <button
+                    onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono brakujące nakłady', 'success'); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Uzupełnij tylko brakujące
+                  </button>
+                  <button
+                    onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Zastąpiono wszystkie nakłady', 'success'); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Zastąp wszystkie nakłady
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
+          {/* Ceny */}
+          <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">
+            Ceny
           </button>
-          {showPrzesunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <MoveUp className="w-4 h-4 text-gray-400" />
-                Przesuń pozycję w górę
-              </button>
-              <button
-                onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <MoveDown className="w-4 h-4 text-gray-400" />
-                Przesuń pozycję w dół
-              </button>
-              <button
-                onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-              >
-                <ArrowUpRight className="w-4 h-4 text-gray-400" />
-                Przesuń pozycję do pierwszego działu
-              </button>
-            </div>
-          )}
+
+          {/* Komentarze dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
+              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+                leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Komentarze
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showKomentarzeDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Wszystkie komentarze
+                </button>
+                <button
+                  onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Wstaw komentarz do...
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="w-px h-6 bg-gray-200 mx-1" />
-
-        {/* Kopiuj - 📋 clipboard icon per documentation */}
-        <button
-          onClick={() => {
-            if (editorState.selectedItemId && editorState.selectedItemType) {
-              setEditorState(prev => ({
-                ...prev,
-                clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'copy' }
-              }));
-              showNotificationMessage('Skopiowano do schowka', 'success');
-            }
-          }}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-          }`}
-          disabled={!editorState.selectedItemId}
-        >
-          <Clipboard className="w-4 h-4" />
-          Kopiuj
-        </button>
-
-        {/* Wytnij */}
-        <button
-          onClick={() => {
-            if (editorState.selectedItemId && editorState.selectedItemType) {
-              setEditorState(prev => ({
-                ...prev,
-                clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'cut' }
-              }));
-              showNotificationMessage('Wycięto do schowka', 'success');
-            }
-          }}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-          }`}
-          disabled={!editorState.selectedItemId}
-        >
-          <Scissors className="w-4 h-4" />
-          Wytnij
-        </button>
-
-        {/* Wklej - 📋 clipboard icon per documentation, with state indicator per 3.2.12 */}
-        <button
-          onClick={handlePaste}
-          className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.clipboard ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-          }`}
-          disabled={!editorState.clipboard}
-        >
-          <Clipboard className="w-4 h-4" />
-          {editorState.clipboard?.action === 'cut' ? 'Wklej (wycięta pozycja)' :
-           editorState.clipboard?.action === 'copy' ? 'Wklej (pozycja)' : 'Wklej'}
-        </button>
-        </div>
-
-        {/* Right side of Row 2 - ✨ Sprawdź kosztorys | ⚙ Opcje widoku | ⚙ per documentation 3.3 */}
+        {/* Right side of Row 1 - Settings */}
         <div className="flex items-center gap-1">
-          <button
-            onClick={handleSprawdzKosztorys}
-            className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-          >
-            <Sparkles className="w-4 h-4" />
-            Sprawdź kosztorys
-          </button>
-        {/* Opcje widoku dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
-            className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-          >
-            <Settings className="w-4 h-4" />
-            Opcje widoku
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showOpcjeWidokuDropdown && (
-            <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <div className="p-2 border-b border-gray-200">
-                <p className="text-xs text-gray-500 font-medium mb-2">Rodzaj kosztorysu</p>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="radio"
-                    name="viewType"
-                    checked={estimate?.settings.type === 'contractor'}
-                    onChange={() => {
-                      if (estimate) {
-                        setEstimate({ ...estimate, settings: { ...estimate.settings, type: 'contractor' } });
-                      }
-                    }}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="text-sm text-gray-800">Kosztorys wykonawczy</span>
-                </label>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="radio"
-                    name="viewType"
-                    checked={estimate?.settings.type === 'investor'}
-                    onChange={() => {
-                      if (estimate) {
-                        setEstimate({ ...estimate, settings: { ...estimate.settings, type: 'investor' } });
-                      }
-                    }}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <span className="text-sm text-gray-800">Kosztorys inwestorski</span>
-                </label>
-              </div>
-              <div className="p-2">
-                <p className="text-xs text-gray-500 font-medium mb-2">Widok</p>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={viewOptions.showPrzemiar}
-                    onChange={(e) => setViewOptions(prev => ({ ...prev, showPrzemiar: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-800">Pokaż przedmiar</span>
-                </label>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={viewOptions.showNaklady}
-                    onChange={(e) => setViewOptions(prev => ({ ...prev, showNaklady: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-800">Pokaż nakłady</span>
-                </label>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={viewOptions.showCeny}
-                    onChange={(e) => setViewOptions(prev => ({ ...prev, showCeny: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-800">Pokaż ceny</span>
-                </label>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={viewOptions.showSumy}
-                    onChange={(e) => setViewOptions(prev => ({ ...prev, showSumy: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-800">Pokaż sumy</span>
-                </label>
-                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={viewOptions.compactView}
-                    onChange={(e) => setViewOptions(prev => ({ ...prev, compactView: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm text-gray-800">Widok kompaktowy</span>
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-
           <button onClick={() => setShowSettingsModal(true)} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Ustawienia">
             <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Toolbar Row 2 - shown only when item is selected */}
+      {editorState.selectedItemId && (
+        <div className="bg-gray-50 border-b border-gray-200 px-2 py-1 flex items-center">
+          <div className="flex items-center gap-0.5">
+            {/* Usuń dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUsunDropdown(!showUsunDropdown)}
+                className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+              >
+                <Trash2 className="w-4 h-4" />
+                Usuń
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {showUsunDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <button
+                    onClick={() => {
+                      if (editorState.selectedItemId && editorState.selectedItemType) {
+                        if (confirm('Czy na pewno chcesz usunąć ten element?')) {
+                          handleDeleteItem(editorState.selectedItemId, editorState.selectedItemType);
+                        }
+                      }
+                      setShowUsunDropdown(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
+                  >
+                    {editorState.selectedItemType === 'section' ? 'Usuń dział' :
+                     editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
+                     editorState.selectedItemType === 'resource' ? 'Usuń nakład' : 'Usuń zaznaczony element'}
+                  </button>
+                  {editorState.selectedItemType === 'position' && (
+                    <button
+                      onClick={() => {
+                        if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                          if (confirm('Czy na pewno chcesz usunąć pozycję wraz z nakładami?')) {
+                            handleDeleteItem(editorState.selectedItemId, 'position');
+                          }
+                        }
+                        setShowUsunDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Usuń pozycję z nakładami
+                    </button>
+                  )}
+                  {editorState.selectedItemType === 'section' && (
+                    <button
+                      onClick={() => {
+                        setShowUsunDropdown(false);
+                        showNotificationMessage('Funkcja w przygotowaniu', 'error');
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Usuń dział (zachowaj pozycje)
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Przesuń dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPrzesunDropdown(!showPrzesunDropdown)}
+                className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+              >
+                <MoveUp className="w-4 h-4" />
+                Przesuń
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {showPrzesunDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <button
+                    onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <MoveUp className="w-4 h-4 text-gray-400" />
+                    Przesuń pozycję w górę
+                  </button>
+                  <button
+                    onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <MoveDown className="w-4 h-4 text-gray-400" />
+                    Przesuń pozycję w dół
+                  </button>
+                  <button
+                    onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <ArrowUpRight className="w-4 h-4 text-gray-400" />
+                    Przesuń pozycję do pierwszego działu
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="w-px h-6 bg-gray-300 mx-1" />
+
+            {/* Kopiuj */}
+            <button
+              onClick={() => {
+                if (editorState.selectedItemId && editorState.selectedItemType) {
+                  setEditorState(prev => ({
+                    ...prev,
+                    clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'copy' }
+                  }));
+                  showNotificationMessage('Skopiowano do schowka', 'success');
+                }
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <Clipboard className="w-4 h-4" />
+              Kopiuj
+            </button>
+
+            {/* Wytnij */}
+            <button
+              onClick={() => {
+                if (editorState.selectedItemId && editorState.selectedItemType) {
+                  setEditorState(prev => ({
+                    ...prev,
+                    clipboard: { id: editorState.selectedItemId!, type: editorState.selectedItemType!, action: 'cut' }
+                  }));
+                  showNotificationMessage('Wycięto do schowka', 'success');
+                }
+              }}
+              className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <Scissors className="w-4 h-4" />
+              Wytnij
+            </button>
+
+            {/* Wklej */}
+            <button
+              onClick={handlePaste}
+              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+                editorState.clipboard ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
+              }`}
+              disabled={!editorState.clipboard}
+            >
+              <Clipboard className="w-4 h-4" />
+              {editorState.clipboard?.action === 'cut' ? 'Wklej (wycięta)' :
+               editorState.clipboard?.action === 'copy' ? 'Wklej (kopia)' : 'Wklej'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Click outside to close all dropdowns */}
       {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showOpcjeWidokuDropdown) && (
@@ -2845,45 +2879,9 @@ export const KosztorysEditorPage: React.FC = () => {
                   </button>
 
                   {/* Sections tree - only shown when root is expanded */}
-                  {editorState.treeRootExpanded !== false && estimateData.root.sectionIds.map(sectionId => {
-                    const section = estimateData.sections[sectionId];
-                    if (!section) return null;
-                    const isSectionExpanded = editorState.expandedSections.has(sectionId);
-
-                    return (
-                      <div key={sectionId}>
-                        <button
-                          onClick={() => {
-                            toggleExpandSection(sectionId);
-                            selectItem(sectionId, 'section');
-                          }}
-                          className={`w-full flex items-center gap-1 pl-4 pr-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 ${
-                            editorState.selectedItemId === sectionId ? 'bg-blue-50 text-blue-700' : ''
-                          }`}
-                        >
-                          {isSectionExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          <span className="truncate">{section.ordinalNumber} {section.name}</span>
-                        </button>
-
-                        {isSectionExpanded && section.positionIds.map((posId, posIndex) => {
-                          const position = estimateData.positions[posId];
-                          if (!position) return null;
-                          return (
-                            <button
-                              key={posId}
-                              onClick={() => selectItem(posId, 'position')}
-                              className={`w-full flex items-center gap-1 pl-10 pr-2 py-1 text-xs text-left rounded hover:bg-gray-50 ${
-                                editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
-                              }`}
-                            >
-                              <FileText className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">d.{section.ordinalNumber}.{posIndex + 1} {position.base || position.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
+                  {editorState.treeRootExpanded !== false && estimateData.root.sectionIds.map(sectionId =>
+                    renderSectionTree(sectionId, 0)
+                  )}
 
                   {/* Root positions - only shown when root is expanded */}
                   {editorState.treeRootExpanded !== false && estimateData.root.positionIds.map((posId, index) => {
@@ -2909,25 +2907,6 @@ export const KosztorysEditorPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Quick add buttons */}
-                <div className="p-2 border-t border-gray-200">
-                  <div className="space-y-1">
-                    <button
-                      onClick={handleAddSection}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-lg border border-dashed border-gray-300"
-                    >
-                      <FolderPlus className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-600">Dodaj dział</span>
-                    </button>
-                    <button
-                      onClick={() => handleAddPosition(null)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-lg border border-dashed border-gray-300"
-                    >
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-600">Dodaj pozycję</span>
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -4246,41 +4225,6 @@ export const KosztorysEditorPage: React.FC = () => {
         {/* Properties panel - now integrated into left panel */}
       </div>
 
-      {/* Footer with totals */}
-      <div className="bg-white border-t border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Zapisz
-          </button>
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            <Download className="w-4 h-4" />
-            Eksport CSV
-          </button>
-          {editorState.isDirty && (
-            <span className="text-sm text-amber-600 flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" />
-              Niezapisane zmiany
-            </span>
-          )}
-        </div>
-        <div className="text-right">
-          <span className="text-sm text-gray-500 mr-4">
-            Wartość kosztorysu:
-          </span>
-          <span className="text-xl font-bold text-gray-900">
-            {formatCurrency(calculationResult?.totalValue || 0)}
-          </span>
-        </div>
-      </div>
-
       {/* Alerts bar - matching eKosztorysowanie "0 z 13" style with visual slider */}
       <div className="bg-gray-50 border-t border-gray-200 px-4 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-3 flex-1">
@@ -4779,6 +4723,41 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
       )}
 
+
+      {/* Exit Confirmation Modal */}
+      {showExitConfirmModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Zapisz przed wyjściem?</h2>
+              <p className="text-sm text-gray-600 mb-6">
+                Masz niezapisane zmiany. Co chcesz zrobić?
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowExitConfirmModal(false);
+                    navigate('/construction/estimates');
+                  }}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
+                >
+                  Nie zapisuj
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleSave();
+                    setShowExitConfirmModal(false);
+                    navigate('/construction/estimates');
+                  }}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Zapisz i wyjdź
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ustawienia (Settings) Modal - matching eKosztorysowanie exactly */}
       {showSettingsModal && estimate && (
