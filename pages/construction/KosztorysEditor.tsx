@@ -14,7 +14,7 @@ import {
   MessageSquare, Search, Filter, MoreHorizontal, Loader2, Monitor,
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
   GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
-  HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles
+  HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -2871,9 +2871,9 @@ export const KosztorysEditorPage: React.FC = () => {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 bg-gray-100 overflow-hidden">
         {/* Left panel - Navigation and Properties */}
-        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+        <div className="shrink-0 bg-white w-[356px] h-full relative border-r border-gray-400 flex flex-col">
           {/* Tab headers - Przegląd / Właściwości */}
           <div className="flex border-b border-gray-200">
             <button
@@ -3392,8 +3392,8 @@ export const KosztorysEditorPage: React.FC = () => {
                     .map((page, index) => (
                     <div
                       key={page.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-grab transition-all ${
-                        page.enabled ? 'border-gray-300 bg-white' : 'border-gray-200 bg-gray-50 opacity-60'
+                      className={`outline-none bg-white hover:bg-gray-50 flex items-center gap-2 rounded p-2 border focus-visible:border-gray-600 text-xs text-left cursor-grab transition-all ${
+                        page.enabled ? 'border-gray-300' : 'border-gray-200 bg-gray-50 opacity-60'
                       } ${draggedExportPageId === page.id ? 'opacity-50 scale-95' : ''}`}
                       draggable
                       onDragStart={(e) => {
@@ -3437,10 +3437,10 @@ export const KosztorysEditorPage: React.FC = () => {
                       {page.canEdit && (
                         <button
                           onClick={() => setLeftPanelMode('titlePageEditor')}
-                          className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
+                          className="flex items-center justify-center rounded font-semibold whitespace-nowrap focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none transition-colors shrink-0 border border-transparent hover:bg-gray-900 hover:bg-opacity-20 rounded-full h-7 w-7"
                           title="Edytuj stronę tytułową"
                         >
-                          <Settings className="w-3 h-3 text-gray-400" />
+                          <SquarePen className="w-4 h-4" />
                         </button>
                       )}
                       <button
@@ -3522,7 +3522,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="number"
                           value={catalogQuantity}
                           onChange={e => setCatalogQuantity(e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div className="w-16">
@@ -3537,13 +3537,13 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="number"
                           value={catalogMultiplier}
                           onChange={e => setCatalogMultiplier(e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                     </div>
                     <button
                       onClick={() => insertFromCatalog(selectedCatalogItem)}
-                      className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="flex items-center justify-center font-semibold whitespace-nowrap focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none transition-colors bg-blue-600 hover:bg-blue-700 text-white aria-disabled:bg-opacity-30 text-sm gap-2.5 leading-tight px-2.5 py-1.5 [&_svg]:w-4 [&_svg]:h-4 rounded w-full mt-2"
                     >
                       Wstaw
                     </button>
@@ -3658,7 +3658,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         value={titlePageData.title}
                         onChange={e => setTitlePageData(prev => ({ ...prev, title: e.target.value }))}
                         placeholder="Tytuł kosztorysu"
-                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                        className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                       />
                     </div>
                   )}
@@ -3723,15 +3723,15 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="text"
                           value={titlePageData.companyName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, companyName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Adres</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres podmiotu</label>
                         <textarea
                           value={titlePageData.companyAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, companyAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full resize-none"
                           rows={2}
                         />
                       </div>
@@ -3756,15 +3756,15 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="text"
                           value={titlePageData.orderName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, orderName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Adres budowy</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres obiektu budowlanego</label>
                         <textarea
                           value={titlePageData.orderAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, orderAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full resize-none"
                           rows={2}
                         />
                       </div>
@@ -3789,15 +3789,15 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="text"
                           value={titlePageData.clientName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, clientName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Adres</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres zamawiającego</label>
                         <textarea
                           value={titlePageData.clientAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, clientAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full resize-none"
                           rows={2}
                         />
                       </div>
@@ -3822,7 +3822,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="text"
                           value={titlePageData.contractorName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, contractorName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
@@ -3830,7 +3830,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         <textarea
                           value={titlePageData.contractorAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, contractorAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full resize-none"
                           rows={2}
                         />
                       </div>
@@ -3841,7 +3841,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           value={titlePageData.industry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, industry: e.target.value }))}
                           placeholder="np. Budowlana, Elektryczna"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
@@ -3851,7 +3851,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           value={titlePageData.contractorNIP}
                           onChange={e => setTitlePageData(prev => ({ ...prev, contractorNIP: e.target.value }))}
                           placeholder="np. 123-456-78-90"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                     </div>
@@ -3876,14 +3876,14 @@ export const KosztorysEditorPage: React.FC = () => {
                           value={titlePageData.preparedBy}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedBy: e.target.value }))}
                           placeholder="Imię i nazwisko"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                         <input
                           type="text"
                           value={titlePageData.preparedByIndustry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedByIndustry: e.target.value }))}
                           placeholder="Branża"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div className="space-y-2">
@@ -3893,14 +3893,14 @@ export const KosztorysEditorPage: React.FC = () => {
                           value={titlePageData.checkedBy}
                           onChange={e => setTitlePageData(prev => ({ ...prev, checkedBy: e.target.value }))}
                           placeholder="Imię i nazwisko"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                         <input
                           type="text"
                           value={titlePageData.checkedByIndustry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, checkedByIndustry: e.target.value }))}
                           placeholder="Branża"
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                     </div>
@@ -3924,7 +3924,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="date"
                           value={titlePageData.preparedDate}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedDate: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                       <div>
@@ -3933,7 +3933,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="date"
                           value={titlePageData.approvedDate}
                           onChange={e => setTitlePageData(prev => ({ ...prev, approvedDate: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                          className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
                     </div>
