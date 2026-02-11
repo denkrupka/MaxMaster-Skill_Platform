@@ -55,7 +55,7 @@ import type {
 
 // View mode types - extended with all views from eKosztorysowanie
 type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia' | 'pozycje';
-type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments' | 'titlePageEditor';
+type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments' | 'titlePageEditor' | 'settings';
 type ZestawieniaTab = 'robocizna' | 'materialy' | 'sprzet';
 
 // Title page editor data structure - matching eKosztorysowanie exactly
@@ -2655,7 +2655,11 @@ export const KosztorysEditorPage: React.FC = () => {
 
         {/* Right side of Row 1 - Settings */}
         <div className="flex items-center gap-1">
-          <button onClick={() => setShowSettingsModal(true)} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Ustawienia">
+          <button
+            onClick={() => setLeftPanelMode('settings')}
+            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+            title="Ustawienia"
+          >
             <Settings className="w-4 h-4" />
           </button>
         </div>
@@ -3919,6 +3923,188 @@ export const KosztorysEditorPage: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Settings panel */}
+            {leftPanelMode === 'settings' && estimate && (
+              <div className="p-3 flex flex-col h-full overflow-y-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">Ustawienia kosztorysu</h3>
+                  <button onClick={() => setLeftPanelMode('overview')} className="text-gray-400 hover:text-gray-600">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  {/* Nazwa kosztorysu */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Nazwa kosztorysu</label>
+                    <input
+                      type="text"
+                      value={estimate.settings.name}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, name: e.target.value }
+                      } : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+
+                  {/* Rodzaj */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-2">Rodzaj</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="settingsEstimateType"
+                          value="contractor"
+                          checked={estimate.settings.type === 'contractor'}
+                          onChange={() => setEstimate(prev => prev ? {
+                            ...prev,
+                            settings: { ...prev.settings, type: 'contractor' }
+                          } : null)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm text-gray-800">Wykonawczy</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="settingsEstimateType"
+                          value="investor"
+                          checked={estimate.settings.type === 'investor'}
+                          onChange={() => setEstimate(prev => prev ? {
+                            ...prev,
+                            settings: { ...prev.settings, type: 'investor' }
+                          } : null)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm text-gray-800">Inwestorski</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Kalkulacje */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Kalkulacje</label>
+                    <select
+                      value={estimate.settings.calculationTemplate}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, calculationTemplate: e.target.value }
+                      } : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="overhead-on-top">Narzuty „od góry" - liczenie od kosztów bezpośrednich</option>
+                      <option value="overhead-cascade">Narzuty kaskadowe - liczenie od sumy poprzednich</option>
+                      <option value="simple">Uproszczona - bez narzutów</option>
+                    </select>
+                  </div>
+
+                  {/* Opis */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Opis</label>
+                    <textarea
+                      value={estimate.settings.description}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, description: e.target.value }
+                      } : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                      rows={3}
+                      placeholder="Dodaj opis kosztorysu..."
+                    />
+                  </div>
+
+                  {/* Dokładność */}
+                  <div className="border border-gray-200 rounded-lg p-3">
+                    <h4 className="text-sm font-medium text-gray-800 mb-2">Dokładność</h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Normy</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, norms: Math.max(0, prev.settings.precision.norms - 1) }
+                              }
+                            } : null)}
+                            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                          <span className="w-6 text-center text-sm">{estimate.settings.precision.norms}</span>
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, norms: Math.min(10, prev.settings.precision.norms + 1) }
+                              }
+                            } : null)}
+                            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Wart</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, unitValues: Math.max(0, prev.settings.precision.unitValues - 1) }
+                              }
+                            } : null)}
+                            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                          <span className="w-6 text-center text-sm">{estimate.settings.precision.unitValues}</span>
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, unitValues: Math.min(10, prev.settings.precision.unitValues + 1) }
+                              }
+                            } : null)}
+                            className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer buttons */}
+                <div className="pt-3 border-t border-gray-200 flex gap-2 mt-auto">
+                  <button
+                    onClick={() => setLeftPanelMode('overview')}
+                    className="flex-1 px-3 py-2 text-sm text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Anuluj
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditorState(prev => ({ ...prev, isDirty: true }));
+                      setLeftPanelMode('overview');
+                      showNotificationMessage('Ustawienia zapisane', 'success');
+                    }}
+                    className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Zapisz ustawienia
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -4754,357 +4940,6 @@ export const KosztorysEditorPage: React.FC = () => {
                   Zapisz i wyjdź
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Ustawienia (Settings) Modal - matching eKosztorysowanie exactly */}
-      {showSettingsModal && estimate && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white">
-              <h2 className="text-lg font-bold text-gray-900">Ustawienia kosztorysu</h2>
-              <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-6">
-              {/* Nazwa kosztorysu */}
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-1">Nazwa kosztorysu</label>
-                <input
-                  type="text"
-                  value={estimate.settings.name}
-                  onChange={(e) => setEstimate(prev => prev ? {
-                    ...prev,
-                    settings: { ...prev.settings, name: e.target.value }
-                  } : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                />
-              </div>
-
-              {/* Rodzaj */}
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">Rodzaj</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="estimateType"
-                      value="contractor"
-                      checked={estimate.settings.type === 'contractor'}
-                      onChange={() => setEstimate(prev => prev ? {
-                        ...prev,
-                        settings: { ...prev.settings, type: 'contractor' }
-                      } : null)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-800">Wykonawczy</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="estimateType"
-                      value="investor"
-                      checked={estimate.settings.type === 'investor'}
-                      onChange={() => setEstimate(prev => prev ? {
-                        ...prev,
-                        settings: { ...prev.settings, type: 'investor' }
-                      } : null)}
-                      className="w-4 h-4 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-800">Inwestorski</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Kalkulacje - template dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-1">Kalkulacje</label>
-                <select
-                  value={estimate.settings.calculationTemplate}
-                  onChange={(e) => setEstimate(prev => prev ? {
-                    ...prev,
-                    settings: { ...prev.settings, calculationTemplate: e.target.value }
-                  } : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                >
-                  <option value="overhead-on-top">Narzuty „od góry" - liczenie od kosztów bezpośrednich</option>
-                  <option value="overhead-cascade">Narzuty kaskadowe - liczenie od sumy poprzednich</option>
-                  <option value="simple">Uproszczona - bez narzutów</option>
-                </select>
-              </div>
-
-              {/* Opis */}
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-1">Opis</label>
-                <textarea
-                  value={estimate.settings.description}
-                  onChange={(e) => setEstimate(prev => prev ? {
-                    ...prev,
-                    settings: { ...prev.settings, description: e.target.value }
-                  } : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
-                  rows={3}
-                  placeholder="Dodaj opis kosztorysu..."
-                />
-              </div>
-
-              {/* Dokładność (Precision) section */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-800 mb-3">Dokładność</h3>
-                <div className="space-y-3">
-                  {/* Normy */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Normy</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, norms: Math.max(0, prev.settings.precision.norms - 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-sm">{estimate.settings.precision.norms}</span>
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, norms: Math.min(10, prev.settings.precision.norms + 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Wartości */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Wart</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, unitValues: Math.max(0, prev.settings.precision.unitValues - 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-sm">{estimate.settings.precision.unitValues}</span>
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, unitValues: Math.min(10, prev.settings.precision.unitValues + 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Nakłady */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Nakła</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, resources: Math.max(0, prev.settings.precision.resources - 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-sm">{estimate.settings.precision.resources}</span>
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, resources: Math.min(10, prev.settings.precision.resources + 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Podsumowania */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Pods</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, positionBase: Math.max(0, prev.settings.precision.positionBase - 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-sm">{estimate.settings.precision.positionBase}</span>
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, positionBase: Math.min(10, prev.settings.precision.positionBase + 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Obmiary */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Obmi</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, measurements: Math.max(0, prev.settings.precision.measurements - 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-sm">{estimate.settings.precision.measurements}</span>
-                      <button
-                        onClick={() => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            precision: { ...prev.settings.precision, measurements: Math.min(10, prev.settings.precision.measurements + 1) }
-                          }
-                        } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Współczynniki norm section */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-800 mb-3">Współczynniki norm</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Robocizna</label>
-                    <input
-                      type="text"
-                      value={estimateData.root.factors.labor.toString().replace('.', ',')}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
-                        setEstimateData(prev => ({
-                          ...prev,
-                          root: { ...prev.root, factors: { ...prev.root.factors, labor: val } }
-                        }));
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Materiały</label>
-                    <input
-                      type="text"
-                      value={estimateData.root.factors.material.toString().replace('.', ',')}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
-                        setEstimateData(prev => ({
-                          ...prev,
-                          root: { ...prev.root, factors: { ...prev.root.factors, material: val } }
-                        }));
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Sprzęt</label>
-                    <input
-                      type="text"
-                      value={estimateData.root.factors.equipment.toString().replace('.', ',')}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value.replace(',', '.')) || 1;
-                        setEstimateData(prev => ({
-                          ...prev,
-                          root: { ...prev.root, factors: { ...prev.root.factors, equipment: val } }
-                        }));
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Odpady</label>
-                    <input
-                      type="text"
-                      value={estimateData.root.factors.waste.toString().replace('.', ',')}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value.replace(',', '.')) || 0;
-                        setEstimateData(prev => ({
-                          ...prev,
-                          root: { ...prev.root, factors: { ...prev.root.factors, waste: val } }
-                        }));
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-gray-200 flex justify-end gap-3 sticky bottom-0 bg-white">
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                Anuluj
-              </button>
-              <button
-                onClick={() => {
-                  setEditorState(prev => ({ ...prev, isDirty: true }));
-                  setShowSettingsModal(false);
-                  showNotificationMessage('Ustawienia zapisane', 'success');
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Zapisz ustawienia
-              </button>
             </div>
           </div>
         </div>
