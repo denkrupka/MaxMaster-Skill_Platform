@@ -3184,4 +3184,5 @@ export interface KosztorysEditorState {
   } | null;
   isDirty: boolean;
   lastSaved: string | null;
+  treeRootExpanded?: boolean;
 }

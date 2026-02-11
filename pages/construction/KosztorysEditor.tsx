@@ -13,7 +13,8 @@ import {
   Calculator, Users, Package, Wrench, Percent, DollarSign,
   MessageSquare, Search, Filter, MoreHorizontal, Loader2, Monitor,
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
-  GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3
+  GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
+  HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -57,7 +58,7 @@ type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia
 type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments' | 'titlePageEditor';
 type ZestawieniaTab = 'robocizna' | 'materialy' | 'sprzet';
 
-// Title page editor data structure
+// Title page editor data structure - matching eKosztorysowanie exactly
 interface TitlePageData {
   title: string;
   hideManHourRate: boolean;
@@ -71,6 +72,7 @@ interface TitlePageData {
   clientAddress: string;
   contractorName: string;
   contractorAddress: string;
+  contractorNIP: string;  // NIP wykonawcy
   industry: string;
   preparedBy: string;
   preparedByIndustry: string;
@@ -78,6 +80,11 @@ interface TitlePageData {
   checkedByIndustry: string;
   preparedDate: string;
   approvedDate: string;
+  // Stawki section
+  stawkaRobocizny: string;
+  kosztyPosrednie: string;
+  zysk: string;
+  kosztyZakupu: string;
 }
 
 // Export page types for print configuration
@@ -247,10 +254,10 @@ const RESOURCE_TYPE_CONFIG: Record<ExtendedResourceType, {
   bgColor: string;
   icon: React.FC<{ className?: string }>;
 }> = {
-  labor: { label: 'Robocizna', shortLabel: 'R', color: 'text-blue-700', bgColor: 'bg-blue-100', icon: Users },
-  material: { label: 'Materiał', shortLabel: 'M', color: 'text-green-700', bgColor: 'bg-green-100', icon: Package },
-  equipment: { label: 'Sprzęt', shortLabel: 'S', color: 'text-orange-700', bgColor: 'bg-orange-100', icon: Wrench },
-  waste: { label: 'Odpady', shortLabel: 'O', color: 'text-slate-700', bgColor: 'bg-slate-100', icon: Trash2 },
+  labor: { label: 'Robocizna', shortLabel: 'R', color: 'text-yellow-700', bgColor: 'bg-[#FCD34D]', icon: Users },
+  material: { label: 'Materiał', shortLabel: 'M', color: 'text-blue-700', bgColor: 'bg-[#60A5FA]', icon: Package },
+  equipment: { label: 'Sprzęt', shortLabel: 'S', color: 'text-emerald-700', bgColor: 'bg-[#34D399]', icon: Wrench },
+  waste: { label: 'Odpady', shortLabel: 'O', color: 'text-gray-800', bgColor: 'bg-gray-100', icon: Trash2 },
 };
 
 // Export template types
@@ -319,6 +326,7 @@ const initialEditorState: KosztorysEditorState = {
   clipboard: null,
   isDirty: false,
   lastSaved: null,
+  treeRootExpanded: true,
 };
 
 // Empty estimate data
@@ -426,8 +434,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 }) => {
   if (!selectedItem || !selectedType) {
     return (
-      <div className="w-80 bg-white border-l border-slate-200 p-4">
-        <p className="text-slate-500 text-sm text-center mt-8">
+      <div className="w-80 bg-white border-l border-gray-200 p-4">
+        <p className="text-gray-500 text-sm text-center mt-8">
           Wybierz element na kosztorysie, aby wyświetlić jego właściwości
         </p>
       </div>
@@ -437,64 +445,64 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const renderSectionProperties = (section: KosztorysSection) => (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa działu</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa działu</label>
         <input
           type="text"
           value={section.name}
           onChange={e => onUpdate({ name: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">Opis</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Opis</label>
         <textarea
           value={section.description}
           onChange={e => onUpdate({ description: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           rows={3}
         />
       </div>
-      <div className="pt-4 border-t border-slate-200">
-        <h4 className="text-sm font-medium text-slate-700 mb-2">Współczynniki działu</h4>
+      <div className="pt-4 border-t border-gray-200">
+        <h4 className="text-sm font-medium text-gray-800 mb-2">Współczynniki działu</h4>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs text-slate-500">R (robocizna)</label>
+            <label className="block text-xs text-gray-500">R (robocizna)</label>
             <input
               type="number"
               step="0.01"
               value={section.factors.labor}
               onChange={e => onUpdate({ factors: { ...section.factors, labor: parseFloat(e.target.value) || 1 } })}
-              className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">M (materiały)</label>
+            <label className="block text-xs text-gray-500">M (materiały)</label>
             <input
               type="number"
               step="0.01"
               value={section.factors.material}
               onChange={e => onUpdate({ factors: { ...section.factors, material: parseFloat(e.target.value) || 1 } })}
-              className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">S (sprzęt)</label>
+            <label className="block text-xs text-gray-500">S (sprzęt)</label>
             <input
               type="number"
               step="0.01"
               value={section.factors.equipment}
               onChange={e => onUpdate({ factors: { ...section.factors, equipment: parseFloat(e.target.value) || 1 } })}
-              className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-500">Odpady %</label>
+            <label className="block text-xs text-gray-500">Odpady %</label>
             <input
               type="number"
               step="0.1"
               value={section.factors.waste}
               onChange={e => onUpdate({ factors: { ...section.factors, waste: parseFloat(e.target.value) || 0 } })}
-              className="w-full px-2 py-1 border border-slate-300 rounded text-sm"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
             />
           </div>
         </div>
@@ -505,34 +513,34 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const renderPositionProperties = (position: KosztorysPosition) => (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">Podstawa (norma)</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Podstawa (norma)</label>
         <input
           type="text"
           value={position.base}
           onChange={e => onUpdate({ base: e.target.value, originBase: e.target.value })}
           placeholder="np. KNNR 5 0702-01"
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa nakładu</label>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa nakładu</label>
         <textarea
           value={position.name}
           onChange={e => onUpdate({ name: e.target.value })}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           rows={2}
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Jednostka</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Jednostka</label>
           <select
             value={position.unit.unitIndex}
             onChange={e => {
               const unit = UNITS_REFERENCE.find(u => u.index === e.target.value);
               if (unit) onUpdate({ unit: { label: unit.unit, unitIndex: unit.index } });
             }}
-            className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
           >
             {UNITS_REFERENCE.map(u => (
               <option key={u.index} value={u.index}>{u.unit} - {u.name}</option>
@@ -540,47 +548,47 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Mnożnik</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Mnożnik</label>
           <input
             type="number"
             step="0.01"
             value={position.multiplicationFactor}
             onChange={e => onUpdate({ multiplicationFactor: parseFloat(e.target.value) || 1 })}
-            className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+            className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
       </div>
 
       {calculationResult && (
-        <div className="pt-4 border-t border-slate-200 space-y-2">
-          <h4 className="text-sm font-medium text-slate-700">Podsumowanie pozycji</h4>
-          <div className="bg-slate-50 rounded-lg p-3 space-y-1 text-sm">
+        <div className="pt-4 border-t border-gray-200 space-y-2">
+          <h4 className="text-sm font-medium text-gray-800">Podsumowanie pozycji</h4>
+          <div className="bg-gray-50 rounded-lg p-3 space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-slate-500">Ilość:</span>
+              <span className="text-gray-500">Ilość:</span>
               <span className="font-medium">{formatNumber(calculationResult.quantity)} {position.unit.label}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Robocizna:</span>
+              <span className="text-gray-500">Robocizna:</span>
               <span className="font-medium">{formatCurrency(calculationResult.laborTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Materiały:</span>
+              <span className="text-gray-500">Materiały:</span>
               <span className="font-medium">{formatCurrency(calculationResult.materialTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Sprzęt:</span>
+              <span className="text-gray-500">Sprzęt:</span>
               <span className="font-medium">{formatCurrency(calculationResult.equipmentTotal)}</span>
             </div>
-            <div className="flex justify-between pt-2 border-t border-slate-200">
-              <span className="text-slate-600 font-medium">Koszty bezpośrednie:</span>
+            <div className="flex justify-between pt-2 border-t border-gray-200">
+              <span className="text-gray-600 font-medium">Koszty bezpośrednie:</span>
               <span className="font-bold">{formatCurrency(calculationResult.directCostsTotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-600 font-medium">Razem z narzutami:</span>
+              <span className="text-gray-600 font-medium">Razem z narzutami:</span>
               <span className="font-bold text-blue-600">{formatCurrency(calculationResult.totalWithOverheads)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-600 font-medium">Cena jednostkowa:</span>
+              <span className="text-gray-600 font-medium">Cena jednostkowa:</span>
               <span className="font-bold">{formatCurrency(calculationResult.unitCost)}</span>
             </div>
           </div>
@@ -597,47 +605,47 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${config.bgColor} ${config.color}`}>
             {config.shortLabel}
           </span>
-          <span className="text-sm font-medium text-slate-700">{config.label}</span>
+          <span className="text-sm font-medium text-gray-800">{config.label}</span>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa</label>
           <input
             type="text"
             value={resource.name}
             onChange={e => onUpdate({ name: e.target.value })}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Indeks</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Indeks</label>
           <input
             type="text"
             value={resource.originIndex.index}
             onChange={e => onUpdate({ originIndex: { ...resource.originIndex, index: e.target.value } })}
             placeholder="np. 999"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Norma</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Norma</label>
             <input
               type="number"
               step="0.0001"
               value={resource.norm.value}
               onChange={e => onUpdate({ norm: { ...resource.norm, value: parseFloat(e.target.value) || 0 } })}
-              className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Jednostka</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Jednostka</label>
             <select
               value={resource.unit.unitIndex}
               onChange={e => {
                 const unit = UNITS_REFERENCE.find(u => u.index === e.target.value);
                 if (unit) onUpdate({ unit: { label: unit.unit, unitIndex: unit.index } });
               }}
-              className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
             >
               {UNITS_REFERENCE.map(u => (
                 <option key={u.index} value={u.index}>{u.unit}</option>
@@ -647,23 +655,23 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Cena jednostkowa</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Cena jednostkowa</label>
             <input
               type="number"
               step="0.01"
               value={resource.unitPrice.value}
               onChange={e => onUpdate({ unitPrice: { ...resource.unitPrice, value: parseFloat(e.target.value) || 0 } })}
-              className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Współczynnik</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Współczynnik</label>
             <input
               type="number"
               step="0.01"
               value={resource.factor}
               onChange={e => onUpdate({ factor: parseFloat(e.target.value) || 1 })}
-              className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+              className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
             />
           </div>
         </div>
@@ -672,11 +680,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   return (
-    <div className="w-80 bg-white border-l border-slate-200 flex flex-col">
-      <div className="flex items-center justify-between p-3 border-b border-slate-200">
-        <h3 className="font-semibold text-slate-900">Właściwości</h3>
-        <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded">
-          <X className="w-4 h-4 text-slate-500" />
+    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200">
+        <h3 className="font-semibold text-gray-900">Właściwości</h3>
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4">
@@ -722,6 +730,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('kosztorys');
   const [leftPanelMode, setLeftPanelMode] = useState<LeftPanelMode>('overview');
   const [exportPages, setExportPages] = useState<ExportPage[]>(DEFAULT_EXPORT_PAGES);
+  const [draggedExportPageId, setDraggedExportPageId] = useState<string | null>(null);
   const [activeNavItem, setActiveNavItem] = useState<string>('kosztorysy');
 
   // Catalog browser state
@@ -735,7 +744,6 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
   const [showNakladDropdown, setShowNakladDropdown] = useState(false);
   const [showKNRDropdown, setShowKNRDropdown] = useState(false);
-  const [showViewModeDropdown, setShowViewModeDropdown] = useState(false);
   const [showKomentarzeDropdown, setShowKomentarzeDropdown] = useState(false);
   const [showUsunDropdown, setShowUsunDropdown] = useState(false);
   const [showPrzesunDropdown, setShowPrzesunDropdown] = useState(false);
@@ -760,7 +768,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
-  const [commentsFilter, setCommentsFilter] = useState<'all' | 'mine' | 'unresolved'>('all');
+  const [commentsFilter, setCommentsFilter] = useState<'all' | 'mine' | 'unresolved' | 'closed'>('all');
   const [commentsSearch, setCommentsSearch] = useState('');
   const [comments, setComments] = useState<KosztorysComment[]>([
     {
@@ -795,6 +803,31 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Alerts state
   const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
+  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string }[]>([]);
+
+  // Print dialog state
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [printSettings, setPrintSettings] = useState({
+    pages: 'all',
+    copies: 1,
+    orientation: 'portrait',
+    color: true,
+  });
+  const [printPreviewPage, setPrintPreviewPage] = useState(1);
+  const [printTotalPages, setPrintTotalPages] = useState(5);
+
+  // Opcje widoku dropdown state
+  const [showOpcjeWidokuDropdown, setShowOpcjeWidokuDropdown] = useState(false);
+  const [viewOptions, setViewOptions] = useState({
+    showPrzemiar: true,
+    showNaklady: true,
+    showCeny: true,
+    showSumy: true,
+    compactView: false,
+  });
+
+  // KNR dropdown state
+  const [showKNRDropdown, setShowKNRDropdown] = useState(false);
 
   // Title Page Editor state
   const [titlePageData, setTitlePageData] = useState<TitlePageData>({
@@ -810,6 +843,7 @@ export const KosztorysEditorPage: React.FC = () => {
     clientAddress: '',
     contractorName: '',
     contractorAddress: '',
+    contractorNIP: '',
     industry: '',
     preparedBy: '',
     preparedByIndustry: '',
@@ -817,6 +851,10 @@ export const KosztorysEditorPage: React.FC = () => {
     checkedByIndustry: '',
     preparedDate: '',
     approvedDate: '',
+    stawkaRobocizny: '',
+    kosztyPosrednie: '',
+    zysk: '',
+    kosztyZakupu: '',
   });
 
   // Title Page Editor section expand states
@@ -829,6 +867,7 @@ export const KosztorysEditorPage: React.FC = () => {
     contractor: true,
     participants: true,
     dates: true,
+    stawki: true,  // Ставки section
   });
 
   // Zestawienia (Summaries) tab state
@@ -1643,8 +1682,8 @@ export const KosztorysEditorPage: React.FC = () => {
         <div key={item.id}>
           <div
             className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
-              isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50'
-            } ${isPosition ? 'border border-slate-200' : ''}`}
+              isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+            } ${isPosition ? 'border border-gray-200' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={() => {
               if (hasChildren) {
@@ -1656,19 +1695,19 @@ export const KosztorysEditorPage: React.FC = () => {
             }}
           >
             {hasChildren ? (
-              <button className="p-0.5 -ml-1 hover:bg-slate-200 rounded flex-shrink-0">
+              <button className="p-0.5 -ml-1 hover:bg-gray-200 rounded flex-shrink-0">
                 {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               </button>
             ) : isPosition ? (
-              <FileText className="w-3 h-3 text-slate-400 flex-shrink-0 mt-0.5" />
+              <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
             ) : (
               <div className="w-4" />
             )}
             <div className="flex-1 min-w-0">
-              <div className={`font-mono ${isPosition ? 'text-blue-600' : 'text-slate-600'}`}>
+              <div className={`font-mono ${isPosition ? 'text-blue-600' : 'text-gray-600'}`}>
                 {item.code}
               </div>
-              <div className={`text-slate-500 ${level > 1 ? 'truncate' : ''}`} title={item.name}>
+              <div className={`text-gray-500 ${level > 1 ? 'truncate' : ''}`} title={item.name}>
                 {item.name}
               </div>
             </div>
@@ -1743,6 +1782,197 @@ export const KosztorysEditorPage: React.FC = () => {
     showNotificationMessage(`Dodano pozycję: ${catalogItem.code}`, 'success');
   };
 
+  // Add uncatalogued position (pozycja nieskatalogowana)
+  const handleAddUncataloguedPosition = () => {
+    setNewPositionForm({ base: '', name: '', unitIndex: '020', measurement: '' });
+    setShowAddPositionModal(true);
+  };
+
+  // Check estimate for errors (Sprawdź kosztorys)
+  const handleSprawdzKosztorys = () => {
+    const newAlerts: typeof alerts = [];
+
+    // Check all positions
+    Object.values(estimateData.positions).forEach((position, index) => {
+      // Check for empty name
+      if (!position.name.trim()) {
+        newAlerts.push({
+          id: `${position.id}-name`,
+          type: 'error',
+          message: `Pozycja ${index + 1}: Brak nazwy`,
+          positionId: position.id,
+        });
+      }
+
+      // Check for zero quantity
+      const posResult = calculationResult?.positions[position.id];
+      if (!posResult?.quantity || posResult.quantity === 0) {
+        newAlerts.push({
+          id: `${position.id}-qty`,
+          type: 'warning',
+          message: `Pozycja ${index + 1}: Przedmiar równy 0`,
+          positionId: position.id,
+        });
+      }
+
+      // Check resources for zero prices
+      position.resources.forEach((resource, resIndex) => {
+        if (resource.unitPrice.value === 0) {
+          newAlerts.push({
+            id: `${resource.id}-price`,
+            type: 'warning',
+            message: `Pozycja ${index + 1}, nakład ${resIndex + 1}: Cena zerowa`,
+            positionId: position.id,
+          });
+        }
+      });
+
+      // Check if position has no resources
+      if (position.resources.length === 0) {
+        newAlerts.push({
+          id: `${position.id}-nores`,
+          type: 'warning',
+          message: `Pozycja ${index + 1}: Brak nakładów`,
+          positionId: position.id,
+        });
+      }
+    });
+
+    setAlerts(newAlerts);
+    setAlertsCount({ current: 0, total: newAlerts.length });
+
+    if (newAlerts.length === 0) {
+      showNotificationMessage('Kosztorys nie zawiera błędów', 'success');
+    } else {
+      showNotificationMessage(`Znaleziono ${newAlerts.length} alertów`, 'error');
+    }
+  };
+
+  // Paste from clipboard
+  const handlePaste = () => {
+    if (!editorState.clipboard) return;
+
+    const { id, type, action } = editorState.clipboard;
+
+    if (type === 'position') {
+      const sourcePosition = estimateData.positions[id];
+      if (!sourcePosition) return;
+
+      // Create a copy of the position
+      const newPosition = {
+        ...sourcePosition,
+        id: `pos-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: action === 'cut' ? sourcePosition.name : `${sourcePosition.name} (kopia)`,
+        resources: sourcePosition.resources.map(r => ({
+          ...r,
+          id: `res-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        })),
+      };
+
+      // Add to data
+      const newData = { ...estimateData };
+      newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
+      newData.root = {
+        ...newData.root,
+        positionIds: [...newData.root.positionIds, newPosition.id],
+      };
+
+      // If cut, remove original
+      if (action === 'cut') {
+        delete newData.positions[id];
+        newData.root.positionIds = newData.root.positionIds.filter(pid => pid !== id);
+        // Also check sections
+        Object.keys(newData.sections).forEach(secId => {
+          if (newData.sections[secId].positionIds.includes(id)) {
+            newData.sections[secId] = {
+              ...newData.sections[secId],
+              positionIds: newData.sections[secId].positionIds.filter(pid => pid !== id),
+            };
+          }
+        });
+      }
+
+      updateEstimateData(newData);
+      setEditorState(prev => ({
+        ...prev,
+        clipboard: action === 'cut' ? null : prev.clipboard,
+        selectedItemId: newPosition.id,
+        selectedItemType: 'position',
+      }));
+
+      showNotificationMessage(action === 'cut' ? 'Pozycja przeniesiona' : 'Pozycja skopiowana', 'success');
+    } else if (type === 'section') {
+      const sourceSection = estimateData.sections[id];
+      if (!sourceSection) return;
+
+      const newSection = {
+        ...sourceSection,
+        id: `sec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: action === 'cut' ? sourceSection.name : `${sourceSection.name} (kopia)`,
+        positionIds: [],
+      };
+
+      // Copy positions too
+      const newPositions: Record<string, KosztorysPosition> = {};
+      sourceSection.positionIds.forEach(posId => {
+        const pos = estimateData.positions[posId];
+        if (pos) {
+          const newPosId = `pos-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          newPositions[newPosId] = {
+            ...pos,
+            id: newPosId,
+            resources: pos.resources.map(r => ({
+              ...r,
+              id: `res-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            })),
+          };
+          newSection.positionIds.push(newPosId);
+        }
+      });
+
+      const newData = { ...estimateData };
+      newData.sections = { ...newData.sections, [newSection.id]: newSection };
+      newData.positions = { ...newData.positions, ...newPositions };
+      newData.root = {
+        ...newData.root,
+        sectionIds: [...newData.root.sectionIds, newSection.id],
+      };
+
+      if (action === 'cut') {
+        delete newData.sections[id];
+        sourceSection.positionIds.forEach(posId => {
+          delete newData.positions[posId];
+        });
+        newData.root.sectionIds = newData.root.sectionIds.filter(sid => sid !== id);
+      }
+
+      updateEstimateData(newData);
+      setEditorState(prev => ({
+        ...prev,
+        clipboard: action === 'cut' ? null : prev.clipboard,
+        selectedItemId: newSection.id,
+        selectedItemType: 'section',
+      }));
+
+      showNotificationMessage(action === 'cut' ? 'Dział przeniesiony' : 'Dział skopiowany', 'success');
+    }
+  };
+
+  // Navigate to alert
+  const handleNavigateToAlert = (alertIndex: number) => {
+    if (alertIndex >= 0 && alertIndex < alerts.length) {
+      const alert = alerts[alertIndex];
+      setAlertsCount(prev => ({ ...prev, current: alertIndex }));
+      if (alert.positionId) {
+        selectItem(alert.positionId, 'position');
+        setEditorState(prev => ({
+          ...prev,
+          expandedPositions: new Set([...prev.expandedPositions, alert.positionId!]),
+        }));
+      }
+    }
+  };
+
   // Export to CSV
   const handleExportCSV = () => {
     if (!estimate || !calculationResult) return;
@@ -1799,7 +2029,7 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={position.id}>
         {/* Position row */}
         <tr
-          className={`border-b border-slate-200 hover:bg-slate-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+          className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
           onClick={() => selectItem(position.id, 'position')}
         >
           <td className="px-2 py-2 text-sm w-16">
@@ -1811,62 +2041,46 @@ export const KosztorysEditorPage: React.FC = () => {
               >
                 {positionNumber}
               </button>
-              <div className="text-xs text-slate-500 mt-0.5">d.{sectionId ? '1.' : ''}{positionNumber}</div>
+              <div className="text-xs text-gray-500 mt-0.5">d.{sectionId ? '1.' : ''}{positionNumber}</div>
             </div>
           </td>
           <td className="px-2 py-2 text-sm">
             {/* Podstawa column - base code + Cena zakładowa */}
             {position.base && (
-              <div className="text-xs text-slate-700 font-mono">{position.base}</div>
+              <div className="text-xs text-gray-800 font-mono">{position.base}</div>
             )}
-            <button className="mt-1 px-2 py-0.5 text-xs bg-slate-100 text-slate-600 rounded hover:bg-slate-200 border border-slate-200">
+            <button className="mt-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 border border-gray-200">
               Cena zakładowa
             </button>
           </td>
           <td className="px-2 py-2 text-sm">
-            <div className="font-medium text-slate-900">{position.name}</div>
+            <div className="font-medium text-gray-900">{position.name}</div>
             {position.measurements.rootIds.length > 0 && (
-              <div className="text-xs text-slate-500 mt-0.5">
+              <div className="text-xs text-gray-500 mt-0.5">
                 Przedmiar = {formatNumber(quantity)} {position.unit.label}
               </div>
             )}
           </td>
-          <td className="px-2 py-2 text-sm text-center text-slate-600">{position.unit.label}</td>
-          <td className="px-2 py-2 text-sm text-right text-slate-600">
+          <td className="px-2 py-2 text-sm text-center text-gray-600">{position.unit.label}</td>
+          <td className="px-2 py-2 text-sm text-right text-gray-600">
             {/* Nakład j. - norm quantity per unit */}
+            {formatNumber(quantity, 2)}
           </td>
-          <td className="px-2 py-2 text-sm text-right text-slate-600">
+          <td className="px-2 py-2 text-sm text-right text-gray-600">
+            {/* Ceny jedn. - unit price */}
             {result?.unitCost ? formatNumber(result.unitCost, 2) : '-'}
           </td>
-          <td className="px-2 py-2 text-sm text-right text-slate-600">
-            {result?.unitCost ? formatNumber(result.unitCost, 4) : '-'}
+          <td className="px-2 py-2 text-sm text-right text-gray-600">
+            {/* Koszt jedn. - cost per unit */}
+            {result?.unitCost ? formatNumber(result.unitCost, 2) : '-'}
           </td>
-          <td className="px-2 py-2 text-sm text-right font-medium">{formatNumber(quantity, 1)}</td>
-          <td className="px-2 py-2 text-sm text-right font-bold text-slate-900">
-            {formatNumber(result?.totalWithOverheads || 0, 4)}
+          <td className="px-2 py-2 text-sm text-right text-gray-600">
+            {/* Ilość - quantity */}
+            {formatNumber(quantity, 1)}
           </td>
-          <td className="px-2 py-2 text-sm w-20">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={(e) => { e.stopPropagation(); handleAddResource(position.id); }}
-                className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600"
-                title="Dodaj nakład"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm('Czy na pewno chcesz usunąć tę pozycję?')) {
-                    handleDeleteItem(position.id, 'position');
-                  }
-                }}
-                className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600"
-                title="Usuń"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+          <td className="px-2 py-2 text-sm text-right font-medium text-gray-900">
+            {/* Wartość - total value */}
+            {result?.totalWithOverheads ? formatNumber(result.totalWithOverheads, 2) : '-'}
           </td>
         </tr>
 
@@ -1879,12 +2093,12 @@ export const KosztorysEditorPage: React.FC = () => {
           return (
             <tr
               key={resource.id}
-              className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
+              className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
               onClick={() => selectItem(resource.id, 'resource')}
             >
               <td className="px-2 py-1.5">
                 {/* Resource index number */}
-                <span className="text-xs text-slate-400">{index + 1}</span>
+                <span className="text-xs text-gray-400">{index + 1}</span>
               </td>
               <td className="px-2 py-1.5 text-sm">
                 {/* R/M/S/O badge - prominent display */}
@@ -1892,50 +2106,38 @@ export const KosztorysEditorPage: React.FC = () => {
                   <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${config.bgColor} ${config.color}`}>
                     {config.shortLabel}
                   </span>
-                  <span className="text-slate-500 font-mono text-xs">{resource.originIndex.index || ''}</span>
+                  <span className="text-gray-500 font-mono text-xs">{resource.originIndex.index || ''}</span>
                 </div>
               </td>
               <td className="px-2 py-1.5 text-sm">
                 <div className="pl-2">
-                  <span className="text-slate-700">{resource.name}</span>
+                  <span className="text-gray-800">{resource.name}</span>
                 </div>
                 {/* Formula display like eKosztorysowanie: 1.1 · 1.1 · 1 · 1.35 */}
-                <div className="text-xs text-slate-400 pl-2 mt-0.5 font-mono">
+                <div className="text-xs text-gray-400 pl-2 mt-0.5 font-mono">
                   {resource.factor !== 1 ? `${formatNumber(resource.factor, 1)} · ` : ''}
                   {formatNumber(resource.norm.value, 1)} ·
                   {position.multiplicationFactor !== 1 ? ` ${formatNumber(position.multiplicationFactor, 1)} · ` : ' '}
                   1 · {formatNumber(quantity, 2)}
                 </div>
               </td>
-              <td className="px-2 py-1.5 text-sm text-center text-slate-500">{resource.unit.label}</td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-500 font-mono">
+              <td className="px-2 py-1.5 text-sm text-center text-gray-500">{resource.unit.label}</td>
+              <td className="px-2 py-1.5 text-sm text-right text-gray-500 font-mono">
                 {formatNumber(resResult?.calculatedQuantity || resource.norm.value, 7)}
               </td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-500">
+              <td className="px-2 py-1.5 text-sm text-right text-gray-500">
                 {formatNumber(resource.unitPrice.value, 2)}
               </td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-500">
-                {formatNumber(resource.unitPrice.value, 2)}
+              <td className="px-2 py-1.5 text-sm text-right text-gray-500">
+                {/* Koszt jedn. */}
+                {formatNumber((resResult?.calculatedQuantity || resource.norm.value) * resource.unitPrice.value / (quantity || 1), 2)}
               </td>
-              <td className="px-2 py-1.5 text-sm text-right text-slate-500">
-                {formatNumber(resResult?.calculatedQuantity || 0, 2)}
+              <td className="px-2 py-1.5 text-sm text-right text-gray-500">
+                {/* Ilość */}
               </td>
-              <td className="px-2 py-1.5 text-sm text-right font-medium text-slate-700">
-                {formatNumber(resResult?.calculatedValue || 0, 2)}
-              </td>
-              <td className="px-2 py-1.5 text-sm">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('Czy na pewno chcesz usunąć ten nakład?')) {
-                      handleDeleteItem(resource.id, 'resource');
-                    }
-                  }}
-                  className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-red-600"
-                  title="Usuń"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+              <td className="px-2 py-1.5 text-sm text-right text-gray-500">
+                {/* Wartość */}
+                {formatNumber(resResult?.totalCost || 0, 2)}
               </td>
             </tr>
           );
@@ -1943,41 +2145,39 @@ export const KosztorysEditorPage: React.FC = () => {
 
         {/* RAZEM row for measurement */}
         {isExpanded && position.measurements.rootIds.length > 0 && (
-          <tr className="border-b border-slate-100 bg-slate-50/50">
-            <td colSpan={5}></td>
-            <td colSpan={2} className="px-2 py-1.5 text-xs text-right text-slate-500 font-medium">
-              RAZEM
+          <tr className="border-b border-gray-100 bg-gray-50/50">
+            <td colSpan={4}></td>
+            <td className="px-2 py-1.5 text-xs text-right text-gray-500 font-medium">
+              RAZEM: {formatNumber(quantity, 1)}
             </td>
-            <td className="px-2 py-1.5 text-sm text-right font-medium text-slate-700">
-              {formatNumber(quantity, 1)}
-            </td>
-            <td colSpan={2}></td>
+            <td colSpan={4}></td>
           </tr>
         )}
 
         {/* Position summary row - Razem koszty bezpośrednie */}
         {isExpanded && result && (
-          <tr className="bg-slate-100 border-b border-slate-200">
-            <td colSpan={5}></td>
-            <td colSpan={3} className="px-2 py-2 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span>Razem koszty bezpośrednie</span>
-                <span className="font-medium">{formatNumber(result.directCostsTotal, 4)}</span>
-              </div>
-              <div className="flex justify-between mt-1">
-                <span>Razem z narzutami</span>
-                <span className="font-medium">{formatNumber(result.totalWithOverheads, 2)}</span>
-              </div>
-              <div className="flex justify-between mt-1">
-                <span>Cena jednostkowa</span>
-                <span className="font-medium">{formatNumber(result.unitCost, 2)}</span>
-              </div>
-            </td>
-            <td className="px-2 py-2 text-sm text-right font-bold text-slate-900">
-              {formatNumber(result.totalWithOverheads, 2)}
-            </td>
-            <td></td>
-          </tr>
+          <>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <td colSpan={3}></td>
+              <td colSpan={3} className="px-2 py-1 text-xs text-gray-600">Razem koszty bezpośrednie</td>
+              <td className="px-2 py-1 text-xs text-right text-gray-600">{formatNumber(result.directCostsTotal, 4)}</td>
+              <td className="px-2 py-1 text-xs text-right text-gray-600">{formatNumber(quantity, 2)}</td>
+              <td className="px-2 py-1 text-xs text-right font-medium text-gray-800">{formatNumber(result.directCostsTotal, 2)}</td>
+            </tr>
+            <tr className="bg-gray-50 border-b border-gray-100">
+              <td colSpan={3}></td>
+              <td colSpan={3} className="px-2 py-1 text-xs text-gray-600">Razem z narzutami</td>
+              <td className="px-2 py-1 text-xs text-right text-gray-600">{formatNumber(result.totalWithOverheads, 4)}</td>
+              <td className="px-2 py-1 text-xs text-right text-gray-600">{formatNumber(quantity, 2)}</td>
+              <td className="px-2 py-1 text-xs text-right font-medium text-gray-800">{formatNumber(result.totalWithOverheads, 2)}</td>
+            </tr>
+            <tr className="bg-gray-100 border-b border-gray-200">
+              <td colSpan={3}></td>
+              <td colSpan={3} className="px-2 py-1 text-xs text-gray-600 font-medium">Cena jednostkowa</td>
+              <td className="px-2 py-1 text-xs text-right font-medium text-gray-800">{formatNumber(result.unitCost, 2)}</td>
+              <td colSpan={2}></td>
+            </tr>
+          </>
         )}
       </React.Fragment>
     );
@@ -1993,45 +2193,19 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={section.id}>
         {/* Section header row */}
         <tr
-          className={`bg-slate-100 border-b border-slate-300 cursor-pointer ${isSelected ? 'bg-blue-100' : ''}`}
+          className={`bg-gray-100 border-b border-gray-300 cursor-pointer ${isSelected ? 'bg-blue-100' : ''}`}
           onClick={() => selectItem(section.id, 'section')}
         >
           <td className="px-2 py-2 text-sm">
             <button
               onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
-              className="p-0.5 hover:bg-slate-200 rounded"
+              className="p-0.5 hover:bg-gray-200 rounded"
             >
               {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
             </button>
           </td>
-          <td className="px-2 py-2 text-sm font-bold text-slate-700">{section.ordinalNumber}</td>
-          <td colSpan={6} className="px-2 py-2 text-sm font-bold text-slate-900">{section.name}</td>
-          <td className="px-2 py-2 text-sm text-right font-bold text-slate-900">
-            {sectionResult ? formatNumber(sectionResult.totalValue) : '-'}
-          </td>
-          <td className="px-2 py-2 text-sm">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={(e) => { e.stopPropagation(); handleAddPosition(section.id); }}
-                className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-blue-600"
-                title="Dodaj pozycję"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm('Czy na pewno chcesz usunąć ten dział?')) {
-                    handleDeleteItem(section.id, 'section');
-                  }
-                }}
-                className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-red-600"
-                title="Usuń"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          </td>
+          <td className="px-2 py-2 text-sm font-bold text-gray-800">{section.ordinalNumber}</td>
+          <td colSpan={7} className="px-2 py-2 text-sm font-bold text-gray-900">{section.name}</td>
         </tr>
 
         {/* Positions in section */}
@@ -2053,140 +2227,241 @@ export const KosztorysEditorPage: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-100">
-      {/* Toolbar Row 1 - matching eKosztorysowanie.pl exactly */}
-      <div className="bg-white border-b border-slate-200 px-2 py-1.5 flex items-center gap-0.5 flex-wrap">
-        {/* Kosztorys dropdown - View Mode selector with 7 items */}
-        <div className="relative">
+    <div className="h-full flex flex-col bg-white">
+      {/* Header - eKosztorysowanie style */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Home button */}
           <button
-            onClick={() => setShowViewModeDropdown(!showViewModeDropdown)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded"
+            onClick={() => navigate('/construction/estimates')}
+            className="p-1.5 hover:bg-blue-500 rounded transition-colors"
+            title="Strona główna"
           >
-            <Menu className="w-4 h-4" />
-            Kosztorys
-            <ChevronDown className="w-3 h-3" />
+            <Home className="w-5 h-5" />
           </button>
-          {showViewModeDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button
-                onClick={() => { setViewMode('przedmiar'); setActiveNavItem('przedmiar'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 ${viewMode === 'przedmiar' ? 'bg-slate-100' : ''}`}
-              >
-                <span className="w-4 text-slate-500 font-medium">P</span>
-                Przedmiar
-                {viewMode === 'przedmiar' && <span className="ml-auto w-2 h-2 bg-red-500 rounded-full"></span>}
-              </button>
-              <button
-                onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 ${viewMode === 'kosztorys' ? 'bg-slate-100' : ''}`}
-              >
-                <span className="w-4 text-slate-500 font-medium">C</span>
-                Kosztorys
-              </button>
-              <button
-                onClick={() => { setViewMode('pozycje'); setActiveNavItem('pozycje'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'pozycje' ? 'bg-slate-100' : ''}`}
-              >
-                Pozycje
-              </button>
-              <button
-                onClick={() => { setViewMode('naklady'); setActiveNavItem('naklady'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'naklady' ? 'bg-slate-100' : ''}`}
-              >
-                Nakłady
-              </button>
-              <button
-                onClick={() => { setViewMode('narzuty'); setActiveNavItem('narzuty'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'narzuty' ? 'bg-slate-100' : ''}`}
-              >
-                Narzuty
-              </button>
-              <button
-                onClick={() => { setViewMode('zestawienia'); setActiveNavItem('zestawienia'); setShowViewModeDropdown(false); }}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7 ${viewMode === 'zestawienia' ? 'bg-slate-100' : ''}`}
-              >
-                Zestawienia
-              </button>
-              <button
-                onClick={() => { setActiveNavItem('wydruki'); setLeftPanelMode('export'); setShowViewModeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 pl-7"
-              >
-                Wydruki
-              </button>
-            </div>
-          )}
+
+          {/* Logo */}
+          <div className="flex items-center">
+            <span className="text-lg font-light">e</span>
+            <span className="text-lg font-bold text-yellow-400">KOSZTORYS</span>
+            <span className="text-lg font-light">OWANIE</span>
+          </div>
+
+          {/* Current estimate dropdown */}
+          <div className="relative ml-4">
+            <button className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/30 rounded hover:bg-blue-500/50 text-sm">
+              <span className="max-w-[200px] truncate">{estimate?.settings.name || 'Kosztorys'}</span>
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Add new estimate */}
+          <button
+            onClick={() => navigate('/construction/estimates/new')}
+            className="p-1.5 hover:bg-blue-500 rounded transition-colors"
+            title="Nowy kosztorys"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Drukuj button */}
+        {/* Right side icons */}
+        <div className="flex items-center gap-1">
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Pomoc">
+            <HelpCircle className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Zrzut ekranu">
+            <Camera className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Zakładki">
+            <Flag className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Historia schowka">
+            <Clipboard className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Profil użytkownika">
+            <User className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-blue-500 rounded transition-colors" title="Rozszerzenia">
+            <Puzzle className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Toolbar Row 1 - Wydruki row matching eKosztorysowanie.pl */}
+      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-0.5">
+          {/* ☰ Wydruki dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setLeftPanelMode(leftPanelMode === 'export' ? 'overview' : 'export')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded ${leftPanelMode === 'export' ? 'bg-blue-100 text-blue-600' : 'text-gray-800 hover:bg-gray-100'}`}
+            >
+              <Menu className="w-4 h-4" />
+              Wydruki
+            </button>
+          </div>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
+          {/* 📺 Monitor - Preview */}
+          <button
+            onClick={() => setLeftPanelMode(leftPanelMode === 'export' ? 'overview' : 'export')}
+            className={`p-1.5 rounded ${leftPanelMode === 'export' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+            title="Podgląd wydruku"
+          >
+            <Monitor className="w-4 h-4" />
+          </button>
+
+          {/* Drukuj - no icon per documentation line 43 */}
+          <button
+            onClick={() => setShowPrintDialog(true)}
+            className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Drukuj
+          </button>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
+          {/* 📝 Komentarze */}
+          <button
+            onClick={() => setLeftPanelMode(leftPanelMode === 'comments' ? 'overview' : 'comments')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${leftPanelMode === 'comments' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Komentarze
+          </button>
+        </div>
+
+        <div className="flex items-center gap-0.5">
+          {/* Sprawdź kosztorys - no icon per documentation line 43 */}
+          <button
+            onClick={handleSprawdzKosztorys}
+            className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Sprawdź kosztorys
+          </button>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
+          {/* ⚙ Settings 1 */}
+          <button
+            onClick={() => setShowSettingsDialog(true)}
+            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+            title="Ustawienia"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {/* ⚙ Settings 2 */}
+          <button
+            onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
+            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+            title="Opcje widoku"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Toolbar Row 2 - matching eKosztorysowanie.pl exactly */}
+      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-0.5 flex-wrap">
+          {/* Kosztorys button - switches to Kosztorys view (no dropdown per 3.2.1) */}
         <button
-          onClick={() => setLeftPanelMode('export')}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+          onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
         >
-          <Printer className="w-4 h-4" />
+          <Menu className="w-4 h-4" />
+          Kosztorys
+        </button>
+
+        {/* Drukuj button - no icon per documentation line 151 */}
+        <button
+          onClick={() => setShowPrintDialog(true)}
+          className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+        >
           Drukuj
         </button>
 
-        <div className="w-px h-6 bg-slate-200 mx-1" />
+        <div className="w-px h-6 bg-gray-200 mx-1" />
 
         {/* + Dział dropdown - 5 items matching screenshot */}
         <div className="relative">
           <button
             onClick={() => setShowDzialDropdown(!showDzialDropdown)}
-            className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded"
+            className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
           >
             <Plus className="w-4 h-4" />
             Dział
             <ChevronDown className="w-3 h-3" />
           </button>
           {showDzialDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50">
-                Dodaj nowy
+            <div className="absolute top-full left-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                + Dział
               </button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="text-slate-400">→</span> Poddział na początku
-              </button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="text-slate-400">→</span> Poddział na końcu
-              </button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="text-slate-400">←</span> Dział powyżej
-              </button>
-              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2">
-                <span className="text-slate-400">←</span> Dział poniżej
+              <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
+                + Poddział
               </button>
             </div>
           )}
         </div>
 
-        {/* KNR Pozycja - opens catalog browser in left panel */}
+        {/* KNR Pozycja - opens catalog browser in left panel with dropdown */}
         <div className="relative">
-          <button
-            onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-            }`}
-          >
-            <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
-            Pozycja
-            <ChevronDown className="w-3 h-3" />
-          </button>
+          <div className="flex">
+            <button
+              onClick={() => setLeftPanelMode(leftPanelMode === 'catalog' ? 'overview' : 'catalog')}
+              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded-l ${
+                leftPanelMode === 'catalog' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+              }`}
+            >
+              <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
+              Pozycja
+            </button>
+            <button
+              onClick={() => setShowKNRDropdown(!showKNRDropdown)}
+              className={`px-1 py-1.5 text-sm rounded-r border-l ${
+                leftPanelMode === 'catalog' ? 'bg-blue-600 text-white border-blue-500' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'
+              }`}
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
+          {showKNRDropdown && (
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <button
+                onClick={() => { setLeftPanelMode('catalog'); setShowKNRDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+              >
+                <span className="text-[10px] font-bold px-1 py-0.5 bg-blue-500 text-white rounded">KNR</span>
+                Pozycja
+              </button>
+              <button
+                onClick={() => { handleAddUncataloguedPosition(); setShowKNRDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+              >
+                Wstaw pozycję nieskatalogowaną
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Nakład dropdown - 5 items matching screenshot */}
+        {/* Nakład dropdown - per documentation 3.2.4 uses 📋 clipboard icon */}
         <div className="relative">
           <button
             onClick={() => setShowNakladDropdown(!showNakladDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemType === 'position' ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+              editorState.selectedItemType === 'position' ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
             }`}
           >
-            <Layers className="w-4 h-4" />
+            <Clipboard className="w-4 h-4" />
             Nakład
             <ChevronDown className="w-3 h-3" />
           </button>
           {showNakladDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => {
                   if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
@@ -2194,18 +2469,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   }
                   setShowNakladDropdown(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                Dodaj nowy
-              </button>
-              <button
-                onClick={() => {
-                  if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
-                    handleAddResource(editorState.selectedItemId, 'labor');
-                  }
-                  setShowNakladDropdown(false);
-                }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Robocizna
               </button>
@@ -2216,7 +2480,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   }
                   setShowNakladDropdown(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Materiały
               </button>
@@ -2227,7 +2491,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   }
                   setShowNakladDropdown(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Sprzęt
               </button>
@@ -2236,7 +2500,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   // Odpady (waste) - would need new resource type
                   setShowNakladDropdown(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Odpady
               </button>
@@ -2249,7 +2513,7 @@ export const KosztorysEditorPage: React.FC = () => {
           <button
             onClick={() => setShowUzupelnijDropdown(!showUzupelnijDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              Object.keys(estimateData.positions).length > 0 ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+              Object.keys(estimateData.positions).length > 0 ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
             }`}
             disabled={Object.keys(estimateData.positions).length === 0}
           >
@@ -2257,29 +2521,29 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showUzupelnijDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z bazy', 'success'); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Uzupełnij z bazy normatywnej
               </button>
               <button
                 onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z KNR', 'success'); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
                 Uzupełnij z katalogów KNR
               </button>
-              <div className="border-t border-slate-200">
+              <div className="border-t border-gray-200">
                 <button
                   onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono brakujące nakłady', 'success'); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   Uzupełnij tylko brakujące
                 </button>
                 <button
                   onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Zastąpiono wszystkie nakłady', 'success'); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   Zastąp wszystkie nakłady
                 </button>
@@ -2288,10 +2552,10 @@ export const KosztorysEditorPage: React.FC = () => {
           )}
         </div>
 
-        <div className="w-px h-6 bg-slate-200 mx-1" />
+        <div className="w-px h-6 bg-gray-200 mx-1" />
 
         {/* Ceny - opens dialog */}
-        <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded">
+        <button onClick={() => setShowCenyDialog(true)} className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">
           Ceny
         </button>
 
@@ -2300,7 +2564,7 @@ export const KosztorysEditorPage: React.FC = () => {
           <button
             onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-100'
+              leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
@@ -2308,56 +2572,39 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showKomentarzeDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
               >
-                <Plus className="w-4 h-4 text-slate-400" />
+                Wszystkie komentarze
+              </button>
+              <button
+                onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+              >
                 Wstaw komentarz do...
               </button>
-              <div className="border-t border-slate-200">
-                <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showCommentsOnSheet}
-                    onChange={(e) => setShowCommentsOnSheet(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300"
-                  />
-                  Pokaż komentarze na arkuszu
-                </label>
-                <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showCompletedTasks}
-                    onChange={(e) => setShowCompletedTasks(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300"
-                  />
-                  Pokazuj ukończone zadania
-                </label>
-              </div>
             </div>
           )}
         </div>
 
-        <div className="w-px h-6 bg-slate-200 mx-1" />
+        <div className="w-px h-6 bg-gray-200 mx-1" />
 
         {/* Usuń dropdown - with dynamic label based on selected item */}
         <div className="relative">
           <button
             onClick={() => editorState.selectedItemId && setShowUsunDropdown(!showUsunDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+              editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
             }`}
           >
             <Trash2 className="w-4 h-4" />
-            {editorState.selectedItemType === 'section' ? 'Usuń dział' :
-             editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
-             editorState.selectedItemType === 'resource' ? 'Usuń nakład' : 'Usuń'}
+            Usuń
             <ChevronDown className="w-3 h-3" />
           </button>
           {showUsunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => {
                   if (editorState.selectedItemId && editorState.selectedItemType) {
@@ -2367,7 +2614,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   }
                   setShowUsunDropdown(false);
                 }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-red-600"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
               >
                 {editorState.selectedItemType === 'section' ? 'Usuń dział' :
                  editorState.selectedItemType === 'position' ? 'Usuń pozycję' :
@@ -2383,7 +2630,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     }
                     setShowUsunDropdown(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   Usuń pozycję z nakładami
                 </button>
@@ -2395,7 +2642,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     setShowUsunDropdown(false);
                     showNotificationMessage('Funkcja w przygotowaniu', 'error');
                   }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
                   Usuń dział (zachowaj pozycje)
                 </button>
@@ -2409,7 +2656,7 @@ export const KosztorysEditorPage: React.FC = () => {
           <button
             onClick={() => editorState.selectedItemId && setShowPrzesunDropdown(!showPrzesunDropdown)}
             className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+              editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
             }`}
           >
             <MoveUp className="w-4 h-4" />
@@ -2417,51 +2664,35 @@ export const KosztorysEditorPage: React.FC = () => {
             <ChevronDown className="w-3 h-3" />
           </button>
           {showPrzesunDropdown && editorState.selectedItemId && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-              <div className="px-3 py-2 text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
-                W dziale
-              </div>
+            <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <button
                 onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
               >
-                <MoveUp className="w-4 h-4 text-slate-400" />
+                <MoveUp className="w-4 h-4 text-gray-400" />
                 Przesuń pozycję w górę
               </button>
               <button
                 onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
               >
-                <MoveDown className="w-4 h-4 text-slate-400" />
+                <MoveDown className="w-4 h-4 text-gray-400" />
                 Przesuń pozycję w dół
               </button>
-              <div className="border-t border-slate-200">
-                <button
-                  onClick={() => { handleMovePosition('out'); setShowPrzesunDropdown(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Przesuń pozycję poza dział
-                </button>
-                <button
-                  onClick={() => { handleMovePosition('last'); setShowPrzesunDropdown(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Przesuń pozycję do ostatniego działu
-                </button>
-                <button
-                  onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Przesuń pozycję do pierwszego działu
-                </button>
-              </div>
+              <button
+                onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+              >
+                <ArrowUpRight className="w-4 h-4 text-gray-400" />
+                Przesuń pozycję do pierwszego działu
+              </button>
             </div>
           )}
         </div>
 
-        <div className="w-px h-6 bg-slate-200 mx-1" />
+        <div className="w-px h-6 bg-gray-200 mx-1" />
 
-        {/* Kopiuj - with dynamic label */}
+        {/* Kopiuj - 📋 clipboard icon per documentation */}
         <button
           onClick={() => {
             if (editorState.selectedItemId && editorState.selectedItemType) {
@@ -2473,17 +2704,15 @@ export const KosztorysEditorPage: React.FC = () => {
             }
           }}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
           }`}
           disabled={!editorState.selectedItemId}
         >
-          <Copy className="w-4 h-4" />
-          {editorState.selectedItemType === 'section' ? 'Kopiuj dział' :
-           editorState.selectedItemType === 'position' ? 'Kopiuj pozycję' :
-           editorState.selectedItemType === 'resource' ? 'Kopiuj nakład' : 'Kopiuj'}
+          <Clipboard className="w-4 h-4" />
+          Kopiuj
         </button>
 
-        {/* Wytnij - with dynamic label */}
+        {/* Wytnij */}
         <button
           onClick={() => {
             if (editorState.selectedItemId && editorState.selectedItemType) {
@@ -2495,75 +2724,162 @@ export const KosztorysEditorPage: React.FC = () => {
             }
           }}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.selectedItemId ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            editorState.selectedItemId ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
           }`}
           disabled={!editorState.selectedItemId}
         >
           <Scissors className="w-4 h-4" />
-          {editorState.selectedItemType === 'section' ? 'Wytnij dział' :
-           editorState.selectedItemType === 'position' ? 'Wytnij pozycję' :
-           editorState.selectedItemType === 'resource' ? 'Wytnij nakład' : 'Wytnij'}
+          Wytnij
         </button>
 
-        {/* Wklej - with dynamic label */}
+        {/* Wklej - 📋 clipboard icon per documentation, with state indicator per 3.2.12 */}
         <button
-          onClick={() => {
-            if (editorState.clipboard) {
-              // TODO: Implement paste logic
-              showNotificationMessage('Wklejono ze schowka', 'success');
-            }
-          }}
+          onClick={handlePaste}
           className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-            editorState.clipboard ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'
+            editorState.clipboard ? 'text-gray-600 hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
           }`}
           disabled={!editorState.clipboard}
         >
-          <ClipboardPaste className="w-4 h-4" />
-          {editorState.clipboard?.type === 'section' ? 'Wklej dział' :
-           editorState.clipboard?.type === 'position' ? 'Wklej pozycję' :
-           editorState.clipboard?.type === 'resource' ? 'Wklej nakład' : 'Wklej'}
+          <Clipboard className="w-4 h-4" />
+          {editorState.clipboard?.action === 'cut' ? 'Wklej (wycięta pozycja)' :
+           editorState.clipboard?.action === 'copy' ? 'Wklej (pozycja)' : 'Wklej'}
         </button>
-      </div>
+        </div>
 
-      {/* Toolbar Row 2 - right side actions */}
-      <div className="bg-white border-b border-slate-200 px-2 py-1 flex items-center justify-end gap-1">
-        <button className="flex items-center gap-1 px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded">
-          <RefreshCw className="w-4 h-4" />
-          Sprawdź kosztorys
-        </button>
-        <button className="flex items-center gap-1 px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded">
-          <Eye className="w-4 h-4" />
-          Opcje widoku
-        </button>
-        <button onClick={() => setShowSettingsModal(true)} className="flex items-center gap-1 px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded">
-          <Settings className="w-4 h-4" />
-          Ustawienia
-        </button>
+        {/* Right side of Row 2 - ✨ Sprawdź kosztorys | ⚙ Opcje widoku | ⚙ per documentation 3.3 */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleSprawdzKosztorys}
+            className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            <Sparkles className="w-4 h-4" />
+            Sprawdź kosztorys
+          </button>
+        {/* Opcje widoku dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
+            className="flex items-center gap-1 px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            <Settings className="w-4 h-4" />
+            Opcje widoku
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          {showOpcjeWidokuDropdown && (
+            <div className="absolute top-full right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <div className="p-2 border-b border-gray-200">
+                <p className="text-xs text-gray-500 font-medium mb-2">Rodzaj kosztorysu</p>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="radio"
+                    name="viewType"
+                    checked={estimate?.settings.type === 'contractor'}
+                    onChange={() => {
+                      if (estimate) {
+                        setEstimate({ ...estimate, settings: { ...estimate.settings, type: 'contractor' } });
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-800">Kosztorys wykonawczy</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="radio"
+                    name="viewType"
+                    checked={estimate?.settings.type === 'investor'}
+                    onChange={() => {
+                      if (estimate) {
+                        setEstimate({ ...estimate, settings: { ...estimate.settings, type: 'investor' } });
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-800">Kosztorys inwestorski</span>
+                </label>
+              </div>
+              <div className="p-2">
+                <p className="text-xs text-gray-500 font-medium mb-2">Widok</p>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewOptions.showPrzemiar}
+                    onChange={(e) => setViewOptions(prev => ({ ...prev, showPrzemiar: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-800">Pokaż przedmiar</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewOptions.showNaklady}
+                    onChange={(e) => setViewOptions(prev => ({ ...prev, showNaklady: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-800">Pokaż nakłady</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewOptions.showCeny}
+                    onChange={(e) => setViewOptions(prev => ({ ...prev, showCeny: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-800">Pokaż ceny</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewOptions.showSumy}
+                    onChange={(e) => setViewOptions(prev => ({ ...prev, showSumy: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-800">Pokaż sumy</span>
+                </label>
+                <label className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewOptions.compactView}
+                    onChange={(e) => setViewOptions(prev => ({ ...prev, compactView: e.target.checked }))}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-800">Widok kompaktowy</span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+          <button onClick={() => setShowSettingsModal(true)} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Ustawienia">
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Click outside to close all dropdowns */}
-      {(showDzialDropdown || showNakladDropdown || showViewModeDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown) && (
+      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showOpcjeWidokuDropdown) && (
         <div className="fixed inset-0 z-40" onClick={() => {
           setShowDzialDropdown(false);
           setShowNakladDropdown(false);
-          setShowViewModeDropdown(false);
           setShowKomentarzeDropdown(false);
           setShowUsunDropdown(false);
           setShowPrzesunDropdown(false);
           setShowUzupelnijDropdown(false);
+          setShowKNRDropdown(false);
+          setShowOpcjeWidokuDropdown(false);
         }} />
       )}
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left panel - Navigation and Properties */}
-        <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+        <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
           {/* Tab headers - Przegląd / Właściwości */}
-          <div className="flex border-b border-slate-200">
+          <div className="flex border-b border-gray-200">
             <button
               onClick={() => setLeftPanelMode('overview')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
-                leftPanelMode === 'overview' || leftPanelMode === 'catalog' || leftPanelMode === 'comments' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
+                leftPanelMode === 'overview' || leftPanelMode === 'catalog' || leftPanelMode === 'comments' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               Przegląd
@@ -2571,7 +2887,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <button
               onClick={() => setLeftPanelMode('properties')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
-                leftPanelMode === 'properties' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'
+                leftPanelMode === 'properties' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               Właściwości
@@ -2585,23 +2901,30 @@ export const KosztorysEditorPage: React.FC = () => {
             {leftPanelMode === 'overview' && (
               <div className="flex flex-col h-full">
                 {/* Search in estimate */}
-                <div className="p-3 border-b border-slate-200">
+                <div className="p-3 border-b border-gray-200">
                   <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Szukaj w kosztorysie"
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
                 </div>
 
                 {/* Estimate structure tree */}
                 <div className="flex-1 overflow-y-auto p-2">
-                  <p className="text-xs text-slate-500 px-2 mb-2">Kosztorys: {estimate?.settings.name || 'Kosztowys'}</p>
+                  {/* Root node "▼ Kosztorys" per documentation 4.2 */}
+                  <button
+                    onClick={() => setEditorState(prev => ({ ...prev, treeRootExpanded: !prev.treeRootExpanded }))}
+                    className="w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 font-medium"
+                  >
+                    {editorState.treeRootExpanded !== false ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    <span>Kosztorys</span>
+                  </button>
 
-                  {/* Sections tree */}
-                  {estimateData.root.sectionIds.map(sectionId => {
+                  {/* Sections tree - only shown when root is expanded */}
+                  {editorState.treeRootExpanded !== false && estimateData.root.sectionIds.map(sectionId => {
                     const section = estimateData.sections[sectionId];
                     if (!section) return null;
                     const isSectionExpanded = editorState.expandedSections.has(sectionId);
@@ -2613,7 +2936,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             toggleExpandSection(sectionId);
                             selectItem(sectionId, 'section');
                           }}
-                          className={`w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-slate-50 ${
+                          className={`w-full flex items-center gap-1 pl-4 pr-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 ${
                             editorState.selectedItemId === sectionId ? 'bg-blue-50 text-blue-700' : ''
                           }`}
                         >
@@ -2621,19 +2944,19 @@ export const KosztorysEditorPage: React.FC = () => {
                           <span className="truncate">{section.ordinalNumber} {section.name}</span>
                         </button>
 
-                        {isSectionExpanded && section.positionIds.map(posId => {
+                        {isSectionExpanded && section.positionIds.map((posId, posIndex) => {
                           const position = estimateData.positions[posId];
                           if (!position) return null;
                           return (
                             <button
                               key={posId}
                               onClick={() => selectItem(posId, 'position')}
-                              className={`w-full flex items-center gap-1 pl-6 pr-2 py-1 text-xs text-left rounded hover:bg-slate-50 ${
-                                editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-slate-600'
+                              className={`w-full flex items-center gap-1 pl-10 pr-2 py-1 text-xs text-left rounded hover:bg-gray-50 ${
+                                editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
                               }`}
                             >
                               <FileText className="w-3 h-3 flex-shrink-0" />
-                              <span className="truncate">{position.name}</span>
+                              <span className="truncate">d.{section.ordinalNumber}.{posIndex + 1} {position.base || position.name}</span>
                             </button>
                           );
                         })}
@@ -2641,15 +2964,15 @@ export const KosztorysEditorPage: React.FC = () => {
                     );
                   })}
 
-                  {/* Root positions */}
-                  {estimateData.root.positionIds.map((posId, index) => {
+                  {/* Root positions - only shown when root is expanded */}
+                  {editorState.treeRootExpanded !== false && estimateData.root.positionIds.map((posId, index) => {
                     const position = estimateData.positions[posId];
                     if (!position) return null;
                     return (
                       <button
                         key={posId}
                         onClick={() => selectItem(posId, 'position')}
-                        className={`w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-slate-50 ${
+                        className={`w-full flex items-center gap-1 pl-6 pr-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 ${
                           editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : ''
                         }`}
                       >
@@ -2661,26 +2984,26 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Empty state */}
                   {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
-                    <p className="text-sm text-slate-400 text-center py-4">Kosztorys jest pusty</p>
+                    <p className="text-sm text-gray-400 text-center py-4">Kosztorys jest pusty</p>
                   )}
                 </div>
 
                 {/* Quick add buttons */}
-                <div className="p-2 border-t border-slate-200">
+                <div className="p-2 border-t border-gray-200">
                   <div className="space-y-1">
                     <button
                       onClick={handleAddSection}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-lg border border-dashed border-gray-300"
                     >
-                      <FolderPlus className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-600">Dodaj dział</span>
+                      <FolderPlus className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Dodaj dział</span>
                     </button>
                     <button
                       onClick={() => handleAddPosition(null)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-50 rounded-lg border border-dashed border-slate-300"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-lg border border-dashed border-gray-300"
                     >
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-600">Dodaj pozycję</span>
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Dodaj pozycję</span>
                     </button>
                   </div>
                 </div>
@@ -2693,81 +3016,76 @@ export const KosztorysEditorPage: React.FC = () => {
                   <div className="space-y-3">
                     {/* Nazwa działu - matching eKosztorysowanie layout */}
                     <div>
-                      <label className="block text-sm text-slate-700 mb-1">Nazwa działu</label>
+                      <label className="block text-sm text-gray-800 mb-1">Nazwa działu</label>
                       <input
                         type="text"
                         value={(selectedItem as KosztorysSection).name}
                         onChange={e => handleUpdateSelectedItem({ name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                       />
                     </div>
 
-                    {/* Opis działu with expand button */}
+                    {/* Opis działu - no expand button per documentation 4.3.1 */}
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm text-slate-700">Opis działu</label>
-                        <button className="p-0.5 hover:bg-slate-100 rounded">
-                          <ChevronDown className="w-4 h-4 text-slate-400" />
-                        </button>
-                      </div>
+                      <label className="text-sm text-gray-800 mb-1 block">Opis działu</label>
                       <textarea
                         value={(selectedItem as KosztorysSection).description}
                         onChange={e => handleUpdateSelectedItem({ description: e.target.value })}
                         placeholder="Opis działu"
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm resize-none"
                         rows={2}
                       />
                     </div>
 
                     {/* Współczynniki norm - expandable section matching screenshot */}
-                    <div className="border-t border-slate-200 pt-3">
-                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-3">
+                    <div className="border-t border-gray-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-gray-800 mb-3">
                         <span>Współczynniki norm</span>
-                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                        <ChevronUp className="w-4 h-4 text-gray-400" />
                       </button>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Robocizna</label>
+                          <label className="text-sm text-gray-600">Robocizna</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysSection).factors.labor.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysSection).factors, labor: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Materiały</label>
+                          <label className="text-sm text-gray-600">Materiały</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysSection).factors.material.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysSection).factors, material: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Sprzęt</label>
+                          <label className="text-sm text-gray-600">Sprzęt</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysSection).factors.equipment.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysSection).factors, equipment: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Odpady</label>
+                          <label className="text-sm text-gray-600">Odpady</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysSection).factors.waste.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysSection).factors, waste: parseFloat(e.target.value.replace(',', '.')) || 0 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                       </div>
@@ -2780,9 +3098,9 @@ export const KosztorysEditorPage: React.FC = () => {
                     {/* Podstawa - with eye icon matching eKosztorysowanie */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm text-slate-700">Podstawa</label>
-                        <button className="p-0.5 hover:bg-slate-100 rounded">
-                          <Eye className="w-4 h-4 text-slate-400" />
+                        <label className="text-sm text-gray-800">Podstawa</label>
+                        <button className="p-0.5 hover:bg-gray-100 rounded">
+                          <Eye className="w-4 h-4 text-gray-400" />
                         </button>
                       </div>
                       <input
@@ -2790,26 +3108,26 @@ export const KosztorysEditorPage: React.FC = () => {
                         value={(selectedItem as KosztorysPosition).base}
                         onChange={e => handleUpdateSelectedItem({ base: e.target.value, originBase: e.target.value })}
                         placeholder=""
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                       />
                     </div>
 
                     {/* Opis - textarea */}
                     <div>
-                      <label className="text-sm text-slate-700 mb-1 block">Opis</label>
+                      <label className="text-sm text-gray-800 mb-1 block">Opis</label>
                       <textarea
                         value={(selectedItem as KosztorysPosition).name}
                         onChange={e => handleUpdateSelectedItem({ name: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm resize-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm resize-none"
                         rows={3}
                       />
                     </div>
 
                     {/* Przedmiar - expandable section matching screenshot */}
-                    <div className="border-t border-slate-200 pt-3">
-                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-2">
+                    <div className="border-t border-gray-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-gray-800 mb-2">
                         <span>Przedmiar</span>
-                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                        <ChevronUp className="w-4 h-4 text-gray-400" />
                       </button>
                       <div className="flex items-center gap-2">
                         <input
@@ -2827,10 +3145,10 @@ export const KosztorysEditorPage: React.FC = () => {
                             }
                             handleUpdateSelectedItem({ measurements });
                           }}
-                          className="w-20 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                          className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                         />
-                        <button className="p-1 hover:bg-slate-100 rounded">
-                          <Expand className="w-4 h-4 text-slate-400" />
+                        <button className="p-1 hover:bg-gray-100 rounded">
+                          <ArrowUpRight className="w-4 h-4 text-gray-400" />
                         </button>
                         <select
                           value={(selectedItem as KosztorysPosition).unit.unitIndex}
@@ -2838,7 +3156,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             const unit = UNITS_REFERENCE.find(u => u.index === e.target.value);
                             if (unit) handleUpdateSelectedItem({ unit: { label: unit.unit, unitIndex: unit.index } });
                           }}
-                          className="flex-1 px-2 py-1.5 border border-slate-300 rounded text-sm"
+                          className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
                         >
                           {UNITS_REFERENCE.map(u => (
                             <option key={u.index} value={u.index}>{u.unit}</option>
@@ -2849,64 +3167,64 @@ export const KosztorysEditorPage: React.FC = () => {
 
                     {/* Krotność */}
                     <div>
-                      <label className="text-sm text-slate-700 mb-1 block">Krotność</label>
+                      <label className="text-sm text-gray-800 mb-1 block">Krotność</label>
                       <input
                         type="text"
                         value={(selectedItem as KosztorysPosition).multiplicationFactor.toString().replace('.', ',')}
                         onChange={e => handleUpdateSelectedItem({ multiplicationFactor: parseFloat(e.target.value.replace(',', '.')) || 1 })}
-                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                       />
                     </div>
 
                     {/* Współczynniki norm - expandable section */}
-                    <div className="border-t border-slate-200 pt-3">
-                      <button className="w-full flex items-center justify-between text-sm text-slate-700 mb-3">
+                    <div className="border-t border-gray-200 pt-3">
+                      <button className="w-full flex items-center justify-between text-sm text-gray-800 mb-3">
                         <span>Współczynniki norm</span>
-                        <ChevronUp className="w-4 h-4 text-slate-400" />
+                        <ChevronUp className="w-4 h-4 text-gray-400" />
                       </button>
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Robocizna</label>
+                          <label className="text-sm text-gray-600">Robocizna</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysPosition).factors.labor.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysPosition).factors, labor: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Materiały</label>
+                          <label className="text-sm text-gray-600">Materiały</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysPosition).factors.material.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysPosition).factors, material: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Sprzęt</label>
+                          <label className="text-sm text-gray-600">Sprzęt</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysPosition).factors.equipment.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysPosition).factors, equipment: parseFloat(e.target.value.replace(',', '.')) || 1 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                         <div className="flex items-center justify-between">
-                          <label className="text-sm text-slate-600">Odpady</label>
+                          <label className="text-sm text-gray-600">Odpady</label>
                           <input
                             type="text"
                             value={(selectedItem as KosztorysPosition).factors.waste.toString().replace('.', ',')}
                             onChange={e => handleUpdateSelectedItem({
                               factors: { ...(selectedItem as KosztorysPosition).factors, waste: parseFloat(e.target.value.replace(',', '.')) || 0 }
                             })}
-                            className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                            className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
                           />
                         </div>
                       </div>
@@ -2925,22 +3243,22 @@ export const KosztorysEditorPage: React.FC = () => {
                             <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${config.bgColor} ${config.color}`}>
                               {config.shortLabel}
                             </span>
-                            <span className="text-sm font-medium text-slate-700">{config.label}</span>
+                            <span className="text-sm font-medium text-gray-800">{config.label}</span>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-500 mb-1">Indeks</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Indeks</label>
                             <div className="flex gap-2">
                               <input
                                 type="text"
                                 value={resource.originIndex.index}
                                 onChange={e => handleUpdateSelectedItem({ originIndex: { ...resource.originIndex, index: e.target.value } })}
                                 placeholder="np. 999"
-                                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
                               />
                               <select
                                 value={resource.originIndex.type}
                                 onChange={e => handleUpdateSelectedItem({ originIndex: { ...resource.originIndex, type: e.target.value } })}
-                                className="px-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                className="px-2 py-2 border border-gray-300 rounded-lg text-sm"
                               >
                                 <option value="custom">Własny</option>
                                 <option value="ETO">ETO</option>
@@ -2948,34 +3266,34 @@ export const KosztorysEditorPage: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa</label>
                             <input
                               type="text"
                               value={resource.name}
                               onChange={e => handleUpdateSelectedItem({ name: e.target.value })}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                             />
                           </div>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 mb-1">Norma</label>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Norma</label>
                               <input
                                 type="number"
                                 step="0.0001"
                                 value={resource.norm.value}
                                 onChange={e => handleUpdateSelectedItem({ norm: { ...resource.norm, value: parseFloat(e.target.value) || 0 } })}
-                                className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
                               />
                             </div>
                             <div>
-                              <label className="block text-xs font-medium text-slate-500 mb-1">Jednostka</label>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Jednostka</label>
                               <select
                                 value={resource.unit.unitIndex}
                                 onChange={e => {
                                   const unit = UNITS_REFERENCE.find(u => u.index === e.target.value);
                                   if (unit) handleUpdateSelectedItem({ unit: { label: unit.unit, unitIndex: unit.index } });
                                 }}
-                                className="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm"
+                                className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm"
                               >
                                 {UNITS_REFERENCE.map(u => (
                                   <option key={u.index} value={u.index}>{u.unit}</option>
@@ -2984,17 +3302,17 @@ export const KosztorysEditorPage: React.FC = () => {
                             </div>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-500 mb-1">Cena</label>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Cena</label>
                             <input
                               type="number"
                               step="0.01"
                               value={resource.unitPrice.value}
                               onChange={e => handleUpdateSelectedItem({ unitPrice: { ...resource.unitPrice, value: parseFloat(e.target.value) || 0 } })}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                             />
                           </div>
-                          <div className="pt-4 border-t border-slate-200">
-                            <h4 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                          <div className="pt-4 border-t border-gray-200">
+                            <h4 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-2">
                               <ChevronDown className="w-4 h-4" />
                               Ilość inwestora
                             </h4>
@@ -3003,9 +3321,9 @@ export const KosztorysEditorPage: React.FC = () => {
                                 type="checkbox"
                                 checked={resource.investorTotal}
                                 onChange={e => handleUpdateSelectedItem({ investorTotal: e.target.checked })}
-                                className="w-4 h-4 rounded border-slate-300"
+                                className="w-4 h-4 rounded border-gray-300"
                               />
-                              <span className="text-sm text-slate-600">Całość inwestora</span>
+                              <span className="text-sm text-gray-600">Całość inwestora</span>
                             </div>
                           </div>
                           <button
@@ -3021,7 +3339,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 )}
 
                 {!selectedItem && (
-                  <p className="text-sm text-slate-500 text-center">
+                  <p className="text-sm text-gray-500 text-center">
                     Wybierz element na kosztorysie, aby wyświetlić jego właściwości
                   </p>
                 )}
@@ -3030,7 +3348,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {leftPanelMode === 'properties' && !selectedItem && (
               <div className="p-4">
-                <p className="text-sm text-slate-500 text-center">
+                <p className="text-sm text-gray-500 text-center">
                   Wybierz element na kosztorysie, aby wyświetlić jego właściwości
                 </p>
               </div>
@@ -3038,17 +3356,17 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {leftPanelMode === 'export' && (
               <div className="p-3 flex flex-col h-full">
-                <h3 className="text-sm font-semibold text-slate-900 mb-3">Eksportuj kosztorys</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Eksportuj kosztorys</h3>
 
                 {/* Zawartość section */}
-                <p className="text-xs text-slate-500 mb-2">Zawartość</p>
+                <p className="text-xs text-gray-500 mb-2">Zawartość</p>
 
                 {/* Template dropdown - Szablon */}
-                <p className="text-xs text-slate-500 mb-1">Szablon</p>
+                <p className="text-xs text-gray-500 mb-1">Szablon</p>
                 <select
                   value={exportTemplate}
                   onChange={(e) => setExportTemplate(e.target.value as ExportTemplate)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg mb-3"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-3"
                 >
                   <option value="niestandardowy">Niestandardowy</option>
                   <option value="kosztorys_inwestorski">Kosztorys inwestorski</option>
@@ -3057,29 +3375,53 @@ export const KosztorysEditorPage: React.FC = () => {
 
                 {/* Search field */}
                 <div className="relative mb-3">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Wyszukaj..."
                     value={exportSearch}
                     onChange={(e) => setExportSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-300 rounded-lg"
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg"
                   />
                 </div>
 
-                {/* Draggable export pages list */}
-                <div className="flex-1 overflow-y-auto space-y-2">
+                {/* Draggable export pages list - full drag-and-drop support */}
+                <div className="flex-1 overflow-y-auto space-y-1">
                   {exportPages
                     .filter(p => !exportSearch || p.label.toLowerCase().includes(exportSearch.toLowerCase()))
                     .map((page, index) => (
                     <div
                       key={page.id}
-                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-grab ${
-                        page.enabled ? 'border-slate-300 bg-white' : 'border-slate-200 bg-slate-50 opacity-60'
-                      }`}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-grab transition-all ${
+                        page.enabled ? 'border-gray-300 bg-white' : 'border-gray-200 bg-gray-50 opacity-60'
+                      } ${draggedExportPageId === page.id ? 'opacity-50 scale-95' : ''}`}
                       draggable
+                      onDragStart={(e) => {
+                        setDraggedExportPageId(page.id);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragEnd={() => setDraggedExportPageId(null)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (!draggedExportPageId || draggedExportPageId === page.id) return;
+
+                        const newPages = [...exportPages];
+                        const draggedIndex = newPages.findIndex(p => p.id === draggedExportPageId);
+                        const dropIndex = newPages.findIndex(p => p.id === page.id);
+
+                        if (draggedIndex !== -1 && dropIndex !== -1) {
+                          const [draggedItem] = newPages.splice(draggedIndex, 1);
+                          newPages.splice(dropIndex, 0, draggedItem);
+                          setExportPages(newPages);
+                        }
+                        setDraggedExportPageId(null);
+                      }}
                     >
-                      <GripVertical className="w-4 h-4 text-slate-400" />
+                      <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       <input
                         type="checkbox"
                         checked={page.enabled}
@@ -3089,16 +3431,16 @@ export const KosztorysEditorPage: React.FC = () => {
                           newPages[actualIndex] = { ...page, enabled: !page.enabled };
                           setExportPages(newPages);
                         }}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300 flex-shrink-0"
                       />
-                      <span className="flex-1 text-xs text-slate-700">{page.label}</span>
+                      <span className="flex-1 text-xs text-gray-800 truncate">{page.label}</span>
                       {page.canEdit && (
                         <button
                           onClick={() => setLeftPanelMode('titlePageEditor')}
-                          className="p-1 hover:bg-slate-100 rounded"
+                          className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
                           title="Edytuj stronę tytułową"
                         >
-                          <Settings className="w-3 h-3 text-slate-400" />
+                          <Settings className="w-3 h-3 text-gray-400" />
                         </button>
                       )}
                       <button
@@ -3106,23 +3448,23 @@ export const KosztorysEditorPage: React.FC = () => {
                           const newPages = exportPages.filter(p => p.id !== page.id);
                           setExportPages(newPages);
                         }}
-                        className="p-1 hover:bg-slate-100 rounded"
+                        className="p-1 hover:bg-gray-100 rounded flex-shrink-0"
                         title="Usuń"
                       >
-                        <X className="w-3 h-3 text-slate-400" />
+                        <X className="w-3 h-3 text-gray-400" />
                       </button>
                     </div>
                   ))}
                 </div>
 
                 {/* Add page and print buttons - fixed at bottom */}
-                <div className="mt-4 pt-3 border-t border-slate-200 flex gap-2">
-                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
+                <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2">
+                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
                     <Plus className="w-4 h-4" />
                     Dodaj
                   </button>
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => setShowPrintDialog(true)}
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     <Printer className="w-4 h-4" />
@@ -3135,22 +3477,22 @@ export const KosztorysEditorPage: React.FC = () => {
             {leftPanelMode === 'catalog' && (
               <div className="flex flex-col h-full">
                 {/* Search */}
-                <div className="p-3 border-b border-slate-200">
+                <div className="p-3 border-b border-gray-200">
                   <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Szukaj pozycji..."
                       value={catalogSearch}
                       onChange={e => setCatalogSearch(e.target.value)}
-                      className="w-full pl-8 pr-8 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full pl-8 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                     {catalogSearch && (
                       <button
                         onClick={() => setCatalogSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
                       >
-                        <X className="w-3 h-3 text-slate-400" />
+                        <X className="w-3 h-3 text-gray-400" />
                       </button>
                     )}
                   </div>
@@ -3158,7 +3500,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
                 {/* Catalog tree */}
                 <div className="flex-1 overflow-y-auto p-2">
-                  <div className="text-xs text-slate-500 px-2 mb-2">
+                  <div className="text-xs text-gray-500 px-2 mb-2">
                     <div className="flex items-center justify-between">
                       <span>Podstawa</span>
                       <span>Opis</span>
@@ -3169,33 +3511,33 @@ export const KosztorysEditorPage: React.FC = () => {
 
                 {/* Insert position form */}
                 {selectedCatalogItem?.type === 'position' && (
-                  <div className="p-3 border-t border-slate-200 bg-slate-50">
-                    <p className="text-xs text-slate-600 mb-2 truncate" title={selectedCatalogItem.name}>
+                  <div className="p-3 border-t border-gray-200 bg-gray-50">
+                    <p className="text-xs text-gray-600 mb-2 truncate" title={selectedCatalogItem.name}>
                       {selectedCatalogItem.code}
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
-                        <label className="text-xs text-slate-500">Ilość</label>
+                        <label className="text-xs text-gray-500">Ilość</label>
                         <input
                           type="number"
                           value={catalogQuantity}
                           onChange={e => setCatalogQuantity(e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div className="w-16">
-                        <label className="text-xs text-slate-500">{selectedCatalogItem.unit}</label>
-                        <div className="px-2 py-1.5 text-sm bg-slate-100 rounded text-center">
+                        <label className="text-xs text-gray-500">{selectedCatalogItem.unit}</label>
+                        <div className="px-2 py-1.5 text-sm bg-gray-100 rounded text-center">
                           {selectedCatalogItem.unit}
                         </div>
                       </div>
                       <div className="w-20">
-                        <label className="text-xs text-slate-500">Krotność</label>
+                        <label className="text-xs text-gray-500">Krotność</label>
                         <input
                           type="number"
                           value={catalogMultiplier}
                           onChange={e => setCatalogMultiplier(e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                     </div>
@@ -3213,58 +3555,42 @@ export const KosztorysEditorPage: React.FC = () => {
             {/* Comments panel - matching eKosztorysowanie exactly */}
             {leftPanelMode === 'comments' && (
               <div className="p-3 flex flex-col h-full">
-                <h3 className="text-sm font-semibold text-slate-900 mb-3">Komentarze i zadania</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Komentarze</h3>
 
-                {/* Category filter tabs - matching screenshots */}
-                <div className="flex gap-1 mb-3">
-                  <button
-                    onClick={() => setCommentsFilter('all')}
-                    className={`px-2 py-1 text-xs rounded ${
-                      commentsFilter === 'all' ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:bg-slate-100'
-                    }`}
-                  >
-                    Wszystkie
-                  </button>
-                  <button
-                    onClick={() => setCommentsFilter('unresolved')}
-                    className={`px-2 py-1 text-xs rounded ${
-                      commentsFilter === 'unresolved' ? 'bg-amber-100 text-amber-700' : 'text-slate-500 hover:bg-slate-100'
-                    }`}
-                  >
-                    Do weryfikacji
-                  </button>
-                  <button
-                    onClick={() => setCommentsFilter('mine')}
-                    className={`px-2 py-1 text-xs rounded ${
-                      commentsFilter === 'mine' ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-100'
-                    }`}
-                  >
-                    Do uzupełnienia
-                  </button>
-                </div>
+                {/* Category filter dropdown - matching eKosztorysowanie */}
+                <select
+                  value={commentsFilter}
+                  onChange={(e) => setCommentsFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-3"
+                >
+                  <option value="all">Wszystkie komentarze</option>
+                  <option value="unresolved">Do weryfikacji</option>
+                  <option value="mine">Do uzupełnienia</option>
+                  <option value="closed">Zamknięte</option>
+                </select>
 
                 {/* Comments list */}
                 <div className="flex-1 overflow-y-auto space-y-3">
                   {comments.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
+                    <p className="text-sm text-gray-400 text-center py-8">Brak komentarzy</p>
                   ) : (
                     comments.map(comment => (
-                      <div key={comment.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div key={comment.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         {/* Status badge at top */}
                         <div className="flex items-center justify-between mb-2">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
                             comment.status === 'zatwierdzony' ? 'bg-green-100 text-green-700' :
                             comment.status === 'odrzucony' ? 'bg-red-100 text-red-700' :
                             comment.status === 'do_weryfikacji' ? 'bg-amber-100 text-amber-700' :
-                            'bg-slate-200 text-slate-600'
+                            'bg-gray-200 text-gray-600'
                           }`}>
                             {comment.status === 'zatwierdzony' ? 'Zatwierdzony' :
                              comment.status === 'odrzucony' ? 'Odrzucony' :
                              comment.status === 'do_weryfikacji' ? 'Do weryfikacji' :
                              'Bez kategorii'}
                           </span>
-                          <button className="p-1 hover:bg-slate-200 rounded">
-                            <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                          <button className="p-1 hover:bg-gray-200 rounded">
+                            <MoreHorizontal className="w-4 h-4 text-gray-400" />
                           </button>
                         </div>
 
@@ -3274,8 +3600,8 @@ export const KosztorysEditorPage: React.FC = () => {
                             {comment.userInitials}
                           </div>
                           <div className="flex-1">
-                            <div className="text-sm font-medium text-slate-700">{comment.userName}</div>
-                            <div className="text-xs text-slate-400">{comment.timestamp}</div>
+                            <div className="text-sm font-medium text-gray-800">{comment.userName}</div>
+                            <div className="text-xs text-gray-400">{comment.timestamp}</div>
                           </div>
                         </div>
 
@@ -3288,10 +3614,10 @@ export const KosztorysEditorPage: React.FC = () => {
                         )}
 
                         {/* Comment text */}
-                        <p className="text-sm text-slate-600">{comment.text}</p>
+                        <p className="text-sm text-gray-600">{comment.text}</p>
 
                         {/* Reply button */}
-                        <div className="mt-2 pt-2 border-t border-slate-200">
+                        <div className="mt-2 pt-2 border-t border-gray-200">
                           <button className="text-xs text-blue-600 hover:underline">
                             Odpowiedz
                           </button>
@@ -3301,22 +3627,11 @@ export const KosztorysEditorPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Add comment form */}
-                <div className="mt-3 pt-3 border-t border-slate-200">
-                  <div className="mb-2">
-                    <select className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-lg mb-2">
-                      <option value="">Bez kategorii</option>
-                      <option value="do_weryfikacji">Do weryfikacji</option>
-                      <option value="do_uzupelnienia">Do uzupełnienia</option>
-                    </select>
-                  </div>
-                  <textarea
-                    placeholder="Wpisz komentarz..."
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg resize-none"
-                    rows={3}
-                  />
-                  <button className="mt-2 w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Dodaj komentarz
+                {/* Add comment button - matching eKosztorysowanie */}
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <button className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+                    <Plus className="w-4 h-4" />
+                    Wstaw komentarz do...
                   </button>
                 </div>
               </div>
@@ -3325,13 +3640,13 @@ export const KosztorysEditorPage: React.FC = () => {
             {/* Title Page Editor - Strona tytułowa matching eKosztorysowanie */}
             {leftPanelMode === 'titlePageEditor' && (
               <div className="p-3 flex flex-col h-full overflow-y-auto">
-                <h3 className="text-sm font-semibold text-slate-900 mb-3">Strona tytułowa</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Strona tytułowa</h3>
 
                 {/* Tytuł section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, title: !prev.title }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Tytuł</span>
                     {titlePageSections.title ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3343,17 +3658,17 @@ export const KosztorysEditorPage: React.FC = () => {
                         value={titlePageData.title}
                         onChange={e => setTitlePageData(prev => ({ ...prev, title: e.target.value }))}
                         placeholder="Tytuł kosztorysu"
-                        className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                       />
                     </div>
                   )}
                 </div>
 
                 {/* Wartość robót section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, workValue: !prev.workValue }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Wartość robót</span>
                     {titlePageSections.workValue ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3365,37 +3680,37 @@ export const KosztorysEditorPage: React.FC = () => {
                           type="checkbox"
                           checked={titlePageData.hideManHourRate}
                           onChange={e => setTitlePageData(prev => ({ ...prev, hideManHourRate: e.target.checked }))}
-                          className="w-4 h-4 rounded border-slate-300"
+                          className="w-4 h-4 rounded border-gray-300"
                         />
-                        <span className="text-xs text-slate-600">Ukryj stawkę roboczogodziny</span>
+                        <span className="text-xs text-gray-600">Ukryj stawkę roboczogodziny</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={titlePageData.hideOverheads}
                           onChange={e => setTitlePageData(prev => ({ ...prev, hideOverheads: e.target.checked }))}
-                          className="w-4 h-4 rounded border-slate-300"
+                          className="w-4 h-4 rounded border-gray-300"
                         />
-                        <span className="text-xs text-slate-600">Ukryj narzuty</span>
+                        <span className="text-xs text-gray-600">Ukryj narzuty</span>
                       </label>
                       <label className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           checked={titlePageData.hideWorkValue}
                           onChange={e => setTitlePageData(prev => ({ ...prev, hideWorkValue: e.target.checked }))}
-                          className="w-4 h-4 rounded border-slate-300"
+                          className="w-4 h-4 rounded border-gray-300"
                         />
-                        <span className="text-xs text-slate-600">Ukryj wartość robót</span>
+                        <span className="text-xs text-gray-600">Ukryj wartość robót</span>
                       </label>
                     </div>
                   )}
                 </div>
 
                 {/* Podmiot opracowujący kosztorys section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, company: !prev.company }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Podmiot opracowujący kosztorys</span>
                     {titlePageSections.company ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3403,20 +3718,20 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.company && (
                     <div className="px-3 pb-3 space-y-2">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <label className="block text-xs text-gray-500 mb-1">Nazwa</label>
                         <input
                           type="text"
                           value={titlePageData.companyName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, companyName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres</label>
                         <textarea
                           value={titlePageData.companyAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, companyAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
                           rows={2}
                         />
                       </div>
@@ -3425,10 +3740,10 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Zamówienie section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, order: !prev.order }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Zamówienie</span>
                     {titlePageSections.order ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3436,20 +3751,20 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.order && (
                     <div className="px-3 pb-3 space-y-2">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <label className="block text-xs text-gray-500 mb-1">Nazwa</label>
                         <input
                           type="text"
                           value={titlePageData.orderName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, orderName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Adres budowy</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres budowy</label>
                         <textarea
                           value={titlePageData.orderAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, orderAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
                           rows={2}
                         />
                       </div>
@@ -3458,10 +3773,10 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Zamawiający section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, client: !prev.client }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Zamawiający</span>
                     {titlePageSections.client ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3469,20 +3784,20 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.client && (
                     <div className="px-3 pb-3 space-y-2">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <label className="block text-xs text-gray-500 mb-1">Nazwa</label>
                         <input
                           type="text"
                           value={titlePageData.clientName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, clientName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres</label>
                         <textarea
                           value={titlePageData.clientAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, clientAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
                           rows={2}
                         />
                       </div>
@@ -3491,10 +3806,10 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Wykonawca section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, contractor: !prev.contractor }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Wykonawca</span>
                     {titlePageSections.contractor ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3502,31 +3817,41 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.contractor && (
                     <div className="px-3 pb-3 space-y-2">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Nazwa</label>
+                        <label className="block text-xs text-gray-500 mb-1">Nazwa</label>
                         <input
                           type="text"
                           value={titlePageData.contractorName}
                           onChange={e => setTitlePageData(prev => ({ ...prev, contractorName: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Adres</label>
+                        <label className="block text-xs text-gray-500 mb-1">Adres</label>
                         <textarea
                           value={titlePageData.contractorAddress}
                           onChange={e => setTitlePageData(prev => ({ ...prev, contractorAddress: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded resize-none"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
                           rows={2}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Branża</label>
+                        <label className="block text-xs text-gray-500 mb-1">Branża</label>
                         <input
                           type="text"
                           value={titlePageData.industry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, industry: e.target.value }))}
                           placeholder="np. Budowlana, Elektryczna"
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">NIP</label>
+                        <input
+                          type="text"
+                          value={titlePageData.contractorNIP}
+                          onChange={e => setTitlePageData(prev => ({ ...prev, contractorNIP: e.target.value }))}
+                          placeholder="np. 123-456-78-90"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                     </div>
@@ -3534,10 +3859,10 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Osoby odpowiedzialne section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, participants: !prev.participants }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Osoby odpowiedzialne</span>
                     {titlePageSections.participants ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3545,37 +3870,37 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.participants && (
                     <div className="px-3 pb-3 space-y-3">
                       <div className="space-y-2">
-                        <p className="text-xs font-medium text-slate-600">Opracował</p>
+                        <p className="text-xs font-medium text-gray-600">Opracował</p>
                         <input
                           type="text"
                           value={titlePageData.preparedBy}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedBy: e.target.value }))}
                           placeholder="Imię i nazwisko"
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                         <input
                           type="text"
                           value={titlePageData.preparedByIndustry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedByIndustry: e.target.value }))}
                           placeholder="Branża"
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div className="space-y-2">
-                        <p className="text-xs font-medium text-slate-600">Sprawdził</p>
+                        <p className="text-xs font-medium text-gray-600">Sprawdził</p>
                         <input
                           type="text"
                           value={titlePageData.checkedBy}
                           onChange={e => setTitlePageData(prev => ({ ...prev, checkedBy: e.target.value }))}
                           placeholder="Imię i nazwisko"
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                         <input
                           type="text"
                           value={titlePageData.checkedByIndustry}
                           onChange={e => setTitlePageData(prev => ({ ...prev, checkedByIndustry: e.target.value }))}
                           placeholder="Branża"
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                     </div>
@@ -3583,10 +3908,10 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Daty section */}
-                <div className="border border-slate-200 rounded-lg mb-3">
+                <div className="border border-gray-200 rounded-lg mb-3">
                   <button
                     onClick={() => setTitlePageSections(prev => ({ ...prev, dates: !prev.dates }))}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <span>Daty</span>
                     {titlePageSections.dates ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -3594,22 +3919,89 @@ export const KosztorysEditorPage: React.FC = () => {
                   {titlePageSections.dates && (
                     <div className="px-3 pb-3 space-y-2">
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Data opracowania</label>
+                        <label className="block text-xs text-gray-500 mb-1">Data opracowania</label>
                         <input
                           type="date"
                           value={titlePageData.preparedDate}
                           onChange={e => setTitlePageData(prev => ({ ...prev, preparedDate: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-500 mb-1">Data zatwierdzenia</label>
+                        <label className="block text-xs text-gray-500 mb-1">Data zatwierdzenia</label>
                         <input
                           type="date"
                           value={titlePageData.approvedDate}
                           onChange={e => setTitlePageData(prev => ({ ...prev, approvedDate: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded"
+                          className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                         />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Stawki section - matching eKosztorysowanie documentation */}
+                <div className="border border-gray-200 rounded-lg mb-3">
+                  <button
+                    onClick={() => setTitlePageSections(prev => ({ ...prev, stawki: !prev.stawki }))}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                  >
+                    <span>Stawki</span>
+                    {titlePageSections.stawki ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {titlePageSections.stawki && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Stawka robocizny</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={titlePageData.stawkaRobocizny}
+                            onChange={e => setTitlePageData(prev => ({ ...prev, stawkaRobocizny: e.target.value }))}
+                            placeholder="0,00"
+                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                          />
+                          <span className="text-xs text-gray-500">PLN/r-g</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Koszty pośrednie (Kp)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={titlePageData.kosztyPosrednie}
+                            onChange={e => setTitlePageData(prev => ({ ...prev, kosztyPosrednie: e.target.value }))}
+                            placeholder="0"
+                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Zysk (Z)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={titlePageData.zysk}
+                            onChange={e => setTitlePageData(prev => ({ ...prev, zysk: e.target.value }))}
+                            placeholder="0"
+                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Koszty zakupu (Kz)</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={titlePageData.kosztyZakupu}
+                            onChange={e => setTitlePageData(prev => ({ ...prev, kosztyZakupu: e.target.value }))}
+                            placeholder="0"
+                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -3635,29 +4027,29 @@ export const KosztorysEditorPage: React.FC = () => {
           {/* Narzuty View */}
           {viewMode === 'narzuty' && (
             <div className="p-4">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Narzuty kosztorysu</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Narzuty kosztorysu</h3>
 
               {/* Narzuty table */}
-              <table className="w-full border-collapse border border-slate-200 rounded-lg overflow-hidden">
-                <thead className="bg-slate-50">
-                  <tr className="border-b border-slate-300">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Rodzaj narzutu</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Podstawa naliczania</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Stawka %</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-32">Wartość</th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase w-20">Akcje</th>
+              <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                <thead className="bg-gray-50">
+                  <tr className="border-b border-gray-300">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rodzaj narzutu</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Podstawa naliczania</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Stawka %</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-32">Wartość</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-20">Akcje</th>
                   </tr>
                 </thead>
                 <tbody>
                   {estimateData.root.overheads.map((overhead, index) => (
-                    <tr key={overhead.id} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-sm text-slate-700">
+                    <tr key={overhead.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">
                         {overhead.type === 'indirect_costs' ? 'Koszty pośrednie (Kp)' :
                          overhead.type === 'profit' ? 'Zysk (Z)' :
                          overhead.type === 'purchase_costs' ? 'Koszty zakupu (Kz)' :
                          overhead.name}
                       </td>
-                      <td className="px-3 py-2 text-sm text-slate-600">
+                      <td className="px-3 py-2 text-sm text-gray-600">
                         {overhead.base === 'labor' ? 'Robocizna (R)' :
                          overhead.base === 'material' ? 'Materiały (M)' :
                          overhead.base === 'equipment' ? 'Sprzęt (S)' :
@@ -3681,7 +4073,7 @@ export const KosztorysEditorPage: React.FC = () => {
                               }
                             }));
                           }}
-                          className="w-20 px-2 py-1 text-sm border border-slate-300 rounded text-right"
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded text-right"
                         />
                         <span className="ml-1">%</span>
                       </td>
@@ -3694,16 +4086,16 @@ export const KosztorysEditorPage: React.FC = () => {
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <button className="p-1 hover:bg-slate-100 rounded">
-                          <Settings className="w-4 h-4 text-slate-400" />
+                        <button className="p-1 hover:bg-gray-100 rounded">
+                          <Settings className="w-4 h-4 text-gray-400" />
                         </button>
                       </td>
                     </tr>
                   ))}
 
                   {/* Summary row */}
-                  <tr className="bg-slate-100 font-semibold">
-                    <td colSpan={3} className="px-3 py-2 text-sm text-slate-700 text-right">
+                  <tr className="bg-gray-100 font-semibold">
+                    <td colSpan={3} className="px-3 py-2 text-sm text-gray-800 text-right">
                       Razem narzuty:
                     </td>
                     <td className="px-3 py-2 text-sm text-right">
@@ -3715,7 +4107,7 @@ export const KosztorysEditorPage: React.FC = () => {
               </table>
 
               {/* Add narzut button */}
-              <button className="mt-4 flex items-center gap-2 px-4 py-2 text-sm border border-dashed border-slate-300 rounded-lg text-slate-600 hover:bg-slate-50">
+              <button className="mt-4 flex items-center gap-2 px-4 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
                 <Plus className="w-4 h-4" />
                 Dodaj narzut
               </button>
@@ -3726,13 +4118,13 @@ export const KosztorysEditorPage: React.FC = () => {
           {viewMode === 'zestawienia' && (
             <div className="p-4">
               {/* Tabs for zestawienia */}
-              <div className="flex gap-1 mb-4 border-b border-slate-200">
+              <div className="flex gap-1 mb-4 border-b border-gray-200">
                 <button
                   onClick={() => setZestawieniaTab('robocizna')}
                   className={`px-4 py-2 text-sm font-medium ${
                     zestawieniaTab === 'robocizna'
                       ? 'text-blue-600 border-b-2 border-blue-600'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   <Users className="w-4 h-4 inline mr-1" />
@@ -3743,7 +4135,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   className={`px-4 py-2 text-sm font-medium ${
                     zestawieniaTab === 'materialy'
                       ? 'text-green-600 border-b-2 border-green-600'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   <Package className="w-4 h-4 inline mr-1" />
@@ -3754,7 +4146,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   className={`px-4 py-2 text-sm font-medium ${
                     zestawieniaTab === 'sprzet'
                       ? 'text-orange-600 border-b-2 border-orange-600'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   <Wrench className="w-4 h-4 inline mr-1" />
@@ -3763,16 +4155,16 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
 
               {/* Zestawienie table */}
-              <table className="w-full border-collapse border border-slate-200 rounded-lg overflow-hidden">
-                <thead className="bg-slate-50">
-                  <tr className="border-b border-slate-300">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Indeks</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ilość</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Wartość</th>
+              <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                <thead className="bg-gray-50">
+                  <tr className="border-b border-gray-300">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Lp.</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">Indeks</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nazwa</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-16">j.m.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Ilość</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Cena jedn.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Wartość</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3798,7 +4190,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     if (resources.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                          <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                             Brak nakładów typu {zestawieniaTab === 'robocizna' ? 'robocizna' :
                                                  zestawieniaTab === 'materialy' ? 'materiały' : 'sprzęt'}
                           </td>
@@ -3811,11 +4203,11 @@ export const KosztorysEditorPage: React.FC = () => {
                       const value = item.quantity * item.resource.unitPrice.value;
                       totalValue += value;
                       return (
-                        <tr key={item.resource.id} className="border-b border-slate-200 hover:bg-slate-50">
-                          <td className="px-3 py-2 text-sm text-slate-600">{index + 1}</td>
-                          <td className="px-3 py-2 text-sm font-mono text-slate-600">{item.resource.originIndex.index || '-'}</td>
-                          <td className="px-3 py-2 text-sm text-slate-700">{item.resource.name}</td>
-                          <td className="px-3 py-2 text-sm text-center text-slate-600">{item.resource.unit.label}</td>
+                        <tr key={item.resource.id} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
+                          <td className="px-3 py-2 text-sm font-mono text-gray-600">{item.resource.originIndex.index || '-'}</td>
+                          <td className="px-3 py-2 text-sm text-gray-800">{item.resource.name}</td>
+                          <td className="px-3 py-2 text-sm text-center text-gray-600">{item.resource.unit.label}</td>
                           <td className="px-3 py-2 text-sm text-right">{formatNumber(item.quantity)}</td>
                           <td className="px-3 py-2 text-sm text-right">{formatCurrency(item.resource.unitPrice.value)}</td>
                           <td className="px-3 py-2 text-sm text-right font-medium">{formatCurrency(value)}</td>
@@ -3825,8 +4217,8 @@ export const KosztorysEditorPage: React.FC = () => {
                   })()}
 
                   {/* Summary row */}
-                  <tr className="bg-slate-100 font-semibold">
-                    <td colSpan={6} className="px-3 py-2 text-sm text-slate-700 text-right">
+                  <tr className="bg-gray-100 font-semibold">
+                    <td colSpan={6} className="px-3 py-2 text-sm text-gray-800 text-right">
                       Razem {zestawieniaTab === 'robocizna' ? 'robocizna' :
                              zestawieniaTab === 'materialy' ? 'materiały' : 'sprzęt'}:
                     </td>
@@ -3846,41 +4238,40 @@ export const KosztorysEditorPage: React.FC = () => {
           {/* Standard table views (przedmiar, kosztorys, naklady) */}
           {(viewMode === 'przedmiar' || viewMode === 'kosztorys' || viewMode === 'naklady' || viewMode === 'pozycje') && (
             <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-slate-50 z-10">
+              <thead className="sticky top-0 bg-gray-50 z-10">
                 {viewMode === 'przedmiar' ? (
-                  <tr className="border-b border-slate-300">
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-32">Podstawa</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-32">Poszczególne</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Razem</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-24">Akcje</th>
+                  <tr className="border-b border-gray-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">Podstawa</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nakład</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-16">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-32">Poszczególne</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Razem</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-24">Akcje</th>
                   </tr>
                 ) : viewMode === 'naklady' ? (
-                  <tr className="border-b border-slate-300">
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">Indeks</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-16">j.m.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ilość</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Cena jedn.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Wartość</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość inwestora</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-28">Ilość wykonawcy</th>
+                  <tr className="border-b border-gray-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Indeks</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nazwa</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-16">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Ilość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Cena jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Wartość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Ilość inwestora</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Ilość wykonawcy</th>
                   </tr>
                 ) : (
-                  <tr className="border-b border-slate-300">
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-10">Lp.</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">Podstawa</th>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-slate-500 uppercase">Nakład</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-14">j.m.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Nakład j.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Ceny jedn.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Koszt jedn.</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-16">Ilość</th>
-                    <th className="px-2 py-2 text-right text-xs font-medium text-slate-500 uppercase w-24">Wartość</th>
-                    <th className="px-2 py-2 text-center text-xs font-medium text-slate-500 uppercase w-20"></th>
+                  <tr className="border-b border-gray-300">
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-14">Lp.</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">Podstawa</th>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nakład</th>
+                    <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase w-12">j.m.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Nakład j.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Ceny jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-24">Koszt jedn.</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Ilość</th>
+                    <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">Wartość</th>
                   </tr>
                 )}
               </thead>
@@ -3902,15 +4293,15 @@ export const KosztorysEditorPage: React.FC = () => {
                 {/* Empty state */}
                 {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center">
-                      <div className="text-slate-400 mb-4">
+                    <td colSpan={9} className="px-4 py-12 text-center">
+                      <div className="text-gray-400 mb-4">
                         <FileText className="w-12 h-12 mx-auto mb-2" />
                         <p>Kosztorys jest pusty</p>
                       </div>
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={handleAddSection}
-                          className="px-4 py-2 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+                          className="px-4 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
                         >
                           <FolderPlus className="w-4 h-4 inline mr-1" />
                           Dodaj dział
@@ -3935,7 +4326,7 @@ export const KosztorysEditorPage: React.FC = () => {
       </div>
 
       {/* Footer with totals */}
-      <div className="bg-white border-t border-slate-200 px-4 py-2 flex items-center justify-between">
+      <div className="bg-white border-t border-gray-200 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             onClick={handleSave}
@@ -3947,7 +4338,7 @@ export const KosztorysEditorPage: React.FC = () => {
           </button>
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
             Eksport CSV
@@ -3960,87 +4351,117 @@ export const KosztorysEditorPage: React.FC = () => {
           )}
         </div>
         <div className="text-right">
-          <span className="text-sm text-slate-500 mr-4">
+          <span className="text-sm text-gray-500 mr-4">
             Wartość kosztorysu:
           </span>
-          <span className="text-xl font-bold text-slate-900">
+          <span className="text-xl font-bold text-gray-900">
             {formatCurrency(calculationResult?.totalValue || 0)}
           </span>
         </div>
       </div>
 
-      {/* Alerts bar - matching eKosztorysowanie "0 z 13" style */}
-      <div className="bg-slate-50 border-t border-slate-200 px-4 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
+      {/* Alerts bar - matching eKosztorysowanie "0 z 13" style with visual slider */}
+      <div className="bg-gray-50 border-t border-gray-200 px-4 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-3 flex-1">
+          <span className="text-xs text-gray-500 font-medium">Alerty</span>
+          <span className="text-sm text-gray-600 min-w-[60px]">
+            {alerts.length > 0 ? alertsCount.current + 1 : 0} z {alerts.length}
+          </span>
+
+          {/* Visual slider track - matching eKosztorysowanie ◄════════════════► style */}
+          <div className="flex items-center gap-1 flex-1 max-w-md">
             <button
-              onClick={() => setAlertsCount(prev => ({ ...prev, current: Math.max(0, prev.current - 1) }))}
-              disabled={alertsCount.current === 0}
-              className="p-1 hover:bg-slate-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => handleNavigateToAlert(alertsCount.current - 1)}
+              disabled={alertsCount.current === 0 || alerts.length === 0}
+              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <ChevronDown className="w-4 h-4 rotate-90" />
+              <ChevronLeft className="w-4 h-4 text-gray-500" />
             </button>
-            <span className="text-sm text-slate-600 min-w-[60px] text-center">
-              {alertsCount.current} z {alertsCount.total}
-            </span>
+
+            {/* Slider track */}
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-full relative">
+              {alerts.length > 0 && (
+                <div
+                  className="absolute h-full bg-blue-500 rounded-full transition-all duration-200"
+                  style={{
+                    width: `${((alertsCount.current + 1) / alerts.length) * 100}%`,
+                    minWidth: '8px'
+                  }}
+                />
+              )}
+            </div>
+
             <button
-              onClick={() => setAlertsCount(prev => ({ ...prev, current: Math.min(prev.total, prev.current + 1) }))}
-              disabled={alertsCount.current >= alertsCount.total}
-              className="p-1 hover:bg-slate-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => handleNavigateToAlert(alertsCount.current + 1)}
+              disabled={alertsCount.current >= alerts.length - 1 || alerts.length === 0}
+              className="p-0.5 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <ChevronDown className="w-4 h-4 -rotate-90" />
+              <ChevronRight className="w-4 h-4 text-gray-500" />
             </button>
           </div>
-          {alertsCount.total > 0 && (
-            <span className="text-xs text-amber-600 flex items-center gap-1">
+
+          {/* Alert message */}
+          {alerts.length > 0 && alertsCount.current < alerts.length && (
+            <span className={`text-xs flex items-center gap-1 ml-2 ${
+              alerts[alertsCount.current]?.type === 'error' ? 'text-[#EF4444]' : 'text-amber-600'
+            }`}>
               <AlertCircle className="w-3 h-3" />
-              Alerty w kosztorysie
+              {alerts[alertsCount.current]?.message || 'Alerty w kosztorysie'}
+            </span>
+          )}
+          {alerts.length === 0 && (
+            <span className="text-xs text-green-600 flex items-center gap-1 ml-2">
+              <CheckCircle2 className="w-3 h-3" />
+              Brak alertów
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>Ostatnia modyfikacja: {estimate?.settings.modified ? new Date(estimate.settings.modified).toLocaleString('pl-PL') : '-'}</span>
+
+        {/* Right side - total value */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-gray-500">Wartość kosztorysu:</span>
+          <span className="font-bold text-gray-900">{formatCurrency(calculationResult?.totalValue || 0)}</span>
         </div>
       </div>
 
       {/* Add Position Modal */}
       {showAddPositionModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full shadow-xl">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">Dodaj pozycję</h2>
-              <button onClick={() => setShowAddPositionModal(false)} className="text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Dodaj pozycję</h2>
+              <button onClick={() => setShowAddPositionModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Podstawa (norma)</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Podstawa (norma)</label>
                 <input
                   type="text"
                   value={newPositionForm.base}
                   onChange={e => setNewPositionForm(prev => ({ ...prev, base: e.target.value }))}
                   placeholder="np. KNNR 5 0702-01"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa nakładu</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Nazwa nakładu</label>
                 <textarea
                   value={newPositionForm.name}
                   onChange={e => setNewPositionForm(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Opis pracy..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   rows={2}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka miary</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Jednostka miary</label>
                   <select
                     value={newPositionForm.unitIndex}
                     onChange={e => setNewPositionForm(prev => ({ ...prev, unitIndex: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   >
                     {UNITS_REFERENCE.map(u => (
                       <option key={u.index} value={u.index}>{u.unit} - {u.name}</option>
@@ -4048,21 +4469,21 @@ export const KosztorysEditorPage: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Przedmiar (ilość)</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Przedmiar (ilość)</label>
                   <input
                     type="text"
                     value={newPositionForm.measurement}
                     onChange={e => setNewPositionForm(prev => ({ ...prev, measurement: e.target.value }))}
                     placeholder="np. 10*2.5 lub 25"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
               <button
                 onClick={() => setShowAddPositionModal(false)}
-                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Anuluj
               </button>
@@ -4079,17 +4500,17 @@ export const KosztorysEditorPage: React.FC = () => {
 
       {/* Add Resource Modal */}
       {showAddResourceModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full shadow-xl">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">Dodaj nakład</h2>
-              <button onClick={() => setShowAddResourceModal(false)} className="text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Dodaj nakład</h2>
+              <button onClick={() => setShowAddResourceModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Typ nakładu</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Typ nakładu</label>
                 <div className="flex gap-2">
                   {(['labor', 'material', 'equipment'] as KosztorysResourceType[]).map(type => {
                     const config = RESOURCE_TYPE_CONFIG[type];
@@ -4103,7 +4524,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border ${
                           newResourceForm.type === type
                             ? `${config.bgColor} ${config.color} border-current`
-                            : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                            : 'border-gray-300 text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         <config.icon className="w-4 h-4" />
@@ -4115,21 +4536,21 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Indeks</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Indeks</label>
                   <input
                     type="text"
                     value={newResourceForm.index}
                     onChange={e => setNewResourceForm(prev => ({ ...prev, index: e.target.value }))}
                     placeholder="np. 999"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Jednostka</label>
                   <select
                     value={newResourceForm.unitIndex}
                     onChange={e => setNewResourceForm(prev => ({ ...prev, unitIndex: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   >
                     {UNITS_REFERENCE.map(u => (
                       <option key={u.index} value={u.index}>{u.unit} - {u.name}</option>
@@ -4138,42 +4559,42 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Nazwa</label>
                 <input
                   type="text"
                   value={newResourceForm.name}
                   onChange={e => setNewResourceForm(prev => ({ ...prev, name: e.target.value }))}
                   placeholder={RESOURCE_TYPE_CONFIG[newResourceForm.type].label}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Norma</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Norma</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={newResourceForm.normValue}
                     onChange={e => setNewResourceForm(prev => ({ ...prev, normValue: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Cena jednostkowa</label>
                   <input
                     type="number"
                     step="0.01"
                     value={newResourceForm.unitPrice}
                     onChange={e => setNewResourceForm(prev => ({ ...prev, unitPrice: parseFloat(e.target.value) || 0 }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
               </div>
             </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
               <button
                 onClick={() => setShowAddResourceModal(false)}
-                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Anuluj
               </button>
@@ -4190,24 +4611,24 @@ export const KosztorysEditorPage: React.FC = () => {
 
       {/* Ceny (Prices Update) Dialog */}
       {showCenyDialog && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-lg w-full shadow-xl">
             {/* Dialog header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900">Uaktualnij ceny w kosztorysie</h2>
-              <button onClick={() => setShowCenyDialog(false)} className="text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Uaktualnij ceny w kosztorysie</h2>
+              <button onClick={() => setShowCenyDialog(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-slate-200">
+            <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setCenyDialogTab('wstaw')}
                 className={`px-6 py-3 text-sm font-medium ${
                   cenyDialogTab === 'wstaw'
                     ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-slate-500 hover:text-slate-700'
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
                 Wstaw ceny
@@ -4217,7 +4638,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 className={`px-6 py-3 text-sm font-medium ${
                   cenyDialogTab === 'zmien'
                     ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-slate-500 hover:text-slate-700'
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
                 Zmień ceny
@@ -4228,7 +4649,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <div className="p-4 space-y-4">
               {/* Zastosuj do section */}
               <div>
-                <p className="text-sm text-slate-600 mb-2">Zastosuj do</p>
+                <p className="text-sm text-gray-600 mb-2">Zastosuj do</p>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="flex items-center gap-2">
@@ -4236,36 +4657,36 @@ export const KosztorysEditorPage: React.FC = () => {
                         type="checkbox"
                         checked={priceUpdateSettings.applyToLabor}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToLabor: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300"
                       />
-                      <span className="text-sm text-slate-700">Robocizna</span>
+                      <span className="text-sm text-gray-800">Robocizna</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToMaterial}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToMaterial: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300"
                       />
-                      <span className="text-sm text-slate-700">Materiały</span>
+                      <span className="text-sm text-gray-800">Materiały</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToEquipment}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToEquipment: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300"
                       />
-                      <span className="text-sm text-slate-700">Sprzęt</span>
+                      <span className="text-sm text-gray-800">Sprzęt</span>
                     </label>
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToWaste}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToWaste: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300"
                       />
-                      <span className="text-sm text-slate-700">Odpady</span>
+                      <span className="text-sm text-gray-800">Odpady</span>
                     </label>
                   </div>
                   <div className="space-y-2">
@@ -4274,9 +4695,9 @@ export const KosztorysEditorPage: React.FC = () => {
                         type="checkbox"
                         checked={priceUpdateSettings.unitPositionPrices}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, unitPositionPrices: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300"
+                        className="w-4 h-4 rounded border-gray-300"
                       />
-                      <span className="text-sm text-slate-700">Ceny jednostkowe pozycji</span>
+                      <span className="text-sm text-gray-800">Ceny jednostkowe pozycji</span>
                     </label>
                     {cenyDialogTab === 'wstaw' && (
                       <>
@@ -4285,27 +4706,27 @@ export const KosztorysEditorPage: React.FC = () => {
                             type="checkbox"
                             checked={priceUpdateSettings.emptyUnitPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, emptyUnitPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-slate-300"
+                            className="w-4 h-4 rounded border-gray-300"
                           />
-                          <span className="text-sm text-slate-700">Puste ceny jednostkowe pozycji</span>
+                          <span className="text-sm text-gray-800">Puste ceny jednostkowe pozycji</span>
                         </label>
                         <label className="flex items-center gap-2">
                           <input
                             type="checkbox"
                             checked={priceUpdateSettings.objectPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, objectPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-slate-300"
+                            className="w-4 h-4 rounded border-gray-300"
                           />
-                          <span className="text-sm text-slate-700">Ceny obiektów</span>
+                          <span className="text-sm text-gray-800">Ceny obiektów</span>
                         </label>
                         <label className="flex items-center gap-2">
                           <input
                             type="checkbox"
                             checked={priceUpdateSettings.onlyZeroPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, onlyZeroPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-slate-300"
+                            className="w-4 h-4 rounded border-gray-300"
                           />
-                          <span className="text-sm text-slate-700">Uaktualnij tylko ceny zerowe</span>
+                          <span className="text-sm text-gray-800">Uaktualnij tylko ceny zerowe</span>
                         </label>
                       </>
                     )}
@@ -4316,27 +4737,27 @@ export const KosztorysEditorPage: React.FC = () => {
               {cenyDialogTab === 'wstaw' && (
                 <>
                   {/* Źródła cen section */}
-                  <div className="border border-slate-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                  <div className="border border-gray-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
                       <span>Źródła cen</span>
                       <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="w-4 h-4 text-slate-400" />
+                        <FileSpreadsheet className="w-4 h-4 text-gray-400" />
                         <ChevronDown className="w-4 h-4" />
                       </div>
                     </button>
                   </div>
 
                   {/* Opcje wyszukiwania cen */}
-                  <div className="border border-slate-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                  <div className="border border-gray-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
                       <span>Opcje wyszukiwania cen</span>
                       <ChevronDown className="w-4 h-4" />
                     </button>
                   </div>
 
                   {/* Zaawansowane */}
-                  <div className="border border-slate-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                  <div className="border border-gray-200 rounded-lg">
+                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
                       <span>Zaawansowane</span>
                       <ChevronDown className="w-4 h-4" />
                     </button>
@@ -4348,9 +4769,9 @@ export const KosztorysEditorPage: React.FC = () => {
                       type="checkbox"
                       checked={priceUpdateSettings.skipStepProcess}
                       onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, skipStepProcess: e.target.checked }))}
-                      className="w-4 h-4 rounded border-slate-300"
+                      className="w-4 h-4 rounded border-gray-300"
                     />
-                    <span className="text-sm text-slate-700">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
+                    <span className="text-sm text-gray-800">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
                   </label>
                 </>
               )}
@@ -4359,7 +4780,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 <>
                   {/* Wyrażenie section */}
                   <div>
-                    <p className="text-sm text-slate-600 mb-2">Wyrażenie</p>
+                    <p className="text-sm text-gray-600 mb-2">Wyrażenie</p>
                     <div className="flex gap-2">
                       <select
                         value={priceUpdateSettings.expression.field}
@@ -4367,7 +4788,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           ...prev,
                           expression: { ...prev.expression, field: e.target.value as 'cena' | 'wartosc' }
                         }))}
-                        className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
                         <option value="cena">Cena</option>
                         <option value="wartosc">Wartość</option>
@@ -4378,7 +4799,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           ...prev,
                           expression: { ...prev.expression, operation: e.target.value as 'add' | 'subtract' | 'multiply' | 'divide' }
                         }))}
-                        className="px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
                         <option value="add">Dodaj (+)</option>
                         <option value="subtract">Odejmij (-)</option>
@@ -4393,7 +4814,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           expression: { ...prev.expression, value: e.target.value }
                         }))}
                         placeholder="Wartość"
-                        className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       />
                     </div>
                   </div>
@@ -4404,19 +4825,19 @@ export const KosztorysEditorPage: React.FC = () => {
                       type="checkbox"
                       checked={priceUpdateSettings.zeroPrices}
                       onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, zeroPrices: e.target.checked }))}
-                      className="w-4 h-4 rounded border-slate-300"
+                      className="w-4 h-4 rounded border-gray-300"
                     />
-                    <span className="text-sm text-slate-700">Wyzeruj ceny</span>
+                    <span className="text-sm text-gray-800">Wyzeruj ceny</span>
                   </label>
                 </>
               )}
             </div>
 
             {/* Dialog footer */}
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
               <button
                 onClick={() => setShowCenyDialog(false)}
-                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Anuluj
               </button>
@@ -4440,12 +4861,12 @@ export const KosztorysEditorPage: React.FC = () => {
 
       {/* Ustawienia (Settings) Modal - matching eKosztorysowanie exactly */}
       {showSettingsModal && estimate && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-500/75 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full shadow-xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white">
-              <h2 className="text-lg font-bold text-slate-900">Ustawienia kosztorysu</h2>
-              <button onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white">
+              <h2 className="text-lg font-bold text-gray-900">Ustawienia kosztorysu</h2>
+              <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -4453,7 +4874,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <div className="p-4 space-y-6">
               {/* Nazwa kosztorysu */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa kosztorysu</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Nazwa kosztorysu</label>
                 <input
                   type="text"
                   value={estimate.settings.name}
@@ -4461,13 +4882,13 @@ export const KosztorysEditorPage: React.FC = () => {
                     ...prev,
                     settings: { ...prev.settings, name: e.target.value }
                   } : null)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
               </div>
 
               {/* Rodzaj */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Rodzaj</label>
+                <label className="block text-sm font-medium text-gray-800 mb-2">Rodzaj</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2">
                     <input
@@ -4481,7 +4902,7 @@ export const KosztorysEditorPage: React.FC = () => {
                       } : null)}
                       className="w-4 h-4 text-blue-600"
                     />
-                    <span className="text-sm text-slate-700">Wykonawczy</span>
+                    <span className="text-sm text-gray-800">Wykonawczy</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -4495,21 +4916,21 @@ export const KosztorysEditorPage: React.FC = () => {
                       } : null)}
                       className="w-4 h-4 text-blue-600"
                     />
-                    <span className="text-sm text-slate-700">Inwestorski</span>
+                    <span className="text-sm text-gray-800">Inwestorski</span>
                   </label>
                 </div>
               </div>
 
               {/* Kalkulacje - template dropdown */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Kalkulacje</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Kalkulacje</label>
                 <select
                   value={estimate.settings.calculationTemplate}
                   onChange={(e) => setEstimate(prev => prev ? {
                     ...prev,
                     settings: { ...prev.settings, calculationTemplate: e.target.value }
                   } : null)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 >
                   <option value="overhead-on-top">Narzuty „od góry" - liczenie od kosztów bezpośrednich</option>
                   <option value="overhead-cascade">Narzuty kaskadowe - liczenie od sumy poprzednich</option>
@@ -4519,26 +4940,26 @@ export const KosztorysEditorPage: React.FC = () => {
 
               {/* Opis */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+                <label className="block text-sm font-medium text-gray-800 mb-1">Opis</label>
                 <textarea
                   value={estimate.settings.description}
                   onChange={(e) => setEstimate(prev => prev ? {
                     ...prev,
                     settings: { ...prev.settings, description: e.target.value }
                   } : null)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm resize-none"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
                   rows={3}
                   placeholder="Dodaj opis kosztorysu..."
                 />
               </div>
 
               {/* Dokładność (Precision) section */}
-              <div className="border border-slate-200 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Dokładność</h3>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-gray-800 mb-3">Dokładność</h3>
                 <div className="space-y-3">
                   {/* Normy */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Normy</span>
+                    <span className="text-sm text-gray-600">Normy</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEstimate(prev => prev ? {
@@ -4548,7 +4969,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, norms: Math.max(0, prev.settings.precision.norms - 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -4561,7 +4982,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, norms: Math.min(10, prev.settings.precision.norms + 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronUp className="w-4 h-4" />
                       </button>
@@ -4570,7 +4991,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Wartości */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Wart</span>
+                    <span className="text-sm text-gray-600">Wart</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEstimate(prev => prev ? {
@@ -4580,7 +5001,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, unitValues: Math.max(0, prev.settings.precision.unitValues - 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -4593,7 +5014,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, unitValues: Math.min(10, prev.settings.precision.unitValues + 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronUp className="w-4 h-4" />
                       </button>
@@ -4602,7 +5023,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Nakłady */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Nakła</span>
+                    <span className="text-sm text-gray-600">Nakła</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEstimate(prev => prev ? {
@@ -4612,7 +5033,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, resources: Math.max(0, prev.settings.precision.resources - 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -4625,7 +5046,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, resources: Math.min(10, prev.settings.precision.resources + 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronUp className="w-4 h-4" />
                       </button>
@@ -4634,7 +5055,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Podsumowania */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Pods</span>
+                    <span className="text-sm text-gray-600">Pods</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEstimate(prev => prev ? {
@@ -4644,7 +5065,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, positionBase: Math.max(0, prev.settings.precision.positionBase - 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -4657,7 +5078,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, positionBase: Math.min(10, prev.settings.precision.positionBase + 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronUp className="w-4 h-4" />
                       </button>
@@ -4666,7 +5087,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Obmiary */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">Obmi</span>
+                    <span className="text-sm text-gray-600">Obmi</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => setEstimate(prev => prev ? {
@@ -4676,7 +5097,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, measurements: Math.max(0, prev.settings.precision.measurements - 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronDown className="w-4 h-4" />
                       </button>
@@ -4689,7 +5110,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             precision: { ...prev.settings.precision, measurements: Math.min(10, prev.settings.precision.measurements + 1) }
                           }
                         } : null)}
-                        className="w-6 h-6 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-50"
+                        className="w-6 h-6 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-50"
                       >
                         <ChevronUp className="w-4 h-4" />
                       </button>
@@ -4699,11 +5120,11 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
 
               {/* Współczynniki norm section */}
-              <div className="border border-slate-200 rounded-lg p-4">
-                <h3 className="text-sm font-medium text-slate-700 mb-3">Współczynniki norm</h3>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-gray-800 mb-3">Współczynniki norm</h3>
                 <div className="grid grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Robocizna</label>
+                    <label className="block text-xs text-gray-500 mb-1">Robocizna</label>
                     <input
                       type="text"
                       value={estimateData.root.factors.labor.toString().replace('.', ',')}
@@ -4714,11 +5135,11 @@ export const KosztorysEditorPage: React.FC = () => {
                           root: { ...prev.root, factors: { ...prev.root.factors, labor: val } }
                         }));
                       }}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Materiały</label>
+                    <label className="block text-xs text-gray-500 mb-1">Materiały</label>
                     <input
                       type="text"
                       value={estimateData.root.factors.material.toString().replace('.', ',')}
@@ -4729,11 +5150,11 @@ export const KosztorysEditorPage: React.FC = () => {
                           root: { ...prev.root, factors: { ...prev.root.factors, material: val } }
                         }));
                       }}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Sprzęt</label>
+                    <label className="block text-xs text-gray-500 mb-1">Sprzęt</label>
                     <input
                       type="text"
                       value={estimateData.root.factors.equipment.toString().replace('.', ',')}
@@ -4744,11 +5165,11 @@ export const KosztorysEditorPage: React.FC = () => {
                           root: { ...prev.root, factors: { ...prev.root.factors, equipment: val } }
                         }));
                       }}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1">Odpady</label>
+                    <label className="block text-xs text-gray-500 mb-1">Odpady</label>
                     <input
                       type="text"
                       value={estimateData.root.factors.waste.toString().replace('.', ',')}
@@ -4759,7 +5180,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           root: { ...prev.root, factors: { ...prev.root.factors, waste: val } }
                         }));
                       }}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm text-center"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm text-center"
                     />
                   </div>
                 </div>
@@ -4767,10 +5188,10 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3 sticky bottom-0 bg-white">
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3 sticky bottom-0 bg-white">
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Anuluj
               </button>
@@ -4784,6 +5205,198 @@ export const KosztorysEditorPage: React.FC = () => {
               >
                 Zapisz ustawienia
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Dialog - matching eKosztorysowanie */}
+      {showPrintDialog && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-5xl w-full shadow-xl flex max-h-[90vh]">
+            {/* Preview section */}
+            <div className="flex-1 bg-gray-100 p-4 flex flex-col">
+              <div className="flex-1 bg-white rounded-lg shadow-inner overflow-auto flex items-center justify-center">
+                <div className="w-[595px] h-[842px] bg-white shadow-lg p-8 text-xs">
+                  {/* Preview header */}
+                  <div className="flex justify-between text-[8px] text-gray-500 mb-4">
+                    <span>{new Date().toLocaleDateString('pl-PL')}</span>
+                    <span>eKosztorysowanie</span>
+                  </div>
+
+                  {/* Preview content */}
+                  <h1 className="text-lg font-bold text-center mb-4">Kosztorys</h1>
+                  <h2 className="text-sm font-medium text-center mb-6">Tabela elementów scalonych</h2>
+
+                  <table className="w-full text-[8px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-1 py-0.5">Lp</th>
+                        <th className="border border-gray-300 px-1 py-0.5">Nazwa</th>
+                        <th className="border border-gray-300 px-1 py-0.5">Robocizna</th>
+                        <th className="border border-gray-300 px-1 py-0.5">Materiały</th>
+                        <th className="border border-gray-300 px-1 py-0.5">Sprzęt</th>
+                        <th className="border border-gray-300 px-1 py-0.5">Razem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(estimateData.sections).slice(0, 5).map((section, index) => (
+                        <tr key={section.id}>
+                          <td className="border border-gray-300 px-1 py-0.5 text-center">{index + 1}</td>
+                          <td className="border border-gray-300 px-1 py-0.5">{section.name}</td>
+                          <td className="border border-gray-300 px-1 py-0.5 text-right">
+                            {formatNumber(calculationResult?.sections[section.id]?.laborTotal || 0)}
+                          </td>
+                          <td className="border border-gray-300 px-1 py-0.5 text-right">
+                            {formatNumber(calculationResult?.sections[section.id]?.materialTotal || 0)}
+                          </td>
+                          <td className="border border-gray-300 px-1 py-0.5 text-right">
+                            {formatNumber(calculationResult?.sections[section.id]?.equipmentTotal || 0)}
+                          </td>
+                          <td className="border border-gray-300 px-1 py-0.5 text-right font-medium">
+                            {formatNumber(calculationResult?.sections[section.id]?.totalValue || 0)}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-100 font-medium">
+                        <td colSpan={2} className="border border-gray-300 px-1 py-0.5 text-right">Razem netto:</td>
+                        <td colSpan={4} className="border border-gray-300 px-1 py-0.5 text-right">
+                          {formatCurrency(calculationResult?.totalValue || 0)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <p className="mt-4 text-[8px]">
+                    Słownie: {calculationResult?.totalValue ? `${Math.floor(calculationResult.totalValue)} i ${Math.round((calculationResult.totalValue % 1) * 100)}/100 PLN` : '0 PLN'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Page navigation */}
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <button
+                  onClick={() => setPrintPreviewPage(prev => Math.max(1, prev - 1))}
+                  disabled={printPreviewPage === 1}
+                  className="p-1 hover:bg-gray-200 rounded disabled:opacity-40"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <span className="text-sm text-gray-600">{printPreviewPage}</span>
+                <button
+                  onClick={() => setPrintPreviewPage(prev => Math.min(printTotalPages, prev + 1))}
+                  disabled={printPreviewPage === printTotalPages}
+                  className="p-1 hover:bg-gray-200 rounded disabled:opacity-40"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Settings section */}
+            <div className="w-80 border-l border-gray-200 p-4 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Drukuj</h2>
+                <button onClick={() => setShowPrintDialog(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-500 mb-2">{printTotalPages} stron</p>
+
+              <div className="space-y-4 flex-1">
+                {/* Printer */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Drukarka</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option>Microsoft Print to PDF</option>
+                    <option>RICOH MP C2503</option>
+                  </select>
+                </div>
+
+                {/* Pages */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Strony</label>
+                  <select
+                    value={printSettings.pages}
+                    onChange={(e) => setPrintSettings(prev => ({ ...prev, pages: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="all">Wszystkie</option>
+                    <option value="current">Bieżąca</option>
+                    <option value="range">Zakres</option>
+                  </select>
+                </div>
+
+                {/* Copies */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Kopie</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={printSettings.copies}
+                    onChange={(e) => setPrintSettings(prev => ({ ...prev, copies: parseInt(e.target.value) || 1 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+
+                {/* Orientation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Orientacja</label>
+                  <select
+                    value={printSettings.orientation}
+                    onChange={(e) => setPrintSettings(prev => ({ ...prev, orientation: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="portrait">Pionowa</option>
+                    <option value="landscape">Pozioma</option>
+                  </select>
+                </div>
+
+                {/* Color */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-1">Kolor</label>
+                  <select
+                    value={printSettings.color ? 'color' : 'bw'}
+                    onChange={(e) => setPrintSettings(prev => ({ ...prev, color: e.target.value === 'color' }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="color">Kolorowy</option>
+                    <option value="bw">Czarno-biały</option>
+                  </select>
+                </div>
+
+                {/* Dodatkowe ustawienia - matching eKosztorysowanie */}
+                <div className="border-t border-gray-200 pt-3 mt-3">
+                  <button
+                    className="w-full flex items-center justify-between text-sm text-gray-600 hover:text-gray-800"
+                    onClick={() => {/* Toggle advanced settings */}}
+                  >
+                    <span>Dodatkowe ustawienia</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => setShowPrintDialog(false)}
+                  className="flex-1 px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={() => {
+                    window.print();
+                    setShowPrintDialog(false);
+                  }}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Drukuj
+                </button>
+              </div>
             </div>
           </div>
         </div>
