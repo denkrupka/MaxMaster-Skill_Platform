@@ -826,9 +826,6 @@ export const KosztorysEditorPage: React.FC = () => {
     compactView: false,
   });
 
-  // KNR dropdown state
-  const [showKNRDropdown, setShowKNRDropdown] = useState(false);
-
   // Title Page Editor state
   const [titlePageData, setTitlePageData] = useState<TitlePageData>({
     title: '',
