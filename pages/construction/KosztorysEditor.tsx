@@ -3959,7 +3959,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             value={titlePageData.stawkaRobocizny}
                             onChange={e => setTitlePageData(prev => ({ ...prev, stawkaRobocizny: e.target.value }))}
                             placeholder="0,00"
-                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                            className="flex-1 items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 text-right"
                           />
                           <span className="text-xs text-gray-500">PLN/r-g</span>
                         </div>
@@ -3972,7 +3972,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             value={titlePageData.kosztyPosrednie}
                             onChange={e => setTitlePageData(prev => ({ ...prev, kosztyPosrednie: e.target.value }))}
                             placeholder="0"
-                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                            className="flex-1 items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 text-right"
                           />
                           <span className="text-xs text-gray-500">%</span>
                         </div>
@@ -3985,7 +3985,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             value={titlePageData.zysk}
                             onChange={e => setTitlePageData(prev => ({ ...prev, zysk: e.target.value }))}
                             placeholder="0"
-                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                            className="flex-1 items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 text-right"
                           />
                           <span className="text-xs text-gray-500">%</span>
                         </div>
@@ -3998,7 +3998,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             value={titlePageData.kosztyZakupu}
                             onChange={e => setTitlePageData(prev => ({ ...prev, kosztyZakupu: e.target.value }))}
                             placeholder="0"
-                            className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded text-right"
+                            className="flex-1 items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 text-right"
                           />
                           <span className="text-xs text-gray-500">%</span>
                         </div>
