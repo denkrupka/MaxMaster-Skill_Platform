@@ -753,6 +753,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showUsunDropdown, setShowUsunDropdown] = useState(false);
   const [showPrzesunDropdown, setShowPrzesunDropdown] = useState(false);
   const [showUzupelnijDropdown, setShowUzupelnijDropdown] = useState(false);
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
 
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
@@ -2387,14 +2388,77 @@ export const KosztorysEditorPage: React.FC = () => {
 
           <div className="w-px h-6 bg-gray-200 mx-1" />
 
-          {/* Kosztorys button */}
-          <button
-            onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
-          >
-            <Menu className="w-4 h-4" />
-            Kosztorys
-          </button>
+          {/* Mode selection dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowModeDropdown(!showModeDropdown)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
+            >
+              <Menu className="w-4 h-4" />
+              {leftPanelMode === 'export' ? 'Wydruki' :
+               viewMode === 'przedmiar' ? 'Przedmiar' :
+               viewMode === 'kosztorys' ? 'Kosztorys' :
+               viewMode === 'pozycje' ? 'Pozycje' :
+               viewMode === 'naklady' ? 'Nakłady' :
+               viewMode === 'narzuty' ? 'Narzuty' :
+               viewMode === 'zestawienia' ? 'Zestawienia' : 'Kosztorys'}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showModeDropdown && (
+              <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={() => { setViewMode('przedmiar'); setActiveNavItem('przedmiar'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'przedmiar' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <List className="w-4 h-4" />
+                  Przedmiar
+                </button>
+                <button
+                  onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'kosztorys' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <FileBarChart className="w-4 h-4" />
+                  Kosztorys
+                </button>
+                <button
+                  onClick={() => { setViewMode('pozycje'); setActiveNavItem('pozycje'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'pozycje' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <LayoutList className="w-4 h-4" />
+                  Pozycje
+                </button>
+                <button
+                  onClick={() => { setViewMode('naklady'); setActiveNavItem('naklady'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'naklady' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <Layers className="w-4 h-4" />
+                  Nakłady
+                </button>
+                <button
+                  onClick={() => { setViewMode('narzuty'); setActiveNavItem('narzuty'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'narzuty' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <Percent className="w-4 h-4" />
+                  Narzuty
+                </button>
+                <button
+                  onClick={() => { setViewMode('zestawienia'); setActiveNavItem('zestawienia'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'zestawienia' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <Table2 className="w-4 h-4" />
+                  Zestawienia
+                </button>
+                <div className="border-t border-gray-200" />
+                <button
+                  onClick={() => { setLeftPanelMode('export'); setActiveNavItem('wydruki'); setShowModeDropdown(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${leftPanelMode === 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
+                >
+                  <Printer className="w-4 h-4" />
+                  Wydruki
+                </button>
+              </div>
+            )}
+          </div>
 
 
           {/* + Dział dropdown */}
