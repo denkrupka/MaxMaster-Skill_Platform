@@ -3638,10 +3638,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2 relative">
                   <div className="flex-1 relative">
                     <button
-                      onClick={() => {
-                        setShowAddPageDropdown(!showAddPageDropdown);
-                        setSelectedPagesToAdd(new Set());
-                      }}
+                      onClick={() => setShowAddPageDropdown(!showAddPageDropdown)}
                       className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
                     >
                       <Plus className="w-4 h-4" />
@@ -3650,47 +3647,30 @@ export const KosztorysEditorPage: React.FC = () => {
 
                     {/* Dropdown with available pages */}
                     {showAddPageDropdown && (
-                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
-                        <div className="p-2 space-y-1">
+                      <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto min-w-[280px]">
+                        <div className="p-2 space-y-0.5">
                           {ALL_EXPORT_PAGES
                             .filter(page => !exportPages.some(p => p.id === page.id))
                             .map(page => (
-                              <label key={page.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                              <label key={page.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 rounded cursor-pointer">
                                 <input
                                   type="checkbox"
-                                  checked={selectedPagesToAdd.has(page.id)}
-                                  onChange={(e) => {
-                                    const newSelected = new Set(selectedPagesToAdd);
-                                    if (e.target.checked) {
-                                      newSelected.add(page.id);
-                                    } else {
-                                      newSelected.delete(page.id);
+                                  checked={false}
+                                  onChange={() => {
+                                    // Immediately add page to list
+                                    const pageToAdd = ALL_EXPORT_PAGES.find(p => p.id === page.id);
+                                    if (pageToAdd) {
+                                      setExportPages([...exportPages, { ...pageToAdd }]);
                                     }
-                                    setSelectedPagesToAdd(newSelected);
                                   }}
-                                  className="w-4 h-4 rounded border-gray-300"
+                                  className="w-4 h-4 rounded border-gray-300 flex-shrink-0"
                                 />
-                                <span className="text-xs text-gray-800">{page.label}</span>
+                                <span className="text-sm text-gray-800">{page.label}</span>
                               </label>
                             ))}
                           {ALL_EXPORT_PAGES.filter(page => !exportPages.some(p => p.id === page.id)).length === 0 && (
-                            <p className="text-xs text-gray-400 text-center py-2">Wszystkie strony zostały dodane</p>
+                            <p className="text-sm text-gray-400 text-center py-2">Wszystkie strony zostały dodane</p>
                           )}
-                        </div>
-                        <div className="border-t border-gray-200 p-2">
-                          <button
-                            onClick={() => {
-                              // Add selected pages to exportPages
-                              const pagesToAdd = ALL_EXPORT_PAGES.filter(page => selectedPagesToAdd.has(page.id));
-                              setExportPages([...exportPages, ...pagesToAdd]);
-                              setShowAddPageDropdown(false);
-                              setSelectedPagesToAdd(new Set());
-                            }}
-                            disabled={selectedPagesToAdd.size === 0}
-                            className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                          >
-                            Wstaw
-                          </button>
                         </div>
                       </div>
                     )}
