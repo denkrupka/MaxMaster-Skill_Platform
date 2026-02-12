@@ -2846,7 +2846,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <button
               onClick={() => setLeftPanelMode('properties')}
               className={`flex-1 px-4 py-2 text-sm font-medium ${
-                leftPanelMode === 'properties' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'
+                leftPanelMode === 'properties' || leftPanelMode === 'settings' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               Właściwości
