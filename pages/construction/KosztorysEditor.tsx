@@ -2417,14 +2417,21 @@ export const KosztorysEditorPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Right side - unsaved changes indicator */}
-        <div className="flex items-center gap-2">
+        {/* Right side - unsaved changes indicator + Settings */}
+        <div className="flex items-center gap-3">
           {editorState.isDirty && (
             <span className="text-sm text-amber-600 flex items-center gap-1">
               <AlertCircle className="w-4 h-4" />
               Niezapisane zmiany
             </span>
           )}
+          <button
+            onClick={() => setLeftPanelMode('settings')}
+            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
+            title="Ustawienia"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -2653,16 +2660,6 @@ export const KosztorysEditorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right side of Row 1 - Settings */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setLeftPanelMode('settings')}
-            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
-            title="Ustawienia"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
       </div>
 
       {/* Toolbar Row 2 - shown only when item is selected */}
