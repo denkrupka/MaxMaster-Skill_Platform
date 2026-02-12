@@ -737,6 +737,11 @@ export const KosztorysEditorPage: React.FC = () => {
   const [exportPages, setExportPages] = useState<ExportPage[]>(DEFAULT_EXPORT_PAGES);
   const [draggedExportPageId, setDraggedExportPageId] = useState<string | null>(null);
   const [activeNavItem, setActiveNavItem] = useState<string>('kosztorysy');
+  const [activeExportSection, setActiveExportSection] = useState<string | null>(null);
+
+  // Refs for print preview sections
+  const printPreviewRef = React.useRef<HTMLDivElement>(null);
+  const sectionRefs = React.useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   // Catalog browser state
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -2113,6 +2118,71 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
+  // Scroll to export section when clicked in left panel
+  const scrollToExportSection = (sectionId: string) => {
+    setActiveExportSection(sectionId);
+    const sectionRef = sectionRefs.current[sectionId];
+    if (sectionRef && printPreviewRef.current) {
+      sectionRef.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Handle print document
+  const handlePrintDocument = () => {
+    const printContent = printPreviewRef.current;
+    if (!printContent) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const styles = `
+      <style>
+        @page { margin: 20mm; size: A4; }
+        body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; }
+        .print-section { page-break-after: always; }
+        .print-section:last-child { page-break-after: auto; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: 600; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        h1, h2, h3 { margin: 0 0 0.5em 0; }
+        .page-header { display: flex; justify-content: space-between; margin-bottom: 1em; font-size: 10px; color: #666; }
+        .page-footer { position: fixed; bottom: 10mm; left: 20mm; right: 20mm; text-align: center; font-size: 10px; color: #666; }
+        .title-page { min-height: 90vh; }
+        .company-header { text-align: right; margin-bottom: 3em; }
+        .title-content { max-width: 600px; margin: 2em auto; }
+        .title-content h1 { text-align: center; font-size: 24px; margin-bottom: 2em; }
+        .title-field { display: flex; margin-bottom: 1em; }
+        .title-label { width: 200px; color: #333; }
+        .title-value { flex: 1; }
+        .dates-row { display: flex; justify-content: space-between; margin-top: 3em; }
+        @media print { .no-print { display: none; } }
+      </style>
+    `;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="pl">
+      <head>
+        <meta charset="UTF-8">
+        <title>${titlePageData.title || estimate?.settings.name || 'Kosztorys'}</title>
+        ${styles}
+      </head>
+      <body>
+        ${printContent.innerHTML}
+        <div class="page-footer">Przygotowane w MaxMaster</div>
+      </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+      printWindow.close();
+    };
+  };
+
   // Export to CSV
   const handleExportCSV = () => {
     if (!estimate || !calculationResult) return;
@@ -3453,6 +3523,9 @@ export const KosztorysEditorPage: React.FC = () => {
                   />
                 </div>
 
+                {/* Kolejność stron label */}
+                <p className="text-xs text-gray-500 mb-2">Kolejność stron</p>
+
                 {/* Draggable export pages list - full drag-and-drop support */}
                 <div className="flex-1 overflow-y-auto space-y-1">
                   {exportPages
@@ -3462,7 +3535,7 @@ export const KosztorysEditorPage: React.FC = () => {
                       key={page.id}
                       className={`outline-none bg-white hover:bg-gray-50 flex items-center gap-2 rounded p-2 border focus-visible:border-gray-600 text-xs text-left cursor-grab transition-all ${
                         page.enabled ? 'border-gray-300' : 'border-gray-200 bg-gray-50 opacity-60'
-                      } ${draggedExportPageId === page.id ? 'opacity-50 scale-95' : ''}`}
+                      } ${draggedExportPageId === page.id ? 'opacity-50 scale-95' : ''} ${activeExportSection === page.id ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
                       draggable
                       onDragStart={(e) => {
                         setDraggedExportPageId(page.id);
@@ -3493,7 +3566,8 @@ export const KosztorysEditorPage: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={page.enabled}
-                        onChange={() => {
+                        onChange={(e) => {
+                          e.stopPropagation();
                           const newPages = [...exportPages];
                           const actualIndex = exportPages.findIndex(p => p.id === page.id);
                           newPages[actualIndex] = { ...page, enabled: !page.enabled };
@@ -3501,7 +3575,17 @@ export const KosztorysEditorPage: React.FC = () => {
                         }}
                         className="w-4 h-4 rounded border-gray-300 flex-shrink-0"
                       />
-                      <span className="flex-1 text-xs text-gray-800 truncate">{page.label}</span>
+                      <span
+                        className="flex-1 text-xs text-gray-800 truncate cursor-pointer hover:text-blue-600"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (page.enabled) {
+                            scrollToExportSection(page.id);
+                          }
+                        }}
+                      >
+                        {page.label}
+                      </span>
                       {page.canEdit && (
                         <button
                           onClick={() => setLeftPanelMode('titlePageEditor')}
@@ -3532,7 +3616,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     Dodaj
                   </button>
                   <button
-                    onClick={() => setShowPrintDialog(true)}
+                    onClick={handlePrintDocument}
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                   >
                     <Printer className="w-4 h-4" />
@@ -4275,7 +4359,7 @@ export const KosztorysEditorPage: React.FC = () => {
         {/* Table */}
         <div className="flex-1 overflow-auto bg-white">
           {/* Narzuty View - matching eKosztorysowanie layout */}
-          {viewMode === 'narzuty' && (
+          {viewMode === 'narzuty' && leftPanelMode !== 'export' && (
             <div className="p-4 space-y-6">
               {/* Koszt zakupu materiałów */}
               <div>
@@ -4405,7 +4489,7 @@ export const KosztorysEditorPage: React.FC = () => {
           )}
 
           {/* Zestawienia View - matching eKosztorysowanie summary layout */}
-          {viewMode === 'zestawienia' && (
+          {viewMode === 'zestawienia' && leftPanelMode !== 'export' && (
             <div className="p-4">
               <table className="w-full border-collapse">
                 <thead>
@@ -4438,8 +4522,638 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
           )}
 
+          {/* Print Document Preview - shown when in export mode */}
+          {leftPanelMode === 'export' && (
+            <div ref={printPreviewRef} className="bg-gray-100 min-h-full p-8">
+              <div className="max-w-4xl mx-auto bg-white shadow-lg">
+                {exportPages.filter(p => p.enabled).map((page, pageIndex) => {
+                  const today = new Date().toLocaleDateString('pl-PL');
+
+                  // Render each page type
+                  if (page.type === 'strona_tytulowa') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        {/* Page header */}
+                        <div className="flex justify-between text-xs text-gray-500 mb-8">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+
+                        {/* Company header - top right */}
+                        <div className="text-right text-blue-600 mb-12">
+                          <div className="font-medium">{titlePageData.companyName || estimate?.settings.name || 'max elektro'}</div>
+                          <div>{titlePageData.companyAddress || 'poznan'}</div>
+                        </div>
+
+                        {/* Title */}
+                        <h1 className="text-2xl font-bold text-center mb-12">{titlePageData.title || estimate?.settings.name || 'kostorys'}</h1>
+
+                        {/* Details table */}
+                        <div className="space-y-4 max-w-xl">
+                          <div className="flex">
+                            <span className="w-48 text-gray-600">Nazwa zamówienia:</span>
+                            <span className="flex-1">{titlePageData.orderName || 'numer 2'}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="w-48 text-gray-600">Adres obiektu budowlanego:</span>
+                            <span className="flex-1">{titlePageData.orderAddress || 'poznan'}</span>
+                          </div>
+                          <div className="flex mt-6">
+                            <span className="w-48 text-gray-600">Zamawiający:</span>
+                            <span className="flex-1">{titlePageData.clientName || 'klient'}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="w-48 text-gray-600">Adres zamawiającego:</span>
+                            <span className="flex-1">{titlePageData.clientAddress || 'poznan'}</span>
+                          </div>
+                          <div className="flex mt-6">
+                            <span className="w-48 text-gray-600">Wykonawca:</span>
+                            <span className="flex-1">{titlePageData.contractorName || 'elektryk'}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="w-48 text-gray-600">Adres wykonawcy:</span>
+                            <span className="flex-1">{titlePageData.contractorAddress || 'poznan'}</span>
+                          </div>
+                          <div className="flex mt-6">
+                            <span className="w-48 text-gray-600">Branża:</span>
+                            <span className="flex-1">{titlePageData.industry || 'elektryka'}</span>
+                          </div>
+                          <div className="flex mt-6">
+                            <span className="w-48 text-gray-600">Sporządził kosztorys:</span>
+                            <span className="flex-1">{titlePageData.preparedBy || 'MaxMaster'} {titlePageData.preparedByIndustry ? `(branża ${titlePageData.preparedByIndustry})` : ''}</span>
+                          </div>
+                          <div className="flex">
+                            <span className="w-48 text-gray-600">Sprawdził przedmiar:</span>
+                            <span className="flex-1">{titlePageData.checkedBy || ''} {titlePageData.checkedByIndustry ? `(branża ${titlePageData.checkedByIndustry})` : ''}</span>
+                          </div>
+                        </div>
+
+                        {/* Divider */}
+                        <hr className="my-12 border-gray-300" />
+
+                        {/* Dates */}
+                        <div className="flex justify-between mt-auto">
+                          <div>
+                            <div className="text-gray-600 text-sm">Data opracowania:</div>
+                            <div>{titlePageData.preparedDate || today}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-600 text-sm">Data zatwierdzenia:</div>
+                            <div>{titlePageData.approvedDate || today}</div>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="mt-20 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+
+                        {/* Page number */}
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'kosztorys_inwestorski') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Kosztorys ofertowy</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-14">Lp.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left w-24">Podstawa</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Nazwa</th>
+                              <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Nakład</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Koszt jedn.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-12">R</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-12">M</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-12">S</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* Sections */}
+                            {estimateData.root.sectionIds.map((sectionId, sIdx) => {
+                              const section = estimateData.sections[sectionId];
+                              if (!section) return null;
+                              return (
+                                <React.Fragment key={sectionId}>
+                                  <tr className="border border-gray-400">
+                                    <td className="border border-gray-400 px-2 py-1 font-medium">{sIdx + 1}</td>
+                                    <td className="border border-gray-400 px-2 py-1"></td>
+                                    <td className="border border-gray-400 px-2 py-1 font-medium" colSpan={7}>{section.name}</td>
+                                  </tr>
+                                  {section.positionIds.map((posId, pIdx) => {
+                                    const position = estimateData.positions[posId];
+                                    if (!position) return null;
+                                    const result = calculationResult?.positions[posId];
+                                    const quantity = result?.quantity || 0;
+                                    return (
+                                      <tr key={posId} className="border border-gray-400">
+                                        <td className="border border-gray-400 px-2 py-1 align-top">
+                                          <div className="flex flex-col items-center">
+                                            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">{pIdx + 1}</span>
+                                            <span className="text-xs text-gray-500">d.{sIdx + 1}.{pIdx + 1}</span>
+                                          </div>
+                                        </td>
+                                        <td className="border border-gray-400 px-2 py-1 text-xs font-mono align-top">{position.base}</td>
+                                        <td className="border border-gray-400 px-2 py-1 align-top">
+                                          <div className="font-medium">{position.name}</div>
+                                          <div className="text-xs text-gray-500">Przedmiar z sumami = {formatNumber(quantity, 2)} {position.unit.label}</div>
+                                        </td>
+                                        <td className="border border-gray-400 px-2 py-1 text-center align-top">{position.unit.label}</td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(quantity, 2)}</td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(result?.unitCost || 0, 3)}</td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                      </tr>
+                                    );
+                                  })}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'przedmiar') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Przedmiar robót</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-14">L.p.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left w-28">Podstawa</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Nakład</th>
+                              <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Poszczególne</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Razem</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {estimateData.root.sectionIds.map((sectionId, sIdx) => {
+                              const section = estimateData.sections[sectionId];
+                              if (!section) return null;
+                              return (
+                                <React.Fragment key={sectionId}>
+                                  <tr className="border border-gray-400">
+                                    <td className="border border-gray-400 px-2 py-1 font-medium">{sIdx + 1}</td>
+                                    <td className="border border-gray-400 px-2 py-1" colSpan={5}>
+                                      <span className="font-medium">{section.name}</span>
+                                    </td>
+                                  </tr>
+                                  {section.positionIds.map((posId, pIdx) => {
+                                    const position = estimateData.positions[posId];
+                                    if (!position) return null;
+                                    const result = calculationResult?.positions[posId];
+                                    const quantity = result?.quantity || 0;
+                                    return (
+                                      <React.Fragment key={posId}>
+                                        <tr className="border border-gray-400">
+                                          <td className="border border-gray-400 px-2 py-1 align-top">
+                                            <div className="flex flex-col items-center">
+                                              <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center">{pIdx + 1}</span>
+                                              <span className="text-xs text-gray-500">d.{sIdx + 1}.{pIdx + 1}</span>
+                                            </div>
+                                          </td>
+                                          <td className="border border-gray-400 px-2 py-1 text-xs font-mono align-top">{position.base}</td>
+                                          <td className="border border-gray-400 px-2 py-1 font-medium align-top">{position.name}</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-center align-top">{position.unit.label}</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                        </tr>
+                                        {position.measurements.rootIds.map((measureId) => {
+                                          const measure = position.measurements.entries[measureId];
+                                          if (!measure) return null;
+                                          const measureValue = evaluateMeasurementExpression(measure.expression) || 0;
+                                          return (
+                                            <tr key={measureId} className="border border-gray-400">
+                                              <td className="border border-gray-400 px-2 py-1"></td>
+                                              <td className="border border-gray-400 px-2 py-1 text-gray-500">{measure.description || ''}</td>
+                                              <td className="border border-gray-400 px-2 py-1 text-gray-600">{measure.expression || ''}</td>
+                                              <td className="border border-gray-400 px-2 py-1 text-center">{position.unit.label}</td>
+                                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(measureValue, 2)}</td>
+                                              <td className="border border-gray-400 px-2 py-1"></td>
+                                            </tr>
+                                          );
+                                        })}
+                                        <tr className="border border-gray-400">
+                                          <td className="border border-gray-400 px-2 py-1" colSpan={4}></td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right font-medium">Razem</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(quantity, 2)}</td>
+                                        </tr>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'tabela_elementow') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Tabela elementów scalonych</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-10">Lp.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Nazwa</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Uproszczone</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Robocizna</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Materiały</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Sprzęt</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Odpady</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Razem</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {estimateData.root.sectionIds.map((sectionId, sIdx) => {
+                              const section = estimateData.sections[sectionId];
+                              if (!section) return null;
+                              const sectionResult = calculationResult?.sections[sectionId];
+                              return (
+                                <tr key={sectionId} className="border border-gray-400">
+                                  <td className="border border-gray-400 px-2 py-1">{sIdx + 1}</td>
+                                  <td className="border border-gray-400 px-2 py-1">{section.name}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.laborTotal || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.materialTotal || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.equipmentTotal || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(sectionResult?.totalWithOverheads || 0, 2)}</td>
+                                </tr>
+                              );
+                            })}
+                            <tr className="border border-gray-400 font-medium">
+                              <td className="border border-gray-400 px-2 py-1"></td>
+                              <td className="border border-gray-400 px-2 py-1">Kosztorys netto</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.laborTotal || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.materialTotal || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.equipmentTotal || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalValue || 0, 2)}</td>
+                            </tr>
+                            <tr className="border border-gray-400 font-medium">
+                              <td className="border border-gray-400 px-2 py-1"></td>
+                              <td className="border border-gray-400 px-2 py-1">Kosztorys brutto</td>
+                              <td className="border border-gray-400 px-2 py-1" colSpan={5}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalValue || 0, 2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <div className="mt-4 text-sm text-center">
+                          Słownie: {formatCurrency(calculationResult?.totalValue || 0)}
+                        </div>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'zestawienie_robocizny') {
+                    // Calculate labor summary
+                    const laborItems: { name: string; unit: string; quantity: number; unitPrice: number; total: number }[] = [];
+                    let laborTotal = 0;
+                    Object.values(estimateData.positions).forEach(position => {
+                      position.resources.filter(r => r.type === 'labor').forEach(resource => {
+                        const result = calculationResult?.positions[position.id];
+                        const quantity = result?.quantity || 0;
+                        const resQuantity = resource.norm.value * quantity;
+                        const total = resQuantity * resource.unitPrice.value;
+                        laborItems.push({
+                          name: resource.name,
+                          unit: resource.unit.label,
+                          quantity: resQuantity,
+                          unitPrice: resource.unitPrice.value,
+                          total
+                        });
+                        laborTotal += total;
+                      });
+                    });
+
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Zestawienie robocizny</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-10">Lp.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Opis</th>
+                              <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Ilość</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Cena jedn.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Wartość</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {laborItems.length > 0 ? laborItems.map((item, idx) => (
+                              <tr key={idx} className="border border-gray-400">
+                                <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
+                                <td className="border border-gray-400 px-2 py-1">{item.name}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-center">{item.unit}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.quantity, 1)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.unitPrice, 2)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.total, 2)}</td>
+                              </tr>
+                            )) : (
+                              <tr className="border border-gray-400">
+                                <td colSpan={6} className="border border-gray-400 px-2 py-4 text-center text-gray-500">Brak robocizny</td>
+                              </tr>
+                            )}
+                            <tr className="border border-gray-400 font-medium">
+                              <td className="border border-gray-400 px-2 py-1" colSpan={4}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">Razem</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(laborTotal, 2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'zestawienie_materialow') {
+                    // Calculate materials summary
+                    const materialItems: { name: string; unit: string; quantity: number; unitPrice: number; total: number }[] = [];
+                    let materialTotal = 0;
+                    Object.values(estimateData.positions).forEach(position => {
+                      position.resources.filter(r => r.type === 'material').forEach(resource => {
+                        const result = calculationResult?.positions[position.id];
+                        const quantity = result?.quantity || 0;
+                        const resQuantity = resource.norm.value * quantity;
+                        const total = resQuantity * resource.unitPrice.value;
+                        materialItems.push({
+                          name: resource.name,
+                          unit: resource.unit.label,
+                          quantity: resQuantity,
+                          unitPrice: resource.unitPrice.value,
+                          total
+                        });
+                        materialTotal += total;
+                      });
+                    });
+
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Zestawienie materiałów</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-10">Lp.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Opis</th>
+                              <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Ilość</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Cena jedn.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Wartość</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {materialItems.length > 0 ? materialItems.map((item, idx) => (
+                              <tr key={idx} className="border border-gray-400">
+                                <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
+                                <td className="border border-gray-400 px-2 py-1">{item.name}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-center">{item.unit}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.quantity, 1)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.unitPrice, 2)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.total, 2)}</td>
+                              </tr>
+                            )) : (
+                              <tr className="border border-gray-400">
+                                <td colSpan={6} className="border border-gray-400 px-2 py-4 text-center text-gray-500">Brak materiałów</td>
+                              </tr>
+                            )}
+                            <tr className="border border-gray-400 font-medium">
+                              <td className="border border-gray-400 px-2 py-1" colSpan={4}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">Razem</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(materialTotal, 2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (page.type === 'zestawienie_sprzetu') {
+                    // Calculate equipment summary
+                    const equipmentItems: { name: string; unit: string; quantity: number; unitPrice: number; total: number }[] = [];
+                    let equipmentTotal = 0;
+                    Object.values(estimateData.positions).forEach(position => {
+                      position.resources.filter(r => r.type === 'equipment').forEach(resource => {
+                        const result = calculationResult?.positions[position.id];
+                        const quantity = result?.quantity || 0;
+                        const resQuantity = resource.norm.value * quantity;
+                        const total = resQuantity * resource.unitPrice.value;
+                        equipmentItems.push({
+                          name: resource.name,
+                          unit: resource.unit.label,
+                          quantity: resQuantity,
+                          unitPrice: resource.unitPrice.value,
+                          total
+                        });
+                        equipmentTotal += total;
+                      });
+                    });
+
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">Zestawienie sprzętu</h2>
+
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-2 py-1 text-left w-10">Lp.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-left">Opis</th>
+                              <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Ilość</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Cena jedn.</th>
+                              <th className="border border-gray-400 px-2 py-1 text-right w-24">Wartość</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {equipmentItems.length > 0 ? equipmentItems.map((item, idx) => (
+                              <tr key={idx} className="border border-gray-400">
+                                <td className="border border-gray-400 px-2 py-1">{idx + 1}</td>
+                                <td className="border border-gray-400 px-2 py-1">{item.name}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-center">{item.unit}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.quantity, 1)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.unitPrice, 2)}</td>
+                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(item.total, 2)}</td>
+                              </tr>
+                            )) : (
+                              <tr className="border border-gray-400">
+                                <td colSpan={6} className="border border-gray-400 px-2 py-4 text-center text-gray-500">Brak sprzętu</td>
+                              </tr>
+                            )}
+                            <tr className="border border-gray-400 font-medium">
+                              <td className="border border-gray-400 px-2 py-1" colSpan={4}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">Razem</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(equipmentTotal, 2)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Kalkulacja szczegółowa and Kosztorys szczegółowy - placeholder
+                  if (page.type === 'kalkulacja_szczegolowa' || page.type === 'kosztorys_szczegolowy') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="flex justify-between text-xs text-gray-500 mb-4">
+                          <span>{today}</span>
+                          <span>eKosztorysowanie</span>
+                        </div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <h2 className="text-lg font-bold mb-6">{page.label}</h2>
+
+                        <p className="text-gray-500 text-center py-12">Sekcja w przygotowaniu...</p>
+
+                        <div className="mt-8 text-sm text-gray-500">
+                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
+                        </div>
+                        <div className="text-right text-xs text-gray-400 mt-4">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Standard table views (przedmiar, kosztorys, naklady) */}
-          {(viewMode === 'przedmiar' || viewMode === 'kosztorys' || viewMode === 'naklady' || viewMode === 'pozycje') && (
+          {leftPanelMode !== 'export' && (viewMode === 'przedmiar' || viewMode === 'kosztorys' || viewMode === 'naklady' || viewMode === 'pozycje') && (
             <table className={`w-full border-collapse ${viewMode === 'pozycje' ? 'border border-gray-300' : ''}`}>
               <thead className="sticky top-0 bg-gray-50 z-10">
                 {viewMode === 'przedmiar' ? (
