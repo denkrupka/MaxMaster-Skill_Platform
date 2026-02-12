@@ -2282,15 +2282,16 @@ export const KosztorysEditorPage: React.FC = () => {
       );
     }
 
-    // Kosztorys view (default)
+    // Kosztorys view (default) - matching eKosztorysowanie layout
+    const sectionPrefix = sectionId ? 'd.1.' : 'd.';
     return (
       <React.Fragment key={position.id}>
         {/* Position row */}
         <tr
-          className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+          className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
           onClick={() => selectItem(position.id, 'position')}
         >
-          <td className="px-3 py-2 text-sm">
+          <td className="px-3 py-2 text-sm align-top">
             <div className="flex flex-col items-center">
               <button
                 onClick={(e) => { e.stopPropagation(); toggleExpandPosition(position.id); }}
@@ -2298,25 +2299,27 @@ export const KosztorysEditorPage: React.FC = () => {
               >
                 {positionNumber}
               </button>
-              <div className="text-xs text-gray-500 mt-0.5">d.{positionNumber}</div>
+              <span className="text-xs text-gray-400 mt-0.5">{sectionPrefix}{positionNumber}</span>
             </div>
           </td>
-          <td className="px-3 py-2 text-sm">
-            <div className="text-xs text-gray-800 font-mono">{position.base || '-'}</div>
-            <button className="mt-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 border border-gray-200">
+          <td className="px-3 py-2 text-sm align-top">
+            <div className="text-xs text-gray-800 font-mono">{position.base || ''}</div>
+            <button className="mt-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded border border-gray-200 hover:bg-gray-200">
               Cena zakładowa
             </button>
           </td>
-          <td className="px-3 py-2 text-sm">
+          <td className="px-3 py-2 text-sm align-top">
             <div className="font-medium text-gray-900">{position.name}</div>
             <div className="text-xs text-gray-500 mt-0.5">
-              Przedmiar = {formatNumber(quantity)} {position.unit.label}
+              Przedmiar z sumami = {formatNumber(quantity, 2)} {position.unit.label}
             </div>
           </td>
-          <td className="px-3 py-2 text-sm text-center text-gray-600">{position.unit.label}</td>
-          <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(quantity, 2)}</td>
-          <td className="px-3 py-2 text-sm text-right text-gray-600">-</td>
-          <td className="px-3 py-2 text-sm text-right font-medium text-gray-800">{formatNumber(quantity, 1)}</td>
+          <td className="px-3 py-2 text-sm text-right text-gray-600 align-top">{position.unit.label}</td>
+          <td className="px-3 py-2 text-sm text-right text-gray-600 align-top">{formatNumber(quantity, 2)}</td>
+          <td className="px-3 py-2 text-sm text-right text-gray-600 align-top">{formatNumber(result?.unitCost || 0, 3)}</td>
+          <td className="px-3 py-2 text-sm text-right align-top"></td>
+          <td className="px-3 py-2 text-sm text-right align-top"></td>
+          <td className="px-3 py-2 text-sm text-right align-top"></td>
         </tr>
 
         {/* Resources rows when expanded */}
@@ -2324,53 +2327,83 @@ export const KosztorysEditorPage: React.FC = () => {
           const config = RESOURCE_TYPE_CONFIG[resource.type] || RESOURCE_TYPE_CONFIG.material;
           const resResult = result?.resources.find(r => r.id === resource.id);
           const isResourceSelected = editorState.selectedItemId === resource.id;
+          const resQuantity = resResult?.calculatedQuantity || resource.norm.value * quantity;
+
+          // Calculate values for R, M, S columns
+          const rValue = resource.type === 'labor' ? resResult?.totalCost || 0 : 0;
+          const mValue = resource.type === 'material' ? resResult?.totalCost || 0 : 0;
+          const sValue = resource.type === 'equipment' ? resResult?.totalCost || 0 : 0;
 
           return (
-            <tr
-              key={resource.id}
-              className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
-              onClick={() => selectItem(resource.id, 'resource')}
-            >
-              <td className="px-3 py-1.5"></td>
-              <td className="px-3 py-1.5 text-sm">
-                <span className={`inline-block w-5 h-5 rounded text-center text-xs font-bold leading-5 ${config.bgColor} ${config.color}`}>
-                  {config.shortLabel}
-                </span>
-              </td>
-              <td className="px-3 py-1.5 text-sm text-gray-700">{resource.name}</td>
-              <td className="px-3 py-1.5 text-sm text-center text-gray-500">{resource.unit.label}</td>
-              <td className="px-3 py-1.5 text-sm text-right text-gray-500">{formatNumber(resResult?.calculatedQuantity || 0, 2)}</td>
-              <td className="px-3 py-1.5 text-sm text-right text-gray-500">-</td>
-              <td className="px-3 py-1.5 text-sm text-right text-gray-500">{formatNumber(resResult?.totalCost || 0, 2)}</td>
-            </tr>
+            <React.Fragment key={resource.id}>
+              {/* R/M/S badge row */}
+              <tr className="border-b border-gray-50">
+                <td className="px-3 py-0.5"></td>
+                <td className="px-3 py-0.5" colSpan={8}>
+                  <span className="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded border border-gray-200">
+                    {config.shortLabel}
+                  </span>
+                </td>
+              </tr>
+              {/* Resource data row */}
+              <tr
+                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
+                onClick={() => selectItem(resource.id, 'resource')}
+              >
+                <td className="px-3 py-1.5 text-sm">
+                  <span className="flex items-center gap-0.5">
+                    <span className="text-gray-600">{index + 1}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      resource.type === 'labor' ? 'bg-blue-500' :
+                      resource.type === 'material' ? 'bg-green-500' : 'bg-orange-500'
+                    }`}></span>
+                  </span>
+                </td>
+                <td className="px-3 py-1.5 text-sm font-mono text-gray-600">{resource.originIndex.index || ''}</td>
+                <td className="px-3 py-1.5 text-sm">
+                  <div className="text-gray-800">{resource.name}</div>
+                  <div className="text-xs text-gray-400 font-mono mt-0.5">
+                    {resource.factor !== 1 ? `${formatNumber(resource.factor, 1)} · ` : ''}
+                    {formatNumber(resource.norm.value, 1)} · {formatNumber(quantity, 1)}{resource.unit.label}/{position.unit.label} · {formatNumber(resource.unitPrice.value, 2)}PLN/{resource.unit.label}
+                  </div>
+                </td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-500">{resource.unit.label}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resQuantity, 1)}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resResult?.totalCost || 0, 3)}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{rValue > 0 ? formatNumber(rValue, 2) : ''}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{mValue > 0 ? formatNumber(mValue, 2) : ''}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{sValue > 0 ? formatNumber(sValue, 2) : ''}</td>
+              </tr>
+            </React.Fragment>
           );
         })}
 
         {/* Summary rows when expanded */}
         {isExpanded && (
           <>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <td colSpan={4}></td>
-              <td colSpan={2} className="px-3 py-1.5 text-xs text-right text-gray-500">RAZEM: {formatNumber(quantity, 1)}</td>
-              <td></td>
+            <tr className="border-b border-gray-100">
+              <td colSpan={5}></td>
+              <td className="px-3 py-1 text-xs text-right text-gray-500">RAZEM: {formatNumber(quantity, 1)}</td>
+              <td colSpan={3}></td>
             </tr>
             <tr className="border-b border-gray-100">
-              <td colSpan={4}></td>
-              <td className="px-3 py-1 text-xs text-gray-600">Razem koszty bezpośrednie</td>
-              <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.directCostsTotal || 0, 4)}</td>
+              <td colSpan={5} className="px-3 py-1 text-xs text-gray-600 text-right">Razem koszty bezpośrednie</td>
+              <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.directCostsTotal || 0, 3)}</td>
+              <td className="px-3 py-1 text-xs text-right text-gray-500">{formatNumber(0, 3)}</td>
               <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.directCostsTotal || 0, 2)}</td>
+              <td></td>
             </tr>
             <tr className="border-b border-gray-100">
-              <td colSpan={4}></td>
-              <td className="px-3 py-1 text-xs text-gray-600">Razem z narzutami</td>
-              <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.totalWithOverheads || 0, 4)}</td>
+              <td colSpan={5} className="px-3 py-1 text-xs text-gray-600 text-right">Razem z narzutami</td>
+              <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.totalWithOverheads || 0, 3)}</td>
+              <td className="px-3 py-1 text-xs text-right text-gray-500">{formatNumber(0, 3)}</td>
               <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.totalWithOverheads || 0, 2)}</td>
-            </tr>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <td colSpan={4}></td>
-              <td className="px-3 py-1 text-xs text-gray-600 font-medium">Cena jednostkowa</td>
-              <td className="px-3 py-1 text-xs text-right font-medium">{formatNumber(result?.unitCost || 0, 2)}</td>
               <td></td>
+            </tr>
+            <tr className="border-b border-gray-200">
+              <td colSpan={5} className="px-3 py-1 text-xs text-gray-600 text-right font-medium">Cena jednostkowa</td>
+              <td className="px-3 py-1 text-xs text-right font-medium text-blue-600">{formatNumber(result?.unitCost || 0, 3)}</td>
+              <td colSpan={3}></td>
             </tr>
           </>
         )}
@@ -2385,7 +2418,7 @@ export const KosztorysEditorPage: React.FC = () => {
     const sectionResult = calculationResult?.sections[section.id];
 
     // Determine colspan based on view mode
-    const colspan = viewMode === 'przedmiar' ? 4 : viewMode === 'pozycje' ? 5 : viewMode === 'naklady' ? 7 : 5;
+    const colspan = viewMode === 'przedmiar' ? 4 : viewMode === 'pozycje' ? 5 : viewMode === 'naklady' ? 7 : viewMode === 'kosztorys' ? 7 : 5;
 
     return (
       <React.Fragment key={section.id}>
@@ -4411,15 +4444,17 @@ export const KosztorysEditorPage: React.FC = () => {
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">Wartość</th>
                   </tr>
                 ) : (
-                  /* Kosztorys view */
+                  /* Kosztorys view - matching eKosztorysowanie */
                   <tr className="border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-14">LP.</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">PODSTAWA</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">NAKŁAD</th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-14">J.M.</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-28">POSZCZEGÓLNE</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">RAZEM</th>
-                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase w-20">AKCJE</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-14">Lp.</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-28">Podstawa</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nazwa</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-12">j.m.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-16">Nakład</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">Koszt jedn.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">R</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-16">M</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-16">S</th>
                   </tr>
                 )}
               </thead>
