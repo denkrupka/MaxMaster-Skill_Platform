@@ -2165,28 +2165,31 @@ export const KosztorysEditorPage: React.FC = () => {
     const result = calculationResult?.positions[position.id];
     const quantity = result?.quantity || 0;
 
-    // Przedmiar view
+    // Przedmiar view - matching eKosztorysowanie layout
     if (viewMode === 'przedmiar') {
+      const sectionPrefix = sectionId ? 'd.1.' : 'd.';
       return (
         <React.Fragment key={position.id}>
           {/* Position header row */}
           <tr
-            className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+            className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
             onClick={() => selectItem(position.id, 'position')}
           >
-            <td className="px-3 py-2 text-sm" rowSpan={position.measurements.rootIds.length + 2}>
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleExpandPosition(position.id); }}
-                className="w-6 h-6 rounded-full border-2 border-blue-600 flex items-center justify-center text-xs font-bold text-blue-600 hover:bg-blue-50"
-              >
-                {positionNumber}
-              </button>
+            <td className="px-3 py-2 text-sm align-top">
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleExpandPosition(position.id); }}
+                  className="w-6 h-6 rounded-full border-2 border-blue-600 flex items-center justify-center text-xs font-bold text-blue-600 hover:bg-blue-50"
+                >
+                  {positionNumber}
+                </button>
+                <span className="text-xs text-gray-400 mt-0.5">{sectionPrefix}{positionNumber}</span>
+              </div>
             </td>
-            <td className="px-3 py-2 text-sm font-mono text-gray-800">{position.base || '-'}</td>
-            <td className="px-3 py-2 text-sm text-gray-900">{position.name}</td>
-            <td className="px-3 py-2 text-sm text-right font-medium text-gray-800">{position.unit.label}</td>
-            <td className="px-3 py-2 text-sm text-right"></td>
-            <td className="px-3 py-2 text-sm text-right"></td>
+            <td className="px-3 py-2 text-sm font-mono text-gray-800 align-top">{position.base || ''}</td>
+            <td className="px-3 py-2 text-sm text-gray-900 align-top" colSpan={2}>{position.name}</td>
+            <td className="px-3 py-2 text-sm text-right text-gray-800 align-top">{position.unit.label}</td>
+            <td className="px-3 py-2 text-sm text-right align-top"></td>
           </tr>
           {/* Measurement rows */}
           {position.measurements.rootIds.map((measureId, idx) => {
@@ -2194,20 +2197,20 @@ export const KosztorysEditorPage: React.FC = () => {
             if (!measure) return null;
             const measureValue = evaluateMeasurementExpression(measure.expression) || 0;
             return (
-              <tr key={measureId} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-3 py-1.5 text-sm text-gray-600">{measure.expression || measureValue}</td>
-                <td className="px-3 py-1.5 text-sm text-gray-600"></td>
-                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{position.unit.label}</td>
-                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(measureValue, 2)}</td>
-                <td className="px-3 py-1.5 text-sm text-right"></td>
+              <tr key={measureId} className="border-b border-gray-50 hover:bg-gray-50">
+                <td className="px-3 py-1 text-sm"></td>
+                <td className="px-3 py-1 text-sm text-gray-500">{measure.description || ''}</td>
+                <td className="px-3 py-1 text-sm text-gray-600" colSpan={2}>{measure.expression || ''}</td>
+                <td className="px-3 py-1 text-sm text-right text-gray-500">{position.unit.label}</td>
+                <td className="px-3 py-1 text-sm text-right text-gray-700">{formatNumber(measureValue, 2)}</td>
               </tr>
             );
           })}
-          {/* RAZEM row */}
-          <tr className="border-b border-gray-200 bg-gray-50">
-            <td colSpan={3}></td>
-            <td className="px-3 py-1.5 text-xs text-right text-gray-500 font-medium">RAZEM</td>
-            <td className="px-3 py-1.5 text-sm text-right font-medium text-gray-800">{formatNumber(quantity, 2)}</td>
+          {/* Razem row */}
+          <tr className="border-b border-gray-200">
+            <td colSpan={4}></td>
+            <td className="px-3 py-1.5 text-sm text-right text-gray-500">Razem</td>
+            <td className="px-3 py-1.5 text-sm text-right font-medium text-gray-900">{formatNumber(quantity, 2)}</td>
           </tr>
         </React.Fragment>
       );
@@ -2388,7 +2391,7 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={section.id}>
         {/* Section header row */}
         <tr
-          className={`bg-gray-100 border-b border-gray-300 cursor-pointer ${isSelected ? 'bg-blue-100' : ''}`}
+          className={`bg-gray-50 border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
           onClick={() => selectItem(section.id, 'section')}
         >
           <td className="px-3 py-2 text-sm">
@@ -2396,11 +2399,11 @@ export const KosztorysEditorPage: React.FC = () => {
               onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
               className="p-0.5 hover:bg-gray-200 rounded"
             >
-              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
             </button>
           </td>
-          <td className="px-3 py-2 text-sm font-bold text-gray-800">{section.ordinalNumber}</td>
-          <td colSpan={colspan} className="px-3 py-2 text-sm font-bold text-gray-900">{section.name}</td>
+          <td className="px-3 py-2 text-sm font-semibold text-gray-900">{section.ordinalNumber}</td>
+          <td colSpan={colspan} className="px-3 py-2 text-sm font-semibold text-gray-900">{section.name}</td>
         </tr>
 
         {/* Positions in section */}
