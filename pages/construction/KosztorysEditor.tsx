@@ -2149,9 +2149,28 @@ export const KosztorysEditorPage: React.FC = () => {
 
     const styles = `
       <style>
-        @page { margin: 20mm; size: A4; }
-        body { font-family: Arial, sans-serif; font-size: 12px; line-height: 1.4; }
-        .print-section { page-break-after: always; }
+        @page {
+          margin: 15mm 20mm;
+          size: A4;
+        }
+        @media print {
+          html, body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .no-print { display: none !important; }
+        }
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 12px;
+          line-height: 1.5;
+          margin: 0;
+          padding: 0;
+        }
+        .print-section {
+          page-break-after: always;
+          padding: 0;
+        }
         .print-section:last-child { page-break-after: auto; }
         table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
         th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
@@ -2159,17 +2178,65 @@ export const KosztorysEditorPage: React.FC = () => {
         .text-right { text-align: right; }
         .text-center { text-align: center; }
         h1, h2, h3 { margin: 0 0 0.5em 0; }
-        .page-header { display: flex; justify-content: space-between; margin-bottom: 1em; font-size: 10px; color: #666; }
-        .page-footer { position: fixed; bottom: 10mm; left: 20mm; right: 20mm; text-align: center; font-size: 10px; color: #666; }
-        .title-page { min-height: 90vh; }
-        .company-header { text-align: right; margin-bottom: 3em; }
-        .title-content { max-width: 600px; margin: 2em auto; }
-        .title-content h1 { text-align: center; font-size: 24px; margin-bottom: 2em; }
-        .title-field { display: flex; margin-bottom: 1em; }
-        .title-label { width: 200px; color: #333; }
-        .title-value { flex: 1; }
-        .dates-row { display: flex; justify-content: space-between; margin-top: 3em; }
-        @media print { .no-print { display: none; } }
+
+        /* Title page styles */
+        .title-page-content {
+          min-height: 85vh;
+          display: flex;
+          flex-direction: column;
+        }
+        .company-header {
+          text-align: right;
+          margin-bottom: 40px;
+          line-height: 1.6;
+        }
+        .main-title {
+          text-align: center;
+          font-size: 28px;
+          font-weight: bold;
+          margin: 40px 0 50px 0;
+        }
+        .details-section {
+          flex: 1;
+        }
+        .detail-group {
+          margin-bottom: 24px;
+        }
+        .detail-row {
+          display: flex;
+          margin-bottom: 6px;
+          line-height: 1.6;
+        }
+        .detail-label {
+          width: 220px;
+          color: #555;
+          flex-shrink: 0;
+        }
+        .detail-value {
+          flex: 1;
+        }
+        .dates-section {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 1px solid #ccc;
+        }
+        .dates-row {
+          display: flex;
+          justify-content: space-between;
+        }
+        .date-block {
+          line-height: 1.6;
+        }
+        .date-label {
+          color: #555;
+          font-size: 11px;
+        }
+        .page-number {
+          text-align: right;
+          font-size: 10px;
+          color: #999;
+          margin-top: 20px;
+        }
       </style>
     `;
 
@@ -4603,96 +4670,124 @@ export const KosztorysEditorPage: React.FC = () => {
                       <div
                         key={page.id}
                         ref={el => sectionRefs.current[page.id] = el}
-                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 min-h-[800px] flex flex-col ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 min-h-[800px] ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        {/* Company header - top right */}
-                        {(titlePageData.companyName || titlePageData.companyAddress) && (
-                          <div className="text-right mb-8">
-                            {titlePageData.companyName && <div className="font-medium">{titlePageData.companyName}</div>}
-                            {titlePageData.companyAddress && <div>{titlePageData.companyAddress}</div>}
+                        <div className="title-page-content">
+                          {/* Company header - top right */}
+                          {(titlePageData.companyName || titlePageData.companyAddress) && (
+                            <div className="company-header">
+                              {titlePageData.companyName && <div className="font-medium">{titlePageData.companyName}</div>}
+                              {titlePageData.companyAddress && <div>{titlePageData.companyAddress}</div>}
+                            </div>
+                          )}
+
+                          {/* Title */}
+                          <h1 className="main-title">{titlePageData.title || estimate?.settings.name || ''}</h1>
+
+                          {/* Details section */}
+                          <div className="details-section">
+                            {/* Order info group */}
+                            {(titlePageData.orderName || titlePageData.orderAddress) && (
+                              <div className="detail-group">
+                                {titlePageData.orderName && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Nazwa zamówienia:</span>
+                                    <span className="detail-value">{titlePageData.orderName}</span>
+                                  </div>
+                                )}
+                                {titlePageData.orderAddress && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Adres obiektu budowlanego:</span>
+                                    <span className="detail-value">{titlePageData.orderAddress}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Client info group */}
+                            {(titlePageData.clientName || titlePageData.clientAddress) && (
+                              <div className="detail-group">
+                                {titlePageData.clientName && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Zamawiający:</span>
+                                    <span className="detail-value">{titlePageData.clientName}</span>
+                                  </div>
+                                )}
+                                {titlePageData.clientAddress && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Adres zamawiającego:</span>
+                                    <span className="detail-value">{titlePageData.clientAddress}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Contractor info group */}
+                            {(titlePageData.contractorName || titlePageData.contractorAddress) && (
+                              <div className="detail-group">
+                                {titlePageData.contractorName && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Wykonawca:</span>
+                                    <span className="detail-value">{titlePageData.contractorName}</span>
+                                  </div>
+                                )}
+                                {titlePageData.contractorAddress && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Adres wykonawcy:</span>
+                                    <span className="detail-value">{titlePageData.contractorAddress}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Industry */}
+                            {titlePageData.industry && (
+                              <div className="detail-group">
+                                <div className="detail-row">
+                                  <span className="detail-label">Branża:</span>
+                                  <span className="detail-value">{titlePageData.industry}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Prepared/Checked by group */}
+                            {(titlePageData.preparedBy || titlePageData.checkedBy) && (
+                              <div className="detail-group">
+                                {titlePageData.preparedBy && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Sporządził kosztorys:</span>
+                                    <span className="detail-value">{titlePageData.preparedBy}{titlePageData.preparedByIndustry ? ` (branża ${titlePageData.preparedByIndustry})` : ''}</span>
+                                  </div>
+                                )}
+                                {titlePageData.checkedBy && (
+                                  <div className="detail-row">
+                                    <span className="detail-label">Sprawdził przedmiar:</span>
+                                    <span className="detail-value">{titlePageData.checkedBy}{titlePageData.checkedByIndustry ? ` (branża ${titlePageData.checkedByIndustry})` : ''}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        )}
 
-                        {/* Title */}
-                        <h1 className="text-2xl font-bold text-center mb-12">{titlePageData.title || estimate?.settings.name || ''}</h1>
-
-                        {/* Details table */}
-                        <div className="space-y-3 flex-1">
-                          {titlePageData.orderName && (
-                            <div className="flex">
-                              <span className="w-52 text-gray-600">Nazwa zamówienia:</span>
-                              <span className="flex-1">{titlePageData.orderName}</span>
+                          {/* Dates section */}
+                          <div className="dates-section">
+                            <div className="dates-row">
+                              <div className="date-block">
+                                <div className="date-label">Data opracowania:</div>
+                                <div>{titlePageData.preparedDate || today}</div>
+                              </div>
+                              <div className="date-block">
+                                <div className="date-label">Data zatwierdzenia:</div>
+                                <div>{titlePageData.approvedDate || today}</div>
+                              </div>
                             </div>
-                          )}
-                          {titlePageData.orderAddress && (
-                            <div className="flex">
-                              <span className="w-52 text-gray-600">Adres obiektu budowlanego:</span>
-                              <span className="flex-1">{titlePageData.orderAddress}</span>
-                            </div>
-                          )}
-                          {titlePageData.clientName && (
-                            <div className="flex mt-4">
-                              <span className="w-52 text-gray-600">Zamawiający:</span>
-                              <span className="flex-1">{titlePageData.clientName}</span>
-                            </div>
-                          )}
-                          {titlePageData.clientAddress && (
-                            <div className="flex">
-                              <span className="w-52 text-gray-600">Adres zamawiającego:</span>
-                              <span className="flex-1">{titlePageData.clientAddress}</span>
-                            </div>
-                          )}
-                          {titlePageData.contractorName && (
-                            <div className="flex mt-4">
-                              <span className="w-52 text-gray-600">Wykonawca:</span>
-                              <span className="flex-1">{titlePageData.contractorName}</span>
-                            </div>
-                          )}
-                          {titlePageData.contractorAddress && (
-                            <div className="flex">
-                              <span className="w-52 text-gray-600">Adres wykonawcy:</span>
-                              <span className="flex-1">{titlePageData.contractorAddress}</span>
-                            </div>
-                          )}
-                          {titlePageData.industry && (
-                            <div className="flex mt-4">
-                              <span className="w-52 text-gray-600">Branża:</span>
-                              <span className="flex-1">{titlePageData.industry}</span>
-                            </div>
-                          )}
-                          {titlePageData.preparedBy && (
-                            <div className="flex mt-4">
-                              <span className="w-52 text-gray-600">Sporządził kosztorys:</span>
-                              <span className="flex-1">{titlePageData.preparedBy}{titlePageData.preparedByIndustry ? ` (branża ${titlePageData.preparedByIndustry})` : ''}</span>
-                            </div>
-                          )}
-                          {titlePageData.checkedBy && (
-                            <div className="flex">
-                              <span className="w-52 text-gray-600">Sprawdził przedmiar:</span>
-                              <span className="flex-1">{titlePageData.checkedBy}{titlePageData.checkedByIndustry ? ` (branża ${titlePageData.checkedByIndustry})` : ''}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Divider */}
-                        <hr className="my-8 border-gray-300" />
-
-                        {/* Dates */}
-                        <div className="flex justify-between">
-                          <div>
-                            <div className="text-gray-600 text-sm">Data opracowania:</div>
-                            <div>{titlePageData.preparedDate || today}</div>
                           </div>
-                          <div>
-                            <div className="text-gray-600 text-sm">Data zatwierdzenia:</div>
-                            <div>{titlePageData.approvedDate || today}</div>
-                          </div>
-                        </div>
 
-                        {/* Page number */}
-                        <div className="text-right text-xs text-gray-400 mt-8">
-                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                          {/* Page number */}
+                          <div className="page-number">
+                            {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                          </div>
                         </div>
                       </div>
                     );
