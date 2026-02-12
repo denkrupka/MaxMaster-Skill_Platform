@@ -2216,28 +2216,27 @@ export const KosztorysEditorPage: React.FC = () => {
       );
     }
 
-    // Pozycje view
+    // Pozycje view - matching eKosztorysowanie reference layout
     if (viewMode === 'pozycje') {
+      const sectionPrefix = sectionId ? 'd.1.' : 'd.';
       return (
         <tr
           key={position.id}
-          className={`border-b border-gray-200 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+          className={`hover:bg-blue-50 cursor-pointer ${isSelected ? 'bg-blue-100' : ''}`}
           onClick={() => selectItem(position.id, 'position')}
         >
-          <td className="px-3 py-2 text-sm">
-            <div className="flex items-center gap-1">
-              <span className="w-5 h-5 rounded-full border-2 border-blue-600 flex items-center justify-center text-xs font-bold text-blue-600">
-                {positionNumber}
-              </span>
-              <span className="text-xs text-gray-500">d.</span>
+          <td className="px-3 py-3 text-sm border border-gray-300 align-top">
+            <div className="flex flex-col items-center">
+              <span className="text-sm font-medium text-blue-600">{positionNumber}</span>
+              <span className="text-xs text-gray-500">{sectionPrefix}{positionNumber}</span>
             </div>
           </td>
-          <td className="px-3 py-2 text-sm font-mono text-gray-800">{position.base || '-'}</td>
-          <td className="px-3 py-2 text-sm text-gray-900">{position.name}</td>
-          <td className="px-3 py-2 text-sm text-right text-gray-600">{position.unit.label}</td>
-          <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(quantity, 2)}</td>
-          <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(result?.unitCost || 0, 5)}</td>
-          <td className="px-3 py-2 text-sm text-right font-medium text-gray-800">{formatNumber(result?.totalWithOverheads || 0, 5)}</td>
+          <td className="px-3 py-3 text-sm font-mono text-gray-800 border border-gray-300 align-top">{position.base || ''}</td>
+          <td className="px-3 py-3 text-sm text-gray-900 border border-gray-300 align-top">{position.name}</td>
+          <td className="px-3 py-3 text-sm text-center text-gray-600 border border-gray-300 align-top">{position.unit.label}</td>
+          <td className="px-3 py-3 text-sm text-right text-gray-800 border border-gray-300 align-top">{formatNumber(quantity, 2)}</td>
+          <td className="px-3 py-3 text-sm text-right text-gray-800 border border-gray-300 align-top">{formatNumber(result?.unitCost || 0, 3)}</td>
+          <td className="px-3 py-3 text-sm text-right font-medium text-gray-900 border border-gray-300 align-top">{formatNumber(result?.totalWithOverheads || 0, 3)}</td>
         </tr>
       );
     }
@@ -2419,6 +2418,37 @@ export const KosztorysEditorPage: React.FC = () => {
 
     // Determine colspan based on view mode
     const colspan = viewMode === 'przedmiar' ? 4 : viewMode === 'pozycje' ? 5 : viewMode === 'naklady' ? 7 : viewMode === 'kosztorys' ? 7 : 5;
+
+    // Pozycje view - matching eKosztorysowanie reference
+    if (viewMode === 'pozycje') {
+      return (
+        <React.Fragment key={section.id}>
+          {/* Section header row */}
+          <tr
+            className={`bg-white hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+            onClick={() => selectItem(section.id, 'section')}
+          >
+            <td className="px-3 py-3 text-sm border border-gray-300">
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
+                className="p-0.5 hover:bg-gray-200 rounded"
+              >
+                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
+              </button>
+            </td>
+            <td className="px-3 py-3 text-sm font-semibold text-gray-900 border border-gray-300">{section.ordinalNumber}</td>
+            <td colSpan={5} className="px-3 py-3 text-sm font-semibold text-gray-900 border border-gray-300">{section.name}</td>
+          </tr>
+
+          {/* Positions in section */}
+          {isExpanded && section.positionIds.map((posId, posIndex) => {
+            const position = estimateData.positions[posId];
+            if (!position) return null;
+            return renderPositionRow(position, posIndex + 1, section.id);
+          })}
+        </React.Fragment>
+      );
+    }
 
     return (
       <React.Fragment key={section.id}>
@@ -4410,7 +4440,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
           {/* Standard table views (przedmiar, kosztorys, naklady) */}
           {(viewMode === 'przedmiar' || viewMode === 'kosztorys' || viewMode === 'naklady' || viewMode === 'pozycje') && (
-            <table className="w-full border-collapse">
+            <table className={`w-full border-collapse ${viewMode === 'pozycje' ? 'border border-gray-300' : ''}`}>
               <thead className="sticky top-0 bg-gray-50 z-10">
                 {viewMode === 'przedmiar' ? (
                   <tr className="border-b border-gray-200">
@@ -4434,14 +4464,14 @@ export const KosztorysEditorPage: React.FC = () => {
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-28">Ilość wykonawcy</th>
                   </tr>
                 ) : viewMode === 'pozycje' ? (
-                  <tr className="border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-14">Lp.</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-28">Podstawa</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nakład</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-12">j.m.</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">Obmiar</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-28">Ceny jednostkowa</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">Wartość</th>
+                  <tr className="border-b border-gray-300">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 border border-gray-300 w-14">Lp.</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 border border-gray-300 w-28">Podstawa</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 border border-gray-300">Nakład</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 border border-gray-300 w-12">j.m.</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 border border-gray-300 w-20">Obmiar</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 border border-gray-300 w-28">Ceny jednostkowa</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 border border-gray-300 w-24">Wartość</th>
                   </tr>
                 ) : (
                   /* Kosztorys view - matching eKosztorysowanie */
