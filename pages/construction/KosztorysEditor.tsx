@@ -2367,9 +2367,9 @@ export const KosztorysEditorPage: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Top Action Bar - new design */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Single Toolbar Row */}
+      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-0.5 flex-wrap">
           {/* Powrót button */}
           <button
             onClick={() => {
@@ -2379,66 +2379,15 @@ export const KosztorysEditorPage: React.FC = () => {
                 navigate('/construction/estimates');
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded border border-gray-300"
           >
             <ArrowLeft className="w-4 h-4" />
             Powrót
           </button>
 
-          {/* Zapisz button */}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Zapisz
-          </button>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
 
-          {/* Widok dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
-            >
-              <Eye className="w-4 h-4" />
-              Widok
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* Weryfikuj button */}
-          <button
-            onClick={handleSprawdzKosztorys}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
-          >
-            <Sparkles className="w-4 h-4" />
-            Weryfikuj
-          </button>
-        </div>
-
-        {/* Right side - unsaved changes indicator + Settings */}
-        <div className="flex items-center gap-3">
-          {editorState.isDirty && (
-            <span className="text-sm text-amber-600 flex items-center gap-1">
-              <AlertCircle className="w-4 h-4" />
-              Niezapisane zmiany
-            </span>
-          )}
-          <button
-            onClick={() => setLeftPanelMode('settings')}
-            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}
-            title="Ustawienia"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Toolbar Row 1 - always visible */}
-      <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-0.5 flex-wrap">
-          {/* Kosztorys button - switches to Kosztorys view */}
+          {/* Kosztorys button */}
           <button
             onClick={() => { setViewMode('kosztorys'); setActiveNavItem('kosztorysy'); }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-800 hover:bg-gray-100 rounded"
@@ -2660,6 +2609,48 @@ export const KosztorysEditorPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Right side - Weryfikuj, Widok, Settings, Zapisz */}
+        <div className="flex items-center gap-1">
+          {/* Weryfikuj button */}
+          <button
+            onClick={handleSprawdzKosztorys}
+            className="flex items-center gap-1.5 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+          >
+            <Sparkles className="w-4 h-4" />
+            Weryfikuj
+          </button>
+
+          {/* Widok dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
+              className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+            >
+              <Eye className="w-4 h-4" />
+              Widok
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </div>
+
+          {/* Settings icon */}
+          <button
+            onClick={() => setLeftPanelMode('settings')}
+            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            title="Ustawienia"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+
+          {/* Zapisz icon */}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            title="Zapisz"
+          >
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Toolbar Row 2 - shown only when item is selected */}
