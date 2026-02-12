@@ -2396,15 +2396,6 @@ export const KosztorysEditorPage: React.FC = () => {
             Kosztorys
           </button>
 
-          {/* Drukuj button */}
-          <button
-            onClick={() => setShowPrintDialog(true)}
-            className="px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-          >
-            Drukuj
-          </button>
-
-          <div className="w-px h-6 bg-gray-200 mx-1" />
 
           {/* + Dział dropdown */}
           <div className="relative">
