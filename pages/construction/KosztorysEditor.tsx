@@ -90,7 +90,7 @@ interface TitlePageData {
 // Export page types for print configuration
 interface ExportPage {
   id: string;
-  type: 'strona_tytulowa' | 'tabela_elementow' | 'przedmiar' | 'kosztorys_inwestorski' |
+  type: 'strona_tytulowa' | 'tabela_elementow' | 'przedmiar' | 'kosztorys_ofertowy' |
         'kalkulacja_szczegolowa' | 'kosztorys_szczegolowy' | 'zestawienie_robocizny' |
         'zestawienie_materialow' | 'zestawienie_sprzetu';
   label: string;
@@ -98,18 +98,28 @@ interface ExportPage {
   canEdit?: boolean;
 }
 
-// Default export pages configuration
-const DEFAULT_EXPORT_PAGES: ExportPage[] = [
+// All available export pages
+const ALL_EXPORT_PAGES: ExportPage[] = [
   { id: 'p1', type: 'strona_tytulowa', label: 'Strona tytułowa', enabled: true, canEdit: true },
   { id: 'p2', type: 'tabela_elementow', label: 'Tabela elementów scalonych', enabled: true },
   { id: 'p3', type: 'przedmiar', label: 'Przedmiar', enabled: true },
-  { id: 'p4', type: 'kosztorys_inwestorski', label: 'Kosztorys inwestorski', enabled: true },
-  { id: 'p5', type: 'kalkulacja_szczegolowa', label: 'Szczegółowa kalkulacja cen jednostkowych', enabled: false },
-  { id: 'p6', type: 'kosztorys_szczegolowy', label: 'Szczegółowy kosztorys inwestorski', enabled: false },
+  { id: 'p4', type: 'kosztorys_ofertowy', label: 'Kosztorys ofertowy', enabled: true },
+  { id: 'p5', type: 'kalkulacja_szczegolowa', label: 'Szczegółowa kalkulacja cen jednostkowych', enabled: true },
+  { id: 'p6', type: 'kosztorys_szczegolowy', label: 'Szczegółowy kosztorys inwestorski', enabled: true },
   { id: 'p7', type: 'zestawienie_robocizny', label: 'Zestawienie robocizny', enabled: true },
   { id: 'p8', type: 'zestawienie_materialow', label: 'Zestawienie materiałów', enabled: true },
   { id: 'p9', type: 'zestawienie_sprzetu', label: 'Zestawienie sprzętu', enabled: true },
 ];
+
+// Template page configurations
+const TEMPLATE_PAGES: Record<string, string[]> = {
+  'niestandardowy': [], // Empty - user adds pages manually
+  'kosztorys_ofertowy': ['p1', 'p4', 'p5'], // Strona tytułowa, Kosztorys ofertowy, Szczegółowa kalkulacja
+  'przedmiar_robot': ['p1', 'p3'], // Strona tytułowa, Przedmiar
+};
+
+// Default export pages configuration (empty for niestandardowy)
+const DEFAULT_EXPORT_PAGES: ExportPage[] = [];
 
 // Left navigation items - matching eKosztorysowanie exactly
 // P = Przedmiar, icons match the portal
@@ -261,7 +271,7 @@ const RESOURCE_TYPE_CONFIG: Record<ExtendedResourceType, {
 };
 
 // Export template types
-type ExportTemplate = 'kosztorys_inwestorski' | 'przedmiar_robot' | 'niestandardowy';
+type ExportTemplate = 'kosztorys_ofertowy' | 'przedmiar_robot' | 'niestandardowy';
 
 // Comment type for the comments panel
 interface KosztorysComment {
@@ -759,6 +769,8 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showPrzesunDropdown, setShowPrzesunDropdown] = useState(false);
   const [showUzupelnijDropdown, setShowUzupelnijDropdown] = useState(false);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [showAddPageDropdown, setShowAddPageDropdown] = useState(false);
+  const [selectedPagesToAdd, setSelectedPagesToAdd] = useState<Set<string>>(new Set());
 
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
@@ -3502,11 +3514,21 @@ export const KosztorysEditorPage: React.FC = () => {
                 <p className="text-xs text-gray-500 mb-1">Szablon</p>
                 <select
                   value={exportTemplate}
-                  onChange={(e) => setExportTemplate(e.target.value as ExportTemplate)}
+                  onChange={(e) => {
+                    const newTemplate = e.target.value as ExportTemplate;
+                    setExportTemplate(newTemplate);
+                    // Set pages based on template
+                    const templatePageIds = TEMPLATE_PAGES[newTemplate] || [];
+                    const newPages = templatePageIds.map(id => {
+                      const page = ALL_EXPORT_PAGES.find(p => p.id === id);
+                      return page ? { ...page } : null;
+                    }).filter((p): p is ExportPage => p !== null);
+                    setExportPages(newPages);
+                  }}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-3"
                 >
                   <option value="niestandardowy">Niestandardowy</option>
-                  <option value="kosztorys_inwestorski">Kosztorys inwestorski</option>
+                  <option value="kosztorys_ofertowy">Kosztorys ofertowy</option>
                   <option value="przedmiar_robot">Przedmiar robót</option>
                 </select>
 
@@ -3527,7 +3549,11 @@ export const KosztorysEditorPage: React.FC = () => {
 
                 {/* Draggable export pages list - full drag-and-drop support */}
                 <div className="flex-1 overflow-y-auto space-y-1">
-                  {exportPages
+                  {exportPages.length === 0 ? (
+                    <div className="text-center text-gray-400 text-xs py-4">
+                      Brak stron do wydruku
+                    </div>
+                  ) : exportPages
                     .filter(p => !exportSearch || p.label.toLowerCase().includes(exportSearch.toLowerCase()))
                     .map((page, index) => (
                     <div
@@ -3609,11 +3635,66 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
 
                 {/* Add page and print buttons - fixed at bottom */}
-                <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2">
-                  <button className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
-                    <Plus className="w-4 h-4" />
-                    Dodaj
-                  </button>
+                <div className="mt-4 pt-3 border-t border-gray-200 flex gap-2 relative">
+                  <div className="flex-1 relative">
+                    <button
+                      onClick={() => {
+                        setShowAddPageDropdown(!showAddPageDropdown);
+                        setSelectedPagesToAdd(new Set());
+                      }}
+                      className="w-full flex items-center justify-center gap-1 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Dodaj
+                    </button>
+
+                    {/* Dropdown with available pages */}
+                    {showAddPageDropdown && (
+                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+                        <div className="p-2 space-y-1">
+                          {ALL_EXPORT_PAGES
+                            .filter(page => !exportPages.some(p => p.id === page.id))
+                            .map(page => (
+                              <label key={page.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPagesToAdd.has(page.id)}
+                                  onChange={(e) => {
+                                    const newSelected = new Set(selectedPagesToAdd);
+                                    if (e.target.checked) {
+                                      newSelected.add(page.id);
+                                    } else {
+                                      newSelected.delete(page.id);
+                                    }
+                                    setSelectedPagesToAdd(newSelected);
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300"
+                                />
+                                <span className="text-xs text-gray-800">{page.label}</span>
+                              </label>
+                            ))}
+                          {ALL_EXPORT_PAGES.filter(page => !exportPages.some(p => p.id === page.id)).length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-2">Wszystkie strony zostały dodane</p>
+                          )}
+                        </div>
+                        <div className="border-t border-gray-200 p-2">
+                          <button
+                            onClick={() => {
+                              // Add selected pages to exportPages
+                              const pagesToAdd = ALL_EXPORT_PAGES.filter(page => selectedPagesToAdd.has(page.id));
+                              setExportPages([...exportPages, ...pagesToAdd]);
+                              setShowAddPageDropdown(false);
+                              setSelectedPagesToAdd(new Set());
+                            }}
+                            disabled={selectedPagesToAdd.size === 0}
+                            className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                          >
+                            Wstaw
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={handlePrintDocument}
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -4529,8 +4610,8 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
           )}
 
-          {/* Print Document Preview - shown when in export mode */}
-          {leftPanelMode === 'export' && (
+          {/* Print Document Preview - shown when in export mode or title page editor */}
+          {(leftPanelMode === 'export' || leftPanelMode === 'titlePageEditor') && (
             <div ref={printPreviewRef} className="bg-gray-100 min-h-full p-8">
               <div className="max-w-4xl mx-auto bg-white shadow-lg">
                 {exportPages.filter(p => p.enabled).map((page, pageIndex) => {
@@ -4637,7 +4718,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     );
                   }
 
-                  if (page.type === 'kosztorys_inwestorski') {
+                  if (page.type === 'kosztorys_ofertowy') {
                     return (
                       <div
                         key={page.id}
