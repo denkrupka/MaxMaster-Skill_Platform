@@ -2171,7 +2171,6 @@ export const KosztorysEditorPage: React.FC = () => {
       </head>
       <body>
         ${printContent.innerHTML}
-        <div class="page-footer">Przygotowane w MaxMaster</div>
       </body>
       </html>
     `);
@@ -3789,10 +3788,18 @@ export const KosztorysEditorPage: React.FC = () => {
               </div>
             )}
 
-            {/* Title Page Editor - Strona tytułowa matching eKosztorysowanie */}
+            {/* Title Page Editor - Strona tytułowa */}
             {leftPanelMode === 'titlePageEditor' && (
               <div className="p-3 flex flex-col h-full overflow-y-auto">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Strona tytułowa</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-900">Strona tytułowa</h3>
+                  <button
+                    onClick={() => setLeftPanelMode('export')}
+                    className="text-xs text-blue-600 hover:text-blue-700"
+                  >
+                    ← Powrót do wydruku
+                  </button>
+                </div>
 
                 {/* Tytuł section */}
                 <div className="border border-gray-200 rounded-lg mb-3">
@@ -4535,69 +4542,83 @@ export const KosztorysEditorPage: React.FC = () => {
                       <div
                         key={page.id}
                         ref={el => sectionRefs.current[page.id] = el}
-                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 min-h-[800px] flex flex-col ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        {/* Page header */}
-                        <div className="flex justify-between text-xs text-gray-500 mb-8">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-
                         {/* Company header - top right */}
-                        <div className="text-right text-blue-600 mb-12">
-                          <div className="font-medium">{titlePageData.companyName || estimate?.settings.name || 'max elektro'}</div>
-                          <div>{titlePageData.companyAddress || 'poznan'}</div>
-                        </div>
+                        {(titlePageData.companyName || titlePageData.companyAddress) && (
+                          <div className="text-right mb-8">
+                            {titlePageData.companyName && <div className="font-medium">{titlePageData.companyName}</div>}
+                            {titlePageData.companyAddress && <div>{titlePageData.companyAddress}</div>}
+                          </div>
+                        )}
 
                         {/* Title */}
-                        <h1 className="text-2xl font-bold text-center mb-12">{titlePageData.title || estimate?.settings.name || 'kostorys'}</h1>
+                        <h1 className="text-2xl font-bold text-center mb-12">{titlePageData.title || estimate?.settings.name || ''}</h1>
 
                         {/* Details table */}
-                        <div className="space-y-4 max-w-xl">
-                          <div className="flex">
-                            <span className="w-48 text-gray-600">Nazwa zamówienia:</span>
-                            <span className="flex-1">{titlePageData.orderName || 'numer 2'}</span>
-                          </div>
-                          <div className="flex">
-                            <span className="w-48 text-gray-600">Adres obiektu budowlanego:</span>
-                            <span className="flex-1">{titlePageData.orderAddress || 'poznan'}</span>
-                          </div>
-                          <div className="flex mt-6">
-                            <span className="w-48 text-gray-600">Zamawiający:</span>
-                            <span className="flex-1">{titlePageData.clientName || 'klient'}</span>
-                          </div>
-                          <div className="flex">
-                            <span className="w-48 text-gray-600">Adres zamawiającego:</span>
-                            <span className="flex-1">{titlePageData.clientAddress || 'poznan'}</span>
-                          </div>
-                          <div className="flex mt-6">
-                            <span className="w-48 text-gray-600">Wykonawca:</span>
-                            <span className="flex-1">{titlePageData.contractorName || 'elektryk'}</span>
-                          </div>
-                          <div className="flex">
-                            <span className="w-48 text-gray-600">Adres wykonawcy:</span>
-                            <span className="flex-1">{titlePageData.contractorAddress || 'poznan'}</span>
-                          </div>
-                          <div className="flex mt-6">
-                            <span className="w-48 text-gray-600">Branża:</span>
-                            <span className="flex-1">{titlePageData.industry || 'elektryka'}</span>
-                          </div>
-                          <div className="flex mt-6">
-                            <span className="w-48 text-gray-600">Sporządził kosztorys:</span>
-                            <span className="flex-1">{titlePageData.preparedBy || 'MaxMaster'} {titlePageData.preparedByIndustry ? `(branża ${titlePageData.preparedByIndustry})` : ''}</span>
-                          </div>
-                          <div className="flex">
-                            <span className="w-48 text-gray-600">Sprawdził przedmiar:</span>
-                            <span className="flex-1">{titlePageData.checkedBy || ''} {titlePageData.checkedByIndustry ? `(branża ${titlePageData.checkedByIndustry})` : ''}</span>
-                          </div>
+                        <div className="space-y-3 flex-1">
+                          {titlePageData.orderName && (
+                            <div className="flex">
+                              <span className="w-52 text-gray-600">Nazwa zamówienia:</span>
+                              <span className="flex-1">{titlePageData.orderName}</span>
+                            </div>
+                          )}
+                          {titlePageData.orderAddress && (
+                            <div className="flex">
+                              <span className="w-52 text-gray-600">Adres obiektu budowlanego:</span>
+                              <span className="flex-1">{titlePageData.orderAddress}</span>
+                            </div>
+                          )}
+                          {titlePageData.clientName && (
+                            <div className="flex mt-4">
+                              <span className="w-52 text-gray-600">Zamawiający:</span>
+                              <span className="flex-1">{titlePageData.clientName}</span>
+                            </div>
+                          )}
+                          {titlePageData.clientAddress && (
+                            <div className="flex">
+                              <span className="w-52 text-gray-600">Adres zamawiającego:</span>
+                              <span className="flex-1">{titlePageData.clientAddress}</span>
+                            </div>
+                          )}
+                          {titlePageData.contractorName && (
+                            <div className="flex mt-4">
+                              <span className="w-52 text-gray-600">Wykonawca:</span>
+                              <span className="flex-1">{titlePageData.contractorName}</span>
+                            </div>
+                          )}
+                          {titlePageData.contractorAddress && (
+                            <div className="flex">
+                              <span className="w-52 text-gray-600">Adres wykonawcy:</span>
+                              <span className="flex-1">{titlePageData.contractorAddress}</span>
+                            </div>
+                          )}
+                          {titlePageData.industry && (
+                            <div className="flex mt-4">
+                              <span className="w-52 text-gray-600">Branża:</span>
+                              <span className="flex-1">{titlePageData.industry}</span>
+                            </div>
+                          )}
+                          {titlePageData.preparedBy && (
+                            <div className="flex mt-4">
+                              <span className="w-52 text-gray-600">Sporządził kosztorys:</span>
+                              <span className="flex-1">{titlePageData.preparedBy}{titlePageData.preparedByIndustry ? ` (branża ${titlePageData.preparedByIndustry})` : ''}</span>
+                            </div>
+                          )}
+                          {titlePageData.checkedBy && (
+                            <div className="flex">
+                              <span className="w-52 text-gray-600">Sprawdził przedmiar:</span>
+                              <span className="flex-1">{titlePageData.checkedBy}{titlePageData.checkedByIndustry ? ` (branża ${titlePageData.checkedByIndustry})` : ''}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Divider */}
-                        <hr className="my-12 border-gray-300" />
+                        <hr className="my-8 border-gray-300" />
 
                         {/* Dates */}
-                        <div className="flex justify-between mt-auto">
+                        <div className="flex justify-between">
                           <div>
                             <div className="text-gray-600 text-sm">Data opracowania:</div>
                             <div>{titlePageData.preparedDate || today}</div>
@@ -4608,13 +4629,8 @@ export const KosztorysEditorPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Footer */}
-                        <div className="mt-20 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-
                         {/* Page number */}
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -4629,11 +4645,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Kosztorys ofertowy</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -4695,10 +4707,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </tbody>
                         </table>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -4713,11 +4722,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Przedmiar robót</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -4792,10 +4797,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </tbody>
                         </table>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -4810,11 +4812,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Tabela elementów scalonych</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -4871,10 +4869,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           Słownie: {formatCurrency(calculationResult?.totalValue || 0)}
                         </div>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -4909,11 +4904,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Zestawienie robocizny</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -4950,10 +4941,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </tbody>
                         </table>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -4988,11 +4976,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Zestawienie materiałów</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -5029,10 +5013,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </tbody>
                         </table>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -5067,11 +5048,7 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Zestawienie sprzętu</h2>
 
                         <table className="w-full border-collapse text-sm">
@@ -5108,10 +5085,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </tbody>
                         </table>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -5127,19 +5101,12 @@ export const KosztorysEditorPage: React.FC = () => {
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
-                        <div className="flex justify-between text-xs text-gray-500 mb-4">
-                          <span>{today}</span>
-                          <span>eKosztorysowanie</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || 'kostorys'}</div>
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">{page.label}</h2>
 
                         <p className="text-gray-500 text-center py-12">Sekcja w przygotowaniu...</p>
 
-                        <div className="mt-8 text-sm text-gray-500">
-                          Przygotowane w <span className="text-blue-600">MaxMaster</span>
-                        </div>
-                        <div className="text-right text-xs text-gray-400 mt-4">
+                        <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
                         </div>
                       </div>
@@ -5797,7 +5764,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   {/* Preview header */}
                   <div className="flex justify-between text-[8px] text-gray-500 mb-4">
                     <span>{new Date().toLocaleDateString('pl-PL')}</span>
-                    <span>eKosztorysowanie</span>
+                    <span>{titlePageData.title || estimate?.settings.name || ''}</span>
                   </div>
 
                   {/* Preview content */}
