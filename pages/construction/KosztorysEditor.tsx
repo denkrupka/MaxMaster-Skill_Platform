@@ -837,7 +837,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Alerts state
   const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
-  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string }[]>([]);
+  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string; resourceId?: string }[]>([]);
 
   // Print dialog state
   const [showPrintDialog, setShowPrintDialog] = useState(false);
@@ -1000,6 +1000,7 @@ export const KosztorysEditorPage: React.FC = () => {
               type: 'warning',
               message: `Pozycja ${posIndex}, nakład ${resIndex + 1}: Cena zerowa`,
               positionId: position.id,
+              resourceId: resource.id,
             });
           }
         });
@@ -1102,7 +1103,26 @@ export const KosztorysEditorPage: React.FC = () => {
           updated_at: data.updated_at || now,
         };
 
-        // Convert existing items to positions
+        // Check if we have saved JSON data first
+        if (data.data_json) {
+          // Use saved JSON data directly
+          convertedEstimate.data = data.data_json as KosztorysCostEstimateData;
+          setEstimate(convertedEstimate);
+          setEstimateData(convertedEstimate.data);
+
+          // Expand all sections and positions by default
+          const allSectionIds = Object.keys(convertedEstimate.data.sections);
+          const allPositionIds = Object.keys(convertedEstimate.data.positions);
+          setEditorState(prev => ({
+            ...prev,
+            expandedSections: new Set(allSectionIds),
+            expandedPositions: new Set(allPositionIds),
+          }));
+          setLoading(false);
+          return;
+        }
+
+        // Fallback: Convert existing items to positions
         const positions: Record<string, KosztorysPosition> = {};
         const positionIds: string[] = [];
 
@@ -1302,6 +1322,7 @@ export const KosztorysEditorPage: React.FC = () => {
             subtotal_net: subtotalNet,
             vat_amount: vatAmount,
             total_gross: totalGross,
+            data_json: estimateData, // Save full estimate data as JSON
             updated_at: new Date().toISOString(),
           })
           .eq('id', estimate.id);
@@ -2407,7 +2428,32 @@ export const KosztorysEditorPage: React.FC = () => {
     if (alertIndex >= 0 && alertIndex < alerts.length) {
       const alert = alerts[alertIndex];
       setAlertsCount(prev => ({ ...prev, current: alertIndex }));
-      if (alert.positionId) {
+
+      if (alert.resourceId && alert.positionId) {
+        // Alert is for a resource - expand position and highlight resource
+        selectItem(alert.resourceId, 'resource');
+        setEditorState(prev => ({
+          ...prev,
+          expandedPositions: new Set([...prev.expandedPositions, alert.positionId!]),
+        }));
+
+        // Highlight the resource
+        setHighlightedItemId(alert.resourceId);
+
+        // Scroll to the resource row after a short delay to allow DOM update
+        setTimeout(() => {
+          const rowElement = rowRefs.current[alert.resourceId!];
+          if (rowElement) {
+            rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+
+        // Clear highlight after animation
+        setTimeout(() => {
+          setHighlightedItemId(null);
+        }, 2000);
+      } else if (alert.positionId) {
+        // Alert is for a position
         selectItem(alert.positionId, 'position');
         setEditorState(prev => ({
           ...prev,
@@ -2829,7 +2875,8 @@ export const KosztorysEditorPage: React.FC = () => {
               </tr>
               {/* Resource data row */}
               <tr
-                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
+                ref={(el) => { rowRefs.current[resource.id] = el; }}
+                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''} ${highlightedItemId === resource.id ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-50' : ''}`}
                 onClick={() => selectItem(resource.id, 'resource')}
               >
                 <td className="px-3 py-1.5 text-sm">
