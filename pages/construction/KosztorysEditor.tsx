@@ -136,6 +136,16 @@ const LEFT_NAV_ITEMS = [
 // Active toolbar mode - determines which buttons are shown
 type ToolbarMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'wydruki';
 
+// Position tag/marker options
+const POSITION_TAGS = [
+  { id: 'analiza', label: 'Analiza indywidualna' },
+  { id: 'analogia', label: 'Analogia' },
+  { id: 'cena_zakladowa', label: 'Cena zakładowa' },
+  { id: 'kalk_szczegolowa', label: 'Kalk. szczegółowa' },
+  { id: 'kalk_warsztatowa', label: 'Kalk. warsztatowa' },
+  { id: 'kalk_wlasna', label: 'Kalk. własna' },
+];
+
 // KNR Catalog structure
 interface CatalogItem {
   id: string;
@@ -839,6 +849,10 @@ export const KosztorysEditorPage: React.FC = () => {
   });
   const [printPreviewPage, setPrintPreviewPage] = useState(1);
   const [printTotalPages, setPrintTotalPages] = useState(5);
+
+  // Position tag dropdown state
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [tagSearch, setTagSearch] = useState('');
 
   // Opcje widoku dropdown state
   const [showOpcjeWidokuDropdown, setShowOpcjeWidokuDropdown] = useState(false);
@@ -2770,9 +2784,11 @@ export const KosztorysEditorPage: React.FC = () => {
           </td>
           <td className="px-3 py-2 text-sm align-top">
             <div className="text-xs text-gray-800 font-mono">{position.base || ''}</div>
-            <button className="mt-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded border border-gray-200 hover:bg-gray-200">
-              Cena zakładowa
-            </button>
+            {position.marker && (
+              <span className="mt-1 inline-block px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded border border-gray-200">
+                {POSITION_TAGS.find(t => t.id === position.marker)?.label || position.marker}
+              </span>
+            )}
           </td>
           <td className="px-3 py-2 text-sm align-top">
             <div className="font-medium text-gray-900">{position.name}</div>
@@ -3468,7 +3484,7 @@ export const KosztorysEditorPage: React.FC = () => {
       )}
 
       {/* Click outside to close all dropdowns */}
-      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown) && (
+      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showTagDropdown) && (
         <div className="fixed inset-0 z-40" onClick={() => {
           setShowDzialDropdown(false);
           setShowNakladDropdown(false);
@@ -3476,6 +3492,8 @@ export const KosztorysEditorPage: React.FC = () => {
           setShowUsunDropdown(false);
           setShowPrzesunDropdown(false);
           setShowUzupelnijDropdown(false);
+          setShowTagDropdown(false);
+          setTagSearch('');
           setShowKNRDropdown(false);
         }} />
       )}
@@ -3647,6 +3665,69 @@ export const KosztorysEditorPage: React.FC = () => {
                         placeholder=""
                         className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                       />
+                    </div>
+
+                    {/* Znacznik (Tag) - dropdown with search */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowTagDropdown(!showTagDropdown)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded border border-gray-200 hover:bg-gray-200"
+                      >
+                        {(selectedItem as KosztorysPosition).marker ? (
+                          POSITION_TAGS.find(t => t.id === (selectedItem as KosztorysPosition).marker)?.label || 'Znacznik'
+                        ) : (
+                          <span className="text-gray-400">Znacznik <span className="text-blue-500">wpisz...</span></span>
+                        )}
+                      </button>
+                      {showTagDropdown && (
+                        <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                value={tagSearch}
+                                onChange={e => setTagSearch(e.target.value)}
+                                placeholder="Wyszukaj znacznik"
+                                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {/* Clear tag option */}
+                            {(selectedItem as KosztorysPosition).marker && (
+                              <button
+                                onClick={() => {
+                                  handleUpdateSelectedItem({ marker: null });
+                                  setShowTagDropdown(false);
+                                  setTagSearch('');
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50 italic"
+                              >
+                                Usuń znacznik
+                              </button>
+                            )}
+                            {POSITION_TAGS
+                              .filter(tag => tag.label.toLowerCase().includes(tagSearch.toLowerCase()))
+                              .map(tag => (
+                                <button
+                                  key={tag.id}
+                                  onClick={() => {
+                                    handleUpdateSelectedItem({ marker: tag.id });
+                                    setShowTagDropdown(false);
+                                    setTagSearch('');
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${
+                                    (selectedItem as KosztorysPosition).marker === tag.id ? 'bg-blue-100 text-blue-700' : 'text-gray-700'
+                                  }`}
+                                >
+                                  {tag.label}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Opis - textarea */}
