@@ -2584,21 +2584,32 @@ export const KosztorysEditorPage: React.FC = () => {
 
     // Kosztorys view (default) - matching eKosztorysowanie layout
     const sectionPrefix = sectionId ? 'd.1.' : 'd.';
+
+    // Handle position click - select and toggle expand
+    const handlePositionClick = () => {
+      selectItem(position.id, 'position');
+      toggleExpandPosition(position.id);
+    };
+
     return (
       <React.Fragment key={position.id}>
         {/* Position row */}
         <tr
           className={`border-b border-gray-100 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'}`}
-          onClick={() => selectItem(position.id, 'position')}
+          onClick={handlePositionClick}
         >
           <td className="px-3 py-2 text-sm align-top">
             <div className="flex flex-col items-center">
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleExpandPosition(position.id); }}
-                className="w-6 h-6 rounded-full border-2 border-blue-600 flex items-center justify-center text-xs font-bold text-blue-600 hover:bg-blue-50"
-              >
-                {positionNumber}
-              </button>
+              <div className="flex items-center gap-1">
+                {position.resources.length > 0 && (
+                  isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-400" />
+                )}
+                <span
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold ${isExpanded ? 'bg-blue-600 text-white border-blue-600' : 'border-blue-600 text-blue-600'}`}
+                >
+                  {positionNumber}
+                </span>
+              </div>
               <span className="text-xs text-gray-400 mt-0.5">{sectionPrefix}{positionNumber}</span>
             </div>
           </td>
