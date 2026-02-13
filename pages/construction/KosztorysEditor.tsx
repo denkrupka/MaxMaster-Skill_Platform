@@ -759,6 +759,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
   const [catalogQuantity, setCatalogQuantity] = useState('10');
   const [catalogMultiplier, setCatalogMultiplier] = useState('1');
+  const [catalogUnitIndex, setCatalogUnitIndex] = useState('060'); // Default to m3
 
   // Dropdown states
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
@@ -1954,6 +1955,11 @@ export const KosztorysEditorPage: React.FC = () => {
               }
               if (isPosition) {
                 setSelectedCatalogItem(item);
+                // Set default unit from catalog item
+                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === item.unit);
+                if (defaultUnit) {
+                  setCatalogUnitIndex(defaultUnit.index);
+                }
               }
             }}
           >
@@ -1987,7 +1993,8 @@ export const KosztorysEditorPage: React.FC = () => {
   const insertFromCatalog = (catalogItem: CatalogItem) => {
     if (!catalogItem || catalogItem.type !== 'position') return;
 
-    const unit = UNITS_REFERENCE.find(u => u.unit === catalogItem.unit) || UNITS_REFERENCE[0];
+    // Use selected unit from dropdown instead of catalog default
+    const unit = UNITS_REFERENCE.find(u => u.index === catalogUnitIndex) || UNITS_REFERENCE[0];
     const newPosition = createNewPosition(
       catalogItem.code,
       catalogItem.name,
@@ -2080,10 +2087,61 @@ export const KosztorysEditorPage: React.FC = () => {
     showNotificationMessage(`Dodano pozycję: ${catalogItem.code}`, 'success');
   };
 
-  // Add uncatalogued position (pozycja nieskatalogowana)
+  // Add uncatalogued position (pozycja nieskatalogowana) - instantly creates position and opens properties panel
   const handleAddUncataloguedPosition = () => {
-    setNewPositionForm({ base: '', name: '', unitIndex: '020', measurement: '' });
-    setShowAddPositionModal(true);
+    // Find target section
+    let targetSectionId: string | null = null;
+
+    if (editorState.selectedItemType === 'section' && editorState.selectedItemId) {
+      targetSectionId = editorState.selectedItemId;
+    } else if (editorState.selectedItemType === 'position' && editorState.selectedItemId) {
+      // Find which section contains the selected position
+      for (const [secId, section] of Object.entries(estimateData.sections)) {
+        if (section.positionIds.includes(editorState.selectedItemId)) {
+          targetSectionId = secId;
+          break;
+        }
+      }
+    }
+
+    // If no section selected, try to use the first section
+    if (!targetSectionId && estimateData.root.sectionIds.length > 0) {
+      targetSectionId = estimateData.root.sectionIds[0];
+    }
+
+    // If still no section, show error
+    if (!targetSectionId) {
+      showNotificationMessage('Najpierw dodaj dział, aby móc dodać pozycję', 'warning');
+      return;
+    }
+
+    // Create new empty position
+    const newPosition = createNewPosition('', 'Nowa pozycja', 'szt.', '020');
+
+    // Add to estimate
+    const newData = { ...estimateData };
+    newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
+    newData.sections = {
+      ...newData.sections,
+      [targetSectionId]: {
+        ...newData.sections[targetSectionId],
+        positionIds: [...newData.sections[targetSectionId].positionIds, newPosition.id],
+      },
+    };
+
+    updateEstimateData(newData);
+
+    // Select position and open properties panel
+    setEditorState(prev => ({
+      ...prev,
+      selectedItemId: newPosition.id,
+      selectedItemType: 'position',
+      expandedSections: new Set([...prev.expandedSections, targetSectionId!]),
+      expandedPositions: new Set([...prev.expandedPositions, newPosition.id]),
+    }));
+
+    setLeftPanelMode('properties');
+    showNotificationMessage('Dodano nową pozycję', 'success');
   };
 
   // Check estimate for errors (Sprawdź kosztorys)
@@ -3982,11 +4040,17 @@ export const KosztorysEditorPage: React.FC = () => {
                           className="flex items-center rounded-md px-1.5 py-1.5 text-xs border focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none disabled:bg-gray-50 border-gray-400 w-full"
                         />
                       </div>
-                      <div className="w-16">
-                        <label className="text-xs text-gray-500">{selectedCatalogItem.unit}</label>
-                        <div className="px-2 py-1.5 text-sm bg-gray-100 rounded text-center">
-                          {selectedCatalogItem.unit}
-                        </div>
+                      <div className="w-20">
+                        <label className="text-xs text-gray-500">j.m.</label>
+                        <select
+                          value={catalogUnitIndex}
+                          onChange={e => setCatalogUnitIndex(e.target.value)}
+                          className="w-full px-1 py-1.5 text-xs border border-gray-400 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none bg-white"
+                        >
+                          {UNITS_REFERENCE.map(unit => (
+                            <option key={unit.index} value={unit.index}>{unit.unit}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="w-20">
                         <label className="text-xs text-gray-500">Krotność</label>
