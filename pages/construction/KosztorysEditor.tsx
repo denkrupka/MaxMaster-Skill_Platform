@@ -987,9 +987,32 @@ export const KosztorysEditorPage: React.FC = () => {
     const newAlerts: typeof alerts = [];
     let posIndex = 0;
 
-    Object.values(estimateData.positions).forEach((position) => {
+    // Helper function to get positions from a section (including subsections)
+    const getPositionsFromSection = (sectionId: string): string[] => {
+      const section = estimateData.sections[sectionId];
+      if (!section) return [];
+      let posIds = [...section.positionIds];
+      for (const subId of section.subsectionIds || []) {
+        posIds = posIds.concat(getPositionsFromSection(subId));
+      }
+      return posIds;
+    };
+
+    // Get all visible position IDs in order (through sections)
+    let visiblePositionIds: string[] = [];
+    // First add positions from root (if any direct positions)
+    visiblePositionIds = visiblePositionIds.concat(estimateData.root.positionIds || []);
+    // Then add positions from sections
+    for (const sectionId of estimateData.root.sectionIds) {
+      visiblePositionIds = visiblePositionIds.concat(getPositionsFromSection(sectionId));
+    }
+
+    // Validate only visible positions
+    visiblePositionIds.forEach((positionId) => {
+      const position = estimateData.positions[positionId];
+      if (!position) return;
+
       posIndex++;
-      const posResult = calculationResult.positions[position.id];
 
       // Check for zero unit price (total cost = 0 but has resources)
       if (position.resources.length > 0) {
@@ -1019,7 +1042,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
     setAlerts(newAlerts);
     setAlertsCount({ current: 0, total: newAlerts.length });
-  }, [calculationResult, estimateData.positions]);
+  }, [calculationResult, estimateData.positions, estimateData.sections, estimateData.root.sectionIds, estimateData.root.positionIds]);
 
   // Load estimate
   useEffect(() => {
@@ -2430,10 +2453,33 @@ export const KosztorysEditorPage: React.FC = () => {
       setAlertsCount(prev => ({ ...prev, current: alertIndex }));
 
       if (alert.resourceId && alert.positionId) {
-        // Alert is for a resource - expand position and highlight resource
+        // Alert is for a resource - find and expand parent section and position
         selectItem(alert.resourceId, 'resource');
+
+        // Find which section contains this position and expand it
+        const sectionsToExpand: string[] = [];
+        const findSectionForPosition = (sectionId: string): boolean => {
+          const section = estimateData.sections[sectionId];
+          if (!section) return false;
+          if (section.positionIds.includes(alert.positionId!)) {
+            sectionsToExpand.push(sectionId);
+            return true;
+          }
+          for (const subId of section.subsectionIds || []) {
+            if (findSectionForPosition(subId)) {
+              sectionsToExpand.push(sectionId);
+              return true;
+            }
+          }
+          return false;
+        };
+        for (const sectionId of estimateData.root.sectionIds) {
+          findSectionForPosition(sectionId);
+        }
+
         setEditorState(prev => ({
           ...prev,
+          expandedSections: new Set([...prev.expandedSections, ...sectionsToExpand]),
           expandedPositions: new Set([...prev.expandedPositions, alert.positionId!]),
         }));
 
@@ -2453,10 +2499,33 @@ export const KosztorysEditorPage: React.FC = () => {
           setHighlightedItemId(null);
         }, 2000);
       } else if (alert.positionId) {
-        // Alert is for a position
+        // Alert is for a position - find and expand its parent section
         selectItem(alert.positionId, 'position');
+
+        // Find which section contains this position and expand it
+        const sectionsToExpand: string[] = [];
+        const findSectionForPosition = (sectionId: string): boolean => {
+          const section = estimateData.sections[sectionId];
+          if (!section) return false;
+          if (section.positionIds.includes(alert.positionId!)) {
+            sectionsToExpand.push(sectionId);
+            return true;
+          }
+          for (const subId of section.subsectionIds || []) {
+            if (findSectionForPosition(subId)) {
+              sectionsToExpand.push(sectionId);
+              return true;
+            }
+          }
+          return false;
+        };
+        for (const sectionId of estimateData.root.sectionIds) {
+          findSectionForPosition(sectionId);
+        }
+
         setEditorState(prev => ({
           ...prev,
+          expandedSections: new Set([...prev.expandedSections, ...sectionsToExpand]),
           expandedPositions: new Set([...prev.expandedPositions, alert.positionId!]),
         }));
 
@@ -2893,7 +2962,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   <div className="text-gray-800">{resource.name}</div>
                   <div className="text-xs text-gray-400 font-mono mt-0.5">
                     {resource.factor !== 1 ? `${formatNumber(resource.factor, 1)} · ` : ''}
-                    {formatNumber(resource.norm.value, 1)} · {formatNumber(quantity, 1)}{resource.unit.label}/{position.unit.label} · {formatNumber(resource.unitPrice.value, 2)}PLN/{resource.unit.label}
+                    {formatNumber(resource.norm.value, 2)} · {formatNumber(quantity, 2)}{resource.unit.label}/{position.unit.label} · {formatNumber(resource.unitPrice.value, 2)}PLN/{resource.unit.label}
                   </div>
                 </td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-500">{resource.unit.label}</td>
