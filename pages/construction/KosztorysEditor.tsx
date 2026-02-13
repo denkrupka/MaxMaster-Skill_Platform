@@ -962,6 +962,50 @@ export const KosztorysEditorPage: React.FC = () => {
     return calculationResult.positions[editorState.selectedItemId] || null;
   }, [editorState.selectedItemType, editorState.selectedItemId, calculationResult]);
 
+  // Auto-validate when data changes
+  useEffect(() => {
+    if (!calculationResult || Object.keys(estimateData.positions).length === 0) {
+      setAlerts([]);
+      setAlertsCount({ current: 0, total: 0 });
+      return;
+    }
+
+    const newAlerts: typeof alerts = [];
+    let posIndex = 0;
+
+    Object.values(estimateData.positions).forEach((position) => {
+      posIndex++;
+      const posResult = calculationResult.positions[position.id];
+
+      // Check for zero unit price (total cost = 0 but has resources)
+      if (position.resources.length > 0) {
+        position.resources.forEach((resource, resIndex) => {
+          if (resource.unitPrice.value === 0) {
+            newAlerts.push({
+              id: `${resource.id}-price`,
+              type: 'warning',
+              message: `Pozycja ${posIndex}, nakład ${resIndex + 1}: Cena zerowa`,
+              positionId: position.id,
+            });
+          }
+        });
+      }
+
+      // Check if position has no resources
+      if (position.resources.length === 0) {
+        newAlerts.push({
+          id: `${position.id}-nores`,
+          type: 'warning',
+          message: `Pozycja ${posIndex}: Brak nakładów`,
+          positionId: position.id,
+        });
+      }
+    });
+
+    setAlerts(newAlerts);
+    setAlertsCount({ current: 0, total: newAlerts.length });
+  }, [calculationResult, estimateData.positions]);
+
   // Load estimate
   useEffect(() => {
     if (currentUser) {
@@ -2158,6 +2202,19 @@ export const KosztorysEditorPage: React.FC = () => {
     }));
 
     setLeftPanelMode('properties');
+
+    // Highlight and scroll to the new position
+    setHighlightedItemId(newPosition.id);
+    setTimeout(() => {
+      const rowElement = rowRefs.current[newPosition.id];
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    setTimeout(() => {
+      setHighlightedItemId(null);
+    }, 2000);
+
     showNotificationMessage('Dodano nową pozycję', 'success');
   };
 
@@ -2676,10 +2733,9 @@ export const KosztorysEditorPage: React.FC = () => {
     // Kosztorys view (default) - matching eKosztorysowanie layout
     const sectionPrefix = sectionId ? 'd.1.' : 'd.';
 
-    // Handle position click - select and toggle expand
+    // Handle position click - only select, don't toggle expand (expand only via chevron)
     const handlePositionClick = () => {
       selectItem(position.id, 'position');
-      toggleExpandPosition(position.id);
     };
 
     return (
@@ -2693,8 +2749,15 @@ export const KosztorysEditorPage: React.FC = () => {
           <td className="px-3 py-2 text-sm align-top">
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-1">
-                {position.resources.length > 0 && (
-                  isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-400" />
+                {position.resources.length > 0 ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleExpandPosition(position.id); }}
+                    className="p-0.5 hover:bg-gray-200 rounded"
+                  >
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  </button>
+                ) : (
+                  <span className="w-5 h-4" />
                 )}
                 <span
                   className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold ${isExpanded ? 'bg-blue-600 text-white border-blue-600' : 'border-blue-600 text-blue-600'}`}
