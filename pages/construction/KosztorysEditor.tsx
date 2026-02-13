@@ -850,6 +850,19 @@ export const KosztorysEditorPage: React.FC = () => {
     compactView: false,
   });
 
+  // Right panel state
+  type RightPanelMode = 'closed' | 'settings' | 'viewOptions' | 'positionSettings';
+  const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>('closed');
+  const [viewOptionsPanel, setViewOptionsPanel] = useState({
+    highlightZeroPrices: true,
+    showDetailedOverheads: true,
+  });
+
+  // Highlight state for alert navigation
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const rowRefs = React.useRef<{ [key: string]: HTMLTableRowElement | null }>({});
+
   // Title Page Editor state
   const [titlePageData, setTitlePageData] = useState<TitlePageData>({
     title: '',
@@ -1466,59 +1479,63 @@ export const KosztorysEditorPage: React.FC = () => {
     }));
   };
 
-  // Add resource
+  // Add resource - instantly creates and opens properties panel
   const handleAddResource = (positionId: string, resourceType?: KosztorysResourceType) => {
-    setTargetPositionId(positionId);
+    const position = estimateData.positions[positionId];
+    if (!position) return;
+
     const defaultUnitIndex = resourceType === 'labor' ? '149' : resourceType === 'equipment' ? '150' : '020';
-    setNewResourceForm({
-      type: resourceType || 'labor',
-      name: '',
-      index: '',
-      normValue: 1,
-      unitPrice: 0,
-      unitIndex: defaultUnitIndex,
-    });
-    setShowAddResourceModal(true);
-  };
+    const unit = UNITS_REFERENCE.find(u => u.index === defaultUnitIndex) || UNITS_REFERENCE[0];
 
-  const confirmAddResource = () => {
-    if (!targetPositionId) return;
+    const resourceNames: Record<string, string> = {
+      labor: 'Robocizna',
+      material: 'Materiał',
+      equipment: 'Sprzęt',
+    };
 
-    const unit = UNITS_REFERENCE.find(u => u.index === newResourceForm.unitIndex) || UNITS_REFERENCE[0];
     const newResource = createNewResource(
-      newResourceForm.type,
-      newResourceForm.name,
-      newResourceForm.normValue,
-      newResourceForm.unitPrice,
+      resourceType || 'labor',
+      resourceNames[resourceType || 'labor'] || 'Nowy nakład',
+      1,
+      0,
       unit.unit,
       unit.index
     );
-
-    if (newResourceForm.index) {
-      newResource.originIndex = { type: 'ETO', index: newResourceForm.index };
-    }
-
-    const position = estimateData.positions[targetPositionId];
-    if (!position) return;
 
     updateEstimateData({
       ...estimateData,
       positions: {
         ...estimateData.positions,
-        [targetPositionId]: {
+        [positionId]: {
           ...position,
           resources: [...position.resources, newResource],
         },
       },
     });
 
-    setShowAddResourceModal(false);
-
+    // Select resource, expand position, and open properties panel
     setEditorState(prev => ({
       ...prev,
       selectedItemId: newResource.id,
       selectedItemType: 'resource',
+      expandedPositions: new Set([...prev.expandedPositions, positionId]),
     }));
+
+    setLeftPanelMode('properties');
+
+    // Highlight and scroll to the position
+    setHighlightedItemId(positionId);
+    setTimeout(() => {
+      const rowElement = rowRefs.current[positionId];
+      if (rowElement) {
+        rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+    setTimeout(() => {
+      setHighlightedItemId(null);
+    }, 2000);
+
+    showNotificationMessage(`Dodano nakład: ${resourceNames[resourceType || 'labor']}`, 'success');
   };
 
   // Update selected item
@@ -2314,7 +2331,7 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
-  // Navigate to alert
+  // Navigate to alert with scroll and highlight
   const handleNavigateToAlert = (alertIndex: number) => {
     if (alertIndex >= 0 && alertIndex < alerts.length) {
       const alert = alerts[alertIndex];
@@ -2325,6 +2342,22 @@ export const KosztorysEditorPage: React.FC = () => {
           ...prev,
           expandedPositions: new Set([...prev.expandedPositions, alert.positionId!]),
         }));
+
+        // Highlight the position
+        setHighlightedItemId(alert.positionId);
+
+        // Scroll to the position row after a short delay to allow DOM update
+        setTimeout(() => {
+          const rowElement = rowRefs.current[alert.positionId!];
+          if (rowElement) {
+            rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+
+        // Clear highlight after animation
+        setTimeout(() => {
+          setHighlightedItemId(null);
+        }, 2000);
       }
     }
   };
@@ -2653,7 +2686,8 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={position.id}>
         {/* Position row */}
         <tr
-          className={`border-b border-gray-100 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'}`}
+          ref={(el) => { rowRefs.current[position.id] = el; }}
+          className={`border-b border-gray-100 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'} ${highlightedItemId === position.id ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-50' : ''}`}
           onClick={handlePositionClick}
         >
           <td className="px-3 py-2 text-sm align-top">
@@ -3198,22 +3232,22 @@ export const KosztorysEditorPage: React.FC = () => {
             Weryfikuj
           </button>
 
-          {/* Widok dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowOpcjeWidokuDropdown(!showOpcjeWidokuDropdown)}
-              className="flex items-center gap-1 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
-            >
-              <Eye className="w-4 h-4" />
-              Widok
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </div>
-
-          {/* Settings icon */}
+          {/* Widok button - opens right panel */}
           <button
-            onClick={() => setLeftPanelMode('settings')}
-            className={`p-1.5 rounded ${leftPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
+            onClick={() => setRightPanelMode(rightPanelMode === 'viewOptions' ? 'closed' : 'viewOptions')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              rightPanelMode === 'viewOptions' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+            title="Opcje widoku"
+          >
+            <Eye className="w-4 h-4" />
+            Widok
+          </button>
+
+          {/* Settings icon - opens right panel */}
+          <button
+            onClick={() => setRightPanelMode(rightPanelMode === 'settings' ? 'closed' : 'settings')}
+            className={`p-1.5 rounded ${rightPanelMode === 'settings' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
             title="Ustawienia"
           >
             <Settings className="w-5 h-5" />
@@ -3275,17 +3309,6 @@ export const KosztorysEditorPage: React.FC = () => {
                       className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                     >
                       Usuń pozycję z nakładami
-                    </button>
-                  )}
-                  {editorState.selectedItemType === 'section' && (
-                    <button
-                      onClick={() => {
-                        setShowUsunDropdown(false);
-                        showNotificationMessage('Funkcja w przygotowaniu', 'error');
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      Usuń dział (zachowaj pozycje)
                     </button>
                   )}
                 </div>
@@ -3382,7 +3405,7 @@ export const KosztorysEditorPage: React.FC = () => {
       )}
 
       {/* Click outside to close all dropdowns */}
-      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showOpcjeWidokuDropdown) && (
+      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown) && (
         <div className="fixed inset-0 z-40" onClick={() => {
           setShowDzialDropdown(false);
           setShowNakladDropdown(false);
@@ -3391,7 +3414,6 @@ export const KosztorysEditorPage: React.FC = () => {
           setShowPrzesunDropdown(false);
           setShowUzupelnijDropdown(false);
           setShowKNRDropdown(false);
-          setShowOpcjeWidokuDropdown(false);
         }} />
       )}
 
@@ -5600,6 +5622,359 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
 
         {/* Properties panel - now integrated into left panel */}
+
+        {/* Right Panel - Settings and View Options */}
+        {rightPanelMode !== 'closed' && (
+          <div className="shrink-0 bg-white w-[320px] h-full border-l border-gray-200 flex flex-col">
+            {/* Panel header */}
+            <div className="flex items-center justify-between p-3 border-b border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900">
+                {rightPanelMode === 'settings' ? 'Ustawienia' :
+                 rightPanelMode === 'viewOptions' ? 'Opcje widoku' :
+                 'Ustawienia pozycji'}
+              </h3>
+              <button onClick={() => setRightPanelMode('closed')} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Settings Panel Content */}
+            {rightPanelMode === 'settings' && estimate && (
+              <div className="flex-1 overflow-y-auto p-3">
+                {/* Nazwa kosztorysu */}
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-1">Nazwa kosztorysu</label>
+                  <input
+                    type="text"
+                    value={estimate.settings.name}
+                    onChange={(e) => setEstimate(prev => prev ? {
+                      ...prev,
+                      settings: { ...prev.settings, name: e.target.value }
+                    } : null)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+
+                {/* Rodzaj */}
+                <div className="mb-4">
+                  <label className="block text-xs text-gray-500 mb-2">Rodzaj</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="rightPanelEstimateType"
+                        value="contractor"
+                        checked={estimate.settings.type === 'contractor'}
+                        onChange={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: { ...prev.settings, type: 'contractor' }
+                        } : null)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-800">Kosztorys wykonawczy</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="rightPanelEstimateType"
+                        value="investor"
+                        checked={estimate.settings.type === 'investor'}
+                        onChange={() => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: { ...prev.settings, type: 'investor' }
+                        } : null)}
+                        className="w-4 h-4 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-800">Kosztorys inwestorski</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Kalkulacje */}
+                <div className="mb-4 border-t border-gray-200 pt-4">
+                  <button
+                    onClick={() => {}}
+                    className="w-full flex items-center justify-between text-sm text-blue-600 font-medium mb-2"
+                  >
+                    <span>Kalkulacje</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <div className="mb-2">
+                    <label className="block text-xs text-gray-500 mb-1">Szablon kalkulacji podsumowania kosztorysu</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={estimate.settings.calculationTemplate}
+                        onChange={(e) => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: { ...prev.settings, calculationTemplate: e.target.value }
+                        } : null)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value="overhead-on-top">Narzuty liczone dla całego kosztorysu</option>
+                        <option value="overhead-cascade">Narzuty kaskadowe</option>
+                        <option value="simple">Uproszczona</option>
+                      </select>
+                      <button className="p-2 text-gray-400 hover:text-gray-600">
+                        <HelpCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Opis kosztorysu</label>
+                    <textarea
+                      value={estimate.settings.description}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, description: e.target.value }
+                      } : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none"
+                      rows={2}
+                      placeholder="KOSZTORYS NASZ"
+                    />
+                  </div>
+                </div>
+
+                {/* Dokładność */}
+                <div className="border-t border-gray-200 pt-4">
+                  <button
+                    onClick={() => {}}
+                    className="w-full flex items-center justify-between text-sm text-blue-600 font-medium mb-3"
+                  >
+                    <span>Dokładność</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Normy</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">{estimate.settings.precision.norms}</span>
+                        <div className="flex flex-col">
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, norms: Math.min(10, prev.settings.precision.norms + 1) }
+                              }
+                            } : null)}
+                            className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, norms: Math.max(0, prev.settings.precision.norms - 1) }
+                              }
+                            } : null)}
+                            className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Wart...</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">{estimate.settings.precision.unitValues}</span>
+                        <div className="flex flex-col">
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, unitValues: Math.min(10, prev.settings.precision.unitValues + 1) }
+                              }
+                            } : null)}
+                            className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                          >
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => setEstimate(prev => prev ? {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                precision: { ...prev.settings.precision, unitValues: Math.max(0, prev.settings.precision.unitValues - 1) }
+                              }
+                            } : null)}
+                            className="p-0.5 text-gray-400 hover:bg-gray-100 rounded"
+                          >
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Nakła...</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">1</span>
+                        <div className="flex flex-col">
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Pods....</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">3</span>
+                        <div className="flex flex-col">
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Obmi...</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">2</span>
+                        <div className="flex flex-col">
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-gray-600 truncate">Pods....</label>
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-5 text-center text-sm">2</span>
+                        <div className="flex flex-col">
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronUp className="w-3 h-3" />
+                          </button>
+                          <button className="p-0.5 text-gray-400 hover:bg-gray-100 rounded">
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                    <input type="checkbox" className="w-4 h-4 text-blue-600 rounded" defaultChecked />
+                    <span className="text-xs text-gray-600">Zaokrąglanie liczb wg PN-70/N-02120</span>
+                    <button className="p-1 text-gray-400 hover:text-gray-600">
+                      <HelpCircle className="w-3 h-3" />
+                    </button>
+                  </label>
+                </div>
+
+                {/* Współczynniki norm */}
+                <div className="border-t border-gray-200 pt-4 mt-4">
+                  <button
+                    onClick={() => {}}
+                    className="w-full flex items-center justify-between text-sm text-blue-600 font-medium mb-3"
+                  >
+                    <span>Współczynniki norm</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-gray-600">Robocizna</label>
+                      <input
+                        type="text"
+                        defaultValue="1,1"
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-gray-600">Materiały</label>
+                      <input
+                        type="text"
+                        defaultValue="1,2"
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-gray-600">Sprzęt</label>
+                      <input
+                        type="text"
+                        defaultValue="1,3"
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-gray-600">Odpady</label>
+                      <input
+                        type="text"
+                        defaultValue="1,4"
+                        className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* View Options Panel Content */}
+            {rightPanelMode === 'viewOptions' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                {/* Ceny jednostkowe */}
+                <div className="mb-4">
+                  <button
+                    onClick={() => {}}
+                    className="w-full flex items-center justify-between text-sm text-blue-600 font-medium mb-3"
+                  >
+                    <span>Ceny jednostkowe</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={viewOptionsPanel.highlightZeroPrices}
+                      onChange={(e) => setViewOptionsPanel(prev => ({ ...prev, highlightZeroPrices: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Podświetl wartości zerowe cen jednostkowych</span>
+                  </label>
+                </div>
+
+                {/* Opcje narzutów */}
+                <div className="border-t border-gray-200 pt-4">
+                  <button
+                    onClick={() => {}}
+                    className="w-full flex items-center justify-between text-sm text-blue-600 font-medium mb-3"
+                  >
+                    <span>Opcje narzutów</span>
+                    <ChevronUp className="w-4 h-4" />
+                  </button>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={viewOptionsPanel.showDetailedOverheads}
+                      onChange={(e) => setViewOptionsPanel(prev => ({ ...prev, showDetailedOverheads: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Pokaż szczegółowy podział narzutów w podsumowaniu pozycji</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Position Settings Panel Content */}
+            {rightPanelMode === 'positionSettings' && selectedItem && editorState.selectedItemType === 'resource' && (
+              <div className="flex-1 overflow-y-auto p-3">
+                <p className="text-sm text-gray-600">Ustawienia nakładu</p>
+                {/* Resource properties will be shown here */}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Alerts bar - matching eKosztorysowanie "0 z 13" style with visual slider */}
