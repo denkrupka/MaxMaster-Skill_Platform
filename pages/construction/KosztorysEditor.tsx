@@ -1136,14 +1136,16 @@ export const KosztorysEditorPage: React.FC = () => {
 
         // Check if we have saved JSON data first
         if (data.data_json) {
-          // Use saved JSON data directly
-          convertedEstimate.data = data.data_json as KosztorysCostEstimateData;
+          // Use saved JSON data directly, but clean orphan positions first
+          const rawData = data.data_json as KosztorysCostEstimateData;
+          const cleanedData = cleanOrphanPositions(rawData);
+          convertedEstimate.data = cleanedData;
           setEstimate(convertedEstimate);
-          setEstimateData(convertedEstimate.data);
+          setEstimateData(cleanedData);
 
           // Expand all sections and positions by default
-          const allSectionIds = Object.keys(convertedEstimate.data.sections);
-          const allPositionIds = Object.keys(convertedEstimate.data.positions);
+          const allSectionIds = Object.keys(cleanedData.sections);
+          const allPositionIds = Object.keys(cleanedData.positions);
           setEditorState(prev => ({
             ...prev,
             expandedSections: new Set(allSectionIds),
@@ -1414,6 +1416,57 @@ export const KosztorysEditorPage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Clean orphan positions from data (positions that exist but aren't in any section)
+  const cleanOrphanPositions = (data: KosztorysCostEstimateData): KosztorysCostEstimateData => {
+    // Get all position IDs that are actually referenced
+    const referencedPositionIds = new Set<string>();
+
+    // Add root position IDs
+    (data.root.positionIds || []).forEach(id => referencedPositionIds.add(id));
+
+    // Add position IDs from all sections (including subsections)
+    const collectSectionPositions = (sectionId: string) => {
+      const section = data.sections[sectionId];
+      if (!section) return;
+      (section.positionIds || []).forEach(id => referencedPositionIds.add(id));
+      (section.subsectionIds || []).forEach(subId => collectSectionPositions(subId));
+    };
+
+    (data.root.sectionIds || []).forEach(sectionId => collectSectionPositions(sectionId));
+
+    // Remove unreferenced positions from positions object
+    const cleanedPositions: Record<string, KosztorysPosition> = {};
+    for (const [posId, position] of Object.entries(data.positions)) {
+      if (referencedPositionIds.has(posId)) {
+        cleanedPositions[posId] = position;
+      } else {
+        console.log('Removing orphan position:', posId, position.name);
+      }
+    }
+
+    // Clean up section positionIds to remove IDs that don't exist
+    const cleanedSections: Record<string, KosztorysSection> = {};
+    for (const [secId, section] of Object.entries(data.sections)) {
+      cleanedSections[secId] = {
+        ...section,
+        positionIds: section.positionIds.filter(id => cleanedPositions[id]),
+      };
+    }
+
+    // Clean up root positionIds
+    const cleanedRoot = {
+      ...data.root,
+      positionIds: (data.root.positionIds || []).filter(id => cleanedPositions[id]),
+    };
+
+    return {
+      ...data,
+      root: cleanedRoot,
+      sections: cleanedSections,
+      positions: cleanedPositions,
+    };
   };
 
   // Mark as dirty when data changes
