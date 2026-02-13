@@ -838,6 +838,7 @@ export const KosztorysEditorPage: React.FC = () => {
   // Alerts state
   const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
   const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string; resourceId?: string }[]>([]);
+  const [alertsExpanded, setAlertsExpanded] = useState(false);
 
   // Print dialog state
   const [showPrintDialog, setShowPrintDialog] = useState(false);
@@ -1007,12 +1008,17 @@ export const KosztorysEditorPage: React.FC = () => {
       visiblePositionIds = visiblePositionIds.concat(getPositionsFromSection(sectionId));
     }
 
+    // Filter out orphan position IDs (IDs that don't exist in positions object)
+    visiblePositionIds = visiblePositionIds.filter(id => estimateData.positions[id]);
+
     // Validate only visible positions
     visiblePositionIds.forEach((positionId) => {
       const position = estimateData.positions[positionId];
-      if (!position) return;
 
       posIndex++;
+
+      // Generate position identifier (use base/catalog code if available, otherwise ordinal number)
+      const posIdentifier = position.base?.trim() || `#${posIndex}`;
 
       // Check for zero unit price (total cost = 0 but has resources)
       if (position.resources.length > 0) {
@@ -1021,7 +1027,7 @@ export const KosztorysEditorPage: React.FC = () => {
             newAlerts.push({
               id: `${resource.id}-price`,
               type: 'warning',
-              message: `Pozycja ${posIndex}, nakład ${resIndex + 1}: Cena zerowa`,
+              message: `${posIdentifier}: Nakład ${resIndex + 1} - cena zerowa`,
               positionId: position.id,
               resourceId: resource.id,
             });
@@ -1034,7 +1040,7 @@ export const KosztorysEditorPage: React.FC = () => {
         newAlerts.push({
           id: `${position.id}-nores`,
           type: 'warning',
-          message: `Pozycja ${posIndex}: Brak nakładów`,
+          message: `${posIdentifier}: Brak nakładów`,
           positionId: position.id,
         });
       }
@@ -3111,7 +3117,7 @@ export const KosztorysEditorPage: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white relative">
       {/* Single Toolbar Row */}
       <div className="bg-white border-b border-gray-200 px-2 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-0.5 flex-wrap">
@@ -6277,14 +6283,27 @@ export const KosztorysEditorPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Alert message */}
+          {/* Alert message with expand button */}
           {alerts.length > 0 && alertsCount.current < alerts.length && (
-            <span className={`text-xs flex items-center gap-1 ml-2 ${
-              alerts[alertsCount.current]?.type === 'error' ? 'text-[#EF4444]' : 'text-amber-600'
-            }`}>
-              <AlertCircle className="w-3 h-3" />
-              {alerts[alertsCount.current]?.message || 'Alerty w kosztorysie'}
-            </span>
+            <div className="flex items-center gap-1 ml-2">
+              <span className={`text-xs flex items-center gap-1 ${
+                alerts[alertsCount.current]?.type === 'error' ? 'text-[#EF4444]' : 'text-amber-600'
+              }`}>
+                <AlertCircle className="w-3 h-3" />
+                {alerts[alertsCount.current]?.message || 'Alerty w kosztorysie'}
+              </span>
+              <button
+                onClick={() => setAlertsExpanded(!alertsExpanded)}
+                className="p-0.5 hover:bg-gray-200 rounded transition-colors"
+                title={alertsExpanded ? 'Zwiń listę alertów' : 'Rozwiń listę alertów'}
+              >
+                {alertsExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronUp className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
+            </div>
           )}
           {alerts.length === 0 && (
             <span className="text-xs text-green-600 flex items-center gap-1 ml-2">
@@ -6300,6 +6319,67 @@ export const KosztorysEditorPage: React.FC = () => {
           <span className="font-bold text-gray-900">{formatCurrency(calculationResult?.totalValue || 0)}</span>
         </div>
       </div>
+
+      {/* Expanded Alerts Panel */}
+      {alertsExpanded && alerts.length > 0 && (
+        <div className="absolute bottom-[40px] left-0 right-0 bg-white border-t border-gray-300 shadow-lg z-40 max-h-[300px] overflow-y-auto">
+          <div className="sticky top-0 bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Lista alertów ({alerts.length})</span>
+            <button
+              onClick={() => setAlertsExpanded(false)}
+              className="p-1 hover:bg-gray-200 rounded"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 sticky top-[41px]">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Typ</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opis</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Akcja</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {alerts.map((alert, index) => (
+                <tr
+                  key={alert.id}
+                  className={`hover:bg-gray-50 cursor-pointer ${index === alertsCount.current ? 'bg-blue-50' : ''}`}
+                  onClick={() => {
+                    handleNavigateToAlert(index);
+                    setAlertsExpanded(false);
+                  }}
+                >
+                  <td className="px-4 py-2">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      alert.type === 'error'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      <AlertCircle className="w-3 h-3" />
+                      {alert.type === 'error' ? 'Błąd' : 'Ostrzeżenie'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-700">{alert.message}</td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1 ml-auto"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNavigateToAlert(index);
+                        setAlertsExpanded(false);
+                      }}
+                    >
+                      <ArrowUpRight className="w-3 h-3" />
+                      Idź do
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Add Position Modal */}
       {showAddPositionModal && (
