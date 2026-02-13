@@ -5987,7 +5987,7 @@ export const KosztorysEditorPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                  <div>
+                  <div className="mb-3">
                     <label className="block text-xs text-gray-500 mb-1">Opis kosztorysu</label>
                     <textarea
                       value={estimate.settings.description}
@@ -5999,6 +5999,93 @@ export const KosztorysEditorPage: React.FC = () => {
                       rows={2}
                       placeholder="KOSZTORYS NASZ"
                     />
+                  </div>
+
+                  {/* Narzuty settings */}
+                  <div className="border-t border-gray-100 pt-3">
+                    <label className="block text-xs text-gray-500 mb-2">Narzuty</label>
+                    <div className="space-y-2">
+                      {/* Koszty pośrednie (Kp) */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Koszty pośrednie (Kp)</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={estimateData.root.overheads.find(o => o.name.includes('Kp'))?.value || 65}
+                            onChange={(e) => {
+                              const newValue = parseFloat(e.target.value) || 0;
+                              const newOverheads = estimateData.root.overheads.map(o =>
+                                o.name.includes('Kp') ? { ...o, value: newValue } : o
+                              );
+                              updateEstimateData({
+                                ...estimateData,
+                                root: { ...estimateData.root, overheads: newOverheads }
+                              });
+                            }}
+                            className="w-14 px-2 py-1 text-sm text-right border border-gray-300 rounded"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                          <span className="text-xs text-gray-400 ml-1">(R)</span>
+                        </div>
+                      </div>
+
+                      {/* Zysk (Z) */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Zysk (Z)</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={estimateData.root.overheads.find(o => o.name.includes('Zysk'))?.value || 10}
+                            onChange={(e) => {
+                              const newValue = parseFloat(e.target.value) || 0;
+                              const newOverheads = estimateData.root.overheads.map(o =>
+                                o.name.includes('Zysk') ? { ...o, value: newValue } : o
+                              );
+                              updateEstimateData({
+                                ...estimateData,
+                                root: { ...estimateData.root, overheads: newOverheads }
+                              });
+                            }}
+                            className="w-14 px-2 py-1 text-sm text-right border border-gray-300 rounded"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                          <span className="text-xs text-gray-400 ml-1">(R)</span>
+                        </div>
+                      </div>
+
+                      {/* Koszty zakupu (Kz) */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Koszty zakupu (Kz)</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={estimateData.root.overheads.find(o => o.name.includes('zakupu'))?.value || 5}
+                            onChange={(e) => {
+                              const newValue = parseFloat(e.target.value) || 0;
+                              const newOverheads = estimateData.root.overheads.map(o =>
+                                o.name.includes('zakupu') ? { ...o, value: newValue } : o
+                              );
+                              updateEstimateData({
+                                ...estimateData,
+                                root: { ...estimateData.root, overheads: newOverheads }
+                              });
+                            }}
+                            className="w-14 px-2 py-1 text-sm text-right border border-gray-300 rounded"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                          <span className="text-xs text-gray-400 ml-1">(M)</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
