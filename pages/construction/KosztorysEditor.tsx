@@ -2447,12 +2447,24 @@ export const KosztorysEditorPage: React.FC = () => {
     showNotificationMessage('Eksport do CSV zakończony', 'success');
   };
 
+  // Section depth colors for visual hierarchy
+  const sectionDepthColors = [
+    { border: 'border-l-4 border-l-blue-500', bg: 'bg-blue-50', headerBg: 'bg-blue-100' },      // depth 0 - main section
+    { border: 'border-l-4 border-l-emerald-500', bg: 'bg-emerald-50', headerBg: 'bg-emerald-100' }, // depth 1
+    { border: 'border-l-4 border-l-amber-500', bg: 'bg-amber-50', headerBg: 'bg-amber-100' },      // depth 2
+    { border: 'border-l-4 border-l-purple-500', bg: 'bg-purple-50', headerBg: 'bg-purple-100' },   // depth 3
+    { border: 'border-l-4 border-l-rose-500', bg: 'bg-rose-50', headerBg: 'bg-rose-100' },         // depth 4+
+  ];
+
+  const getDepthColors = (depth: number) => sectionDepthColors[Math.min(depth, sectionDepthColors.length - 1)];
+
   // Render position row
-  const renderPositionRow = (position: KosztorysPosition, positionNumber: number, sectionId: string | null) => {
+  const renderPositionRow = (position: KosztorysPosition, positionNumber: number, sectionId: string | null, sectionDepth: number = 0) => {
     const isExpanded = editorState.expandedPositions.has(position.id);
     const isSelected = editorState.selectedItemId === position.id;
     const result = calculationResult?.positions[position.id];
     const quantity = result?.quantity || 0;
+    const depthColors = getDepthColors(sectionDepth);
 
     // Przedmiar view - matching eKosztorysowanie layout
     if (viewMode === 'przedmiar') {
@@ -2461,7 +2473,7 @@ export const KosztorysEditorPage: React.FC = () => {
         <React.Fragment key={position.id}>
           {/* Position header row */}
           <tr
-            className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+            className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg}`}
             onClick={() => selectItem(position.id, 'position')}
           >
             <td className="px-3 py-2 text-sm align-top">
@@ -2511,7 +2523,7 @@ export const KosztorysEditorPage: React.FC = () => {
       return (
         <tr
           key={position.id}
-          className={`hover:bg-blue-50 cursor-pointer ${isSelected ? 'bg-blue-100' : ''}`}
+          className={`cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'}`}
           onClick={() => selectItem(position.id, 'position')}
         >
           <td className="px-3 py-3 text-sm border border-gray-300 align-top">
@@ -2543,7 +2555,7 @@ export const KosztorysEditorPage: React.FC = () => {
             return (
               <tr
                 key={resource.id}
-                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''}`}
+                className={`border-b border-gray-100 cursor-pointer ${depthColors.border} ${isResourceSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'}`}
                 onClick={() => selectItem(resource.id, 'resource')}
               >
                 <td className="px-3 py-2 text-sm">
@@ -2576,7 +2588,7 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={position.id}>
         {/* Position row */}
         <tr
-          className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+          className={`border-b border-gray-100 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-100' : depthColors.bg + ' hover:brightness-95'}`}
           onClick={() => selectItem(position.id, 'position')}
         >
           <td className="px-3 py-2 text-sm align-top">
@@ -2706,6 +2718,7 @@ export const KosztorysEditorPage: React.FC = () => {
     const sectionResult = calculationResult?.sections[section.id];
     const hasSubsections = section.subsectionIds && section.subsectionIds.length > 0;
     const hasPositions = section.positionIds && section.positionIds.length > 0;
+    const depthColors = getDepthColors(depth);
 
     // Determine colspan based on view mode
     const colspan = viewMode === 'przedmiar' ? 4 : viewMode === 'pozycje' ? 5 : viewMode === 'naklady' ? 7 : viewMode === 'kosztorys' ? 7 : 5;
@@ -2719,14 +2732,14 @@ export const KosztorysEditorPage: React.FC = () => {
         <React.Fragment key={section.id}>
           {/* Section header row */}
           <tr
-            className={`cursor-pointer ${isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : depth > 0 ? 'bg-gray-50 hover:bg-gray-100' : 'bg-white hover:bg-gray-50'}`}
+            className={`cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-200 ring-2 ring-inset ring-blue-400' : depthColors.headerBg + ' hover:brightness-95'}`}
             onClick={() => selectItem(section.id, 'section')}
           >
             <td className="px-3 py-3 text-sm border border-gray-300" style={{ paddingLeft: `${12 + indentPadding}px` }}>
               {(hasSubsections || hasPositions) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
-                  className="p-0.5 hover:bg-gray-200 rounded"
+                  className="p-0.5 hover:bg-white/50 rounded"
                 >
                   {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
                 </button>
@@ -2747,7 +2760,7 @@ export const KosztorysEditorPage: React.FC = () => {
           {isExpanded && section.positionIds.map((posId, posIndex) => {
             const position = estimateData.positions[posId];
             if (!position) return null;
-            return renderPositionRow(position, posIndex + 1, section.id);
+            return renderPositionRow(position, posIndex + 1, section.id, depth);
           })}
         </React.Fragment>
       );
@@ -2757,14 +2770,14 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={section.id}>
         {/* Section header row */}
         <tr
-          className={`border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : depth > 0 ? 'bg-gray-100 hover:bg-gray-200' : 'bg-gray-50 hover:bg-gray-100'}`}
+          className={`border-b border-gray-200 cursor-pointer ${depthColors.border} ${isSelected ? 'bg-blue-200 ring-2 ring-inset ring-blue-400' : depthColors.headerBg + ' hover:brightness-95'}`}
           onClick={() => selectItem(section.id, 'section')}
         >
           <td className="px-3 py-2 text-sm" style={{ paddingLeft: `${12 + indentPadding}px` }}>
             {(hasSubsections || hasPositions) && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
-                className="p-0.5 hover:bg-gray-200 rounded"
+                className="p-0.5 hover:bg-white/50 rounded"
               >
                 {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
               </button>
@@ -2785,7 +2798,7 @@ export const KosztorysEditorPage: React.FC = () => {
         {isExpanded && section.positionIds.map((posId, posIndex) => {
           const position = estimateData.positions[posId];
           if (!position) return null;
-          return renderPositionRow(position, posIndex + 1, section.id);
+          return renderPositionRow(position, posIndex + 1, section.id, depth);
         })}
       </React.Fragment>
     );
