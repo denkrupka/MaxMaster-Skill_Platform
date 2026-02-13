@@ -1427,17 +1427,29 @@ export const KosztorysEditorPage: React.FC = () => {
     const newData = { ...estimateData };
     newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
 
+    // Determine target section - use provided targetSectionId, or selected section, or first section
+    let effectiveTargetSectionId = targetSectionId;
+
+    if (!effectiveTargetSectionId && editorState.selectedItemType === 'section' && editorState.selectedItemId) {
+      effectiveTargetSectionId = editorState.selectedItemId;
+    }
+
+    if (!effectiveTargetSectionId && estimateData.root.sectionIds.length > 0) {
+      effectiveTargetSectionId = estimateData.root.sectionIds[0];
+    }
+
     // Positions can only be added to sections (działy or poddziały), not to root
-    if (!targetSectionId || !newData.sections[targetSectionId]) {
+    if (!effectiveTargetSectionId || !newData.sections[effectiveTargetSectionId]) {
       setShowAddPositionModal(false);
+      showNotificationMessage('Najpierw dodaj dział, aby móc dodać pozycję', 'warning');
       return;
     }
 
     newData.sections = {
       ...newData.sections,
-      [targetSectionId]: {
-        ...newData.sections[targetSectionId],
-        positionIds: [...newData.sections[targetSectionId].positionIds, newPosition.id],
+      [targetSectionForPosition]: {
+        ...newData.sections[targetSectionForPosition],
+        positionIds: [...newData.sections[targetSectionForPosition].positionIds, newPosition.id],
       },
     };
 
@@ -1449,6 +1461,7 @@ export const KosztorysEditorPage: React.FC = () => {
       selectedItemId: newPosition.id,
       selectedItemType: 'position',
       expandedPositions: new Set([...prev.expandedPositions, newPosition.id]),
+      expandedSections: new Set([...prev.expandedSections, targetSectionForPosition]),
     }));
   };
 
@@ -2011,13 +2024,47 @@ export const KosztorysEditorPage: React.FC = () => {
       }
     }
 
+    // Find target section - use selected section or find a section to add to
+    let targetSectionId: string | null = null;
+
+    if (editorState.selectedItemType === 'section' && editorState.selectedItemId) {
+      targetSectionId = editorState.selectedItemId;
+    } else if (editorState.selectedItemType === 'position' && editorState.selectedItemId) {
+      // Find which section contains the selected position
+      for (const [secId, section] of Object.entries(estimateData.sections)) {
+        if (section.positionIds.includes(editorState.selectedItemId)) {
+          targetSectionId = secId;
+          break;
+        }
+      }
+    }
+
+    // If no section selected, try to use the first section
+    if (!targetSectionId && estimateData.root.sectionIds.length > 0) {
+      targetSectionId = estimateData.root.sectionIds[0];
+    }
+
+    // If still no section, show error
+    if (!targetSectionId) {
+      showNotificationMessage('Najpierw dodaj dział, aby móc dodać pozycję', 'warning');
+      return;
+    }
+
     // Add to estimate
     const newData = { ...estimateData };
     newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
-    newData.root = {
-      ...newData.root,
-      positionIds: [...newData.root.positionIds, newPosition.id],
-    };
+
+    // Add position to the target section
+    const targetSection = newData.sections[targetSectionId];
+    if (targetSection) {
+      newData.sections = {
+        ...newData.sections,
+        [targetSectionId]: {
+          ...targetSection,
+          positionIds: [...targetSection.positionIds, newPosition.id],
+        },
+      };
+    }
 
     updateEstimateData(newData);
     setLeftPanelMode('overview');
@@ -2027,6 +2074,7 @@ export const KosztorysEditorPage: React.FC = () => {
       selectedItemId: newPosition.id,
       selectedItemType: 'position',
       expandedPositions: new Set([...prev.expandedPositions, newPosition.id]),
+      expandedSections: new Set([...prev.expandedSections, targetSectionId!]),
     }));
 
     showNotificationMessage(`Dodano pozycję: ${catalogItem.code}`, 'success');
@@ -2671,7 +2719,7 @@ export const KosztorysEditorPage: React.FC = () => {
         <React.Fragment key={section.id}>
           {/* Section header row */}
           <tr
-            className={`bg-white hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+            className={`cursor-pointer ${isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : depth > 0 ? 'bg-gray-50 hover:bg-gray-100' : 'bg-white hover:bg-gray-50'}`}
             onClick={() => selectItem(section.id, 'section')}
           >
             <td className="px-3 py-3 text-sm border border-gray-300" style={{ paddingLeft: `${12 + indentPadding}px` }}>
@@ -2709,7 +2757,7 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={section.id}>
         {/* Section header row */}
         <tr
-          className={`bg-gray-50 border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-50' : ''} ${depth > 0 ? 'bg-gray-100' : ''}`}
+          className={`border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-100 ring-2 ring-inset ring-blue-400' : depth > 0 ? 'bg-gray-100 hover:bg-gray-200' : 'bg-gray-50 hover:bg-gray-100'}`}
           onClick={() => selectItem(section.id, 'section')}
         >
           <td className="px-3 py-2 text-sm" style={{ paddingLeft: `${12 + indentPadding}px` }}>
