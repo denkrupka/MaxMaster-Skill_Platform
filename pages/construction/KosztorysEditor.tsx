@@ -1002,7 +1002,8 @@ export const KosztorysEditorPage: React.FC = () => {
     // Get all visible position IDs in order (through sections)
     let visiblePositionIds: string[] = [];
     // First add positions from root (if any direct positions)
-    visiblePositionIds = visiblePositionIds.concat(estimateData.root.positionIds || []);
+    const rootPosIds = estimateData.root.positionIds || [];
+    visiblePositionIds = visiblePositionIds.concat(rootPosIds);
     // Then add positions from sections
     for (const sectionId of estimateData.root.sectionIds) {
       visiblePositionIds = visiblePositionIds.concat(getPositionsFromSection(sectionId));
@@ -1010,6 +1011,15 @@ export const KosztorysEditorPage: React.FC = () => {
 
     // Filter out orphan position IDs (IDs that don't exist in positions object)
     visiblePositionIds = visiblePositionIds.filter(id => estimateData.positions[id]);
+
+    // Debug: log position locations
+    console.log('=== POSITIONS DEBUG ===');
+    console.log('Root positionIds:', rootPosIds.length, rootPosIds);
+    console.log('Total visible positions:', visiblePositionIds.length);
+    visiblePositionIds.forEach((id, idx) => {
+      const pos = estimateData.positions[id];
+      console.log(`  ${idx + 1}. [${pos?.base || 'NO BASE'}] "${pos?.name}" - resources: ${pos?.resources?.length || 0}`);
+    });
 
     // Validate only visible positions
     visiblePositionIds.forEach((positionId) => {
@@ -6467,12 +6477,57 @@ export const KosztorysEditorPage: React.FC = () => {
         <div className="absolute bottom-[40px] left-0 right-0 bg-white border-t border-gray-300 shadow-lg z-40 max-h-[300px] overflow-y-auto">
           <div className="sticky top-0 bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
             <span className="text-sm font-medium text-gray-700">Lista alertów ({alerts.length})</span>
-            <button
-              onClick={() => setAlertsExpanded(false)}
-              className="p-1 hover:bg-gray-200 rounded"
-            >
-              <X className="w-4 h-4 text-gray-500" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  // Delete all positions without resources
+                  const positionsToDelete = alerts
+                    .filter(a => a.message.includes('Brak nakładów') && a.positionId)
+                    .map(a => a.positionId!);
+
+                  if (positionsToDelete.length === 0) return;
+
+                  if (!confirm(`Usunąć ${positionsToDelete.length} pozycji bez nakładów?`)) return;
+
+                  const newPositions = { ...estimateData.positions };
+                  positionsToDelete.forEach(id => delete newPositions[id]);
+
+                  // Remove from sections
+                  const newSections = { ...estimateData.sections };
+                  for (const [secId, section] of Object.entries(newSections)) {
+                    newSections[secId] = {
+                      ...section,
+                      positionIds: section.positionIds.filter(id => !positionsToDelete.includes(id)),
+                    };
+                  }
+
+                  // Remove from root
+                  const newRoot = {
+                    ...estimateData.root,
+                    positionIds: (estimateData.root.positionIds || []).filter(id => !positionsToDelete.includes(id)),
+                  };
+
+                  updateEstimateData({
+                    ...estimateData,
+                    root: newRoot,
+                    sections: newSections,
+                    positions: newPositions,
+                  });
+
+                  showNotificationMessage(`Usunięto ${positionsToDelete.length} pozycji`, 'success');
+                }}
+                className="px-2 py-1 text-xs bg-red-100 text-red-700 hover:bg-red-200 rounded flex items-center gap-1"
+              >
+                <Trash2 className="w-3 h-3" />
+                Usuń puste pozycje
+              </button>
+              <button
+                onClick={() => setAlertsExpanded(false)}
+                className="p-1 hover:bg-gray-200 rounded"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-gray-50 sticky top-[41px]">
