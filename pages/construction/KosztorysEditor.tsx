@@ -837,7 +837,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Alerts state
   const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
-  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string; resourceId?: string }[]>([]);
+  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string; resourceId?: string; positionName?: string }[]>([]);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
 
   // Print dialog state
@@ -1030,6 +1030,7 @@ export const KosztorysEditorPage: React.FC = () => {
               message: `${posIdentifier}: Nakład ${resIndex + 1} - cena zerowa`,
               positionId: position.id,
               resourceId: resource.id,
+              positionName: position.name,
             });
           }
         });
@@ -1042,6 +1043,7 @@ export const KosztorysEditorPage: React.FC = () => {
           type: 'warning',
           message: `${posIdentifier}: Brak nakładów`,
           positionId: position.id,
+          positionName: position.name,
         });
       }
     });
@@ -6337,6 +6339,7 @@ export const KosztorysEditorPage: React.FC = () => {
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Typ</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opis</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase max-w-[300px]">Nazwa pozycji</th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Akcja</th>
               </tr>
             </thead>
@@ -6345,10 +6348,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 <tr
                   key={alert.id}
                   className={`hover:bg-gray-50 cursor-pointer ${index === alertsCount.current ? 'bg-blue-50' : ''}`}
-                  onClick={() => {
-                    handleNavigateToAlert(index);
-                    setAlertsExpanded(false);
-                  }}
+                  onClick={() => handleNavigateToAlert(index)}
                 >
                   <td className="px-4 py-2">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
@@ -6361,6 +6361,9 @@ export const KosztorysEditorPage: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-gray-700">{alert.message}</td>
+                  <td className="px-4 py-2 text-gray-600 max-w-[300px] truncate" title={alert.positionName || ''}>
+                    {alert.positionName || '-'}
+                  </td>
                   <td className="px-4 py-2 text-right">
                     <button
                       className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1 ml-auto"
