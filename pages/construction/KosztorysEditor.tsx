@@ -1359,6 +1359,46 @@ export const KosztorysEditorPage: React.FC = () => {
     }));
   };
 
+  // Add subsection to selected section
+  const handleAddSubsection = (parentSectionId?: string) => {
+    // Use provided parentSectionId or get from currently selected section
+    const targetParentId = parentSectionId || (
+      editorState.selectedItemType === 'section' ? editorState.selectedItemId : null
+    );
+
+    if (!targetParentId) {
+      // No section selected - show alert or handle error
+      return;
+    }
+
+    const parentSection = estimateData.sections[targetParentId];
+    if (!parentSection) return;
+
+    // Calculate ordinal number: parent.ordinalNumber + "." + (subsectionIds.length + 1)
+    const subsectionIndex = (parentSection.subsectionIds?.length || 0) + 1;
+    const ordinalNumber = `${parentSection.ordinalNumber}.${subsectionIndex}`;
+    const newSection = createNewSection('Nowy poddział', ordinalNumber);
+
+    updateEstimateData({
+      ...estimateData,
+      sections: {
+        ...estimateData.sections,
+        [newSection.id]: newSection,
+        [targetParentId]: {
+          ...parentSection,
+          subsectionIds: [...(parentSection.subsectionIds || []), newSection.id],
+        },
+      },
+    });
+
+    setEditorState(prev => ({
+      ...prev,
+      selectedItemId: newSection.id,
+      selectedItemType: 'section',
+      expandedSections: new Set([...prev.expandedSections, targetParentId, newSection.id]),
+    }));
+  };
+
   // Add position
   const handleAddPosition = (sectionId: string | null = null) => {
     setTargetSectionId(sectionId);
@@ -1387,20 +1427,19 @@ export const KosztorysEditorPage: React.FC = () => {
     const newData = { ...estimateData };
     newData.positions = { ...newData.positions, [newPosition.id]: newPosition };
 
-    if (targetSectionId && newData.sections[targetSectionId]) {
-      newData.sections = {
-        ...newData.sections,
-        [targetSectionId]: {
-          ...newData.sections[targetSectionId],
-          positionIds: [...newData.sections[targetSectionId].positionIds, newPosition.id],
-        },
-      };
-    } else {
-      newData.root = {
-        ...newData.root,
-        positionIds: [...newData.root.positionIds, newPosition.id],
-      };
+    // Positions can only be added to sections (działy or poddziały), not to root
+    if (!targetSectionId || !newData.sections[targetSectionId]) {
+      setShowAddPositionModal(false);
+      return;
     }
+
+    newData.sections = {
+      ...newData.sections,
+      [targetSectionId]: {
+        ...newData.sections[targetSectionId],
+        positionIds: [...newData.sections[targetSectionId].positionIds, newPosition.id],
+      },
+    };
 
     updateEstimateData(newData);
     setShowAddPositionModal(false);
@@ -1515,18 +1554,72 @@ export const KosztorysEditorPage: React.FC = () => {
     updateEstimateData(newData);
   };
 
+  // Helper to recursively collect all section IDs (including subsections) and their positions
+  const collectSectionAndSubsectionIds = (
+    sectionId: string,
+    sections: Record<string, KosztorysSection>
+  ): { sectionIds: string[]; positionIds: string[] } => {
+    const section = sections[sectionId];
+    if (!section) return { sectionIds: [], positionIds: [] };
+
+    const result = {
+      sectionIds: [sectionId],
+      positionIds: [...section.positionIds],
+    };
+
+    // Recursively collect subsections
+    for (const subsectionId of section.subsectionIds || []) {
+      const subResult = collectSectionAndSubsectionIds(subsectionId, sections);
+      result.sectionIds.push(...subResult.sectionIds);
+      result.positionIds.push(...subResult.positionIds);
+    }
+
+    return result;
+  };
+
   // Delete item
   const handleDeleteItem = (itemId: string, itemType: 'section' | 'position' | 'resource') => {
     const newData = { ...estimateData };
 
     switch (itemType) {
       case 'section': {
-        const { [itemId]: removed, ...remainingSections } = newData.sections;
+        // Collect all section IDs and position IDs to delete (including subsections)
+        const { sectionIds: sectionsToDelete, positionIds: positionsToDelete } =
+          collectSectionAndSubsectionIds(itemId, newData.sections);
+
+        // Remove all collected sections
+        const remainingSections = { ...newData.sections };
+        for (const secId of sectionsToDelete) {
+          delete remainingSections[secId];
+        }
         newData.sections = remainingSections;
+
+        // Remove all positions from deleted sections
+        const remainingPositions = { ...newData.positions };
+        for (const posId of positionsToDelete) {
+          delete remainingPositions[posId];
+        }
+        newData.positions = remainingPositions;
+
+        // Remove from root sectionIds
         newData.root = {
           ...newData.root,
           sectionIds: newData.root.sectionIds.filter(id => id !== itemId),
         };
+
+        // Also remove from parent's subsectionIds if it's a subsection
+        for (const [secId, section] of Object.entries(newData.sections)) {
+          if (section.subsectionIds?.includes(itemId)) {
+            newData.sections = {
+              ...newData.sections,
+              [secId]: {
+                ...section,
+                subsectionIds: section.subsectionIds.filter(id => id !== itemId),
+              },
+            };
+            break;
+          }
+        }
         break;
       }
       case 'position': {
@@ -2558,14 +2651,19 @@ export const KosztorysEditorPage: React.FC = () => {
     );
   };
 
-  // Render section
-  const renderSection = (section: KosztorysSection, sectionIndex: number) => {
+  // Render section (with recursive subsections)
+  const renderSection = (section: KosztorysSection, sectionIndex: number, depth: number = 0) => {
     const isExpanded = editorState.expandedSections.has(section.id);
     const isSelected = editorState.selectedItemId === section.id;
     const sectionResult = calculationResult?.sections[section.id];
+    const hasSubsections = section.subsectionIds && section.subsectionIds.length > 0;
+    const hasPositions = section.positionIds && section.positionIds.length > 0;
 
     // Determine colspan based on view mode
     const colspan = viewMode === 'przedmiar' ? 4 : viewMode === 'pozycje' ? 5 : viewMode === 'naklady' ? 7 : viewMode === 'kosztorys' ? 7 : 5;
+
+    // Indentation based on depth
+    const indentPadding = depth * 16;
 
     // Pozycje view - matching eKosztorysowanie reference
     if (viewMode === 'pozycje') {
@@ -2576,17 +2674,26 @@ export const KosztorysEditorPage: React.FC = () => {
             className={`bg-white hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
             onClick={() => selectItem(section.id, 'section')}
           >
-            <td className="px-3 py-3 text-sm border border-gray-300">
-              <button
-                onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
-                className="p-0.5 hover:bg-gray-200 rounded"
-              >
-                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
-              </button>
+            <td className="px-3 py-3 text-sm border border-gray-300" style={{ paddingLeft: `${12 + indentPadding}px` }}>
+              {(hasSubsections || hasPositions) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
+                  className="p-0.5 hover:bg-gray-200 rounded"
+                >
+                  {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
+                </button>
+              )}
             </td>
             <td className="px-3 py-3 text-sm font-semibold text-gray-900 border border-gray-300">{section.ordinalNumber}</td>
             <td colSpan={5} className="px-3 py-3 text-sm font-semibold text-gray-900 border border-gray-300">{section.name}</td>
           </tr>
+
+          {/* Subsections (rendered recursively) */}
+          {isExpanded && section.subsectionIds?.map((subsectionId, subIndex) => {
+            const subsection = estimateData.sections[subsectionId];
+            if (!subsection) return null;
+            return renderSection(subsection, subIndex, depth + 1);
+          })}
 
           {/* Positions in section */}
           {isExpanded && section.positionIds.map((posId, posIndex) => {
@@ -2602,20 +2709,29 @@ export const KosztorysEditorPage: React.FC = () => {
       <React.Fragment key={section.id}>
         {/* Section header row */}
         <tr
-          className={`bg-gray-50 border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-50' : ''}`}
+          className={`bg-gray-50 border-b border-gray-200 cursor-pointer ${isSelected ? 'bg-blue-50' : ''} ${depth > 0 ? 'bg-gray-100' : ''}`}
           onClick={() => selectItem(section.id, 'section')}
         >
-          <td className="px-3 py-2 text-sm">
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
-              className="p-0.5 hover:bg-gray-200 rounded"
-            >
-              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
-            </button>
+          <td className="px-3 py-2 text-sm" style={{ paddingLeft: `${12 + indentPadding}px` }}>
+            {(hasSubsections || hasPositions) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleExpandSection(section.id); }}
+                className="p-0.5 hover:bg-gray-200 rounded"
+              >
+                {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-600" /> : <ChevronRight className="w-4 h-4 text-gray-600" />}
+              </button>
+            )}
           </td>
           <td className="px-3 py-2 text-sm font-semibold text-gray-900">{section.ordinalNumber}</td>
           <td colSpan={colspan} className="px-3 py-2 text-sm font-semibold text-gray-900">{section.name}</td>
         </tr>
+
+        {/* Subsections (rendered recursively) */}
+        {isExpanded && section.subsectionIds?.map((subsectionId, subIndex) => {
+          const subsection = estimateData.sections[subsectionId];
+          if (!subsection) return null;
+          return renderSection(subsection, subIndex, depth + 1);
+        })}
 
         {/* Positions in section */}
         {isExpanded && section.positionIds.map((posId, posIndex) => {
@@ -2745,8 +2861,16 @@ export const KosztorysEditorPage: React.FC = () => {
                 <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
                   + Dział
                 </button>
-                <button onClick={() => { handleAddSection(); setShowDzialDropdown(false); }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">
-                  + Poddział
+                <button
+                  onClick={() => { handleAddSubsection(); setShowDzialDropdown(false); }}
+                  disabled={editorState.selectedItemType !== 'section'}
+                  className={`w-full text-left px-3 py-2 text-sm ${
+                    editorState.selectedItemType === 'section'
+                      ? 'hover:bg-gray-50'
+                      : 'text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  + Poddział {editorState.selectedItemType !== 'section' && '(wybierz dział)'}
                 </button>
               </div>
             )}
@@ -3199,26 +3323,8 @@ export const KosztorysEditorPage: React.FC = () => {
                     renderSectionTree(sectionId, 0)
                   )}
 
-                  {/* Root positions - only shown when root is expanded */}
-                  {editorState.treeRootExpanded !== false && estimateData.root.positionIds.map((posId, index) => {
-                    const position = estimateData.positions[posId];
-                    if (!position) return null;
-                    return (
-                      <button
-                        key={posId}
-                        onClick={() => selectItem(posId, 'position')}
-                        className={`w-full flex items-center gap-1 pl-6 pr-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 ${
-                          editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : ''
-                        }`}
-                      >
-                        <FileText className="w-4 h-4 flex-shrink-0" />
-                        <span className="truncate">{index + 1}. {position.name}</span>
-                      </button>
-                    );
-                  })}
-
                   {/* Empty state */}
-                  {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
+                  {estimateData.root.sectionIds.length === 0 && (
                     <p className="text-sm text-gray-400 text-center py-4">Kosztorys jest pusty</p>
                   )}
                 </div>
@@ -5326,14 +5432,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 )}
               </thead>
               <tbody>
-                {/* Root level positions */}
-                {estimateData.root.positionIds.map((posId, index) => {
-                  const position = estimateData.positions[posId];
-                  if (!position) return null;
-                  return renderPositionRow(position, index + 1, null);
-                })}
-
-                {/* Sections */}
+                {/* Sections (positions can only exist within sections, not at root level) */}
                 {estimateData.root.sectionIds.map((sectionId, index) => {
                   const section = estimateData.sections[sectionId];
                   if (!section) return null;
@@ -5341,29 +5440,21 @@ export const KosztorysEditorPage: React.FC = () => {
                 })}
 
                 {/* Empty state */}
-                {estimateData.root.sectionIds.length === 0 && estimateData.root.positionIds.length === 0 && (
+                {estimateData.root.sectionIds.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-12 text-center">
                       <div className="text-gray-400 mb-4">
                         <FileText className="w-12 h-12 mx-auto mb-2" />
                         <p>Kosztorys jest pusty</p>
+                        <p className="text-sm mt-1">Dodaj dział, aby rozpocząć tworzenie kosztorysu</p>
                       </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={handleAddSection}
-                          className="px-4 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
-                        >
-                          <FolderPlus className="w-4 h-4 inline mr-1" />
-                          Dodaj dział
-                        </button>
-                        <button
-                          onClick={() => handleAddPosition(null)}
-                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          <Plus className="w-4 h-4 inline mr-1" />
-                          Dodaj pozycję
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleAddSection}
+                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        <FolderPlus className="w-4 h-4 inline mr-1" />
+                        Dodaj dział
+                      </button>
                     </td>
                   </tr>
                 )}

@@ -219,11 +219,12 @@ export function calculatePosition(
 }
 
 /**
- * Calculate section totals
+ * Calculate section totals (including subsections recursively)
  */
 export function calculateSection(
   section: KosztorysSection,
   positions: Record<string, KosztorysPosition>,
+  allSections: Record<string, KosztorysSection>,
   globalFactors: KosztorysFactors = DEFAULT_FACTORS,
   globalOverheads: KosztorysOverhead[] = [],
   precision: KosztorysPrecisionSettings = DEFAULT_PRECISION
@@ -240,7 +241,7 @@ export function calculateSection(
   let totalValue = 0;
   const positionResults: Record<string, KosztorysPositionCalculationResult> = {};
 
-  // Calculate positions in section
+  // Calculate positions in this section
   for (const positionId of section.positionIds) {
     const position = positions[positionId];
     if (!position) continue;
@@ -257,6 +258,27 @@ export function calculateSection(
     totalMaterial += result.materialTotal;
     totalEquipment += result.equipmentTotal;
     totalValue += result.totalWithOverheads;
+  }
+
+  // Calculate subsections recursively
+  for (const subsectionId of section.subsectionIds || []) {
+    const subsection = allSections[subsectionId];
+    if (!subsection) continue;
+
+    const subsectionResult = calculateSection(
+      subsection,
+      positions,
+      allSections,
+      globalFactors,
+      globalOverheads,
+      precision
+    );
+
+    // Merge subsection results
+    Object.assign(positionResults, subsectionResult.positionResults);
+    totalLabor += subsectionResult.totalLabor;
+    totalMaterial += subsectionResult.totalMaterial;
+    totalEquipment += subsectionResult.totalEquipment;
   }
 
   // Apply section factors
@@ -328,6 +350,7 @@ export function calculateCostEstimate(
     const result = calculateSection(
       section,
       data.positions,
+      data.sections,
       globalFactors,
       globalOverheads,
       precision
