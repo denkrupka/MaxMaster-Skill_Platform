@@ -2858,9 +2858,9 @@ export const KosztorysEditorPage: React.FC = () => {
           const resQuantity = resResult?.calculatedQuantity || resource.norm.value * quantity;
 
           // Calculate values for R, M, S columns
-          const rValue = resource.type === 'labor' ? resResult?.totalCost || 0 : 0;
-          const mValue = resource.type === 'material' ? resResult?.totalCost || 0 : 0;
-          const sValue = resource.type === 'equipment' ? resResult?.totalCost || 0 : 0;
+          const rValue = resource.type === 'labor' ? resResult?.calculatedValue || 0 : 0;
+          const mValue = resource.type === 'material' ? resResult?.calculatedValue || 0 : 0;
+          const sValue = resource.type === 'equipment' ? resResult?.calculatedValue || 0 : 0;
 
           return (
             <React.Fragment key={resource.id}>
@@ -2898,7 +2898,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 </td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-500">{resource.unit.label}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resQuantity, 1)}</td>
-                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resResult?.totalCost || 0, 3)}</td>
+                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resResult?.calculatedValue || 0, 3)}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{rValue > 0 ? formatNumber(rValue, 2) : ''}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{mValue > 0 ? formatNumber(mValue, 2) : ''}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{sValue > 0 ? formatNumber(sValue, 2) : ''}</td>
