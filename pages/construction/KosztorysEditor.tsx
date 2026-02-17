@@ -1952,6 +1952,8 @@ export const KosztorysEditorPage: React.FC = () => {
     if (!positionIds) return;
     const currentIndex = positionIds.indexOf(posId);
 
+    let handled = false;
+
     switch (direction) {
       case 'up':
         if (currentIndex > 0) {
@@ -1974,31 +1976,53 @@ export const KosztorysEditorPage: React.FC = () => {
         // Move to first section
         if (newData.root.sectionIds.length > 0) {
           const firstSectionId = newData.root.sectionIds[0];
-          positionIds.splice(currentIndex, 1);
+          // Remove from current location
+          if (sectionId) {
+            newData.sections[sectionId] = {
+              ...newData.sections[sectionId],
+              positionIds: newData.sections[sectionId].positionIds.filter(id => id !== posId),
+            };
+          } else {
+            newData.root.positionIds = newData.root.positionIds.filter(id => id !== posId);
+          }
+          // Add to first section
           newData.sections[firstSectionId] = {
             ...newData.sections[firstSectionId],
             positionIds: [...newData.sections[firstSectionId].positionIds, posId],
           };
+          handled = true;
         }
         break;
       case 'last':
         // Move to last section
         if (newData.root.sectionIds.length > 0) {
           const lastSectionId = newData.root.sectionIds[newData.root.sectionIds.length - 1];
-          positionIds.splice(currentIndex, 1);
+          // Remove from current location
+          if (sectionId) {
+            newData.sections[sectionId] = {
+              ...newData.sections[sectionId],
+              positionIds: newData.sections[sectionId].positionIds.filter(id => id !== posId),
+            };
+          } else {
+            newData.root.positionIds = newData.root.positionIds.filter(id => id !== posId);
+          }
+          // Add to last section
           newData.sections[lastSectionId] = {
             ...newData.sections[lastSectionId],
             positionIds: [...newData.sections[lastSectionId].positionIds, posId],
           };
+          handled = true;
         }
         break;
     }
 
-    // Update the original array
-    if (sectionId) {
-      newData.sections[sectionId] = { ...newData.sections[sectionId], positionIds };
-    } else {
-      newData.root.positionIds = positionIds;
+    // Update the original array (only if not already handled)
+    if (!handled) {
+      if (sectionId) {
+        newData.sections[sectionId] = { ...newData.sections[sectionId], positionIds };
+      } else {
+        newData.root.positionIds = positionIds;
+      }
     }
 
     updateEstimateData(newData);
@@ -3895,6 +3919,13 @@ export const KosztorysEditorPage: React.FC = () => {
                   >
                     <ArrowUpRight className="w-4 h-4 text-gray-400" />
                     Przesuń pozycję do pierwszego działu
+                  </button>
+                  <button
+                    onClick={() => { handleMovePosition('last'); setShowPrzesunDropdown(false); }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <ArrowUpRight className="w-4 h-4 text-gray-400 rotate-90" />
+                    Przesuń pozycję do ostatniego działu
                   </button>
                 </div>
               )}
