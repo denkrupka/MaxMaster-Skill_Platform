@@ -3682,16 +3682,25 @@ export const KosztorysEditorPage: React.FC = () => {
             Ceny
           </button>
 
-          {/* Komentarze dropdown */}
-          <div className="relative">
+          {/* Komentarze split button */}
+          <div className="relative flex">
+            {/* Main button - opens comments panel */}
             <button
-              onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
-              className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
+              onClick={() => setLeftPanelMode('comments')}
+              className={`flex items-center gap-1 pl-2 pr-1 py-1.5 text-sm rounded-l border-r border-gray-200 ${
                 leftPanelMode === 'comments' || commentSelectionMode ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
               Komentarze
+            </button>
+            {/* Dropdown arrow */}
+            <button
+              onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
+              className={`flex items-center px-1 py-1.5 text-sm rounded-r ${
+                leftPanelMode === 'comments' || commentSelectionMode ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
               <ChevronDown className="w-3 h-3" />
             </button>
             {showKomentarzeDropdown && (
