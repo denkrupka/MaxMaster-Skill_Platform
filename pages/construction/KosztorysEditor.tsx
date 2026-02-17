@@ -2348,32 +2348,39 @@ export const KosztorysEditorPage: React.FC = () => {
       <div
         key={sectionId}
         draggable
+        data-section-id={sectionId}
+        data-parent-id={parentId || 'root'}
+        data-item-type="section"
         onDragStart={(e) => {
           e.stopPropagation();
-          setDraggedSectionId(sectionId);
-          setDraggedItemParentId(parentId);
           e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', sectionId);
+          e.dataTransfer.setData('application/section-id', sectionId);
+          e.dataTransfer.setData('application/parent-id', parentId || 'root');
+          e.dataTransfer.setData('application/item-type', 'section');
+          setDraggedSectionId(sectionId);
         }}
         onDragEnd={() => {
           setDraggedSectionId(null);
-          setDraggedItemParentId(null);
         }}
         onDragOver={(e) => {
-          // Only allow drop if dragging section from same parent
-          if (draggedSectionId && draggedItemParentId === parentId && draggedSectionId !== sectionId) {
+          // Check if dragging a section (can't access getData in dragOver)
+          if (e.dataTransfer.types.includes('application/section-id') &&
+              !e.dataTransfer.types.includes('application/position-id')) {
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
           }
         }}
         onDrop={(e) => {
-          if (draggedSectionId && draggedItemParentId === parentId && draggedSectionId !== sectionId) {
+          const draggedId = e.dataTransfer.getData('application/section-id');
+          const draggedParent = e.dataTransfer.getData('application/parent-id');
+          const currentParent = parentId || 'root';
+
+          if (draggedId && draggedId !== sectionId && draggedParent === currentParent) {
             e.preventDefault();
             e.stopPropagation();
-            handleSectionReorder(draggedSectionId, sectionId, parentId);
+            handleSectionReorder(draggedId, sectionId, parentId);
             setDraggedSectionId(null);
-            setDraggedItemParentId(null);
           }
         }}
         className={`${draggedSectionId === sectionId ? 'opacity-50' : ''}`}
@@ -2415,32 +2422,39 @@ export const KosztorysEditorPage: React.FC = () => {
                 <div
                   key={posId}
                   draggable
+                  data-position-id={posId}
+                  data-section-id={sectionId}
+                  data-item-type="position"
                   onDragStart={(e) => {
                     e.stopPropagation();
-                    setDraggedPositionId(posId);
-                    setDraggedItemParentId(sectionId);
                     e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', posId);
+                    e.dataTransfer.setData('application/position-id', posId);
+                    e.dataTransfer.setData('application/section-id', sectionId);
+                    e.dataTransfer.setData('application/item-type', 'position');
+                    setDraggedPositionId(posId);
                   }}
                   onDragEnd={() => {
                     setDraggedPositionId(null);
-                    setDraggedItemParentId(null);
                   }}
                   onDragOver={(e) => {
-                    // Only allow drop if dragging position from same section
-                    if (draggedPositionId && draggedItemParentId === sectionId && draggedPositionId !== posId) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.dataTransfer.dropEffect = 'move';
-                    }
+                    const draggedType = e.dataTransfer.types.includes('application/position-id') ? 'position' : null;
+                    if (!draggedType) return;
+
+                    // Check if from same section using types (getData not available in dragOver)
+                    // We'll verify in onDrop
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.dataTransfer.dropEffect = 'move';
                   }}
                   onDrop={(e) => {
-                    if (draggedPositionId && draggedItemParentId === sectionId && draggedPositionId !== posId) {
+                    const draggedId = e.dataTransfer.getData('application/position-id');
+                    const draggedSection = e.dataTransfer.getData('application/section-id');
+
+                    if (draggedId && draggedId !== posId && draggedSection === sectionId) {
                       e.preventDefault();
                       e.stopPropagation();
-                      handlePositionReorder(draggedPositionId, posId, sectionId);
+                      handlePositionReorder(draggedId, posId, sectionId);
                       setDraggedPositionId(null);
-                      setDraggedItemParentId(null);
                     }
                   }}
                   className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded hover:bg-gray-50 ${
