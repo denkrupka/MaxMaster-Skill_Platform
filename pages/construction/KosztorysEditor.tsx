@@ -2134,36 +2134,48 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Get target path for comment
   const getTargetPath = (itemId: string, itemType: 'section' | 'position' | 'resource'): string => {
-    if (itemType === 'section') {
-      const section = estimateData.sections[itemId];
-      return section ? `Dz. ${section.ordinalNumber}` : 'Dział';
-    } else if (itemType === 'position') {
-      const position = estimateData.positions[itemId];
-      if (!position) return 'Pozycja';
-      // Find section containing this position
-      for (const section of Object.values(estimateData.sections)) {
-        const posIdx = section.positionIds.indexOf(itemId);
-        if (posIdx !== -1) {
-          return `Dz. ${section.ordinalNumber} » Poz. ${posIdx + 1}`;
-        }
+    try {
+      if (!estimateData?.sections || !estimateData?.positions) {
+        return itemType === 'section' ? 'Dział' : itemType === 'position' ? 'Pozycja' : 'Nakład';
       }
-      return 'Pozycja';
-    } else {
-      // Resource - find parent position
-      for (const [posId, position] of Object.entries(estimateData.positions)) {
-        const resIdx = position.resources.findIndex(r => r.id === itemId);
-        if (resIdx !== -1) {
-          // Find section
-          for (const section of Object.values(estimateData.sections)) {
-            const posIdx = section.positionIds.indexOf(posId);
-            if (posIdx !== -1) {
-              return `Dz. ${section.ordinalNumber} » Poz. ${posIdx + 1} » Nakład ${resIdx + 1}`;
-            }
+
+      if (itemType === 'section') {
+        const section = estimateData.sections[itemId];
+        return section ? `Dz. ${section.ordinalNumber || '?'}` : 'Dział';
+      } else if (itemType === 'position') {
+        const position = estimateData.positions[itemId];
+        if (!position) return 'Pozycja';
+        // Find section containing this position
+        for (const section of Object.values(estimateData.sections)) {
+          if (!section?.positionIds) continue;
+          const posIdx = section.positionIds.indexOf(itemId);
+          if (posIdx !== -1) {
+            return `Dz. ${section.ordinalNumber || '?'} » Poz. ${posIdx + 1}`;
           }
-          return `Pozycja » Nakład ${resIdx + 1}`;
         }
+        return 'Pozycja';
+      } else {
+        // Resource - find parent position
+        for (const [posId, position] of Object.entries(estimateData.positions)) {
+          if (!position?.resources) continue;
+          const resIdx = position.resources.findIndex(r => r?.id === itemId);
+          if (resIdx !== -1) {
+            // Find section
+            for (const section of Object.values(estimateData.sections)) {
+              if (!section?.positionIds) continue;
+              const posIdx = section.positionIds.indexOf(posId);
+              if (posIdx !== -1) {
+                return `Dz. ${section.ordinalNumber || '?'} » Poz. ${posIdx + 1} » Nakład ${resIdx + 1}`;
+              }
+            }
+            return `Pozycja » Nakład ${resIdx + 1}`;
+          }
+        }
+        return 'Nakład';
       }
-      return 'Nakład';
+    } catch (error) {
+      console.error('Error getting target path:', error);
+      return itemType === 'section' ? 'Dział' : itemType === 'position' ? 'Pozycja' : 'Nakład';
     }
   };
 
@@ -2171,22 +2183,29 @@ export const KosztorysEditorPage: React.FC = () => {
   const selectItem = (itemId: string, itemType: 'section' | 'position' | 'resource') => {
     // Handle comment selection mode
     if (commentSelectionMode) {
-      const targetPath = getTargetPath(itemId, itemType);
-      const newComment: KosztorysComment = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `comment-${Date.now()}`,
-        userId: 'current-user',
-        userName: 'Denys Krupka',
-        userInitials: 'DK',
-        text: '',
-        createdAt: new Date().toISOString().split('T')[0],
-        targetType: itemType,
-        targetId: itemId,
-        targetPath,
-        category: 'none',
-        completed: false,
-      };
-      setComments(prev => [newComment, ...prev]);
-      setSelectedCommentId(newComment.id);
+      try {
+        const targetPath = getTargetPath(itemId, itemType);
+        const commentId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `comment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const newComment: KosztorysComment = {
+          id: commentId,
+          userId: 'current-user',
+          userName: 'Denys Krupka',
+          userInitials: 'DK',
+          text: '',
+          createdAt: new Date().toISOString().split('T')[0],
+          targetType: itemType,
+          targetId: itemId,
+          targetPath,
+          category: 'none',
+          completed: false,
+        };
+        setComments(prev => [newComment, ...prev]);
+        setSelectedCommentId(commentId);
+      } catch (error) {
+        console.error('Error creating comment:', error);
+      }
       setCommentSelectionMode(false);
       setLeftPanelMode('comments');
       return;
