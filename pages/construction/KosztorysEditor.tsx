@@ -448,10 +448,12 @@ interface PropertiesPanelProps {
   calculationResult: KosztorysPositionCalculationResult | null;
   onUpdate: (updates: Partial<any>) => void;
   onClose: () => void;
+  showDetailedOverheads?: boolean;
+  overheads?: KosztorysOverhead[];
 }
 
 const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
-  selectedItem, selectedType, calculationResult, onUpdate, onClose
+  selectedItem, selectedType, calculationResult, onUpdate, onClose, showDetailedOverheads = false, overheads = []
 }) => {
   if (!selectedItem || !selectedType) {
     return (
@@ -604,6 +606,43 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <span className="text-gray-600 font-medium">Koszty bezpośrednie:</span>
               <span className="font-bold">{formatCurrency(calculationResult.directCostsTotal)}</span>
             </div>
+            {/* Detailed overhead breakdown */}
+            {showDetailedOverheads && overheads.length > 0 && (() => {
+              const kpOverhead = overheads.find(o => o.name.includes('Kp'));
+              const zOverhead = overheads.find(o => o.name.includes('Zysk'));
+              const kzOverhead = overheads.find(o => o.name.includes('zakupu'));
+
+              const laborTotal = calculationResult.laborTotal || 0;
+              const materialTotal = calculationResult.materialTotal || 0;
+
+              const kpValue = kpOverhead ? laborTotal * (kpOverhead.value / 100) : 0;
+              const kzValue = kzOverhead ? materialTotal * (kzOverhead.value / 100) : 0;
+              const zBase = laborTotal + kpValue;
+              const zValue = zOverhead ? zBase * (zOverhead.value / 100) : 0;
+
+              return (
+                <div className="space-y-0.5 pl-2 text-xs">
+                  {kpOverhead && kpOverhead.value > 0 && (
+                    <div className="flex justify-between text-gray-500">
+                      <span>Kp ({kpOverhead.value}% od R):</span>
+                      <span>{formatCurrency(kpValue)}</span>
+                    </div>
+                  )}
+                  {zOverhead && zOverhead.value > 0 && (
+                    <div className="flex justify-between text-gray-500">
+                      <span>Z ({zOverhead.value}% od R+Kp):</span>
+                      <span>{formatCurrency(zValue)}</span>
+                    </div>
+                  )}
+                  {kzOverhead && kzOverhead.value > 0 && (
+                    <div className="flex justify-between text-gray-500">
+                      <span>Kz ({kzOverhead.value}% od M):</span>
+                      <span>{formatCurrency(kzValue)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex justify-between">
               <span className="text-gray-600 font-medium">Razem z narzutami:</span>
               <span className="font-bold text-blue-600">{formatCurrency(calculationResult.totalWithOverheads)}</span>
@@ -2918,7 +2957,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 <td className="px-3 py-2 text-sm font-mono text-gray-600">{resource.originIndex.index || '-'}</td>
                 <td className="px-3 py-2 text-sm text-gray-800">{resource.name}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-600">{resource.unit.label}</td>
-                <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(resource.unitPrice.value, 3)}</td>
+                <td className={`px-3 py-2 text-sm text-right ${viewOptionsPanel.highlightZeroPrices && resource.unitPrice.value === 0 ? 'text-amber-600 font-semibold bg-amber-50' : 'text-gray-600'}`}>{formatNumber(resource.unitPrice.value, 3)}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(resQuantity, 2)}</td>
                 <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(resResult?.totalCost || 0, 2)}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-500">{formatNumber(0, 3)}</td>
@@ -3016,7 +3055,7 @@ export const KosztorysEditorPage: React.FC = () => {
               {/* Resource data row */}
               <tr
                 ref={(el) => { rowRefs.current[resource.id] = el; }}
-                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''} ${highlightedItemId === resource.id ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-50' : ''}`}
+                className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${isResourceSelected ? 'bg-blue-50' : ''} ${highlightedItemId === resource.id ? 'animate-pulse ring-2 ring-yellow-400 bg-yellow-50' : ''} ${viewOptionsPanel.highlightZeroPrices && resource.unitPrice.value === 0 ? 'bg-amber-50' : ''}`}
                 onClick={() => selectItem(resource.id, 'resource')}
               >
                 <td className="px-3 py-1.5 text-sm">
@@ -3038,7 +3077,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 </td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-500">{resource.unit.label}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resQuantity, 1)}</td>
-                <td className="px-3 py-1.5 text-sm text-right text-gray-600">{formatNumber(resResult?.calculatedValue || 0, 3)}</td>
+                <td className={`px-3 py-1.5 text-sm text-right ${viewOptionsPanel.highlightZeroPrices && resource.unitPrice.value === 0 ? 'text-amber-600 font-semibold' : 'text-gray-600'}`}>{formatNumber(resResult?.calculatedValue || 0, 3)}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{rValue > 0 ? formatNumber(rValue, 2) : ''}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{mValue > 0 ? formatNumber(mValue, 2) : ''}</td>
                 <td className="px-3 py-1.5 text-sm text-right text-gray-600">{sValue > 0 ? formatNumber(sValue, 2) : ''}</td>
@@ -3062,6 +3101,59 @@ export const KosztorysEditorPage: React.FC = () => {
               <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.directCostsTotal || 0, 2)}</td>
               <td></td>
             </tr>
+            {/* Detailed overhead breakdown */}
+            {viewOptionsPanel.showDetailedOverheads && (() => {
+              const kpOverhead = estimateData.root.overheads.find(o => o.name.includes('Kp'));
+              const zOverhead = estimateData.root.overheads.find(o => o.name.includes('Zysk'));
+              const kzOverhead = estimateData.root.overheads.find(o => o.name.includes('zakupu'));
+
+              const laborTotal = result?.laborTotal || 0;
+              const materialTotal = result?.materialTotal || 0;
+
+              const kpValue = kpOverhead ? laborTotal * (kpOverhead.value / 100) : 0;
+              const kzValue = kzOverhead ? materialTotal * (kzOverhead.value / 100) : 0;
+              // Z (zysk) typically applies to R+Kp
+              const zBase = laborTotal + kpValue;
+              const zValue = zOverhead ? zBase * (zOverhead.value / 100) : 0;
+
+              return (
+                <>
+                  {kpOverhead && kpOverhead.value > 0 && (
+                    <tr className="border-b border-gray-50">
+                      <td colSpan={5} className="px-3 py-0.5 text-xs text-gray-500 text-right pl-8">
+                        Koszty pośrednie (Kp) {kpOverhead.value}% od R
+                      </td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-500">{formatNumber(kpValue, 3)}</td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-400">{formatNumber(kpValue, 2)}</td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  )}
+                  {zOverhead && zOverhead.value > 0 && (
+                    <tr className="border-b border-gray-50">
+                      <td colSpan={5} className="px-3 py-0.5 text-xs text-gray-500 text-right pl-8">
+                        Zysk (Z) {zOverhead.value}% od R+Kp
+                      </td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-500">{formatNumber(zValue, 3)}</td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-400">{formatNumber(zValue, 2)}</td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                  )}
+                  {kzOverhead && kzOverhead.value > 0 && (
+                    <tr className="border-b border-gray-50">
+                      <td colSpan={5} className="px-3 py-0.5 text-xs text-gray-500 text-right pl-8">
+                        Koszty zakupu (Kz) {kzOverhead.value}% od M
+                      </td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-500">{formatNumber(kzValue, 3)}</td>
+                      <td></td>
+                      <td className="px-3 py-0.5 text-xs text-right text-gray-400">{formatNumber(kzValue, 2)}</td>
+                      <td></td>
+                    </tr>
+                  )}
+                </>
+              );
+            })()}
             <tr className="border-b border-gray-100">
               <td colSpan={5} className="px-3 py-1 text-xs text-gray-600 text-right">Razem z narzutami</td>
               <td className="px-3 py-1 text-xs text-right">{formatNumber(result?.totalWithOverheads || 0, 3)}</td>

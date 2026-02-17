@@ -176,21 +176,55 @@ export function calculatePosition(
     precision.positionBase
   );
 
-  // Calculate overheads (Narzuty)
+  // Calculate overheads (Narzuty) with proper cumulative calculation
+  // Standard Polish cost estimate formula:
+  // - Kp (Koszty pośrednie) = R × Kp% - applied to labor
+  // - Z (Zysk) = (R + Kp) × Z% - applied to labor + indirect costs
+  // - Kz (Koszty zakupu) = M × Kz% - applied to materials
   let overheadsTotal = 0;
   const allOverheads = [...(position.overheads || []), ...globalOverheads];
 
-  for (const overhead of allOverheads) {
-    let base = 0;
-    if (overhead.appliesTo.includes('labor')) base += laborTotal;
-    if (overhead.appliesTo.includes('material')) base += materialTotal;
-    if (overhead.appliesTo.includes('equipment')) base += equipmentTotal;
+  // Sort by order to ensure correct cumulative calculation
+  const sortedOverheads = [...allOverheads].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    if (overhead.type === 'percentage') {
-      overheadsTotal += base * (overhead.value / 100);
+  // Track cumulative values for proper Z calculation
+  let kpValue = 0;
+
+  for (const overhead of sortedOverheads) {
+    let base = 0;
+    const isKp = overhead.name.includes('Kp') || overhead.name.includes('pośrednie');
+    const isZ = overhead.name.includes('Zysk') || overhead.name.includes('(Z)');
+    const isKz = overhead.name.includes('zakupu') || overhead.name.includes('Kz');
+
+    if (isKp) {
+      // Kp applies to labor (R)
+      base = laborTotal;
+    } else if (isZ) {
+      // Z applies to R + Kp (cumulative)
+      base = laborTotal + kpValue;
+    } else if (isKz) {
+      // Kz applies to materials (M)
+      base = materialTotal;
     } else {
-      overheadsTotal += overhead.value;
+      // Fallback to original appliesTo logic
+      if (overhead.appliesTo.includes('labor')) base += laborTotal;
+      if (overhead.appliesTo.includes('material')) base += materialTotal;
+      if (overhead.appliesTo.includes('equipment')) base += equipmentTotal;
     }
+
+    let overheadValue = 0;
+    if (overhead.type === 'percentage') {
+      overheadValue = base * (overhead.value / 100);
+    } else {
+      overheadValue = overhead.value;
+    }
+
+    // Track Kp value for cumulative Z calculation
+    if (isKp) {
+      kpValue = overheadValue;
+    }
+
+    overheadsTotal += overheadValue;
   }
   overheadsTotal = roundToPrecision(overheadsTotal, precision.positionBase);
 
