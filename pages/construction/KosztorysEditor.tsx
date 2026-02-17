@@ -283,6 +283,9 @@ const RESOURCE_TYPE_CONFIG: Record<ExtendedResourceType, {
 // Export template types
 type ExportTemplate = 'kosztorys_ofertowy' | 'przedmiar_robot' | 'niestandardowy';
 
+// Comment category types
+type CommentCategory = 'none' | 'verification' | 'completion';
+
 // Comment type for the comments panel
 interface KosztorysComment {
   id: string;
@@ -290,10 +293,12 @@ interface KosztorysComment {
   userName: string;
   userInitials: string;
   text: string;
-  timestamp: string;
-  sectionId?: string;
-  sectionName?: string;
-  status: 'do_weryfikacji' | 'zatwierdzony' | 'odrzucony' | 'nowy';
+  createdAt: string;
+  targetType: 'section' | 'position' | 'resource' | 'measurement';
+  targetId: string;
+  targetPath: string; // e.g., "Dz. 1.1 » Poz. 8"
+  category: CommentCategory;
+  completed: boolean;
 }
 
 // Price update dialog settings
@@ -841,28 +846,38 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
-  const [commentsFilter, setCommentsFilter] = useState<'all' | 'mine' | 'unresolved' | 'closed'>('all');
-  const [commentsSearch, setCommentsSearch] = useState('');
+  const [commentsFilter, setCommentsFilter] = useState<'all' | 'verification' | 'completion' | 'none'>('all');
+  const [commentsSortBy, setCommentsSortBy] = useState<'date' | 'activity'>('activity');
+  const [showCommentsSortDropdown, setShowCommentsSortDropdown] = useState(false);
+  const [commentSelectionMode, setCommentSelectionMode] = useState(false);
+  const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState('');
   const [comments, setComments] = useState<KosztorysComment[]>([
     {
       id: '1',
       userId: 'user1',
       userName: 'Denys Krupka',
       userInitials: 'DK',
-      text: 'testowy',
-      timestamp: '18:31',
-      sectionName: 'Dział 1.1',
-      status: 'nowy',
+      text: 'Stworzył zadanie',
+      createdAt: '2026-02-10',
+      targetType: 'position',
+      targetId: 'pos-1',
+      targetPath: 'Dz. 1.1 » Poz. 8',
+      category: 'verification',
+      completed: false,
     },
     {
       id: '2',
       userId: 'user1',
       userName: 'Denys Krupka',
       userInitials: 'DK',
-      text: 'sprawdzić',
-      timestamp: '18:26',
-      sectionName: 'Dział 1',
-      status: 'do_weryfikacji',
+      text: 'Stworzył zadanie',
+      createdAt: '2026-02-10',
+      targetType: 'measurement',
+      targetId: 'meas-1',
+      targetPath: 'Dz. 1.1 » Poz. 8 » Obmiar cc533c2e-f5ed-4c18-8ce1-c0053659ba32',
+      category: 'none',
+      completed: false,
     },
   ]);
 
@@ -2117,8 +2132,66 @@ export const KosztorysEditorPage: React.FC = () => {
     );
   };
 
+  // Get target path for comment
+  const getTargetPath = (itemId: string, itemType: 'section' | 'position' | 'resource'): string => {
+    if (itemType === 'section') {
+      const section = estimateData.sections[itemId];
+      return section ? `Dz. ${section.ordinalNumber}` : 'Dział';
+    } else if (itemType === 'position') {
+      const position = estimateData.positions[itemId];
+      if (!position) return 'Pozycja';
+      // Find section containing this position
+      for (const section of Object.values(estimateData.sections)) {
+        const posIdx = section.positionIds.indexOf(itemId);
+        if (posIdx !== -1) {
+          return `Dz. ${section.ordinalNumber} » Poz. ${posIdx + 1}`;
+        }
+      }
+      return 'Pozycja';
+    } else {
+      // Resource - find parent position
+      for (const [posId, position] of Object.entries(estimateData.positions)) {
+        const resIdx = position.resources.findIndex(r => r.id === itemId);
+        if (resIdx !== -1) {
+          // Find section
+          for (const section of Object.values(estimateData.sections)) {
+            const posIdx = section.positionIds.indexOf(posId);
+            if (posIdx !== -1) {
+              return `Dz. ${section.ordinalNumber} » Poz. ${posIdx + 1} » Nakład ${resIdx + 1}`;
+            }
+          }
+          return `Pozycja » Nakład ${resIdx + 1}`;
+        }
+      }
+      return 'Nakład';
+    }
+  };
+
   // Select item
   const selectItem = (itemId: string, itemType: 'section' | 'position' | 'resource') => {
+    // Handle comment selection mode
+    if (commentSelectionMode) {
+      const targetPath = getTargetPath(itemId, itemType);
+      const newComment: KosztorysComment = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `comment-${Date.now()}`,
+        userId: 'current-user',
+        userName: 'Denys Krupka',
+        userInitials: 'DK',
+        text: '',
+        createdAt: new Date().toISOString().split('T')[0],
+        targetType: itemType,
+        targetId: itemId,
+        targetPath,
+        category: 'none',
+        completed: false,
+      };
+      setComments(prev => [newComment, ...prev]);
+      setSelectedCommentId(newComment.id);
+      setCommentSelectionMode(false);
+      setLeftPanelMode('comments');
+      return;
+    }
+
     setEditorState(prev => ({
       ...prev,
       selectedItemId: itemId,
@@ -3016,9 +3089,30 @@ export const KosztorysEditorPage: React.FC = () => {
             )}
           </td>
           <td className="px-3 py-2 text-sm align-top">
-            <div className="font-medium text-gray-900">{position.name}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              Przedmiar z sumami = {formatNumber(quantity, 2)} {position.unit.label}
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <div className="font-medium text-gray-900">{position.name}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Przedmiar z sumami = {formatNumber(quantity, 2)} {position.unit.label}
+                </div>
+              </div>
+              {/* Comment tag */}
+              {showCommentsOnSheet && comments.filter(c => c.targetId === position.id).length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const positionComments = comments.filter(c => c.targetId === position.id);
+                    if (positionComments.length > 0) {
+                      setSelectedCommentId(positionComments[0].id);
+                      setLeftPanelMode('comments');
+                    }
+                  }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  {comments.filter(c => c.targetId === position.id).length}
+                </button>
+              )}
             </div>
           </td>
           <td className="px-3 py-2 text-sm text-right text-gray-600 align-top">{position.unit.label}</td>
@@ -3245,7 +3339,28 @@ export const KosztorysEditorPage: React.FC = () => {
             )}
           </td>
           <td className="px-3 py-2 text-sm font-semibold text-gray-900">{section.ordinalNumber}</td>
-          <td colSpan={colspan} className="px-3 py-2 text-sm font-semibold text-gray-900">{section.name}</td>
+          <td colSpan={colspan} className="px-3 py-2 text-sm font-semibold text-gray-900">
+            <div className="flex items-center gap-2">
+              <span>{section.name}</span>
+              {/* Comment tag */}
+              {showCommentsOnSheet && comments.filter(c => c.targetId === section.id).length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const sectionComments = comments.filter(c => c.targetId === section.id);
+                    if (sectionComments.length > 0) {
+                      setSelectedCommentId(sectionComments[0].id);
+                      setLeftPanelMode('comments');
+                    }
+                  }}
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200 font-normal"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                  {comments.filter(c => c.targetId === section.id).length}
+                </button>
+              )}
+            </div>
+          </td>
         </tr>
 
         {/* Subsections (rendered recursively) */}
@@ -3553,7 +3668,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <button
               onClick={() => setShowKomentarzeDropdown(!showKomentarzeDropdown)}
               className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-                leftPanelMode === 'comments' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                leftPanelMode === 'comments' || commentSelectionMode ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <MessageSquare className="w-4 h-4" />
@@ -3562,18 +3677,38 @@ export const KosztorysEditorPage: React.FC = () => {
             </button>
             {showKomentarzeDropdown && (
               <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                {/* Insert comment option */}
                 <button
-                  onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  onClick={() => {
+                    setCommentSelectionMode(true);
+                    setShowKomentarzeDropdown(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
                 >
-                  Wszystkie komentarze
-                </button>
-                <button
-                  onClick={() => { setLeftPanelMode('comments'); setShowKomentarzeDropdown(false); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                >
+                  <Plus className="w-4 h-4 text-gray-500" />
                   Wstaw komentarz do...
                 </button>
+                <div className="border-t border-gray-100" />
+                {/* Show comments on sheet checkbox */}
+                <label className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCommentsOnSheet}
+                    onChange={(e) => setShowCommentsOnSheet(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  Pokaż komentarze na arkuszu
+                </label>
+                {/* Show completed tasks checkbox */}
+                <label className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showCompletedTasks}
+                    onChange={(e) => setShowCompletedTasks(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  Pokazuj ukończone zadania
+                </label>
               </div>
             )}
           </div>
@@ -3763,7 +3898,7 @@ export const KosztorysEditorPage: React.FC = () => {
       )}
 
       {/* Click outside to close all dropdowns */}
-      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showTagDropdown) && (
+      {(showDzialDropdown || showNakladDropdown || showKomentarzeDropdown || showUsunDropdown || showPrzesunDropdown || showUzupelnijDropdown || showKNRDropdown || showTagDropdown || showCommentsSortDropdown) && (
         <div className="fixed inset-0 z-40" onClick={() => {
           setShowDzialDropdown(false);
           setShowNakladDropdown(false);
@@ -3774,6 +3909,7 @@ export const KosztorysEditorPage: React.FC = () => {
           setShowTagDropdown(false);
           setTagSearch('');
           setShowKNRDropdown(false);
+          setShowCommentsSortDropdown(false);
         }} />
       )}
 
@@ -4520,82 +4656,216 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {/* Comments panel - matching eKosztorysowanie exactly */}
             {leftPanelMode === 'comments' && (
-              <div className="p-3 flex flex-col h-full">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3">Komentarze</h3>
+              <div className="flex flex-col h-full">
+                {/* Header */}
+                <div className="flex items-center justify-between p-3 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-900">Komentarze</h3>
+                  <button
+                    onClick={() => setLeftPanelMode('overview')}
+                    className="p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
 
-                {/* Category filter dropdown - matching eKosztorysowanie */}
-                <select
-                  value={commentsFilter}
-                  onChange={(e) => setCommentsFilter(e.target.value as any)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-3"
-                >
-                  <option value="all">Wszystkie komentarze</option>
-                  <option value="unresolved">Do weryfikacji</option>
-                  <option value="mine">Do uzupełnienia</option>
-                  <option value="closed">Zamknięte</option>
-                </select>
+                {/* Filter row */}
+                <div className="flex items-center gap-2 p-3 border-b border-gray-100">
+                  {/* Category filter dropdown */}
+                  <select
+                    value={commentsFilter}
+                    onChange={(e) => setCommentsFilter(e.target.value as any)}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                  >
+                    <option value="all">Wszystkie komentarze</option>
+                    <option value="verification">Do weryfikacji</option>
+                    <option value="completion">Do uzupełnienia</option>
+                    <option value="none">Bez kategorii</option>
+                  </select>
+
+                  {/* Sort filter button */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowCommentsSortDropdown(!showCommentsSortDropdown)}
+                      className="p-2 hover:bg-gray-100 rounded border border-gray-300"
+                    >
+                      <Filter className="w-4 h-4 text-gray-500" />
+                    </button>
+                    {showCommentsSortDropdown && (
+                      <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                        <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="commentSort"
+                            checked={commentsSortBy === 'date'}
+                            onChange={() => { setCommentsSortBy('date'); setShowCommentsSortDropdown(false); }}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          Sortuj po dacie utworzenia
+                        </label>
+                        <label className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="commentSort"
+                            checked={commentsSortBy === 'activity'}
+                            onChange={() => { setCommentsSortBy('activity'); setShowCommentsSortDropdown(false); }}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          Sortuj po najnowszej aktywności
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Comments list */}
-                <div className="flex-1 overflow-y-auto space-y-3">
-                  {comments.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-8">Brak komentarzy</p>
-                  ) : (
-                    comments.map(comment => (
-                      <div key={comment.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        {/* Status badge at top */}
+                <div className="flex-1 overflow-y-auto">
+                  {comments
+                    .filter(c => {
+                      if (commentsFilter === 'all') return showCompletedTasks || !c.completed;
+                      if (!showCompletedTasks && c.completed) return false;
+                      return c.category === commentsFilter;
+                    })
+                    .sort((a, b) => {
+                      if (commentsSortBy === 'date') {
+                        return b.createdAt.localeCompare(a.createdAt);
+                      }
+                      return b.createdAt.localeCompare(a.createdAt); // For now, same as date
+                    })
+                    .map(comment => (
+                      <div
+                        key={comment.id}
+                        className={`p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
+                          selectedCommentId === comment.id ? 'bg-blue-50' : ''
+                        }`}
+                        onClick={() => {
+                          setSelectedCommentId(comment.id);
+                          // Navigate to target
+                          if (comment.targetType === 'position' || comment.targetType === 'section') {
+                            selectItem(comment.targetId, comment.targetType);
+                          }
+                        }}
+                      >
+                        {/* Date and location */}
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                          <span>{comment.createdAt}</span>
+                          <span className="text-blue-600">{comment.targetPath}</span>
+                        </div>
+
+                        {/* Category dropdown and completion checkbox */}
                         <div className="flex items-center justify-between mb-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            comment.status === 'zatwierdzony' ? 'bg-green-100 text-green-700' :
-                            comment.status === 'odrzucony' ? 'bg-red-100 text-red-700' :
-                            comment.status === 'do_weryfikacji' ? 'bg-amber-100 text-amber-700' :
-                            'bg-gray-200 text-gray-600'
-                          }`}>
-                            {comment.status === 'zatwierdzony' ? 'Zatwierdzony' :
-                             comment.status === 'odrzucony' ? 'Odrzucony' :
-                             comment.status === 'do_weryfikacji' ? 'Do weryfikacji' :
-                             'Bez kategorii'}
-                          </span>
-                          <button className="p-1 hover:bg-gray-200 rounded">
-                            <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                          <div className="relative">
+                            <select
+                              value={comment.category}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setComments(prev => prev.map(c =>
+                                  c.id === comment.id ? { ...c, category: e.target.value as CommentCategory } : c
+                                ));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className={`text-xs px-2 py-1 rounded-lg border-0 cursor-pointer ${
+                                comment.category === 'verification' ? 'bg-blue-50 text-blue-700' :
+                                comment.category === 'completion' ? 'bg-orange-50 text-orange-700' :
+                                'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              <option value="none">● Bez kategorii</option>
+                              <option value="verification">● Do weryfikacji</option>
+                              <option value="completion">● Do uzupełnienia</option>
+                            </select>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setComments(prev => prev.map(c =>
+                                c.id === comment.id ? { ...c, completed: !c.completed } : c
+                              ));
+                            }}
+                            className={`p-1 rounded-full border ${
+                              comment.completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 text-gray-400 hover:border-gray-400'
+                            }`}
+                          >
+                            <Check className="w-3 h-3" />
                           </button>
                         </div>
 
-                        {/* User and time */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">
+                        {/* Author info */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">
                             {comment.userInitials}
                           </div>
                           <div className="flex-1">
-                            <div className="text-sm font-medium text-gray-800">{comment.userName}</div>
-                            <div className="text-xs text-gray-400">{comment.timestamp}</div>
+                            <span className="text-sm font-medium text-gray-800">{comment.userName}</span>
+                            <span className="text-xs text-gray-400 ml-2">{comment.createdAt}</span>
                           </div>
                         </div>
 
-                        {/* Section reference */}
-                        {comment.sectionName && (
-                          <div className="text-xs text-blue-600 mb-1 flex items-center gap-1">
-                            <FileText className="w-3 h-3" />
-                            {comment.sectionName}
+                        {/* Comment text - editable when selected */}
+                        {selectedCommentId === comment.id ? (
+                          <div className="mt-2 space-y-2">
+                            <textarea
+                              value={comment.text}
+                              onChange={(e) => {
+                                setComments(prev => prev.map(c =>
+                                  c.id === comment.id ? { ...c, text: e.target.value } : c
+                                ));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              placeholder="Dodaj treść komentarza..."
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded resize-none"
+                              rows={2}
+                            />
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setComments(prev => prev.filter(c => c.id !== comment.id));
+                                  setSelectedCommentId(null);
+                                }}
+                                className="text-xs text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="w-3 h-3 inline mr-1" />
+                                Usuń
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Navigate to target
+                                  if (comment.targetType === 'position' || comment.targetType === 'section' || comment.targetType === 'resource') {
+                                    setEditorState(prev => ({
+                                      ...prev,
+                                      selectedItemId: comment.targetId,
+                                      selectedItemType: comment.targetType as 'section' | 'position' | 'resource',
+                                    }));
+                                  }
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                <ArrowUpRight className="w-3 h-3 inline mr-1" />
+                                Idź do elementu
+                              </button>
+                            </div>
                           </div>
+                        ) : (
+                          <p className="text-sm text-gray-500 mt-1">{comment.text || <span className="italic text-gray-400">Brak treści</span>}</p>
                         )}
-
-                        {/* Comment text */}
-                        <p className="text-sm text-gray-600">{comment.text}</p>
-
-                        {/* Reply button */}
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <button className="text-xs text-blue-600 hover:underline">
-                            Odpowiedz
-                          </button>
-                        </div>
                       </div>
-                    ))
+                    ))}
+
+                  {comments.filter(c => showCompletedTasks || !c.completed).length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-8">Brak komentarzy</p>
                   )}
                 </div>
 
-                {/* Add comment button - matching eKosztorysowanie */}
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <button className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+                {/* Add comment button */}
+                <div className="p-3 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      setCommentSelectionMode(true);
+                      setLeftPanelMode('overview');
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
+                  >
                     <Plus className="w-4 h-4" />
                     Wstaw komentarz do...
                   </button>
@@ -5179,7 +5449,22 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
 
         {/* Table */}
-        <div className="flex-1 overflow-auto bg-white">
+        <div className={`flex-1 overflow-auto bg-white ${commentSelectionMode ? 'cursor-crosshair' : ''}`}>
+          {/* Comment selection mode indicator */}
+          {commentSelectionMode && (
+            <div className="sticky top-0 z-20 bg-blue-500 text-white px-4 py-2 text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4" />
+                Wybierz element do którego chcesz dodać komentarz (dział, pozycję lub nakład)
+              </span>
+              <button
+                onClick={() => setCommentSelectionMode(false)}
+                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm"
+              >
+                Anuluj
+              </button>
+            </div>
+          )}
           {/* Narzuty View - matching eKosztorysowanie layout */}
           {viewMode === 'narzuty' && leftPanelMode !== 'export' && (
             <div className="p-4 space-y-6">
