@@ -792,8 +792,10 @@ export const KosztorysEditorPage: React.FC = () => {
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
   const [targetPositionId, setTargetPositionId] = useState<string | null>(null);
 
-  // Drag and drop state for sections
+  // Drag and drop state for sections and positions
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [draggedPositionId, setDraggedPositionId] = useState<string | null>(null);
+  const [draggedItemParentId, setDraggedItemParentId] = useState<string | null>(null);
 
   // View modes
   const [viewMode, setViewMode] = useState<ViewMode>('kosztorys');
@@ -1539,39 +1541,77 @@ export const KosztorysEditorPage: React.FC = () => {
     setEditorState(prev => ({ ...prev, isDirty: true }));
   };
 
-  // Reorder sections via drag-and-drop
-  const handleSectionReorder = (draggedId: string, targetId: string) => {
+  // Reorder sections via drag-and-drop (works for root sections and subsections)
+  const handleSectionReorder = (draggedId: string, targetId: string, parentSectionId?: string | null) => {
     if (draggedId === targetId) return;
 
-    const sectionIds = [...estimateData.root.sectionIds];
-    const draggedIndex = sectionIds.indexOf(draggedId);
-    const targetIndex = sectionIds.indexOf(targetId);
+    const newData = { ...estimateData };
+
+    if (parentSectionId) {
+      // Reordering subsections within a parent section
+      const sectionIds = [...newData.sections[parentSectionId].subsectionIds];
+      const draggedIndex = sectionIds.indexOf(draggedId);
+      const targetIndex = sectionIds.indexOf(targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return;
+
+      sectionIds.splice(draggedIndex, 1);
+      sectionIds.splice(targetIndex, 0, draggedId);
+
+      newData.sections[parentSectionId] = {
+        ...newData.sections[parentSectionId],
+        subsectionIds: sectionIds,
+      };
+    } else {
+      // Reordering root sections
+      const sectionIds = [...newData.root.sectionIds];
+      const draggedIndex = sectionIds.indexOf(draggedId);
+      const targetIndex = sectionIds.indexOf(targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return;
+
+      sectionIds.splice(draggedIndex, 1);
+      sectionIds.splice(targetIndex, 0, draggedId);
+
+      // Update ordinal numbers
+      sectionIds.forEach((id, index) => {
+        if (newData.sections[id]) {
+          newData.sections[id] = {
+            ...newData.sections[id],
+            ordinalNumber: String(index + 1),
+          };
+        }
+      });
+
+      newData.root = {
+        ...newData.root,
+        sectionIds,
+      };
+    }
+
+    updateEstimateData(newData);
+  };
+
+  // Reorder positions via drag-and-drop within a section
+  const handlePositionReorder = (draggedId: string, targetId: string, sectionId: string) => {
+    if (draggedId === targetId) return;
+
+    const newData = { ...estimateData };
+    const positionIds = [...newData.sections[sectionId].positionIds];
+    const draggedIndex = positionIds.indexOf(draggedId);
+    const targetIndex = positionIds.indexOf(targetId);
 
     if (draggedIndex === -1 || targetIndex === -1) return;
 
-    // Remove dragged item and insert at target position
-    sectionIds.splice(draggedIndex, 1);
-    sectionIds.splice(targetIndex, 0, draggedId);
+    positionIds.splice(draggedIndex, 1);
+    positionIds.splice(targetIndex, 0, draggedId);
 
-    // Update ordinal numbers
-    const updatedSections = { ...estimateData.sections };
-    sectionIds.forEach((id, index) => {
-      if (updatedSections[id]) {
-        updatedSections[id] = {
-          ...updatedSections[id],
-          ordinalNumber: String(index + 1),
-        };
-      }
-    });
+    newData.sections[sectionId] = {
+      ...newData.sections[sectionId],
+      positionIds,
+    };
 
-    updateEstimateData({
-      ...estimateData,
-      root: {
-        ...estimateData.root,
-        sectionIds,
-      },
-      sections: updatedSections,
-    });
+    updateEstimateData(newData);
   };
 
   // Add section
@@ -2295,7 +2335,7 @@ export const KosztorysEditorPage: React.FC = () => {
   };
 
   // Render section/subsection tree recursively
-  const renderSectionTree = (sectionId: string, depth: number = 0): React.ReactNode => {
+  const renderSectionTree = (sectionId: string, depth: number = 0, parentId: string | null = null): React.ReactNode => {
     const section = estimateData.sections[sectionId];
     if (!section) return null;
 
@@ -2304,42 +2344,36 @@ export const KosztorysEditorPage: React.FC = () => {
     const hasPositions = section.positionIds && section.positionIds.length > 0;
     const paddingLeft = 8 + depth * 16; // 8px base + 16px per depth level
 
-    // Helper to move section in tree
-    const handleTreeSectionMove = (e: React.MouseEvent, direction: 'up' | 'down') => {
-      e.stopPropagation();
-      handleMoveSectionById(sectionId, direction);
-      selectItem(sectionId, 'section');
-    };
-
-    // Helper to move position in tree
-    const handleTreePositionMove = (e: React.MouseEvent, posId: string, direction: 'up' | 'down') => {
-      e.stopPropagation();
-      handleMovePositionById(posId, direction);
-      selectItem(posId, 'position');
-    };
-
     return (
       <div
         key={sectionId}
-        draggable={depth === 0}
+        draggable
         onDragStart={(e) => {
-          if (depth === 0) {
-            setDraggedSectionId(sectionId);
-            e.dataTransfer.effectAllowed = 'move';
-          }
+          e.stopPropagation();
+          setDraggedSectionId(sectionId);
+          setDraggedItemParentId(parentId);
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', sectionId);
         }}
-        onDragEnd={() => setDraggedSectionId(null)}
+        onDragEnd={() => {
+          setDraggedSectionId(null);
+          setDraggedItemParentId(null);
+        }}
         onDragOver={(e) => {
-          if (depth === 0) {
+          // Only allow drop if dragging section from same parent
+          if (draggedSectionId && draggedItemParentId === parentId && draggedSectionId !== sectionId) {
             e.preventDefault();
+            e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
           }
         }}
         onDrop={(e) => {
-          if (depth === 0 && draggedSectionId && draggedSectionId !== sectionId) {
+          if (draggedSectionId && draggedItemParentId === parentId && draggedSectionId !== sectionId) {
             e.preventDefault();
-            handleSectionReorder(draggedSectionId, sectionId);
+            e.stopPropagation();
+            handleSectionReorder(draggedSectionId, sectionId, parentId);
             setDraggedSectionId(null);
+            setDraggedItemParentId(null);
           }
         }}
         className={`${draggedSectionId === sectionId ? 'opacity-50' : ''}`}
@@ -2350,23 +2384,8 @@ export const KosztorysEditorPage: React.FC = () => {
           }`}
           style={{ paddingLeft: `${paddingLeft}px` }}
         >
-          {/* Move buttons - visible on hover */}
-          <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button
-              onClick={(e) => handleTreeSectionMove(e, 'up')}
-              className="p-0.5 hover:bg-gray-200 rounded"
-              title="Przesuń w górę"
-            >
-              <MoveUp className="w-3 h-3 text-gray-400" />
-            </button>
-            <button
-              onClick={(e) => handleTreeSectionMove(e, 'down')}
-              className="p-0.5 hover:bg-gray-200 rounded"
-              title="Przesuń w dół"
-            >
-              <MoveDown className="w-3 h-3 text-gray-400" />
-            </button>
-          </div>
+          {/* Drag handle */}
+          <GripVertical className="w-4 h-4 text-gray-400 cursor-grab flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
           <button
             onClick={() => {
               toggleExpandSection(sectionId);
@@ -2386,7 +2405,7 @@ export const KosztorysEditorPage: React.FC = () => {
         {isSectionExpanded && (
           <>
             {/* Subsections */}
-            {section.subsectionIds?.map(subsectionId => renderSectionTree(subsectionId, depth + 1))}
+            {section.subsectionIds?.map(subsectionId => renderSectionTree(subsectionId, depth + 1, sectionId))}
 
             {/* Positions in this section */}
             {section.positionIds.map((posId, posIndex) => {
@@ -2395,28 +2414,42 @@ export const KosztorysEditorPage: React.FC = () => {
               return (
                 <div
                   key={posId}
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    setDraggedPositionId(posId);
+                    setDraggedItemParentId(sectionId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', posId);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedPositionId(null);
+                    setDraggedItemParentId(null);
+                  }}
+                  onDragOver={(e) => {
+                    // Only allow drop if dragging position from same section
+                    if (draggedPositionId && draggedItemParentId === sectionId && draggedPositionId !== posId) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move';
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (draggedPositionId && draggedItemParentId === sectionId && draggedPositionId !== posId) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePositionReorder(draggedPositionId, posId, sectionId);
+                      setDraggedPositionId(null);
+                      setDraggedItemParentId(null);
+                    }
+                  }}
                   className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded hover:bg-gray-50 ${
                     editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
-                  }`}
+                  } ${draggedPositionId === posId ? 'opacity-50' : ''}`}
                   style={{ paddingLeft: `${paddingLeft + 24}px` }}
                 >
-                  {/* Move buttons for positions - visible on hover */}
-                  <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button
-                      onClick={(e) => handleTreePositionMove(e, posId, 'up')}
-                      className="p-0.5 hover:bg-gray-200 rounded"
-                      title="Przesuń w górę"
-                    >
-                      <MoveUp className="w-3 h-3 text-gray-400" />
-                    </button>
-                    <button
-                      onClick={(e) => handleTreePositionMove(e, posId, 'down')}
-                      className="p-0.5 hover:bg-gray-200 rounded"
-                      title="Przesuń w dół"
-                    >
-                      <MoveDown className="w-3 h-3 text-gray-400" />
-                    </button>
-                  </div>
+                  {/* Drag handle for positions */}
+                  <GripVertical className="w-3 h-3 text-gray-400 cursor-grab flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <button
                     onClick={() => selectItem(posId, 'position')}
                     className="flex items-center gap-1 flex-1 text-left"
