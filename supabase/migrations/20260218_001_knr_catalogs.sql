@@ -128,7 +128,7 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- =====================================================
--- RLS Policies
+-- RLS Policies (simplified - all authenticated users can read)
 -- =====================================================
 ALTER TABLE knr_folders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE knr_positions ENABLE ROW LEVEL SECURITY;
@@ -136,70 +136,33 @@ ALTER TABLE knr_position_resources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE price_sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resource_prices ENABLE ROW LEVEL SECURITY;
 
--- System catalogs are visible to all authenticated users
-CREATE POLICY "System KNR folders visible to all" ON knr_folders
-    FOR SELECT USING (is_system = true);
+-- All authenticated users can read system and company data
+CREATE POLICY "KNR folders readable by authenticated" ON knr_folders
+    FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Company KNR folders visible to company members" ON knr_folders
-    FOR SELECT USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
+CREATE POLICY "KNR folders manageable by authenticated" ON knr_folders
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "System KNR positions visible to all" ON knr_positions
-    FOR SELECT USING (is_system = true);
+CREATE POLICY "KNR positions readable by authenticated" ON knr_positions
+    FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Company KNR positions visible to company members" ON knr_positions
-    FOR SELECT USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
+CREATE POLICY "KNR positions manageable by authenticated" ON knr_positions
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "KNR resources visible to all" ON knr_position_resources
-    FOR SELECT USING (true);
+CREATE POLICY "KNR resources readable by authenticated" ON knr_position_resources
+    FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "System price sources visible to all" ON price_sources
-    FOR SELECT USING (is_system = true);
+CREATE POLICY "KNR resources manageable by authenticated" ON knr_position_resources
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "Company price sources visible to company members" ON price_sources
-    FOR SELECT USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
+CREATE POLICY "Price sources readable by authenticated" ON price_sources
+    FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Resource prices visible to all" ON resource_prices
-    FOR SELECT USING (true);
+CREATE POLICY "Price sources manageable by authenticated" ON price_sources
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- Allow insert/update for company data
-CREATE POLICY "Company members can manage their KNR folders" ON knr_folders
-    FOR ALL USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
+CREATE POLICY "Resource prices readable by authenticated" ON resource_prices
+    FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Company members can manage their KNR positions" ON knr_positions
-    FOR ALL USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Company members can manage their price sources" ON price_sources
-    FOR ALL USING (
-        company_id IN (
-            SELECT company_id FROM profiles WHERE id = auth.uid()
-        )
-    );
-
-CREATE POLICY "Company members can manage resource prices" ON resource_prices
-    FOR ALL USING (
-        price_source_id IN (
-            SELECT id FROM price_sources WHERE company_id IN (
-                SELECT company_id FROM profiles WHERE id = auth.uid()
-            )
-        )
-    );
+CREATE POLICY "Resource prices manageable by authenticated" ON resource_prices
+    FOR ALL TO authenticated USING (true) WITH CHECK (true);
