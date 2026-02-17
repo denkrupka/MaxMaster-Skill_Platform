@@ -8,7 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Menu, Printer, Plus, FolderPlus, FileText, Hash, Layers,
   ChevronDown, ChevronRight, ChevronUp, Trash2, Copy, ClipboardPaste,
-  Scissors, MoveUp, MoveDown, Settings, Eye, CheckCircle2,
+  Scissors, MoveUp, MoveDown, Settings, Eye, CheckCircle2, Check,
   AlertCircle, Save, Download, Upload, RefreshCw, X, Home,
   Calculator, Users, Package, Wrench, Percent, DollarSign,
   MessageSquare, Search, Filter, MoreHorizontal, Loader2, Monitor,
