@@ -1614,6 +1614,59 @@ export const KosztorysEditorPage: React.FC = () => {
     updateEstimateData(newData);
   };
 
+  // Move position from one section to another
+  const handleMovePositionToSection = (positionId: string, fromSectionId: string, toSectionId: string) => {
+    if (fromSectionId === toSectionId) return;
+
+    const newData = { ...estimateData };
+
+    // Remove from source section
+    newData.sections[fromSectionId] = {
+      ...newData.sections[fromSectionId],
+      positionIds: newData.sections[fromSectionId].positionIds.filter(id => id !== positionId),
+    };
+
+    // Add to target section
+    newData.sections[toSectionId] = {
+      ...newData.sections[toSectionId],
+      positionIds: [...newData.sections[toSectionId].positionIds, positionId],
+    };
+
+    updateEstimateData(newData);
+    showNotificationMessage('Pozycja przeniesiona', 'success');
+  };
+
+  // Move section/subsection to become a subsection of another section
+  const handleMoveSectionToSection = (sectionId: string, fromParentId: string | null, toSectionId: string) => {
+    if (sectionId === toSectionId) return;
+
+    const newData = { ...estimateData };
+
+    // Remove from source
+    if (fromParentId) {
+      // Remove from parent's subsectionIds
+      newData.sections[fromParentId] = {
+        ...newData.sections[fromParentId],
+        subsectionIds: newData.sections[fromParentId].subsectionIds.filter(id => id !== sectionId),
+      };
+    } else {
+      // Remove from root
+      newData.root = {
+        ...newData.root,
+        sectionIds: newData.root.sectionIds.filter(id => id !== sectionId),
+      };
+    }
+
+    // Add to target section as subsection
+    newData.sections[toSectionId] = {
+      ...newData.sections[toSectionId],
+      subsectionIds: [...newData.sections[toSectionId].subsectionIds, sectionId],
+    };
+
+    updateEstimateData(newData);
+    showNotificationMessage('Dział przeniesiony', 'success');
+  };
+
   // Add section
   const handleAddSection = () => {
     const sectionIds = estimateData.root.sectionIds;
@@ -2363,23 +2416,43 @@ export const KosztorysEditorPage: React.FC = () => {
           setDraggedSectionId(null);
         }}
         onDragOver={(e) => {
-          // Check if dragging a section (can't access getData in dragOver)
-          if (e.dataTransfer.types.includes('application/section-id') &&
-              !e.dataTransfer.types.includes('application/position-id')) {
+          // Accept sections and positions
+          if (e.dataTransfer.types.includes('application/section-id') ||
+              e.dataTransfer.types.includes('application/position-id')) {
             e.preventDefault();
             e.stopPropagation();
             e.dataTransfer.dropEffect = 'move';
           }
         }}
         onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Check if dropping a position
+          const draggedPositionIdFromData = e.dataTransfer.getData('application/position-id');
+          if (draggedPositionIdFromData) {
+            const fromSection = e.dataTransfer.getData('application/section-id');
+            if (fromSection && fromSection !== sectionId) {
+              handleMovePositionToSection(draggedPositionIdFromData, fromSection, sectionId);
+            }
+            setDraggedPositionId(null);
+            return;
+          }
+
+          // Check if dropping a section
           const draggedId = e.dataTransfer.getData('application/section-id');
           const draggedParent = e.dataTransfer.getData('application/parent-id');
           const currentParent = parentId || 'root';
 
-          if (draggedId && draggedId !== sectionId && draggedParent === currentParent) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleSectionReorder(draggedId, sectionId, parentId);
+          if (draggedId && draggedId !== sectionId) {
+            // Same parent - reorder
+            if (draggedParent === currentParent) {
+              handleSectionReorder(draggedId, sectionId, parentId);
+            } else {
+              // Different parent - move into this section as subsection
+              const fromParent = draggedParent === 'root' ? null : draggedParent;
+              handleMoveSectionToSection(draggedId, fromParent, sectionId);
+            }
             setDraggedSectionId(null);
           }
         }}
@@ -2447,13 +2520,20 @@ export const KosztorysEditorPage: React.FC = () => {
                     e.dataTransfer.dropEffect = 'move';
                   }}
                   onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
                     const draggedId = e.dataTransfer.getData('application/position-id');
                     const draggedSection = e.dataTransfer.getData('application/section-id');
 
-                    if (draggedId && draggedId !== posId && draggedSection === sectionId) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handlePositionReorder(draggedId, posId, sectionId);
+                    if (draggedId && draggedId !== posId) {
+                      if (draggedSection === sectionId) {
+                        // Same section - reorder
+                        handlePositionReorder(draggedId, posId, sectionId);
+                      } else {
+                        // Different section - move to this section
+                        handleMovePositionToSection(draggedId, draggedSection, sectionId);
+                      }
                       setDraggedPositionId(null);
                     }
                   }}
