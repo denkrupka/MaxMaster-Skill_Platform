@@ -3116,22 +3116,36 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
               </div>
               {/* Comment tag */}
-              {showCommentsOnSheet && comments.filter(c => c.targetId === position.id).length > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const positionComments = comments.filter(c => c.targetId === position.id);
-                    if (positionComments.length > 0) {
-                      setSelectedCommentId(positionComments[0].id);
-                      setLeftPanelMode('comments');
-                    }
-                  }}
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200"
-                >
-                  <MessageSquare className="w-3 h-3" />
-                  {comments.filter(c => c.targetId === position.id).length}
-                </button>
-              )}
+              {(() => {
+                const positionComments = comments.filter(c =>
+                  c.targetId === position.id && (showCompletedTasks || !c.completed)
+                );
+                if (!showCommentsOnSheet || positionComments.length === 0) return null;
+
+                // Get primary category for color (first non-completed comment)
+                const primaryComment = positionComments[0];
+                const colorClass = primaryComment?.category === 'verification'
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : primaryComment?.category === 'completion'
+                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200';
+
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (positionComments.length > 0) {
+                        setSelectedCommentId(positionComments[0].id);
+                        setLeftPanelMode('comments');
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs ${colorClass}`}
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    {positionComments.length}
+                  </button>
+                );
+              })()}
             </div>
           </td>
           <td className="px-3 py-2 text-sm text-right text-gray-600 align-top">{position.unit.label}</td>
@@ -3362,22 +3376,35 @@ export const KosztorysEditorPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <span>{section.name}</span>
               {/* Comment tag */}
-              {showCommentsOnSheet && comments.filter(c => c.targetId === section.id).length > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const sectionComments = comments.filter(c => c.targetId === section.id);
-                    if (sectionComments.length > 0) {
-                      setSelectedCommentId(sectionComments[0].id);
-                      setLeftPanelMode('comments');
-                    }
-                  }}
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200 font-normal"
-                >
-                  <MessageSquare className="w-3 h-3" />
-                  {comments.filter(c => c.targetId === section.id).length}
-                </button>
-              )}
+              {(() => {
+                const sectionComments = comments.filter(c =>
+                  c.targetId === section.id && (showCompletedTasks || !c.completed)
+                );
+                if (!showCommentsOnSheet || sectionComments.length === 0) return null;
+
+                const primaryComment = sectionComments[0];
+                const colorClass = primaryComment?.category === 'verification'
+                  ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : primaryComment?.category === 'completion'
+                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200';
+
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (sectionComments.length > 0) {
+                        setSelectedCommentId(sectionComments[0].id);
+                        setLeftPanelMode('comments');
+                      }
+                    }}
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-normal ${colorClass}`}
+                  >
+                    <MessageSquare className="w-3 h-3" />
+                    {sectionComments.length}
+                  </button>
+                );
+              })()}
             </div>
           </td>
         </tr>
