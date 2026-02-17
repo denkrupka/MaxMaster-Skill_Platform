@@ -4882,23 +4882,35 @@ export const KosztorysEditorPage: React.FC = () => {
                                 <Trash2 className="w-3 h-3 inline mr-1" />
                                 Usuń
                               </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // Navigate to target
-                                  if (comment.targetType === 'position' || comment.targetType === 'section' || comment.targetType === 'resource') {
-                                    setEditorState(prev => ({
-                                      ...prev,
-                                      selectedItemId: comment.targetId,
-                                      selectedItemType: comment.targetType as 'section' | 'position' | 'resource',
-                                    }));
-                                  }
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700"
-                              >
-                                <ArrowUpRight className="w-3 h-3 inline mr-1" />
-                                Idź do elementu
-                              </button>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Navigate to target
+                                    if (comment.targetType === 'position' || comment.targetType === 'section' || comment.targetType === 'resource') {
+                                      setEditorState(prev => ({
+                                        ...prev,
+                                        selectedItemId: comment.targetId,
+                                        selectedItemType: comment.targetType as 'section' | 'position' | 'resource',
+                                      }));
+                                    }
+                                  }}
+                                  className="text-xs text-blue-600 hover:text-blue-700"
+                                >
+                                  <ArrowUpRight className="w-3 h-3 inline mr-1" />
+                                  Idź do elementu
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedCommentId(null);
+                                  }}
+                                  className="p-1.5 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                  title="Zapisz"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
