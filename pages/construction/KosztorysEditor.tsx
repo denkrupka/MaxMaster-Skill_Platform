@@ -845,6 +845,33 @@ export const KosztorysEditorPage: React.FC = () => {
     expression: { field: 'cena', operation: 'add', value: '' },
     zeroPrices: false,
   });
+  const [showPriceSourcesExpanded, setShowPriceSourcesExpanded] = useState(true);
+  const [showSearchOptionsExpanded, setShowSearchOptionsExpanded] = useState(true);
+  const [showAdvancedExpanded, setShowAdvancedExpanded] = useState(true);
+  const [searchByNameWhenNoIndex, setSearchByNameWhenNoIndex] = useState(false);
+  const [searchAllIndexTypes, setSearchAllIndexTypes] = useState(false);
+  const [matchUnits, setMatchUnits] = useState(false);
+  const [zeroNotFoundPrices, setZeroNotFoundPrices] = useState(false);
+  const [autoSelectLowestPrice, setAutoSelectLowestPrice] = useState(false);
+
+  // KNR Catalog import modal state
+  const [showKatalogImportModal, setShowKatalogImportModal] = useState(false);
+  const [katalogImportFile, setKatalogImportFile] = useState<File | null>(null);
+  const [katalogImportName, setKatalogImportName] = useState('');
+  const [katalogImportBase, setKatalogImportBase] = useState('');
+  const [katalogImportDragging, setKatalogImportDragging] = useState(false);
+
+  // Price sources modal state
+  const [showPriceSourcesModal, setShowPriceSourcesModal] = useState(false);
+  const [selectedPriceSources, setSelectedPriceSources] = useState<string[]>(['ekosztorysowanie']);
+  const [priceSourceSearch, setPriceSourceSearch] = useState('');
+
+  // Price import modal state
+  const [showPriceImportModal, setShowPriceImportModal] = useState(false);
+  const [priceImportFile, setPriceImportFile] = useState<File | null>(null);
+  const [priceImportName, setPriceImportName] = useState('');
+  const [priceImportSource, setPriceImportSource] = useState<'sekocenbud' | 'orgbud'>('sekocenbud');
+  const [priceImportDragging, setPriceImportDragging] = useState(false);
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -5115,37 +5142,64 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {leftPanelMode === 'catalog' && (
               <div className="flex flex-col h-full">
-                {/* Search */}
+                {/* Search with settings */}
                 <div className="p-3 border-b border-gray-200">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Szukaj pozycji..."
-                      value={catalogSearch}
-                      onChange={e => setCatalogSearch(e.target.value)}
-                      className="w-full pl-8 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                    {catalogSearch && (
-                      <button
-                        onClick={() => setCatalogSearch('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
-                      >
-                        <X className="w-3 h-3 text-gray-400" />
-                      </button>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Szukaj pozycji"
+                        value={catalogSearch}
+                        onChange={e => setCatalogSearch(e.target.value)}
+                        className="w-full pl-8 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                      {catalogSearch && (
+                        <button
+                          onClick={() => setCatalogSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
+                        >
+                          <X className="w-3 h-3 text-gray-400" />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowKatalogImportModal(true)}
+                      className="p-2 hover:bg-gray-100 rounded border border-gray-300"
+                      title="Wczytaj inne normatywy"
+                    >
+                      <Settings className="w-4 h-4 text-gray-500" />
+                    </button>
+                    <button
+                      onClick={() => setLeftPanelMode('overview')}
+                      className="p-2 hover:bg-gray-100 rounded"
+                    >
+                      <X className="w-4 h-4 text-gray-500" />
+                    </button>
                   </div>
+                </div>
+
+                {/* Column headers */}
+                <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+                  <span>Podstawa</span>
+                  <span>Opis</span>
                 </div>
 
                 {/* Catalog tree */}
                 <div className="flex-1 overflow-y-auto p-2">
-                  <div className="text-xs text-gray-500 px-2 mb-2">
-                    <div className="flex items-center justify-between">
-                      <span>Podstawa</span>
-                      <span>Opis</span>
+                  {/* Katalog Systemowy section */}
+                  <div className="mb-2">
+                    <button
+                      className="w-full flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded"
+                      onClick={() => {/* toggle system catalog */}}
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                      <span>Katalog systemowy</span>
+                    </button>
+                    <div className="ml-2">
+                      {renderCatalogTree(KNR_CATALOG, 0)}
                     </div>
                   </div>
-                  {renderCatalogTree(KNR_CATALOG, 0)}
                 </div>
 
                 {/* Insert position form */}
@@ -7824,39 +7878,126 @@ export const KosztorysEditorPage: React.FC = () => {
               {cenyDialogTab === 'wstaw' && (
                 <>
                   {/* Źródła cen section */}
-                  <div className="border border-gray-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowPriceSourcesExpanded(!showPriceSourcesExpanded)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                    >
                       <span>Źródła cen</span>
                       <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="w-4 h-4 text-gray-400" />
-                        <ChevronDown className="w-4 h-4" />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowPriceSourcesModal(true); }}
+                          className="p-1 hover:bg-gray-100 rounded"
+                        >
+                          <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                        </button>
+                        {showPriceSourcesExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </div>
                     </button>
+                    {showPriceSourcesExpanded && (
+                      <div className="px-4 pb-3 space-y-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between py-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-800">Cennik eKosztorysowanie</span>
+                            <button className="text-gray-400 hover:text-gray-600" title="Informacje o cenniku eKosztorysowanie. Cennik jest aktualny">
+                              <HelpCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <button className="text-gray-400 hover:text-red-500">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Opcje wyszukiwania cen */}
-                  <div className="border border-gray-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowSearchOptionsExpanded(!showSearchOptionsExpanded)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                    >
                       <span>Opcje wyszukiwania cen</span>
-                      <ChevronDown className="w-4 h-4" />
+                      {showSearchOptionsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
+                    {showSearchOptionsExpanded && (
+                      <div className="px-4 pb-3 space-y-3 border-t border-gray-100">
+                        <select className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mt-3">
+                          <option value="">Wybierz opcję szukiwania cen</option>
+                          <option value="index">Szukaj po indeksie</option>
+                          <option value="name">Szukaj po nazwie</option>
+                        </select>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={searchByNameWhenNoIndex}
+                            onChange={(e) => setSearchByNameWhenNoIndex(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-800">Szukaj po nazwie gdy brak wyników wg indeksu</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={searchAllIndexTypes}
+                            onChange={(e) => setSearchAllIndexTypes(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-800">Szukaj we wszystkich typach indeksów</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={matchUnits}
+                            onChange={(e) => setMatchUnits(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-800">Zgodność jednostek miar</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Zaawansowane */}
-                  <div className="border border-gray-200 rounded-lg">
-                    <button className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowAdvancedExpanded(!showAdvancedExpanded)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                    >
                       <span>Zaawansowane</span>
-                      <ChevronDown className="w-4 h-4" />
+                      {showAdvancedExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
+                    {showAdvancedExpanded && (
+                      <div className="px-4 pb-3 space-y-3 border-t border-gray-100 mt-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={zeroNotFoundPrices}
+                            onChange={(e) => setZeroNotFoundPrices(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-800">Zeruj ceny nieznalezione</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={autoSelectLowestPrice}
+                            onChange={(e) => setAutoSelectLowestPrice(e.target.checked)}
+                            className="w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-800">Po znalezieniu kilku cen automatycznie wybieraj tą najniższą</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Skip step process checkbox */}
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 pt-2">
                     <input
                       type="checkbox"
                       checked={priceUpdateSettings.skipStepProcess}
                       onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, skipStepProcess: e.target.checked }))}
-                      className="w-4 h-4 rounded border-gray-300"
+                      className="w-4 h-4 rounded border-blue-600 text-blue-600"
                     />
                     <span className="text-sm text-gray-800">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
                   </label>
@@ -7945,6 +8086,272 @@ export const KosztorysEditorPage: React.FC = () => {
         </div>
       )}
 
+      {/* Price Sources Selection Modal (Baza cenników) */}
+      {showPriceSourcesModal && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Baza cenników</h2>
+              <button onClick={() => setShowPriceSourcesModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={priceSourceSearch}
+                  onChange={(e) => setPriceSourceSearch(e.target.value)}
+                  placeholder="Szukaj"
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedPriceSources.includes('ekosztorysowanie')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedPriceSources([...selectedPriceSources, 'ekosztorysowanie']);
+                      } else {
+                        setSelectedPriceSources(selectedPriceSources.filter(s => s !== 'ekosztorysowanie'));
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-800">Cennik eKosztorysowanie</span>
+                </label>
+              </div>
+              <button
+                onClick={() => setShowPriceImportModal(true)}
+                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Dodaj cennik</span>
+              </button>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowPriceSourcesModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Zatwierdź
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price Import Modal */}
+      {showPriceImportModal && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowPriceImportModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              </div>
+              <button onClick={() => setShowPriceImportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Drag and drop area */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setPriceImportDragging(true); }}
+                onDragLeave={() => setPriceImportDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setPriceImportDragging(false);
+                  const files = e.dataTransfer.files;
+                  if (files.length > 0) {
+                    setPriceImportFile(files[0]);
+                  }
+                }}
+                className={`border-2 border-dashed rounded-lg p-8 text-center ${
+                  priceImportDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 mb-3">
+                  Przeciągnij i upuść plik dbf, by zaimportować.
+                </p>
+                <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer inline-block">
+                  Wybierz z plików
+                  <input
+                    type="file"
+                    accept=".dbf,.csv,.xlsx"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setPriceImportFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {priceImportFile && (
+                  <p className="text-sm text-green-600 mt-2">Wybrano: {priceImportFile.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Nazwa cennika</label>
+                <input
+                  type="text"
+                  value={priceImportName}
+                  onChange={(e) => setPriceImportName(e.target.value)}
+                  placeholder=""
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Źródło cennika</label>
+                <select
+                  value={priceImportSource}
+                  onChange={(e) => setPriceImportSource(e.target.value as 'sekocenbud' | 'orgbud')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="sekocenbud">Sekocenbud</option>
+                  <option value="orgbud">Orgbud</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => {
+                  if (priceImportFile) {
+                    showNotificationMessage('Importowanie cennika...', 'success');
+                    setShowPriceImportModal(false);
+                    setPriceImportFile(null);
+                    setPriceImportName('');
+                  }
+                }}
+                disabled={!priceImportFile}
+                className={`px-4 py-2 rounded-lg ${
+                  priceImportFile
+                    ? 'bg-orange-500 text-white hover:bg-orange-600'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KNR Catalog Import Modal */}
+      {showKatalogImportModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Wczytaj inne normatywy</h2>
+              <button onClick={() => setShowKatalogImportModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-gray-600">Dodaj własny katalog (CSV)</p>
+
+              {/* Drag and drop area */}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setKatalogImportDragging(true); }}
+                onDragLeave={() => setKatalogImportDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setKatalogImportDragging(false);
+                  const files = e.dataTransfer.files;
+                  if (files.length > 0) {
+                    setKatalogImportFile(files[0]);
+                  }
+                }}
+                className={`border-2 border-dashed rounded-lg p-8 text-center ${
+                  katalogImportDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                }`}
+              >
+                <FileSpreadsheet className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 mb-3">
+                  Przeciągnij i upuść plik csv, aby go przesłać.
+                </p>
+                <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer inline-block">
+                  Wybierz z plików
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setKatalogImportFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {katalogImportFile && (
+                  <p className="text-sm text-green-600 mt-2">Wybrano: {katalogImportFile.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-800 mb-1">Nazwa katalogu *</label>
+                <input
+                  type="text"
+                  value={katalogImportName}
+                  onChange={(e) => setKatalogImportName(e.target.value)}
+                  placeholder="Wprowadź nazwę katalogu"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-gray-800 mb-1">Baza katalogu *</label>
+                <input
+                  type="text"
+                  value={katalogImportBase}
+                  onChange={(e) => setKatalogImportBase(e.target.value)}
+                  placeholder="Wprowadź bazę katalogu"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-between">
+              <button
+                onClick={() => setShowKatalogImportModal(false)}
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  if (katalogImportFile && katalogImportName && katalogImportBase) {
+                    showNotificationMessage('Importowanie katalogu...', 'success');
+                    setShowKatalogImportModal(false);
+                    setKatalogImportFile(null);
+                    setKatalogImportName('');
+                    setKatalogImportBase('');
+                  }
+                }}
+                disabled={!katalogImportFile || !katalogImportName || !katalogImportBase}
+                className={`px-4 py-2 rounded-lg ${
+                  katalogImportFile && katalogImportName && katalogImportBase
+                    ? 'bg-orange-500 text-white hover:bg-orange-600'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Exit Confirmation Modal */}
       {showExitConfirmModal && (
