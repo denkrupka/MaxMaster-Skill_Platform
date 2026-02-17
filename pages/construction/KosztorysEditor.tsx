@@ -2029,6 +2029,234 @@ export const KosztorysEditorPage: React.FC = () => {
     showNotificationMessage('Pozycja przeniesiona', 'success');
   };
 
+  // Direct move position by ID (for tree panel)
+  const handleMovePositionById = (posId: string, direction: 'up' | 'down') => {
+    const newData = { ...estimateData };
+
+    // Find which array the position is in
+    let positionIds: string[] | null = null;
+    let sectionId: string | null = null;
+
+    if (newData.root.positionIds.includes(posId)) {
+      positionIds = [...newData.root.positionIds];
+    } else {
+      for (const [secId, section] of Object.entries(newData.sections)) {
+        if (section.positionIds.includes(posId)) {
+          positionIds = [...section.positionIds];
+          sectionId = secId;
+          break;
+        }
+      }
+    }
+
+    if (!positionIds) return;
+    const currentIndex = positionIds.indexOf(posId);
+
+    if (direction === 'up' && currentIndex > 0) {
+      [positionIds[currentIndex], positionIds[currentIndex - 1]] =
+        [positionIds[currentIndex - 1], positionIds[currentIndex]];
+    } else if (direction === 'down' && currentIndex < positionIds.length - 1) {
+      [positionIds[currentIndex], positionIds[currentIndex + 1]] =
+        [positionIds[currentIndex + 1], positionIds[currentIndex]];
+    } else {
+      return; // No movement possible
+    }
+
+    if (sectionId) {
+      newData.sections[sectionId] = { ...newData.sections[sectionId], positionIds };
+    } else {
+      newData.root.positionIds = positionIds;
+    }
+
+    updateEstimateData(newData);
+    showNotificationMessage('Pozycja przeniesiona', 'success');
+  };
+
+  // Direct move section by ID (for tree panel)
+  const handleMoveSectionById = (secId: string, direction: 'up' | 'down') => {
+    const newData = { ...estimateData };
+
+    // Find if this is a top-level section or a subsection
+    let parentSectionId: string | null = null;
+    let sectionIds: string[] | null = null;
+
+    if (newData.root.sectionIds.includes(secId)) {
+      sectionIds = [...newData.root.sectionIds];
+    } else {
+      for (const [parentId, section] of Object.entries(newData.sections)) {
+        if (section.subsectionIds.includes(secId)) {
+          sectionIds = [...section.subsectionIds];
+          parentSectionId = parentId;
+          break;
+        }
+      }
+    }
+
+    if (!sectionIds) return;
+    const currentIndex = sectionIds.indexOf(secId);
+
+    if (direction === 'up' && currentIndex > 0) {
+      [sectionIds[currentIndex], sectionIds[currentIndex - 1]] =
+        [sectionIds[currentIndex - 1], sectionIds[currentIndex]];
+    } else if (direction === 'down' && currentIndex < sectionIds.length - 1) {
+      [sectionIds[currentIndex], sectionIds[currentIndex + 1]] =
+        [sectionIds[currentIndex + 1], sectionIds[currentIndex]];
+    } else {
+      return; // No movement possible
+    }
+
+    if (parentSectionId) {
+      newData.sections[parentSectionId] = { ...newData.sections[parentSectionId], subsectionIds: sectionIds };
+    } else {
+      newData.root.sectionIds = sectionIds;
+    }
+
+    updateEstimateData(newData);
+    showNotificationMessage('Dział przeniesiony', 'success');
+  };
+
+  // Move section/subsection in various directions
+  const handleMoveSection = (direction: 'up' | 'down' | 'out' | 'toFirstSection' | 'toLastSection') => {
+    if (!editorState.selectedItemId || editorState.selectedItemType !== 'section') return;
+
+    const sectionId = editorState.selectedItemId;
+    const newData = { ...estimateData };
+
+    // Find if this is a top-level section or a subsection
+    let parentSectionId: string | null = null;
+    let sectionIds: string[] | null = null;
+
+    if (newData.root.sectionIds.includes(sectionId)) {
+      // Top-level section
+      sectionIds = [...newData.root.sectionIds];
+    } else {
+      // Find parent section
+      for (const [secId, section] of Object.entries(newData.sections)) {
+        if (section.subsectionIds.includes(sectionId)) {
+          sectionIds = [...section.subsectionIds];
+          parentSectionId = secId;
+          break;
+        }
+      }
+    }
+
+    if (!sectionIds) return;
+    const currentIndex = sectionIds.indexOf(sectionId);
+
+    let handled = false;
+
+    switch (direction) {
+      case 'up':
+        if (currentIndex > 0) {
+          [sectionIds[currentIndex], sectionIds[currentIndex - 1]] =
+            [sectionIds[currentIndex - 1], sectionIds[currentIndex]];
+        }
+        break;
+      case 'down':
+        if (currentIndex < sectionIds.length - 1) {
+          [sectionIds[currentIndex], sectionIds[currentIndex + 1]] =
+            [sectionIds[currentIndex + 1], sectionIds[currentIndex]];
+        }
+        break;
+      case 'out':
+        // Move subsection out to parent level (or root if in top section)
+        if (parentSectionId) {
+          // Remove from current parent
+          sectionIds.splice(currentIndex, 1);
+          newData.sections[parentSectionId] = {
+            ...newData.sections[parentSectionId],
+            subsectionIds: sectionIds,
+          };
+
+          // Find grandparent or add to root
+          let grandparentId: string | null = null;
+          for (const [secId, section] of Object.entries(newData.sections)) {
+            if (section.subsectionIds.includes(parentSectionId)) {
+              grandparentId = secId;
+              break;
+            }
+          }
+
+          if (grandparentId) {
+            // Add to grandparent's subsections after the parent
+            const grandparentSubsections = [...newData.sections[grandparentId].subsectionIds];
+            const parentIdx = grandparentSubsections.indexOf(parentSectionId);
+            grandparentSubsections.splice(parentIdx + 1, 0, sectionId);
+            newData.sections[grandparentId] = {
+              ...newData.sections[grandparentId],
+              subsectionIds: grandparentSubsections,
+            };
+          } else {
+            // Parent is at root level, add section to root after parent
+            const rootSections = [...newData.root.sectionIds];
+            const parentIdx = rootSections.indexOf(parentSectionId);
+            rootSections.splice(parentIdx + 1, 0, sectionId);
+            newData.root.sectionIds = rootSections;
+          }
+          handled = true;
+        }
+        break;
+      case 'toFirstSection':
+        // Move to first section as subsection
+        if (newData.root.sectionIds.length > 0) {
+          const firstSectionId = newData.root.sectionIds[0];
+          if (firstSectionId !== sectionId) {
+            // Remove from current location
+            if (parentSectionId) {
+              newData.sections[parentSectionId] = {
+                ...newData.sections[parentSectionId],
+                subsectionIds: newData.sections[parentSectionId].subsectionIds.filter(id => id !== sectionId),
+              };
+            } else {
+              newData.root.sectionIds = newData.root.sectionIds.filter(id => id !== sectionId);
+            }
+            // Add to first section
+            newData.sections[firstSectionId] = {
+              ...newData.sections[firstSectionId],
+              subsectionIds: [...newData.sections[firstSectionId].subsectionIds, sectionId],
+            };
+            handled = true;
+          }
+        }
+        break;
+      case 'toLastSection':
+        // Move to last section as subsection
+        if (newData.root.sectionIds.length > 0) {
+          const lastSectionId = newData.root.sectionIds[newData.root.sectionIds.length - 1];
+          if (lastSectionId !== sectionId) {
+            // Remove from current location
+            if (parentSectionId) {
+              newData.sections[parentSectionId] = {
+                ...newData.sections[parentSectionId],
+                subsectionIds: newData.sections[parentSectionId].subsectionIds.filter(id => id !== sectionId),
+              };
+            } else {
+              newData.root.sectionIds = newData.root.sectionIds.filter(id => id !== sectionId);
+            }
+            // Add to last section
+            newData.sections[lastSectionId] = {
+              ...newData.sections[lastSectionId],
+              subsectionIds: [...newData.sections[lastSectionId].subsectionIds, sectionId],
+            };
+            handled = true;
+          }
+        }
+        break;
+    }
+
+    // Update the original array (only if not already handled)
+    if (!handled) {
+      if (parentSectionId) {
+        newData.sections[parentSectionId] = { ...newData.sections[parentSectionId], subsectionIds: sectionIds };
+      } else {
+        newData.root.sectionIds = sectionIds;
+      }
+    }
+
+    updateEstimateData(newData);
+    showNotificationMessage('Dział przeniesiony', 'success');
+  };
+
   // Toggle expand
   const toggleExpandSection = (sectionId: string) => {
     setEditorState(prev => {
@@ -2076,6 +2304,20 @@ export const KosztorysEditorPage: React.FC = () => {
     const hasPositions = section.positionIds && section.positionIds.length > 0;
     const paddingLeft = 8 + depth * 16; // 8px base + 16px per depth level
 
+    // Helper to move section in tree
+    const handleTreeSectionMove = (e: React.MouseEvent, direction: 'up' | 'down') => {
+      e.stopPropagation();
+      handleMoveSectionById(sectionId, direction);
+      selectItem(sectionId, 'section');
+    };
+
+    // Helper to move position in tree
+    const handleTreePositionMove = (e: React.MouseEvent, posId: string, direction: 'up' | 'down') => {
+      e.stopPropagation();
+      handleMovePositionById(posId, direction);
+      selectItem(posId, 'position');
+    };
+
     return (
       <div
         key={sectionId}
@@ -2103,14 +2345,28 @@ export const KosztorysEditorPage: React.FC = () => {
         className={`${draggedSectionId === sectionId ? 'opacity-50' : ''}`}
       >
         <div
-          className={`flex items-center gap-1 pr-2 py-1.5 text-sm rounded hover:bg-gray-50 ${
+          className={`group flex items-center gap-1 pr-2 py-1.5 text-sm rounded hover:bg-gray-50 ${
             editorState.selectedItemId === sectionId ? 'bg-blue-50 text-blue-700' : ''
           }`}
           style={{ paddingLeft: `${paddingLeft}px` }}
         >
-          {depth === 0 && (
-            <GripVertical className="w-4 h-4 text-gray-400 cursor-grab flex-shrink-0" />
-          )}
+          {/* Move buttons - visible on hover */}
+          <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button
+              onClick={(e) => handleTreeSectionMove(e, 'up')}
+              className="p-0.5 hover:bg-gray-200 rounded"
+              title="Przesuń w górę"
+            >
+              <MoveUp className="w-3 h-3 text-gray-400" />
+            </button>
+            <button
+              onClick={(e) => handleTreeSectionMove(e, 'down')}
+              className="p-0.5 hover:bg-gray-200 rounded"
+              title="Przesuń w dół"
+            >
+              <MoveDown className="w-3 h-3 text-gray-400" />
+            </button>
+          </div>
           <button
             onClick={() => {
               toggleExpandSection(sectionId);
@@ -2137,17 +2393,38 @@ export const KosztorysEditorPage: React.FC = () => {
               const position = estimateData.positions[posId];
               if (!position) return null;
               return (
-                <button
+                <div
                   key={posId}
-                  onClick={() => selectItem(posId, 'position')}
-                  className={`w-full flex items-center gap-1 pr-2 py-1 text-xs text-left rounded hover:bg-gray-50 ${
+                  className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded hover:bg-gray-50 ${
                     editorState.selectedItemId === posId ? 'bg-blue-50 text-blue-700' : 'text-gray-600'
                   }`}
                   style={{ paddingLeft: `${paddingLeft + 24}px` }}
                 >
-                  <FileText className="w-3 h-3 flex-shrink-0" />
-                  <span className="truncate">d.{section.ordinalNumber}.{posIndex + 1} {position.base || position.name}</span>
-                </button>
+                  {/* Move buttons for positions - visible on hover */}
+                  <div className="flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button
+                      onClick={(e) => handleTreePositionMove(e, posId, 'up')}
+                      className="p-0.5 hover:bg-gray-200 rounded"
+                      title="Przesuń w górę"
+                    >
+                      <MoveUp className="w-3 h-3 text-gray-400" />
+                    </button>
+                    <button
+                      onClick={(e) => handleTreePositionMove(e, posId, 'down')}
+                      className="p-0.5 hover:bg-gray-200 rounded"
+                      title="Przesuń w dół"
+                    >
+                      <MoveDown className="w-3 h-3 text-gray-400" />
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => selectItem(posId, 'position')}
+                    className="flex items-center gap-1 flex-1 text-left"
+                  >
+                    <FileText className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate">d.{section.ordinalNumber}.{posIndex + 1} {position.base || position.name}</span>
+                  </button>
+                </div>
               );
             })}
           </>
@@ -3899,34 +4176,87 @@ export const KosztorysEditorPage: React.FC = () => {
               </button>
               {showPrzesunDropdown && (
                 <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                  <button
-                    onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <MoveUp className="w-4 h-4 text-gray-400" />
-                    Przesuń pozycję w górę
-                  </button>
-                  <button
-                    onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <MoveDown className="w-4 h-4 text-gray-400" />
-                    Przesuń pozycję w dół
-                  </button>
-                  <button
-                    onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <ArrowUpRight className="w-4 h-4 text-gray-400" />
-                    Przesuń pozycję do pierwszego działu
-                  </button>
-                  <button
-                    onClick={() => { handleMovePosition('last'); setShowPrzesunDropdown(false); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
-                  >
-                    <ArrowUpRight className="w-4 h-4 text-gray-400 rotate-90" />
-                    Przesuń pozycję do ostatniego działu
-                  </button>
+                  {/* Position move options */}
+                  {editorState.selectedItemType === 'position' && (
+                    <>
+                      <button
+                        onClick={() => { handleMovePosition('up'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <MoveUp className="w-4 h-4 text-gray-400" />
+                        Przesuń pozycję w górę
+                      </button>
+                      <button
+                        onClick={() => { handleMovePosition('down'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <MoveDown className="w-4 h-4 text-gray-400" />
+                        Przesuń pozycję w dół
+                      </button>
+                      <button
+                        onClick={() => { handleMovePosition('first'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ArrowUpRight className="w-4 h-4 text-gray-400" />
+                        Przesuń pozycję do pierwszego działu
+                      </button>
+                      <button
+                        onClick={() => { handleMovePosition('last'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ArrowUpRight className="w-4 h-4 text-gray-400 rotate-90" />
+                        Przesuń pozycję do ostatniego działu
+                      </button>
+                    </>
+                  )}
+
+                  {/* Section move options */}
+                  {editorState.selectedItemType === 'section' && (
+                    <>
+                      <button
+                        onClick={() => { handleMoveSection('up'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <MoveUp className="w-4 h-4 text-gray-400" />
+                        Przesuń dział w górę
+                      </button>
+                      <button
+                        onClick={() => { handleMoveSection('down'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <MoveDown className="w-4 h-4 text-gray-400" />
+                        Przesuń dział w dół
+                      </button>
+                      <button
+                        onClick={() => { handleMoveSection('out'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ChevronLeft className="w-4 h-4 text-gray-400" />
+                        Przesuń dział wyżej (na poziom rodzica)
+                      </button>
+                      <button
+                        onClick={() => { handleMoveSection('toFirstSection'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ArrowUpRight className="w-4 h-4 text-gray-400" />
+                        Przesuń jako poddział do pierwszego działu
+                      </button>
+                      <button
+                        onClick={() => { handleMoveSection('toLastSection'); setShowPrzesunDropdown(false); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <ArrowUpRight className="w-4 h-4 text-gray-400 rotate-90" />
+                        Przesuń jako poddział do ostatniego działu
+                      </button>
+                    </>
+                  )}
+
+                  {/* No selection message */}
+                  {(!editorState.selectedItemType || (editorState.selectedItemType !== 'position' && editorState.selectedItemType !== 'section')) && (
+                    <div className="px-3 py-2 text-sm text-gray-400">
+                      Zaznacz dział lub pozycję, aby przenieść
+                    </div>
+                  )}
                 </div>
               )}
             </div>
