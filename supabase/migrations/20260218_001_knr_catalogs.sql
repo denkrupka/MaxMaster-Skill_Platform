@@ -79,8 +79,8 @@ CREATE INDEX idx_knr_resources_rms_index ON knr_position_resources(rms_index);
 -- =====================================================
 CREATE TABLE IF NOT EXISTS price_sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,                          -- "Cennik eKosztorysowanie", "Sekocenbud"
-    source_type TEXT NOT NULL DEFAULT 'sekocenbud', -- sekocenbud, orgbud, custom
+    name TEXT NOT NULL,                          -- "Cennik Systemowy", "Sekocenbud"
+    source_type TEXT NOT NULL DEFAULT 'sekocenbud', -- system, sekocenbud, orgbud, custom
     is_system BOOLEAN NOT NULL DEFAULT true,
     company_id UUID REFERENCES companies(id),
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -122,7 +122,7 @@ CREATE INDEX idx_resource_prices_name ON resource_prices(name);
 -- =====================================================
 INSERT INTO price_sources (id, name, source_type, is_system, description)
 VALUES
-    ('00000000-0000-0000-0000-000000000001', 'Cennik eKosztorysowanie', 'ekosztorysowanie', true, 'Systemowy cennik eKosztorysowanie'),
+    ('00000000-0000-0000-0000-000000000001', 'Cennik Systemowy', 'system', true, 'Systemowy cennik'),
     ('00000000-0000-0000-0000-000000000002', 'Sekocenbud', 'sekocenbud', true, 'Cennik Sekocenbud'),
     ('00000000-0000-0000-0000-000000000003', 'Orgbud', 'orgbud', true, 'Cennik Orgbud')
 ON CONFLICT DO NOTHING;

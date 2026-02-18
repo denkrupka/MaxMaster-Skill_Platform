@@ -57,8 +57,56 @@ import type {
 type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia' | 'pozycje';
 type LeftPanelMode = 'overview' | 'properties' | 'export' | 'catalog' | 'comments' | 'titlePageEditor' | 'settings';
 type ZestawieniaTab = 'robocizna' | 'materialy' | 'sprzet';
+type CustomPriceListTab = 'robocizna' | 'materialy' | 'sprzet';
 
-// Title page editor data structure - matching eKosztorysowanie exactly
+interface CustomPriceListItem {
+  id: string;
+  rms_index: string;
+  autoIndex: boolean;
+  name: string;
+  category: string;
+  unit: string;
+  price: number;
+  comment: string;
+  isActive: boolean;
+}
+
+interface CustomPriceListState {
+  name: string;
+  items: {
+    robocizna: CustomPriceListItem[];
+    materialy: CustomPriceListItem[];
+    sprzet: CustomPriceListItem[];
+  };
+}
+
+const createEmptyPriceListItem = (): CustomPriceListItem => ({
+  id: crypto.randomUUID(),
+  rms_index: '',
+  autoIndex: true,
+  name: '',
+  category: '',
+  unit: '',
+  price: 0,
+  comment: '',
+  isActive: false,
+});
+
+const generateAutoIndex = (tab: CustomPriceListTab, sequenceNumber: number): string => {
+  const prefix = tab === 'robocizna' ? 'R' : tab === 'materialy' ? 'M' : 'S';
+  return `${prefix}-${String(sequenceNumber).padStart(4, '0')}`;
+};
+
+const initialCustomPriceList: CustomPriceListState = {
+  name: 'Nowy cennik',
+  items: {
+    robocizna: [createEmptyPriceListItem()],
+    materialy: [createEmptyPriceListItem()],
+    sprzet: [createEmptyPriceListItem()],
+  },
+};
+
+// Title page editor data structure
 interface TitlePageData {
   title: string;
   hideManHourRate: boolean;
@@ -874,7 +922,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Price sources modal state
   const [showPriceSourcesModal, setShowPriceSourcesModal] = useState(false);
-  const [selectedPriceSources, setSelectedPriceSources] = useState<string[]>(['ekosztorysowanie']);
+  const [selectedPriceSources, setSelectedPriceSources] = useState<string[]>(['system']);
   const [priceSourceSearch, setPriceSourceSearch] = useState('');
 
   // Price import modal state
@@ -883,6 +931,15 @@ export const KosztorysEditorPage: React.FC = () => {
   const [priceImportName, setPriceImportName] = useState('');
   const [priceImportSource, setPriceImportSource] = useState<'sekocenbud' | 'orgbud'>('sekocenbud');
   const [priceImportDragging, setPriceImportDragging] = useState(false);
+
+  // Custom price list creation state
+  const [showPriceAddChoice, setShowPriceAddChoice] = useState(false);
+  const [showCustomPriceListModal, setShowCustomPriceListModal] = useState(false);
+  const [customPriceListTab, setCustomPriceListTab] = useState<CustomPriceListTab>('robocizna');
+  const [customPriceListSaving, setCustomPriceListSaving] = useState(false);
+  const [customPriceListEditingName, setCustomPriceListEditingName] = useState(false);
+  const [customPriceList, setCustomPriceList] = useState<CustomPriceListState>(initialCustomPriceList);
+  const [userPriceSources, setUserPriceSources] = useState<Array<{ id: string; name: string }>>([]);
 
   // Replace resources confirmation modal
   const [showReplaceResourcesConfirm, setShowReplaceResourcesConfirm] = useState(false);
@@ -1169,6 +1226,13 @@ export const KosztorysEditorPage: React.FC = () => {
       }
     }
   }, [currentUser, estimateId]);
+
+  // Load user-created price sources
+  useEffect(() => {
+    if (currentUser) {
+      loadUserPriceSources();
+    }
+  }, [currentUser]);
 
   // Load KNR catalog from database
   useEffect(() => {
@@ -1567,6 +1631,130 @@ export const KosztorysEditorPage: React.FC = () => {
   const showNotificationMessage = (message: string, type: 'success' | 'error' | 'warning') => {
     setNotification({ type: type === 'warning' ? 'error' : type, message });
     setTimeout(() => setNotification(null), 4000);
+  };
+
+  // --- Custom price list helpers ---
+
+  const loadUserPriceSources = async () => {
+    const { data, error } = await supabase
+      .from('price_sources')
+      .select('id, name')
+      .eq('is_system', false)
+      .eq('is_active', true);
+    if (!error && data) {
+      setUserPriceSources(data);
+    }
+  };
+
+  const handleCustomPriceListItemUpdate = (
+    tab: CustomPriceListTab,
+    itemId: string,
+    field: keyof CustomPriceListItem,
+    value: string | number | boolean
+  ) => {
+    setCustomPriceList(prev => {
+      const tabItems = [...prev.items[tab]];
+      const itemIndex = tabItems.findIndex(item => item.id === itemId);
+      if (itemIndex === -1) return prev;
+
+      const updatedItem = { ...tabItems[itemIndex], [field]: value };
+
+      const hasRequiredFields =
+        updatedItem.name.trim() !== '' &&
+        updatedItem.unit.trim() !== '' &&
+        updatedItem.price > 0 &&
+        (updatedItem.autoIndex || updatedItem.rms_index.trim() !== '');
+
+      if (!updatedItem.isActive && hasRequiredFields) {
+        updatedItem.isActive = true;
+        if (updatedItem.autoIndex) {
+          const activeCount = tabItems.filter(i => i.isActive).length + 1;
+          updatedItem.rms_index = generateAutoIndex(tab, activeCount);
+        }
+        tabItems[itemIndex] = updatedItem;
+        tabItems.push(createEmptyPriceListItem());
+      } else {
+        tabItems[itemIndex] = updatedItem;
+      }
+
+      return { ...prev, items: { ...prev.items, [tab]: tabItems } };
+    });
+  };
+
+  const handleDeletePriceListItem = (tab: CustomPriceListTab, itemId: string) => {
+    setCustomPriceList(prev => {
+      const tabItems = prev.items[tab].filter(item => item.id !== itemId);
+      if (tabItems.length === 0 || tabItems[tabItems.length - 1].isActive) {
+        tabItems.push(createEmptyPriceListItem());
+      }
+      return { ...prev, items: { ...prev.items, [tab]: tabItems } };
+    });
+  };
+
+  const handleSaveCustomPriceList = async () => {
+    if (!customPriceList.name.trim()) {
+      showNotificationMessage('Wprowadź nazwę cennika', 'warning');
+      return;
+    }
+
+    const allActiveItems = [
+      ...customPriceList.items.robocizna.filter(i => i.isActive).map(i => ({ ...i, rms_type: 'R' })),
+      ...customPriceList.items.materialy.filter(i => i.isActive).map(i => ({ ...i, rms_type: 'M' })),
+      ...customPriceList.items.sprzet.filter(i => i.isActive).map(i => ({ ...i, rms_type: 'S' })),
+    ];
+
+    if (allActiveItems.length === 0) {
+      showNotificationMessage('Dodaj co najmniej jedną pozycję do cennika', 'warning');
+      return;
+    }
+
+    setCustomPriceListSaving(true);
+
+    try {
+      const { data: priceSource, error: sourceError } = await supabase
+        .from('price_sources')
+        .insert({
+          name: customPriceList.name,
+          source_type: 'custom',
+          is_system: false,
+          company_id: currentUser?.company_id || null,
+          is_active: true,
+          description: `Cennik własny: ${customPriceList.name}`,
+        })
+        .select('id')
+        .single();
+
+      if (sourceError) throw sourceError;
+
+      const priceRows = allActiveItems.map(item => ({
+        price_source_id: priceSource.id,
+        rms_index: item.rms_index,
+        rms_type: item.rms_type,
+        name: item.name,
+        unit: item.unit,
+        min_price: item.price,
+        avg_price: item.price,
+        max_price: item.price,
+      }));
+
+      const { error: pricesError } = await supabase
+        .from('resource_prices')
+        .insert(priceRows);
+
+      if (pricesError) throw pricesError;
+
+      setUserPriceSources(prev => [...prev, { id: priceSource.id, name: customPriceList.name }]);
+      setSelectedPriceSources(prev => [...prev, priceSource.id]);
+
+      showNotificationMessage('Cennik został utworzony pomyślnie', 'success');
+      setShowCustomPriceListModal(false);
+      setCustomPriceList(initialCustomPriceList);
+    } catch (error) {
+      console.error('Error saving custom price list:', error);
+      showNotificationMessage('Błąd podczas zapisywania cennika', 'error');
+    } finally {
+      setCustomPriceListSaving(false);
+    }
   };
 
   // Apply prices to resources based on settings
@@ -8625,26 +8813,80 @@ export const KosztorysEditorPage: React.FC = () => {
                 <label className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={selectedPriceSources.includes('ekosztorysowanie')}
+                    checked={selectedPriceSources.includes('system')}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedPriceSources([...selectedPriceSources, 'ekosztorysowanie']);
+                        setSelectedPriceSources([...selectedPriceSources, 'system']);
                       } else {
-                        setSelectedPriceSources(selectedPriceSources.filter(s => s !== 'ekosztorysowanie'));
+                        setSelectedPriceSources(selectedPriceSources.filter(s => s !== 'system'));
                       }
                     }}
                     className="w-4 h-4 rounded border-gray-300 text-blue-600"
                   />
-                  <span className="text-sm text-gray-800">Cennik eKosztorysowanie</span>
+                  <span className="text-sm text-gray-800">Cennik Systemowy</span>
                 </label>
+                {userPriceSources
+                  .filter(ps => !priceSourceSearch || ps.name.toLowerCase().includes(priceSourceSearch.toLowerCase()))
+                  .map(ps => (
+                  <label key={ps.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedPriceSources.includes(ps.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPriceSources([...selectedPriceSources, ps.id]);
+                        } else {
+                          setSelectedPriceSources(selectedPriceSources.filter(s => s !== ps.id));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-800">{ps.name}</span>
+                  </label>
+                ))}
               </div>
-              <button
-                onClick={() => setShowPriceImportModal(true)}
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Dodaj cennik</span>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowPriceAddChoice(!showPriceAddChoice)}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Dodaj cennik</span>
+                </button>
+                {showPriceAddChoice && (
+                  <>
+                    <div className="fixed inset-0 z-[65]" onClick={() => setShowPriceAddChoice(false)} />
+                    <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[70] w-56">
+                      <button
+                        onClick={() => {
+                          setShowPriceAddChoice(false);
+                          setShowPriceImportModal(true);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-t-lg"
+                      >
+                        <Upload className="w-4 h-4 text-gray-400" />
+                        <div className="text-left">
+                          <div className="font-medium">Importuj cennik</div>
+                          <div className="text-xs text-gray-400">Z pliku dbf, csv lub xlsx</div>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowPriceAddChoice(false);
+                          setShowCustomPriceListModal(true);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 rounded-b-lg border-t border-gray-100"
+                      >
+                        <SquarePen className="w-4 h-4 text-gray-400" />
+                        <div className="text-left">
+                          <div className="font-medium">Utwórz własny cennik</div>
+                          <div className="text-xs text-gray-400">Wprowadź pozycje ręcznie</div>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
             <div className="p-4 border-t border-gray-200 flex justify-end">
               <button
@@ -8756,6 +8998,222 @@ export const KosztorysEditorPage: React.FC = () => {
               >
                 Import
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Price List Creation Modal */}
+      {showCustomPriceListModal && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-5xl w-full shadow-xl max-h-[90vh] flex flex-col">
+            {/* Header with editable name */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                {customPriceListEditingName ? (
+                  <input
+                    type="text"
+                    value={customPriceList.name}
+                    onChange={(e) => setCustomPriceList(prev => ({ ...prev, name: e.target.value }))}
+                    onBlur={() => setCustomPriceListEditingName(false)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setCustomPriceListEditingName(false); }}
+                    autoFocus
+                    className="text-lg font-bold text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                ) : (
+                  <h2
+                    onClick={() => setCustomPriceListEditingName(true)}
+                    className="text-lg font-bold text-gray-900 cursor-pointer hover:bg-blue-50 px-2 py-1 rounded"
+                  >
+                    {customPriceList.name}
+                    <SquarePen className="w-3.5 h-3.5 inline ml-2 text-gray-400" />
+                  </h2>
+                )}
+              </div>
+              <button onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200">
+              {([
+                { key: 'robocizna' as CustomPriceListTab, label: 'Robocizna' },
+                { key: 'materialy' as CustomPriceListTab, label: 'Materiał' },
+                { key: 'sprzet' as CustomPriceListTab, label: 'Sprzęt' },
+              ]).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setCustomPriceListTab(tab.key)}
+                  className={`px-4 py-2 text-sm font-medium ${
+                    customPriceListTab === tab.key
+                      ? 'text-blue-600 border-b-2 border-blue-600'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {tab.label}
+                  {customPriceList.items[tab.key].filter(i => i.isActive).length > 0 && (
+                    <span className="ml-1.5 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                      {customPriceList.items[tab.key].filter(i => i.isActive).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Auto-index checkbox */}
+            <div className="px-4 pt-3 pb-1 flex items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={customPriceList.items[customPriceListTab].every(i => i.autoIndex)}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setCustomPriceList(prev => ({
+                      ...prev,
+                      items: {
+                        ...prev.items,
+                        [customPriceListTab]: prev.items[customPriceListTab].map(item => ({
+                          ...item,
+                          autoIndex: checked,
+                        })),
+                      },
+                    }));
+                  }}
+                  className="w-3 h-3 rounded border-gray-300"
+                />
+                Automatycznie generuj indeks
+              </label>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto px-4 pb-2">
+              <table className="w-full text-sm border-collapse">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gray-50 text-left">
+                    <th className="px-2 py-2 border border-gray-200 w-12 text-center">Nr</th>
+                    <th className="px-2 py-2 border border-gray-200 w-32">Indeks</th>
+                    <th className="px-2 py-2 border border-gray-200 min-w-[200px]">Nazwa</th>
+                    <th className="px-2 py-2 border border-gray-200 w-32">Kategoria</th>
+                    <th className="px-2 py-2 border border-gray-200 w-24">Jedn. miary</th>
+                    <th className="px-2 py-2 border border-gray-200 w-28">Cena netto</th>
+                    <th className="px-2 py-2 border border-gray-200 w-36">Komentarz</th>
+                    <th className="px-2 py-2 border border-gray-200 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customPriceList.items[customPriceListTab].map((item, index) => (
+                    <tr
+                      key={item.id}
+                      className={`${item.isActive ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/30 transition-colors`}
+                    >
+                      <td className="px-2 py-1 border border-gray-200 text-center text-gray-400 text-xs">
+                        {item.isActive ? index + 1 : ''}
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        {item.autoIndex ? (
+                          <span className="text-xs text-gray-400 italic px-1">
+                            {item.isActive ? item.rms_index : 'auto'}
+                          </span>
+                        ) : (
+                          <EditableCell
+                            value={item.rms_index}
+                            onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'rms_index', String(v))}
+                            placeholder="Indeks..."
+                            className="text-xs"
+                          />
+                        )}
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        <EditableCell
+                          value={item.name}
+                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'name', String(v))}
+                          placeholder="Nazwa pozycji..."
+                          className="text-sm"
+                        />
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        <EditableCell
+                          value={item.category}
+                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'category', String(v))}
+                          placeholder="Kategoria..."
+                          className="text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        <EditableCell
+                          value={item.unit}
+                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'unit', String(v))}
+                          placeholder="jm"
+                          className="text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        <EditableCell
+                          value={item.price}
+                          type="number"
+                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'price', Number(v))}
+                          placeholder="0,00"
+                          suffix=" zł"
+                          className="text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200">
+                        <EditableCell
+                          value={item.comment}
+                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'comment', String(v))}
+                          placeholder=""
+                          className="text-xs"
+                        />
+                      </td>
+                      <td className="px-1 py-1 border border-gray-200 text-center">
+                        {item.isActive && (
+                          <button
+                            onClick={() => handleDeletePriceListItem(customPriceListTab, item.id)}
+                            className="text-gray-400 hover:text-red-500 transition-colors"
+                            title="Usuń"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                R: {customPriceList.items.robocizna.filter(i => i.isActive).length} | M: {customPriceList.items.materialy.filter(i => i.isActive).length} | S: {customPriceList.items.sprzet.filter(i => i.isActive).length}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }}
+                  className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={handleSaveCustomPriceList}
+                  disabled={customPriceListSaving}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                    customPriceListSaving
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {customPriceListSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Zapisz cennik
+                </button>
+              </div>
             </div>
           </div>
         </div>
