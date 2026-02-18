@@ -494,7 +494,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
       onClick={() => { setEditValue(String(value)); setIsEditing(true); }}
       className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${className}`}
     >
-      {type === 'number' ? formatNumber(Number(value)) : (value || placeholder)}
+      {type === 'number' ? formatNumber(Number(value)) : (value || placeholder || '\u00A0')}
       {suffix}
     </span>
   );
@@ -9345,12 +9345,29 @@ export const KosztorysEditorPage: React.FC = () => {
                         />
                       </td>
                       <td className="px-1 py-1 border border-gray-200">
-                        <EditableCell
-                          value={item.unit}
-                          onSave={(v) => handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'unit', String(v))}
-                          placeholder="jm"
-                          className="text-xs"
-                        />
+                        <select
+                          value={UNITS_REFERENCE.some(u => u.unit === item.unit) ? item.unit : (item.unit ? '__custom__' : '')}
+                          onChange={(e) => {
+                            if (e.target.value === '__add_new__') {
+                              const newUnit = prompt('Podaj nową jednostkę miary:');
+                              if (newUnit && newUnit.trim()) {
+                                handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'unit', newUnit.trim());
+                              }
+                            } else {
+                              handleCustomPriceListItemUpdate(customPriceListTab, item.id, 'unit', e.target.value);
+                            }
+                          }}
+                          className="w-full px-1 py-0.5 text-xs border-0 bg-transparent cursor-pointer focus:ring-1 focus:ring-blue-500 rounded"
+                        >
+                          <option value="">jm</option>
+                          {UNITS_REFERENCE.map(u => (
+                            <option key={u.index} value={u.unit}>{u.unit}</option>
+                          ))}
+                          {item.unit && !UNITS_REFERENCE.some(u => u.unit === item.unit) && (
+                            <option value="__custom__">{item.unit}</option>
+                          )}
+                          <option value="__add_new__">+ Dodaj...</option>
+                        </select>
                       </td>
                       <td className="px-1 py-1 border border-gray-200">
                         <EditableCell
