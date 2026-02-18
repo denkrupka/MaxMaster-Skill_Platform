@@ -92,9 +92,8 @@ const createEmptyPriceListItem = (): CustomPriceListItem => ({
   isActive: false,
 });
 
-const generateAutoIndex = (tab: CustomPriceListTab, sequenceNumber: number): string => {
-  const prefix = tab === 'robocizna' ? 'R' : tab === 'materialy' ? 'M' : 'S';
-  return `${prefix}-${String(sequenceNumber).padStart(4, '0')}`;
+const generateAutoIndex = (_tab: CustomPriceListTab, sequenceNumber: number): string => {
+  return String(sequenceNumber).padStart(5, '0');
 };
 
 const initialCustomPriceList: CustomPriceListState = {
@@ -1960,11 +1959,12 @@ export const KosztorysEditorPage: React.FC = () => {
           return;
         }
 
-        // Try to find price by index
+        // Try to find price by index (check both resource.index and originIndex.index)
         let foundPrice: { min: number; avg: number; max: number } | undefined;
+        const resourceIndex = resource.index || resource.originIndex?.index || '';
 
-        if (resource.index) {
-          foundPrice = priceByIndex.get(resource.index);
+        if (resourceIndex) {
+          foundPrice = priceByIndex.get(resourceIndex);
         }
 
         // If not found by index and option enabled, try by name
@@ -1973,8 +1973,8 @@ export const KosztorysEditorPage: React.FC = () => {
         }
 
         // If searching all index types is enabled, try without prefix
-        if (!foundPrice && searchAllIndexTypes && resource.index) {
-          const indexParts = resource.index.split('-');
+        if (!foundPrice && searchAllIndexTypes && resourceIndex) {
+          const indexParts = resourceIndex.split('-');
           if (indexParts.length > 1) {
             foundPrice = priceByIndex.get(indexParts[indexParts.length - 1]);
           }
