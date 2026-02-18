@@ -2245,7 +2245,7 @@ export const KosztorysEditorPage: React.FC = () => {
         // Calculate VAT
         const subtotalNet = totals.totalLabor + totals.totalMaterial + totals.totalEquipment;
         const vatRate = estimate.settings?.vatRate ?? 23;
-        const vatAmount = subtotalNet * (vatRate / 100);
+        const vatAmount = vatRate < 0 ? 0 : subtotalNet * (vatRate / 100);
         const totalGross = subtotalNet + vatAmount;
 
         const { error } = await supabase
@@ -6843,19 +6843,21 @@ export const KosztorysEditorPage: React.FC = () => {
 
                   {/* Stawka VAT */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-800 mb-1">Stawka VAT (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Stawka VAT</label>
+                    <select
                       value={estimate.settings.vatRate ?? 23}
                       onChange={(e) => setEstimate(prev => prev ? {
                         ...prev,
-                        settings: { ...prev.settings, vatRate: parseFloat(e.target.value) || 0 }
+                        settings: { ...prev.settings, vatRate: parseFloat(e.target.value) }
                       } : null)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
+                    >
+                      <option value={23}>23% — stawka podstawowa</option>
+                      <option value={8}>8% — budownictwo mieszkaniowe, usługi</option>
+                      <option value={5}>5% — żywność, książki</option>
+                      <option value={0}>0% — eksport, WDT</option>
+                      <option value={-1}>zw. — zwolniony z VAT</option>
+                    </select>
                   </div>
 
                   {/* Opis */}
@@ -7145,7 +7147,8 @@ export const KosztorysEditorPage: React.FC = () => {
                 {(() => {
                   const totalNet = calculationResult?.totalValue || 0;
                   const currentVatRate = estimate?.settings?.vatRate ?? 23;
-                  const vatAmount = totalNet * (currentVatRate / 100);
+                  const isVatExempt = currentVatRate < 0;
+                  const vatAmount = isVatExempt ? 0 : totalNet * (currentVatRate / 100);
                   const totalGross = totalNet + vatAmount;
                   return (
                     <table className="w-full border-collapse">
@@ -7161,7 +7164,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(totalNet, 2)}</td>
                         </tr>
                         <tr className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-2 text-sm text-gray-800">VAT ({currentVatRate}%)</td>
+                          <td className="px-3 py-2 text-sm text-gray-800">{isVatExempt ? 'VAT (zw.)' : `VAT (${currentVatRate}%)`}</td>
                           <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(vatAmount, 2)}</td>
                         </tr>
                         <tr className="border-b border-gray-200 bg-green-50">
@@ -7195,7 +7198,8 @@ export const KosztorysEditorPage: React.FC = () => {
 
             const zTotalNet = calculationResult?.totalValue || 0;
             const zVatRate = estimate?.settings?.vatRate ?? 23;
-            const zVatAmount = zTotalNet * (zVatRate / 100);
+            const zIsVatExempt = zVatRate < 0;
+            const zVatAmount = zIsVatExempt ? 0 : zTotalNet * (zVatRate / 100);
             const zTotalGross = zTotalNet + zVatAmount;
 
             return (
@@ -7274,7 +7278,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     <td className="px-3 py-2 text-sm text-right text-blue-600"></td>
                   </tr>
                   <tr className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm text-gray-800">VAT ({zVatRate}%)</td>
+                    <td className="px-3 py-2 text-sm text-gray-800">{zIsVatExempt ? 'VAT (zw.)' : `VAT (${zVatRate}%)`}</td>
                     <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zVatAmount, 2)}</td>
                     <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
                     <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
@@ -8187,23 +8191,22 @@ export const KosztorysEditorPage: React.FC = () => {
                     </div>
 
                     {/* Stawka VAT */}
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                      <span className="text-xs text-gray-600">Stawka VAT</span>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={estimate.settings.vatRate ?? 23}
-                          onChange={(e) => setEstimate(prev => prev ? {
-                            ...prev,
-                            settings: { ...prev.settings, vatRate: parseFloat(e.target.value) || 0 }
-                          } : null)}
-                          className="w-14 px-2 py-1 text-sm text-right border border-gray-300 rounded"
-                        />
-                        <span className="text-xs text-gray-500">%</span>
-                      </div>
+                    <div className="mt-2 pt-2 border-t border-gray-100">
+                      <label className="block text-xs text-gray-600 mb-1">Stawka VAT</label>
+                      <select
+                        value={estimate.settings.vatRate ?? 23}
+                        onChange={(e) => setEstimate(prev => prev ? {
+                          ...prev,
+                          settings: { ...prev.settings, vatRate: parseFloat(e.target.value) }
+                        } : null)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                      >
+                        <option value={23}>23% — podstawowa</option>
+                        <option value={8}>8% — budownictwo</option>
+                        <option value={5}>5% — żywność, książki</option>
+                        <option value={0}>0% — eksport, WDT</option>
+                        <option value={-1}>zw. — zwolniony</option>
+                      </select>
                     </div>
                   </div>
                 </div>
