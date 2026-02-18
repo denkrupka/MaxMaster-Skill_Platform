@@ -2639,6 +2639,7 @@ export const KosztorysEditorPage: React.FC = () => {
       labor: 'Robocizna',
       material: 'Materiał',
       equipment: 'Sprzęt',
+      waste: 'Odpady',
     };
 
     const newResource = createNewResource(
@@ -4912,6 +4913,9 @@ export const KosztorysEditorPage: React.FC = () => {
                 </button>
                 <button
                   onClick={() => {
+                    if (editorState.selectedItemId && editorState.selectedItemType === 'position') {
+                      handleAddResource(editorState.selectedItemId, 'waste');
+                    }
                     setShowNakladDropdown(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
