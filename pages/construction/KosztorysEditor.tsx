@@ -929,7 +929,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showPriceImportModal, setShowPriceImportModal] = useState(false);
   const [priceImportFile, setPriceImportFile] = useState<File | null>(null);
   const [priceImportName, setPriceImportName] = useState('');
-  const [priceImportSource, setPriceImportSource] = useState<'sekocenbud' | 'orgbud'>('sekocenbud');
+  const [priceImportSource, setPriceImportSource] = useState('');
   const [priceImportDragging, setPriceImportDragging] = useState(false);
 
   // Custom price list creation state
@@ -943,6 +943,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [deletingPriceSourceId, setDeletingPriceSourceId] = useState<string | null>(null);
   const [deletingPriceSourceName, setDeletingPriceSourceName] = useState('');
   const [userPriceSources, setUserPriceSources] = useState<Array<{ id: string; name: string }>>([]);
+  const [allPriceSources, setAllPriceSources] = useState<Array<{ id: string; name: string }>>([]);
 
   // Replace resources confirmation modal
   const [showReplaceResourcesConfirm, setShowReplaceResourcesConfirm] = useState(false);
@@ -1640,6 +1641,21 @@ export const KosztorysEditorPage: React.FC = () => {
 
   const loadUserPriceSources = async () => {
     const companyId = currentUser?.company_id;
+
+    // Load all price sources (for import dropdown)
+    const { data: allData } = await supabase
+      .from('price_sources')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name');
+    if (allData) {
+      setAllPriceSources(allData);
+      if (!priceImportSource && allData.length > 0) {
+        setPriceImportSource(allData[0].id);
+      }
+    }
+
+    // Load only user's custom price sources
     let query = supabase
       .from('price_sources')
       .select('id, name')
@@ -9140,11 +9156,12 @@ export const KosztorysEditorPage: React.FC = () => {
                 <label className="block text-sm text-gray-600 mb-1">Źródło cennika</label>
                 <select
                   value={priceImportSource}
-                  onChange={(e) => setPriceImportSource(e.target.value as 'sekocenbud' | 'orgbud')}
+                  onChange={(e) => setPriceImportSource(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
-                  <option value="sekocenbud">Sekocenbud</option>
-                  <option value="orgbud">Orgbud</option>
+                  {allPriceSources.map(ps => (
+                    <option key={ps.id} value={ps.id}>{ps.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
