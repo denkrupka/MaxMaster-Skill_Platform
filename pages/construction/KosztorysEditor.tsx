@@ -1736,6 +1736,137 @@ export const KosztorysEditorPage: React.FC = () => {
     setShowCenyDialog(false);
   };
 
+  // Populate resources from KNR catalog based on position base codes
+  const handleUzupelnijNaklady = async (mode: 'missing' | 'replace') => {
+    const newData = { ...estimateData };
+    let updatedPositions = 0;
+    let addedResources = 0;
+
+    // Get all positions with KNR base codes
+    const positionsWithBase = Object.values(newData.positions).filter(pos => pos.base && pos.base.trim());
+
+    if (positionsWithBase.length === 0) {
+      showNotificationMessage('Brak pozycji z powiązaniem KNR do uzupełnienia', 'warning');
+      return;
+    }
+
+    // Get unique base codes
+    const baseCodes = [...new Set(positionsWithBase.map(p => p.base?.trim()))].filter(Boolean);
+
+    // Fetch KNR positions from database by basis (code)
+    const { data: knrPositions, error: knrError } = await supabase
+      .from('knr_positions')
+      .select('xid, basis, name, unit')
+      .in('basis', baseCodes);
+
+    if (knrError) {
+      console.error('Error fetching KNR positions:', knrError);
+      showNotificationMessage('Błąd podczas pobierania danych z katalogu KNR', 'error');
+      return;
+    }
+
+    if (!knrPositions || knrPositions.length === 0) {
+      showNotificationMessage('Nie znaleziono pozycji KNR dla podanych kodów', 'warning');
+      return;
+    }
+
+    // Create map of KNR positions by basis code
+    const knrByBasis = new Map<string, any>();
+    knrPositions.forEach(kp => knrByBasis.set(kp.basis, kp));
+
+    // Get all KNR position xids
+    const knrXids = knrPositions.map(kp => kp.xid);
+
+    // Fetch resources for these KNR positions
+    const { data: knrResources, error: resError } = await supabase
+      .from('knr_position_resources')
+      .select('*')
+      .in('position_xid', knrXids)
+      .order('ordinal_number', { ascending: true });
+
+    if (resError) {
+      console.error('Error fetching KNR resources:', resError);
+      showNotificationMessage('Błąd podczas pobierania nakładów z katalogu KNR', 'error');
+      return;
+    }
+
+    // Group resources by position_xid
+    const resourcesByXid = new Map<string, any[]>();
+    (knrResources || []).forEach(res => {
+      const existing = resourcesByXid.get(res.position_xid) || [];
+      existing.push(res);
+      resourcesByXid.set(res.position_xid, existing);
+    });
+
+    // Update each position with matching KNR code
+    Object.values(newData.positions).forEach(position => {
+      if (!position.base || !position.base.trim()) return;
+
+      const knrPosition = knrByBasis.get(position.base.trim());
+      if (!knrPosition) return;
+
+      const knrRes = resourcesByXid.get(knrPosition.xid) || [];
+      if (knrRes.length === 0) return;
+
+      // Check mode
+      if (mode === 'missing' && position.resources.length > 0) {
+        // Skip positions that already have resources
+        return;
+      }
+
+      if (mode === 'replace') {
+        // Clear existing resources
+        position.resources = [];
+      }
+
+      // Add resources from KNR
+      knrRes.forEach(res => {
+        const resourceType: KosztorysResourceType =
+          res.type === 'R' ? 'labor' :
+          res.type === 'M' ? 'material' : 'equipment';
+
+        // Find unit
+        const unitMatch = UNITS_REFERENCE.find(u => u.unit === res.rms_unit);
+
+        const newResource = createNewResource(
+          resourceType,
+          res.rms_name || '',
+          parseFloat(res.norm) || 0,
+          0, // Price - will be set separately
+          res.rms_unit || 'szt.',
+          unitMatch?.index || '020'
+        );
+
+        // Set index for price lookup
+        if (res.rms_index) {
+          newResource.index = res.rms_index;
+          newResource.originIndex = { type: 'knr', index: res.rms_index };
+        }
+
+        position.resources.push(newResource);
+        addedResources++;
+      });
+
+      updatedPositions++;
+    });
+
+    if (updatedPositions === 0) {
+      showNotificationMessage(
+        mode === 'missing'
+          ? 'Wszystkie pozycje z kodem KNR już mają nakłady'
+          : 'Nie znaleziono nakładów do dodania',
+        'warning'
+      );
+      return;
+    }
+
+    setEstimateData(newData);
+    showNotificationMessage(
+      `Uzupełniono ${updatedPositions} pozycji, dodano ${addedResources} nakładów`,
+      'success'
+    );
+  };
+
   // Save estimate
   const handleSave = async () => {
     if (!estimate || !currentUser) return;
@@ -4455,31 +4586,17 @@ export const KosztorysEditorPage: React.FC = () => {
             {showUzupelnijDropdown && (
               <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <button
-                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z bazy', 'success'); }}
+                  onClick={() => { setShowUzupelnijDropdown(false); handleUzupelnijNaklady('missing'); }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  Uzupełnij z bazy normatywnej
+                  Uzupełnij tylko brakujące
                 </button>
                 <button
-                  onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono nakłady z KNR', 'success'); }}
+                  onClick={() => { setShowUzupelnijDropdown(false); handleUzupelnijNaklady('replace'); }}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  Uzupełnij z katalogów KNR
+                  Zastąp wszystkie nakłady
                 </button>
-                <div className="border-t border-gray-200">
-                  <button
-                    onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Uzupełniono brakujące nakłady', 'success'); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Uzupełnij tylko brakujące
-                  </button>
-                  <button
-                    onClick={() => { setShowUzupelnijDropdown(false); showNotificationMessage('Zastąpiono wszystkie nakłady', 'success'); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Zastąp wszystkie nakłady
-                  </button>
-                </div>
               </div>
             )}
           </div>
