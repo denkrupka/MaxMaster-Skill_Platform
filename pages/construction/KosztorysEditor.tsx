@@ -7491,9 +7491,9 @@ export const KosztorysEditorPage: React.FC = () => {
                                         <td className="border border-gray-400 px-2 py-1 text-center align-top">{position.unit.label}</td>
                                         <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(quantity, 2)}</td>
                                         <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(result?.unitCost || 0, 3)}</td>
-                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
-                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
-                                        <td className="border border-gray-400 px-2 py-1 text-right align-top"></td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(result?.laborTotal || 0, 2)}</td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(result?.materialTotal || 0, 2)}</td>
+                                        <td className="border border-gray-400 px-2 py-1 text-right align-top">{formatNumber(result?.equipmentTotal || 0, 2)}</td>
                                       </tr>
                                     );
                                   })}
@@ -7611,16 +7611,21 @@ export const KosztorysEditorPage: React.FC = () => {
                         <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
                         <h2 className="text-lg font-bold mb-6">Tabela elementów scalonych</h2>
 
+                        {(() => {
+                          const teVatRate = estimate?.settings?.vatRate ?? 23;
+                          const teIsExempt = teVatRate < 0;
+                          const teNetTotal = calculationResult?.totalValue || 0;
+                          const teVatAmount = teIsExempt ? 0 : teNetTotal * (teVatRate / 100);
+                          const teBrutto = teNetTotal + teVatAmount;
+                          return (
                         <table className="w-full border-collapse text-sm">
                           <thead>
                             <tr className="border border-gray-400">
                               <th className="border border-gray-400 px-2 py-1 text-left w-10">Lp.</th>
                               <th className="border border-gray-400 px-2 py-1 text-left">Nazwa</th>
-                              <th className="border border-gray-400 px-2 py-1 text-right w-20">Uproszczone</th>
                               <th className="border border-gray-400 px-2 py-1 text-right w-24">Robocizna</th>
                               <th className="border border-gray-400 px-2 py-1 text-right w-24">Materiały</th>
                               <th className="border border-gray-400 px-2 py-1 text-right w-24">Sprzęt</th>
-                              <th className="border border-gray-400 px-2 py-1 text-right w-16">Odpady</th>
                               <th className="border border-gray-400 px-2 py-1 text-right w-24">Razem</th>
                             </tr>
                           </thead>
@@ -7633,11 +7638,9 @@ export const KosztorysEditorPage: React.FC = () => {
                                 <tr key={sectionId} className="border border-gray-400">
                                   <td className="border border-gray-400 px-2 py-1">{sIdx + 1}</td>
                                   <td className="border border-gray-400 px-2 py-1">{section.name}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.laborTotal || 0, 2)}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.materialTotal || 0, 2)}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.equipmentTotal || 0, 2)}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.totalLabor || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.totalMaterial || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.totalEquipment || 0, 2)}</td>
                                   <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(sectionResult?.totalValue || 0, 2)}</td>
                                 </tr>
                               );
@@ -7645,21 +7648,27 @@ export const KosztorysEditorPage: React.FC = () => {
                             <tr className="border border-gray-400 font-medium">
                               <td className="border border-gray-400 px-2 py-1"></td>
                               <td className="border border-gray-400 px-2 py-1">Kosztorys netto</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.laborTotal || 0, 2)}</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.materialTotal || 0, 2)}</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.equipmentTotal || 0, 2)}</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalValue || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalLabor || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalMaterial || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalEquipment || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(teNetTotal, 2)}</td>
                             </tr>
                             <tr className="border border-gray-400 font-medium">
                               <td className="border border-gray-400 px-2 py-1"></td>
+                              <td className="border border-gray-400 px-2 py-1">{teIsExempt ? 'VAT (zw.)' : `VAT (${teVatRate}%)`}</td>
+                              <td className="border border-gray-400 px-2 py-1" colSpan={3}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(teVatAmount, 2)}</td>
+                            </tr>
+                            <tr className="border border-gray-400 font-bold">
+                              <td className="border border-gray-400 px-2 py-1"></td>
                               <td className="border border-gray-400 px-2 py-1">Kosztorys brutto</td>
-                              <td className="border border-gray-400 px-2 py-1" colSpan={5}></td>
-                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(calculationResult?.totalValue || 0, 2)}</td>
+                              <td className="border border-gray-400 px-2 py-1" colSpan={3}></td>
+                              <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(teBrutto, 2)}</td>
                             </tr>
                           </tbody>
                         </table>
+                          );
+                        })()}
 
                         <div className="mt-4 text-sm text-center">
                           Słownie: {formatCurrency(calculationResult?.totalValue || 0)}
@@ -7888,8 +7897,10 @@ export const KosztorysEditorPage: React.FC = () => {
                     );
                   }
 
-                  // Kalkulacja szczegółowa and Kosztorys szczegółowy - placeholder
-                  if (page.type === 'kalkulacja_szczegolowa' || page.type === 'kosztorys_szczegolowy') {
+                  // Szczegółowa kalkulacja cen jednostkowych
+                  if (page.type === 'kalkulacja_szczegolowa') {
+                    const skKpOverhead = estimateData.root.overheads.find(o => o.name.includes('Kp'));
+                    const skZOverhead = estimateData.root.overheads.find(o => o.name.includes('Zysk'));
                     return (
                       <div
                         key={page.id}
@@ -7898,9 +7909,328 @@ export const KosztorysEditorPage: React.FC = () => {
                         onClick={() => setActiveExportSection(page.id)}
                       >
                         <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
-                        <h2 className="text-lg font-bold mb-6">{page.label}</h2>
+                        <h2 className="text-lg font-bold mb-6">Szczegółowa kalkulacja cen jednostkowych</h2>
 
-                        <p className="text-gray-500 text-center py-12">Sekcja w przygotowaniu...</p>
+                        {estimateData.root.sectionIds.map((sectionId, sIdx) => {
+                          const section = estimateData.sections[sectionId];
+                          if (!section) return null;
+                          return (
+                            <React.Fragment key={sectionId}>
+                              <h3 className="text-sm font-bold mt-6 mb-2">{sIdx + 1}. {section.name}</h3>
+                              {section.positionIds.map((posId, pIdx) => {
+                                const position = estimateData.positions[posId];
+                                if (!position) return null;
+                                const result = calculationResult?.positions[posId];
+                                const quantity = result?.quantity || 0;
+
+                                // Calculate per-unit values
+                                const laborResources = position.resources.filter(r => r.type === 'labor');
+                                const materialResources = position.resources.filter(r => r.type === 'material');
+                                const equipmentResources = position.resources.filter(r => r.type === 'equipment');
+
+                                const unitLabor = quantity > 0 ? (result?.laborTotal || 0) / quantity : 0;
+                                const unitMaterial = quantity > 0 ? (result?.materialTotal || 0) / quantity : 0;
+                                const unitEquipment = quantity > 0 ? (result?.equipmentTotal || 0) / quantity : 0;
+                                const unitDirect = unitLabor + unitMaterial + unitEquipment;
+
+                                const kpUnit = skKpOverhead ? (unitLabor + unitEquipment) * (skKpOverhead.value / 100) : 0;
+                                const zUnit = skZOverhead ? (unitLabor + unitEquipment + kpUnit) * (skZOverhead.value / 100) : 0;
+                                const unitTotal = unitDirect + kpUnit + zUnit;
+
+                                return (
+                                  <div key={posId} className="mb-6">
+                                    <div className="text-xs text-gray-500 mb-1">d.{sIdx + 1}.{pIdx + 1} &middot; {position.base}</div>
+                                    <div className="text-sm font-medium mb-2">{position.name} [{position.unit.label}]</div>
+                                    <table className="w-full border-collapse text-xs">
+                                      <thead>
+                                        <tr className="border border-gray-400">
+                                          <th className="border border-gray-400 px-2 py-1 text-left w-8">Lp.</th>
+                                          <th className="border border-gray-400 px-2 py-1 text-left">Opis nakładu</th>
+                                          <th className="border border-gray-400 px-2 py-1 text-center w-12">j.m.</th>
+                                          <th className="border border-gray-400 px-2 py-1 text-right w-20">Nakład jedn.</th>
+                                          <th className="border border-gray-400 px-2 py-1 text-right w-20">Cena jedn.</th>
+                                          <th className="border border-gray-400 px-2 py-1 text-right w-24">Koszt jedn.</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {laborResources.length > 0 && (
+                                          <>
+                                            <tr className="border border-gray-300 bg-gray-50">
+                                              <td colSpan={6} className="border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-500">Robocizna (R)</td>
+                                            </tr>
+                                            {laborResources.map((res, rIdx) => (
+                                              <tr key={res.id} className="border border-gray-400">
+                                                <td className="border border-gray-400 px-2 py-1">{rIdx + 1}</td>
+                                                <td className="border border-gray-400 px-2 py-1">{res.name}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-center">{res.unit.label}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value, 4)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.unitPrice.value, 2)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value * res.unitPrice.value, 2)}</td>
+                                              </tr>
+                                            ))}
+                                          </>
+                                        )}
+                                        {materialResources.length > 0 && (
+                                          <>
+                                            <tr className="border border-gray-300 bg-gray-50">
+                                              <td colSpan={6} className="border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-500">Materiały (M)</td>
+                                            </tr>
+                                            {materialResources.map((res, rIdx) => (
+                                              <tr key={res.id} className="border border-gray-400">
+                                                <td className="border border-gray-400 px-2 py-1">{rIdx + 1}</td>
+                                                <td className="border border-gray-400 px-2 py-1">{res.name}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-center">{res.unit.label}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value, 4)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.unitPrice.value, 2)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value * res.unitPrice.value, 2)}</td>
+                                              </tr>
+                                            ))}
+                                          </>
+                                        )}
+                                        {equipmentResources.length > 0 && (
+                                          <>
+                                            <tr className="border border-gray-300 bg-gray-50">
+                                              <td colSpan={6} className="border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-500">Sprzęt (S)</td>
+                                            </tr>
+                                            {equipmentResources.map((res, rIdx) => (
+                                              <tr key={res.id} className="border border-gray-400">
+                                                <td className="border border-gray-400 px-2 py-1">{rIdx + 1}</td>
+                                                <td className="border border-gray-400 px-2 py-1">{res.name}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-center">{res.unit.label}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value, 4)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.unitPrice.value, 2)}</td>
+                                                <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(res.norm.value * res.unitPrice.value, 2)}</td>
+                                              </tr>
+                                            ))}
+                                          </>
+                                        )}
+                                        {/* Subtotals */}
+                                        <tr className="border border-gray-400 bg-gray-50">
+                                          <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs font-medium">Rj (robocizna na jedn.)</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(unitLabor, 2)}</td>
+                                        </tr>
+                                        <tr className="border border-gray-400 bg-gray-50">
+                                          <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs font-medium">Mj (materiały na jedn.)</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(unitMaterial, 2)}</td>
+                                        </tr>
+                                        <tr className="border border-gray-400 bg-gray-50">
+                                          <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs font-medium">Sj (sprzęt na jedn.)</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(unitEquipment, 2)}</td>
+                                        </tr>
+                                        <tr className="border border-gray-400 font-medium">
+                                          <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs">Koszty bezpośrednie (Rj+Mj+Sj)</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(unitDirect, 2)}</td>
+                                        </tr>
+                                        {skKpOverhead && skKpOverhead.value > 0 && (
+                                          <tr className="border border-gray-400">
+                                            <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs">Koszty pośrednie Kpj ({skKpOverhead.value}% od Rj+Sj)</td>
+                                            <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(kpUnit, 2)}</td>
+                                          </tr>
+                                        )}
+                                        {skZOverhead && skZOverhead.value > 0 && (
+                                          <tr className="border border-gray-400">
+                                            <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs">Zysk Zj ({skZOverhead.value}% od Rj+Sj+Kpj)</td>
+                                            <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(zUnit, 2)}</td>
+                                          </tr>
+                                        )}
+                                        <tr className="border border-gray-400 font-bold bg-blue-50">
+                                          <td colSpan={5} className="border border-gray-400 px-2 py-1 text-right text-xs">Cena jednostkowa Cj [zł/{position.unit.label}]</td>
+                                          <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(unitTotal, 2)}</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+
+                        <div className="text-right text-xs text-gray-400 mt-8">
+                          {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Szczegółowy kosztorys inwestorski
+                  if (page.type === 'kosztorys_szczegolowy') {
+                    return (
+                      <div
+                        key={page.id}
+                        ref={el => sectionRefs.current[page.id] = el}
+                        className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
+                        onClick={() => setActiveExportSection(page.id)}
+                      >
+                        <div className="text-sm text-gray-600 mb-2">{titlePageData.title || estimate?.settings.name || ''}</div>
+                        <h2 className="text-lg font-bold mb-6">Szczegółowy kosztorys inwestorski</h2>
+
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="border border-gray-400">
+                              <th className="border border-gray-400 px-1 py-1 text-left w-12">Lp.</th>
+                              <th className="border border-gray-400 px-1 py-1 text-left w-20">Podstawa</th>
+                              <th className="border border-gray-400 px-1 py-1 text-left">Opis</th>
+                              <th className="border border-gray-400 px-1 py-1 text-center w-10">j.m.</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-16">Nakład jdn.</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-14">Ilość</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-16">Cena jdn.</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-20">R</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-20">M</th>
+                              <th className="border border-gray-400 px-1 py-1 text-right w-20">S</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(() => {
+                              let globalLabor = 0, globalMaterial = 0, globalEquipment = 0;
+
+                              return (
+                                <>
+                                  {estimateData.root.sectionIds.map((sectionId, sIdx) => {
+                                    const section = estimateData.sections[sectionId];
+                                    if (!section) return null;
+                                    let sectionLabor = 0, sectionMaterial = 0, sectionEquipment = 0;
+
+                                    return (
+                                      <React.Fragment key={sectionId}>
+                                        <tr className="border border-gray-400 bg-gray-100">
+                                          <td className="border border-gray-400 px-1 py-1 font-bold">{sIdx + 1}</td>
+                                          <td className="border border-gray-400 px-1 py-1 font-bold" colSpan={9}>{section.name}</td>
+                                        </tr>
+                                        {section.positionIds.map((posId, pIdx) => {
+                                          const position = estimateData.positions[posId];
+                                          if (!position) return null;
+                                          const result = calculationResult?.positions[posId];
+                                          const quantity = result?.quantity || 0;
+                                          let posLabor = 0, posMaterial = 0, posEquipment = 0;
+
+                                          return (
+                                            <React.Fragment key={posId}>
+                                              {/* Position header */}
+                                              <tr className="border border-gray-400 bg-gray-50">
+                                                <td className="border border-gray-400 px-1 py-1 align-top text-center">
+                                                  <span className="text-xs">{pIdx + 1}</span>
+                                                  <div className="text-xs text-gray-400">d.{sIdx + 1}.{pIdx + 1}</div>
+                                                </td>
+                                                <td className="border border-gray-400 px-1 py-1 font-mono align-top">{position.base}</td>
+                                                <td className="border border-gray-400 px-1 py-1 font-medium align-top">{position.name}</td>
+                                                <td className="border border-gray-400 px-1 py-1 text-center align-top">{position.unit.label}</td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top"></td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top font-medium">{formatNumber(quantity, 2)}</td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top"></td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top"></td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top"></td>
+                                                <td className="border border-gray-400 px-1 py-1 text-right align-top"></td>
+                                              </tr>
+                                              {/* Resource rows */}
+                                              {position.resources.map((res) => {
+                                                const resQty = res.norm.value * quantity;
+                                                const resValue = resQty * res.unitPrice.value;
+                                                if (res.type === 'labor') { posLabor += resValue; sectionLabor += resValue; globalLabor += resValue; }
+                                                if (res.type === 'material') { posMaterial += resValue; sectionMaterial += resValue; globalMaterial += resValue; }
+                                                if (res.type === 'equipment') { posEquipment += resValue; sectionEquipment += resValue; globalEquipment += resValue; }
+                                                return (
+                                                  <tr key={res.id} className="border border-gray-300">
+                                                    <td className="border border-gray-300 px-1 py-0.5"></td>
+                                                    <td className="border border-gray-300 px-1 py-0.5"></td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-gray-600">{res.name}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-center text-gray-500">{res.unit.label}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right text-gray-500">{formatNumber(res.norm.value, 4)}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right text-gray-600">{formatNumber(resQty, 2)}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right text-gray-500">{formatNumber(res.unitPrice.value, 2)}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right">{res.type === 'labor' ? formatNumber(resValue, 2) : ''}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right">{res.type === 'material' ? formatNumber(resValue, 2) : ''}</td>
+                                                    <td className="border border-gray-300 px-1 py-0.5 text-right">{res.type === 'equipment' ? formatNumber(resValue, 2) : ''}</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                              {/* Position total */}
+                                              <tr className="border border-gray-400 bg-gray-50">
+                                                <td className="border border-gray-400 px-1 py-0.5" colSpan={7}>
+                                                  <span className="text-xs font-medium text-gray-600 pl-4">RAZEM poz. d.{sIdx + 1}.{pIdx + 1}</span>
+                                                </td>
+                                                <td className="border border-gray-400 px-1 py-0.5 text-right font-medium">{formatNumber(posLabor, 2)}</td>
+                                                <td className="border border-gray-400 px-1 py-0.5 text-right font-medium">{formatNumber(posMaterial, 2)}</td>
+                                                <td className="border border-gray-400 px-1 py-0.5 text-right font-medium">{formatNumber(posEquipment, 2)}</td>
+                                              </tr>
+                                            </React.Fragment>
+                                          );
+                                        })}
+                                        {/* Section total */}
+                                        <tr className="border border-gray-400 bg-gray-200 font-bold">
+                                          <td className="border border-gray-400 px-1 py-1" colSpan={7}>
+                                            <span className="text-xs">RAZEM dział {sIdx + 1}</span>
+                                          </td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(sectionLabor, 2)}</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(sectionMaterial, 2)}</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(sectionEquipment, 2)}</td>
+                                        </tr>
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                  {/* Grand totals */}
+                                  {(() => {
+                                    const ksKpOverhead = estimateData.root.overheads.find(o => o.name.includes('Kp'));
+                                    const ksZOverhead = estimateData.root.overheads.find(o => o.name.includes('Zysk'));
+                                    const ksKzOverhead = estimateData.root.overheads.find(o => o.name.includes('zakupu'));
+                                    const ksKpVal = ksKpOverhead ? (globalLabor + globalEquipment) * (ksKpOverhead.value / 100) : 0;
+                                    const ksZVal = ksZOverhead ? (globalLabor + globalEquipment + ksKpVal) * (ksZOverhead.value / 100) : 0;
+                                    const ksKzVal = ksKzOverhead ? globalMaterial * (ksKzOverhead.value / 100) : 0;
+                                    const ksNetto = globalLabor + globalMaterial + globalEquipment + ksKpVal + ksZVal + ksKzVal;
+                                    const ksVatRate = estimate?.settings?.vatRate ?? 23;
+                                    const ksVatExempt = ksVatRate < 0;
+                                    const ksVat = ksVatExempt ? 0 : ksNetto * (ksVatRate / 100);
+                                    const ksBrutto = ksNetto + ksVat;
+                                    return (
+                                      <>
+                                        <tr className="border border-gray-400 font-bold bg-gray-100">
+                                          <td className="border border-gray-400 px-1 py-1" colSpan={7}>Koszty bezpośrednie</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(globalLabor, 2)}</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(globalMaterial, 2)}</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right">{formatNumber(globalEquipment, 2)}</td>
+                                        </tr>
+                                        {ksKpOverhead && ksKpOverhead.value > 0 && (
+                                          <tr className="border border-gray-400">
+                                            <td className="border border-gray-400 px-1 py-1" colSpan={7}>Koszty pośrednie Kp ({ksKpOverhead.value}% od R+S)</td>
+                                            <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksKpVal, 2)}</td>
+                                          </tr>
+                                        )}
+                                        {ksZOverhead && ksZOverhead.value > 0 && (
+                                          <tr className="border border-gray-400">
+                                            <td className="border border-gray-400 px-1 py-1" colSpan={7}>Zysk Z ({ksZOverhead.value}% od R+S+Kp)</td>
+                                            <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksZVal, 2)}</td>
+                                          </tr>
+                                        )}
+                                        {ksKzOverhead && ksKzOverhead.value > 0 && (
+                                          <tr className="border border-gray-400">
+                                            <td className="border border-gray-400 px-1 py-1" colSpan={7}>Koszty zakupu Kz ({ksKzOverhead.value}% od M)</td>
+                                            <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksKzVal, 2)}</td>
+                                          </tr>
+                                        )}
+                                        <tr className="border border-gray-400 font-bold bg-blue-50">
+                                          <td className="border border-gray-400 px-1 py-1" colSpan={7}>RAZEM netto</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksNetto, 2)}</td>
+                                        </tr>
+                                        <tr className="border border-gray-400">
+                                          <td className="border border-gray-400 px-1 py-1" colSpan={7}>{ksVatExempt ? 'VAT (zw.)' : `VAT (${ksVatRate}%)`}</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksVat, 2)}</td>
+                                        </tr>
+                                        <tr className="border border-gray-400 font-bold bg-green-50">
+                                          <td className="border border-gray-400 px-1 py-1" colSpan={7}>RAZEM brutto</td>
+                                          <td className="border border-gray-400 px-1 py-1 text-right" colSpan={3}>{formatNumber(ksBrutto, 2)}</td>
+                                        </tr>
+                                      </>
+                                    );
+                                  })()}
+                                </>
+                              );
+                            })()}
+                          </tbody>
+                        </table>
+
+                        <div className="mt-4 text-sm text-center">
+                          Słownie: {formatCurrency(calculationResult?.totalValue || 0)}
+                        </div>
 
                         <div className="text-right text-xs text-gray-400 mt-8">
                           {pageIndex + 1}/{exportPages.filter(p => p.enabled).length}
