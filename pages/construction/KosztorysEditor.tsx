@@ -2244,7 +2244,7 @@ export const KosztorysEditorPage: React.FC = () => {
       if (estimate.id) {
         // Calculate VAT
         const subtotalNet = totals.totalLabor + totals.totalMaterial + totals.totalEquipment;
-        const vatRate = 23;
+        const vatRate = estimate.settings?.vatRate ?? 23;
         const vatAmount = subtotalNet * (vatRate / 100);
         const totalGross = subtotalNet + vatAmount;
 
@@ -6841,6 +6841,23 @@ export const KosztorysEditorPage: React.FC = () => {
                     </select>
                   </div>
 
+                  {/* Stawka VAT */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-800 mb-1">Stawka VAT (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={estimate.settings.vatRate ?? 23}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, vatRate: parseFloat(e.target.value) || 0 }
+                      } : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+
                   {/* Opis */}
                   <div>
                     <label className="block text-sm font-medium text-gray-800 mb-1">Opis</label>
@@ -7122,90 +7139,159 @@ export const KosztorysEditorPage: React.FC = () => {
                 </table>
               </div>
 
-              {/* Dodatki */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Dodatki</h3>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 w-12">L.p.</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Nazwa</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Obliczane od</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Ust. na poziomie</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan={6} className="px-3 py-4 text-sm text-gray-400 text-center">
-                        Brak dodatków
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* VAT */}
+              {/* VAT i podsumowanie brutto */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">VAT</h3>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 w-12">L.p.</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Nazwa</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Obliczane od</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Wartość</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td colSpan={6} className="px-3 py-4 text-sm text-gray-400 text-center">
-                        Brak stawek VAT
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                {(() => {
+                  const totalNet = calculationResult?.totalValue || 0;
+                  const currentVatRate = estimate?.settings?.vatRate ?? 23;
+                  const vatAmount = totalNet * (currentVatRate / 100);
+                  const totalGross = totalNet + vatAmount;
+                  return (
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Składnik</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-28">Wartość</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-sm text-gray-800">Razem z narzutami (netto)</td>
+                          <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(totalNet, 2)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-sm text-gray-800">VAT ({currentVatRate}%)</td>
+                          <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(vatAmount, 2)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200 bg-green-50">
+                          <td className="px-3 py-2 text-sm font-bold text-green-900">Razem z narzutami brutto (z VAT)</td>
+                          <td className="px-3 py-2 text-sm text-right font-bold text-green-900">{formatNumber(totalGross, 2)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
             </div>
             );
           })()}
 
           {/* Zestawienia View - matching eKosztorysowanie summary layout */}
-          {viewMode === 'zestawienia' && leftPanelMode !== 'export' && (
+          {viewMode === 'zestawienia' && leftPanelMode !== 'export' && (() => {
+            const zLaborTotal = calculationResult?.totalLabor || 0;
+            const zMaterialTotal = calculationResult?.totalMaterial || 0;
+            const zEquipmentTotal = calculationResult?.totalEquipment || 0;
+            const zDirectTotal = calculationResult?.totalDirect || 0;
+
+            const zKpOverhead = estimateData.root.overheads.find(o => o.name.includes('Kp'));
+            const zZOverhead = estimateData.root.overheads.find(o => o.name.includes('Zysk'));
+            const zKzOverhead = estimateData.root.overheads.find(o => o.name.includes('zakupu'));
+
+            const zKpValue = zKpOverhead ? zLaborTotal * (zKpOverhead.value / 100) : 0;
+            const zKzValue = zKzOverhead ? zMaterialTotal * (zKzOverhead.value / 100) : 0;
+            const zBase = zLaborTotal + zKpValue;
+            const zZValue = zZOverhead ? zBase * (zZOverhead.value / 100) : 0;
+
+            const zTotalNet = calculationResult?.totalValue || 0;
+            const zVatRate = estimate?.settings?.vatRate ?? 23;
+            const zVatAmount = zTotalNet * (zVatRate / 100);
+            const zTotalGross = zTotalNet + zVatAmount;
+
+            return (
             <div className="p-4">
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200">
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nazwa</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">Razem</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">R</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">M</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">S</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-28">Razem</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">R</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">M</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-24">S</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm text-gray-800">Koszty bezpośrednie</td>
-                    <td className="px-3 py-2 text-sm text-right font-medium">
-                      {formatNumber(calculationResult?.directCostsTotal || 0, 2)}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-right text-gray-600">
-                      {formatNumber(calculationResult?.laborTotal || 0, 2)}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-right text-gray-600">
-                      {formatNumber(calculationResult?.materialTotal || 0, 2)}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-right text-gray-600">
-                      {formatNumber(calculationResult?.equipmentTotal || 0, 2)}
-                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-800">Robocizna (R)</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zLaborTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(zLaborTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                  </tr>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm text-gray-800">Materiały (M)</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zMaterialTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(zMaterialTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                  </tr>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm text-gray-800">Sprzęt (S)</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zEquipmentTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(0, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(zEquipmentTotal, 2)}</td>
+                  </tr>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50 bg-gray-50">
+                    <td className="px-3 py-2 text-sm font-medium text-gray-900">Koszty bezpośrednie (R+M+S)</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatNumber(zDirectTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium text-gray-600">{formatNumber(zLaborTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium text-gray-600">{formatNumber(zMaterialTotal, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium text-gray-600">{formatNumber(zEquipmentTotal, 2)}</td>
+                  </tr>
+                  {zKpOverhead && zKpOverhead.value > 0 && (
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Koszty pośrednie Kp ({zKpOverhead.value}% od R)</td>
+                      <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zKpValue, 2)}</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                    </tr>
+                  )}
+                  {zZOverhead && zZOverhead.value > 0 && (
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Zysk Z ({zZOverhead.value}% od R+Kp)</td>
+                      <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zZValue, 2)}</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                    </tr>
+                  )}
+                  {zKzOverhead && zKzOverhead.value > 0 && (
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Koszty zakupu Kz ({zKzOverhead.value}% od M)</td>
+                      <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zKzValue, 2)}</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                    </tr>
+                  )}
+                  <tr className="border-b border-gray-200 bg-blue-50">
+                    <td className="px-3 py-2 text-sm font-bold text-blue-900">Razem z narzutami (netto)</td>
+                    <td className="px-3 py-2 text-sm text-right font-bold text-blue-900">{formatNumber(zTotalNet, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-blue-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-blue-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-blue-600"></td>
+                  </tr>
+                  <tr className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm text-gray-800">VAT ({zVatRate}%)</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(zVatAmount, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-600"></td>
+                  </tr>
+                  <tr className="border-b border-gray-200 bg-green-50">
+                    <td className="px-3 py-2 text-sm font-bold text-green-900">Razem brutto (z VAT)</td>
+                    <td className="px-3 py-2 text-sm text-right font-bold text-green-900">{formatNumber(zTotalGross, 2)}</td>
+                    <td className="px-3 py-2 text-sm text-right text-green-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-green-600"></td>
+                    <td className="px-3 py-2 text-sm text-right text-green-600"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-          )}
+            );
+          })()}
 
           {/* Print Document Preview - shown when in export mode or title page editor */}
           {(leftPanelMode === 'export' || leftPanelMode === 'titlePageEditor') && (
@@ -7548,7 +7634,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                   <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.materialTotal || 0, 2)}</td>
                                   <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(sectionResult?.equipmentTotal || 0, 2)}</td>
                                   <td className="border border-gray-400 px-2 py-1 text-right">{formatNumber(0, 2)}</td>
-                                  <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(sectionResult?.totalWithOverheads || 0, 2)}</td>
+                                  <td className="border border-gray-400 px-2 py-1 text-right font-medium">{formatNumber(sectionResult?.totalValue || 0, 2)}</td>
                                 </tr>
                               );
                             })}
@@ -7926,7 +8012,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {/* Settings Panel Content */}
             {rightPanelMode === 'settings' && estimate && (
-              <div className="flex-1 overflow-y-auto p-3">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-3">
                 {/* Nazwa kosztorysu */}
                 <div className="mb-4">
                   <label className="block text-xs text-gray-500 mb-1">Nazwa kosztorysu</label>
@@ -7987,23 +8073,18 @@ export const KosztorysEditorPage: React.FC = () => {
                   </button>
                   <div className="mb-2">
                     <label className="block text-xs text-gray-500 mb-1">Szablon kalkulacji podsumowania kosztorysu</label>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={estimate.settings.calculationTemplate}
-                        onChange={(e) => setEstimate(prev => prev ? {
-                          ...prev,
-                          settings: { ...prev.settings, calculationTemplate: e.target.value }
-                        } : null)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                      >
-                        <option value="overhead-on-top">Narzuty liczone dla całego kosztorysu</option>
-                        <option value="overhead-cascade">Narzuty kaskadowe</option>
-                        <option value="simple">Uproszczona</option>
-                      </select>
-                      <button className="p-2 text-gray-400 hover:text-gray-600">
-                        <HelpCircle className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <select
+                      value={estimate.settings.calculationTemplate}
+                      onChange={(e) => setEstimate(prev => prev ? {
+                        ...prev,
+                        settings: { ...prev.settings, calculationTemplate: e.target.value }
+                      } : null)}
+                      className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs"
+                    >
+                      <option value="overhead-on-top">Narzuty liczone dla kosztorysu</option>
+                      <option value="overhead-cascade">Narzuty kaskadowe</option>
+                      <option value="simple">Uproszczona</option>
+                    </select>
                   </div>
                   <div className="mb-3">
                     <label className="block text-xs text-gray-500 mb-1">Opis kosztorysu</label>
@@ -8102,6 +8183,26 @@ export const KosztorysEditorPage: React.FC = () => {
                           <span className="text-xs text-gray-500">%</span>
                           <span className="text-xs text-gray-400 ml-1">(M)</span>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Stawka VAT */}
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-600">Stawka VAT</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={estimate.settings.vatRate ?? 23}
+                          onChange={(e) => setEstimate(prev => prev ? {
+                            ...prev,
+                            settings: { ...prev.settings, vatRate: parseFloat(e.target.value) || 0 }
+                          } : null)}
+                          className="w-14 px-2 py-1 text-sm text-right border border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-500">%</span>
                       </div>
                     </div>
                   </div>

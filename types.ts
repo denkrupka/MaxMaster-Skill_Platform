@@ -3033,6 +3033,7 @@ export interface KosztorysCostEstimateSettings {
   print: KosztorysPrintSettings;
   precision: KosztorysPrecisionSettings;
   calculationTemplate: KosztorysCalculationTemplate;
+  vatRate?: number;                    // Stawka VAT (domyślnie 23%)
 }
 
 // =====================================================
