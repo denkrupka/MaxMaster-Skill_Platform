@@ -1898,9 +1898,15 @@ export const KosztorysEditorPage: React.FC = () => {
 
     // Determine which resource types to update
     const typesToUpdate: KosztorysResourceType[] = [];
-    if (settings.applyToLabor) typesToUpdate.push('labor');
-    if (settings.applyToMaterial) typesToUpdate.push('material');
-    if (settings.applyToEquipment) typesToUpdate.push('equipment');
+    if (settings.skipStepProcess) {
+      // Auto mode: apply to all resource types
+      typesToUpdate.push('labor', 'material', 'equipment', 'waste');
+    } else {
+      if (settings.applyToLabor) typesToUpdate.push('labor');
+      if (settings.applyToMaterial) typesToUpdate.push('material');
+      if (settings.applyToEquipment) typesToUpdate.push('equipment');
+      if (settings.applyToWaste) typesToUpdate.push('waste');
+    }
 
     if (typesToUpdate.length === 0 && !settings.unitPositionPrices) {
       showNotificationMessage('Wybierz co najmniej jeden typ nakładu do aktualizacji', 'warning');
