@@ -939,6 +939,9 @@ export const KosztorysEditorPage: React.FC = () => {
   const [customPriceListSaving, setCustomPriceListSaving] = useState(false);
   const [customPriceListEditingName, setCustomPriceListEditingName] = useState(false);
   const [customPriceList, setCustomPriceList] = useState<CustomPriceListState>(initialCustomPriceList);
+  const [editingPriceSourceId, setEditingPriceSourceId] = useState<string | null>(null);
+  const [deletingPriceSourceId, setDeletingPriceSourceId] = useState<string | null>(null);
+  const [deletingPriceSourceName, setDeletingPriceSourceName] = useState('');
   const [userPriceSources, setUserPriceSources] = useState<Array<{ id: string; name: string }>>([]);
 
   // Replace resources confirmation modal
@@ -1711,23 +1714,57 @@ export const KosztorysEditorPage: React.FC = () => {
     setCustomPriceListSaving(true);
 
     try {
-      const { data: priceSource, error: sourceError } = await supabase
-        .from('price_sources')
-        .insert({
-          name: customPriceList.name,
-          source_type: 'custom',
-          is_system: false,
-          company_id: currentUser?.company_id || null,
-          is_active: true,
-          description: `Cennik własny: ${customPriceList.name}`,
-        })
-        .select('id')
-        .single();
+      let sourceId: string;
 
-      if (sourceError) throw sourceError;
+      if (editingPriceSourceId) {
+        // Update existing price source
+        const { error: updateError } = await supabase
+          .from('price_sources')
+          .update({
+            name: customPriceList.name,
+            description: `Cennik własny: ${customPriceList.name}`,
+          })
+          .eq('id', editingPriceSourceId);
+
+        if (updateError) throw updateError;
+        sourceId = editingPriceSourceId;
+
+        // Delete old prices and re-insert
+        const { error: delError } = await supabase
+          .from('resource_prices')
+          .delete()
+          .eq('price_source_id', editingPriceSourceId);
+
+        if (delError) throw delError;
+
+        // Update local list name
+        setUserPriceSources(prev => prev.map(p =>
+          p.id === editingPriceSourceId ? { ...p, name: customPriceList.name } : p
+        ));
+      } else {
+        // Create new price source
+        const { data: priceSource, error: sourceError } = await supabase
+          .from('price_sources')
+          .insert({
+            name: customPriceList.name,
+            source_type: 'custom',
+            is_system: false,
+            company_id: currentUser?.company_id || null,
+            is_active: true,
+            description: `Cennik własny: ${customPriceList.name}`,
+          })
+          .select('id')
+          .single();
+
+        if (sourceError) throw sourceError;
+        sourceId = priceSource.id;
+
+        setUserPriceSources(prev => [...prev, { id: sourceId, name: customPriceList.name }]);
+        setSelectedPriceSources(prev => [...prev, sourceId]);
+      }
 
       const priceRows = allActiveItems.map(item => ({
-        price_source_id: priceSource.id,
+        price_source_id: sourceId,
         rms_index: item.rms_index,
         rms_type: item.rms_type,
         name: item.name,
@@ -1743,17 +1780,91 @@ export const KosztorysEditorPage: React.FC = () => {
 
       if (pricesError) throw pricesError;
 
-      setUserPriceSources(prev => [...prev, { id: priceSource.id, name: customPriceList.name }]);
-      setSelectedPriceSources(prev => [...prev, priceSource.id]);
-
-      showNotificationMessage('Cennik został utworzony pomyślnie', 'success');
+      showNotificationMessage(editingPriceSourceId ? 'Cennik został zaktualizowany' : 'Cennik został utworzony pomyślnie', 'success');
       setShowCustomPriceListModal(false);
       setCustomPriceList(initialCustomPriceList);
+      setEditingPriceSourceId(null);
     } catch (error) {
       console.error('Error saving custom price list:', error);
       showNotificationMessage('Błąd podczas zapisywania cennika', 'error');
     } finally {
       setCustomPriceListSaving(false);
+    }
+  };
+
+  const handleEditPriceSource = async (psId: string) => {
+    try {
+      const { data: prices, error } = await supabase
+        .from('resource_prices')
+        .select('*')
+        .eq('price_source_id', psId);
+
+      if (error) throw error;
+
+      const ps = userPriceSources.find(p => p.id === psId);
+      const items: CustomPriceListState['items'] = {
+        robocizna: [],
+        materialy: [],
+        sprzet: [],
+      };
+
+      (prices || []).forEach(p => {
+        const item: CustomPriceListItem = {
+          id: p.id,
+          rms_index: p.rms_index || '',
+          autoIndex: false,
+          name: p.name || '',
+          category: '',
+          unit: p.unit || '',
+          price: parseFloat(p.avg_price) || 0,
+          comment: '',
+          isActive: true,
+        };
+        if (p.rms_type === 'R') items.robocizna.push(item);
+        else if (p.rms_type === 'M') items.materialy.push(item);
+        else if (p.rms_type === 'S') items.sprzet.push(item);
+      });
+
+      // Add empty placeholder rows
+      items.robocizna.push(createEmptyPriceListItem());
+      items.materialy.push(createEmptyPriceListItem());
+      items.sprzet.push(createEmptyPriceListItem());
+
+      setCustomPriceList({ name: ps?.name || 'Cennik', items });
+      setEditingPriceSourceId(psId);
+      setCustomPriceListTab('robocizna');
+      setShowCustomPriceListModal(true);
+    } catch (error) {
+      console.error('Error loading price source:', error);
+      showNotificationMessage('Błąd podczas ładowania cennika', 'error');
+    }
+  };
+
+  const handleDeletePriceSource = async (psId: string) => {
+    try {
+      const { error } = await supabase
+        .from('price_sources')
+        .delete()
+        .eq('id', psId);
+
+      if (error) throw error;
+
+      setUserPriceSources(prev => prev.filter(p => p.id !== psId));
+      setSelectedPriceSources(prev => prev.filter(s => s !== psId));
+      setDeletingPriceSourceId(null);
+      setDeletingPriceSourceName('');
+
+      // Close editor if deleting the one being edited
+      if (editingPriceSourceId === psId) {
+        setShowCustomPriceListModal(false);
+        setCustomPriceList(initialCustomPriceList);
+        setEditingPriceSourceId(null);
+      }
+
+      showNotificationMessage('Cennik został usunięty', 'success');
+    } catch (error) {
+      console.error('Error deleting price source:', error);
+      showNotificationMessage('Błąd podczas usuwania cennika', 'error');
     }
   };
 
@@ -8555,17 +8666,38 @@ export const KosztorysEditorPage: React.FC = () => {
                     </button>
                     {showPriceSourcesExpanded && (
                       <div className="px-3 pb-2 space-y-1 border-t border-gray-100">
-                        <div className="flex items-center justify-between py-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-gray-800">Cennik Systemowy</span>
-                            <button className="text-gray-400 hover:text-gray-600" title="Cennik systemowy. Cennik jest aktualny">
-                              <HelpCircle className="w-3.5 h-3.5" />
+                        {selectedPriceSources.length === 0 && (
+                          <div className="py-1.5 text-xs text-gray-400 italic">Brak wybranych cenników</div>
+                        )}
+                        {selectedPriceSources.includes('system') && (
+                          <div className="flex items-center justify-between py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-800">Cennik Systemowy</span>
+                              <button className="text-gray-400 hover:text-gray-600" title="Cennik systemowy">
+                                <HelpCircle className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => setSelectedPriceSources(prev => prev.filter(s => s !== 'system'))}
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          <button className="text-gray-400 hover:text-red-500">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        )}
+                        {userPriceSources
+                          .filter(ps => selectedPriceSources.includes(ps.id))
+                          .map(ps => (
+                          <div key={ps.id} className="flex items-center justify-between py-1.5">
+                            <span className="text-xs text-gray-800">{ps.name}</span>
+                            <button
+                              onClick={() => setSelectedPriceSources(prev => prev.filter(s => s !== ps.id))}
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -8828,21 +8960,39 @@ export const KosztorysEditorPage: React.FC = () => {
                 {userPriceSources
                   .filter(ps => !priceSourceSearch || ps.name.toLowerCase().includes(priceSourceSearch.toLowerCase()))
                   .map(ps => (
-                  <label key={ps.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedPriceSources.includes(ps.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPriceSources([...selectedPriceSources, ps.id]);
-                        } else {
-                          setSelectedPriceSources(selectedPriceSources.filter(s => s !== ps.id));
-                        }
-                      }}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-800">{ps.name}</span>
-                  </label>
+                  <div key={ps.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded group">
+                    <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedPriceSources.includes(ps.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedPriceSources([...selectedPriceSources, ps.id]);
+                          } else {
+                            setSelectedPriceSources(selectedPriceSources.filter(s => s !== ps.id));
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-800">{ps.name}</span>
+                    </label>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleEditPriceSource(ps.id)}
+                        className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                        title="Edytuj cennik"
+                      >
+                        <SquarePen className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => { setDeletingPriceSourceId(ps.id); setDeletingPriceSourceName(ps.name); }}
+                        className="p-1 text-gray-400 hover:text-red-500 rounded"
+                        title="Usuń cennik"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
               <div className="relative">
@@ -9011,7 +9161,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }}
+                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); setEditingPriceSourceId(null); }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <ChevronLeft className="w-5 h-5" />
@@ -9036,7 +9186,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   </h2>
                 )}
               </div>
-              <button onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); setEditingPriceSourceId(null); }} className="text-gray-400 hover:text-gray-600">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -9191,12 +9341,23 @@ export const KosztorysEditorPage: React.FC = () => {
 
             {/* Footer */}
             <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="text-xs text-gray-500">
-                R: {customPriceList.items.robocizna.filter(i => i.isActive).length} | M: {customPriceList.items.materialy.filter(i => i.isActive).length} | S: {customPriceList.items.sprzet.filter(i => i.isActive).length}
+              <div className="flex items-center gap-3">
+                <div className="text-xs text-gray-500">
+                  R: {customPriceList.items.robocizna.filter(i => i.isActive).length} | M: {customPriceList.items.materialy.filter(i => i.isActive).length} | S: {customPriceList.items.sprzet.filter(i => i.isActive).length}
+                </div>
+                {editingPriceSourceId && (
+                  <button
+                    onClick={() => { setDeletingPriceSourceId(editingPriceSourceId); setDeletingPriceSourceName(customPriceList.name); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Usuń cennik
+                  </button>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); }}
+                  onClick={() => { setShowCustomPriceListModal(false); setCustomPriceList(initialCustomPriceList); setEditingPriceSourceId(null); }}
                   className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   Anuluj
@@ -9212,6 +9373,37 @@ export const KosztorysEditorPage: React.FC = () => {
                 >
                   {customPriceListSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                   Zapisz cennik
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Price Source Confirmation Modal */}
+      {deletingPriceSourceId && (
+        <div className="fixed inset-0 z-[80] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-xl">
+            <div className="p-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Usuń cennik</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Czy na pewno chcesz usunąć cennik <strong>"{deletingPriceSourceName}"</strong>? Ta operacja jest nieodwracalna.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => { setDeletingPriceSourceId(null); setDeletingPriceSourceName(''); }}
+                  className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={() => handleDeletePriceSource(deletingPriceSourceId)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Usuń
                 </button>
               </div>
             </div>
