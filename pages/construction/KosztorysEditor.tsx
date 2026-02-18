@@ -492,7 +492,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
   return (
     <span
       onClick={() => { setEditValue(String(value)); setIsEditing(true); }}
-      className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${className}`}
+      className={`block w-full min-h-[1.5em] cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${className}`}
     >
       {type === 'number' ? formatNumber(Number(value)) : (value || placeholder || '\u00A0')}
       {suffix}
