@@ -1639,11 +1639,16 @@ export const KosztorysEditorPage: React.FC = () => {
   // --- Custom price list helpers ---
 
   const loadUserPriceSources = async () => {
-    const { data, error } = await supabase
+    const companyId = currentUser?.company_id;
+    let query = supabase
       .from('price_sources')
       .select('id, name')
       .eq('is_system', false)
       .eq('is_active', true);
+    if (companyId) {
+      query = query.eq('company_id', companyId);
+    }
+    const { data, error } = await query;
     if (!error && data) {
       setUserPriceSources(data);
     }
@@ -1886,11 +1891,25 @@ export const KosztorysEditorPage: React.FC = () => {
       return;
     }
 
-    // Fetch prices from database
+    // Build list of price source IDs to query
+    const sourceIds: string[] = [];
+    if (selectedPriceSources.includes('system')) {
+      sourceIds.push('00000000-0000-0000-0000-000000000001');
+    }
+    selectedPriceSources.forEach(s => {
+      if (s !== 'system') sourceIds.push(s);
+    });
+
+    if (sourceIds.length === 0) {
+      showNotificationMessage('Wybierz co najmniej jedno źródło cen', 'warning');
+      return;
+    }
+
+    // Fetch prices from database for all selected sources
     const { data: prices, error: pricesError } = await supabase
       .from('resource_prices')
       .select('*')
-      .eq('price_source_id', '00000000-0000-0000-0000-000000000001');
+      .in('price_source_id', sourceIds);
 
     if (pricesError) {
       console.error('Error fetching prices:', pricesError);

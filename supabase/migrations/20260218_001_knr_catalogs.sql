@@ -155,14 +155,40 @@ CREATE POLICY "KNR resources readable by authenticated" ON knr_position_resource
 CREATE POLICY "KNR resources manageable by authenticated" ON knr_position_resources
     FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
+-- Price sources: system cenniki visible to all, custom only to own company
 CREATE POLICY "Price sources readable by authenticated" ON price_sources
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO authenticated
+    USING (is_system = true OR company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+    ));
 
-CREATE POLICY "Price sources manageable by authenticated" ON price_sources
-    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Price sources manageable by company" ON price_sources
+    FOR ALL TO authenticated
+    USING (is_system = false AND company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+    ))
+    WITH CHECK (company_id IN (
+        SELECT company_id FROM users WHERE id = auth.uid()
+    ));
 
+-- Resource prices: readable if parent price_source is accessible, manageable for own company's custom
 CREATE POLICY "Resource prices readable by authenticated" ON resource_prices
-    FOR SELECT TO authenticated USING (true);
+    FOR SELECT TO authenticated
+    USING (price_source_id IN (
+        SELECT id FROM price_sources WHERE is_system = true OR company_id IN (
+            SELECT company_id FROM users WHERE id = auth.uid()
+        )
+    ));
 
-CREATE POLICY "Resource prices manageable by authenticated" ON resource_prices
-    FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Resource prices manageable by company" ON resource_prices
+    FOR ALL TO authenticated
+    USING (price_source_id IN (
+        SELECT id FROM price_sources WHERE is_system = false AND company_id IN (
+            SELECT company_id FROM users WHERE id = auth.uid()
+        )
+    ))
+    WITH CHECK (price_source_id IN (
+        SELECT id FROM price_sources WHERE is_system = false AND company_id IN (
+            SELECT company_id FROM users WHERE id = auth.uid()
+        )
+    ));
