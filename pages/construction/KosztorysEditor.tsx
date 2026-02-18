@@ -147,6 +147,15 @@ const POSITION_TAGS = [
 ];
 
 // KNR Catalog structure
+interface CatalogNorm {
+  type: KosztorysResourceType;
+  value: number;
+  unit: string;
+  name?: string;        // Resource name from database
+  index?: string;       // RMS index for price lookup
+  rmsCode?: number;     // RMS code
+}
+
 interface CatalogItem {
   id: string;
   code: string;
@@ -154,7 +163,7 @@ interface CatalogItem {
   type: 'catalog' | 'chapter' | 'table' | 'position';
   children?: CatalogItem[];
   unit?: string;
-  norms?: { type: KosztorysResourceType; value: number; unit: string }[];
+  norms?: CatalogNorm[];
 }
 
 // Sample KNR catalog data (based on eKosztorysowanie screenshots)
@@ -816,6 +825,8 @@ export const KosztorysEditorPage: React.FC = () => {
   const [catalogQuantity, setCatalogQuantity] = useState('10');
   const [catalogMultiplier, setCatalogMultiplier] = useState('1');
   const [catalogUnitIndex, setCatalogUnitIndex] = useState('060'); // Default to m3
+  const [knrCatalog, setKnrCatalog] = useState<CatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
 
   // Dropdown states
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
@@ -1155,6 +1166,144 @@ export const KosztorysEditorPage: React.FC = () => {
       }
     }
   }, [currentUser, estimateId]);
+
+  // Load KNR catalog from database
+  useEffect(() => {
+    const loadKnrCatalog = async () => {
+      setCatalogLoading(true);
+      try {
+        // Fetch folders (catalogs, chapters, tables)
+        const { data: folders, error: foldersError } = await supabase
+          .from('knr_folders')
+          .select('*')
+          .eq('is_system', true)
+          .order('path', { ascending: true });
+
+        if (foldersError) {
+          console.error('Error loading KNR folders:', foldersError);
+          setCatalogLoading(false);
+          return;
+        }
+
+        // Fetch positions
+        const { data: positions, error: positionsError } = await supabase
+          .from('knr_positions')
+          .select('*')
+          .eq('is_system', true);
+
+        if (positionsError) {
+          console.error('Error loading KNR positions:', positionsError);
+          setCatalogLoading(false);
+          return;
+        }
+
+        // Fetch position resources (norms)
+        const { data: resources, error: resourcesError } = await supabase
+          .from('knr_position_resources')
+          .select('*');
+
+        if (resourcesError) {
+          console.error('Error loading KNR resources:', resourcesError);
+          // Continue without resources - positions will have empty norms
+        }
+
+        // Build resource map by position_xid
+        const resourcesByPosition = new Map<string, any[]>();
+        (resources || []).forEach(res => {
+          const existing = resourcesByPosition.get(res.position_xid) || [];
+          existing.push(res);
+          resourcesByPosition.set(res.position_xid, existing);
+        });
+
+        // Build folder map by xid
+        const folderMap = new Map<string, any>();
+        (folders || []).forEach(f => folderMap.set(f.xid, f));
+
+        // Build position map by folder_xid
+        const positionsByFolder = new Map<string, any[]>();
+        (positions || []).forEach(pos => {
+          const existing = positionsByFolder.get(pos.folder_xid) || [];
+          existing.push(pos);
+          positionsByFolder.set(pos.folder_xid, existing);
+        });
+
+        // Convert flat structure to nested CatalogItem[]
+        const buildCatalogTree = (): CatalogItem[] => {
+          // Get root catalogs (depth = 0, no parent)
+          const rootFolders = (folders || []).filter(f => f.depth === 0 || !f.parent_xid);
+
+          const buildFolderItem = (folder: any): CatalogItem => {
+            // Get children folders
+            const childFolders = (folders || []).filter(f => f.parent_xid === folder.xid);
+
+            // Get positions for this folder
+            const folderPositions = positionsByFolder.get(folder.xid) || [];
+
+            // Convert positions to CatalogItem
+            const positionItems: CatalogItem[] = folderPositions
+              .sort((a, b) => a.ordinal_number - b.ordinal_number)
+              .map(pos => {
+                const posResources = resourcesByPosition.get(pos.xid) || [];
+                const norms: CatalogNorm[] = posResources
+                  .sort((a, b) => a.ordinal_number - b.ordinal_number)
+                  .map(res => ({
+                    type: (res.type === 'R' ? 'labor' : res.type === 'M' ? 'material' : 'equipment') as KosztorysResourceType,
+                    value: parseFloat(res.norm) || 0,
+                    unit: res.rms_unit || '',
+                    name: res.rms_name || '',
+                    index: res.rms_index || undefined,
+                    rmsCode: res.rms_code || undefined,
+                  }));
+
+                return {
+                  id: pos.xid,
+                  code: pos.basis,
+                  name: pos.name,
+                  type: 'position' as const,
+                  unit: pos.unit,
+                  norms: norms.length > 0 ? norms : undefined,
+                };
+              });
+
+            // Build children (folders + positions)
+            const children: CatalogItem[] = [
+              ...childFolders
+                .sort((a, b) => a.basis.localeCompare(b.basis))
+                .map(buildFolderItem),
+              ...positionItems,
+            ];
+
+            // Determine type based on depth
+            let type: 'catalog' | 'chapter' | 'table' = 'catalog';
+            if (folder.depth === 1) type = 'chapter';
+            else if (folder.depth >= 2) type = 'table';
+
+            return {
+              id: folder.xid,
+              code: folder.basis,
+              name: folder.name,
+              type,
+              children: children.length > 0 ? children : undefined,
+            };
+          };
+
+          return rootFolders
+            .sort((a, b) => a.basis.localeCompare(b.basis))
+            .map(buildFolderItem);
+        };
+
+        const catalog = buildCatalogTree();
+        console.log('Loaded KNR catalog:', catalog.length, 'root items');
+        setKnrCatalog(catalog);
+      } catch (error) {
+        console.error('Error loading KNR catalog:', error);
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+
+    loadKnrCatalog();
+  }, []);
 
   const loadEstimate = async (id: string) => {
     setLoading(true);
@@ -2795,14 +2944,22 @@ export const KosztorysEditorPage: React.FC = () => {
     if (catalogItem.norms) {
       for (const norm of catalogItem.norms) {
         const resourceUnit = UNITS_REFERENCE.find(u => u.unit === norm.unit) || UNITS_REFERENCE[0];
+        // Use resource name from catalog if available, otherwise use default
+        const resourceName = norm.name ||
+          (norm.type === 'labor' ? 'Robotnicy' : norm.type === 'equipment' ? 'Sprzęt' : 'Materiał');
         const resource = createNewResource(
           norm.type,
-          norm.type === 'labor' ? 'Robotnicy' : norm.type === 'equipment' ? 'Sprzęt' : 'Materiał',
+          resourceName,
           norm.value,
           0, // Price will be set later
           resourceUnit.unit,
           resourceUnit.index
         );
+        // Set index for price lookup if available
+        if (norm.index) {
+          resource.index = norm.index;
+          resource.originIndex = { type: 'knr', index: norm.index };
+        }
         newPosition.resources.push(resource);
       }
     }
@@ -5195,9 +5352,19 @@ export const KosztorysEditorPage: React.FC = () => {
                     >
                       <ChevronDown className="w-4 h-4" />
                       <span>Katalog systemowy</span>
+                      {catalogLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
                     </button>
                     <div className="ml-2">
-                      {renderCatalogTree(KNR_CATALOG, 0)}
+                      {catalogLoading ? (
+                        <div className="flex items-center justify-center py-4 text-sm text-gray-500">
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          Ładowanie katalogu...
+                        </div>
+                      ) : knrCatalog.length > 0 ? (
+                        renderCatalogTree(knrCatalog, 0)
+                      ) : (
+                        renderCatalogTree(KNR_CATALOG, 0)
+                      )}
                     </div>
                   </div>
                 </div>
