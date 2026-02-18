@@ -856,9 +856,9 @@ export const KosztorysEditorPage: React.FC = () => {
     expression: { field: 'cena', operation: 'add', value: '' },
     zeroPrices: false,
   });
-  const [showPriceSourcesExpanded, setShowPriceSourcesExpanded] = useState(true);
-  const [showSearchOptionsExpanded, setShowSearchOptionsExpanded] = useState(true);
-  const [showAdvancedExpanded, setShowAdvancedExpanded] = useState(true);
+  const [showPriceSourcesExpanded, setShowPriceSourcesExpanded] = useState(false);
+  const [showSearchOptionsExpanded, setShowSearchOptionsExpanded] = useState(false);
+  const [showAdvancedExpanded, setShowAdvancedExpanded] = useState(false);
   const [searchByNameWhenNoIndex, setSearchByNameWhenNoIndex] = useState(false);
   const [searchAllIndexTypes, setSearchAllIndexTypes] = useState(false);
   const [matchUnits, setMatchUnits] = useState(false);
@@ -1561,9 +1561,179 @@ export const KosztorysEditorPage: React.FC = () => {
     setLoading(false);
   };
 
-  const showNotificationMessage = (message: string, type: 'success' | 'error') => {
-    setNotification({ type, message });
+  const showNotificationMessage = (message: string, type: 'success' | 'error' | 'warning') => {
+    setNotification({ type: type === 'warning' ? 'error' : type, message });
     setTimeout(() => setNotification(null), 4000);
+  };
+
+  // Apply prices to resources based on settings
+  const handleApplyPrices = async () => {
+    const settings = priceUpdateSettings;
+    const newData = { ...estimateData };
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    // Determine which resource types to update
+    const typesToUpdate: KosztorysResourceType[] = [];
+    if (settings.applyToLabor) typesToUpdate.push('labor');
+    if (settings.applyToMaterial) typesToUpdate.push('material');
+    if (settings.applyToEquipment) typesToUpdate.push('equipment');
+
+    if (typesToUpdate.length === 0 && !settings.unitPositionPrices) {
+      showNotificationMessage('Wybierz co najmniej jeden typ nakładu do aktualizacji', 'warning');
+      return;
+    }
+
+    // Fetch prices from database
+    const { data: prices, error: pricesError } = await supabase
+      .from('resource_prices')
+      .select('*')
+      .eq('price_source_id', '00000000-0000-0000-0000-000000000001');
+
+    if (pricesError) {
+      console.error('Error fetching prices:', pricesError);
+      showNotificationMessage('Błąd podczas pobierania cen z bazy danych', 'error');
+      return;
+    }
+
+    // Create price lookup by index
+    const priceByIndex = new Map<string, { min: number; avg: number; max: number }>();
+    const priceByName = new Map<string, { min: number; avg: number; max: number }>();
+    prices?.forEach(p => {
+      const priceData = { min: p.min_price || 0, avg: p.avg_price || 0, max: p.max_price || 0 };
+      if (p.rms_index) priceByIndex.set(p.rms_index, priceData);
+      if (p.name) priceByName.set(p.name.toLowerCase(), priceData);
+    });
+
+    // Update resources in all positions
+    Object.values(newData.positions).forEach(position => {
+      position.resources.forEach(resource => {
+        // Check if this resource type should be updated
+        if (!typesToUpdate.includes(resource.type)) return;
+
+        // Check if we should only update zero prices
+        if (settings.onlyZeroPrices && resource.unitPrice.value !== 0) {
+          skippedCount++;
+          return;
+        }
+
+        // Try to find price by index
+        let foundPrice: { min: number; avg: number; max: number } | undefined;
+
+        if (resource.index) {
+          foundPrice = priceByIndex.get(resource.index);
+        }
+
+        // If not found by index and option enabled, try by name
+        if (!foundPrice && searchByNameWhenNoIndex && resource.name) {
+          foundPrice = priceByName.get(resource.name.toLowerCase());
+        }
+
+        // If searching all index types is enabled, try without prefix
+        if (!foundPrice && searchAllIndexTypes && resource.index) {
+          const indexParts = resource.index.split('-');
+          if (indexParts.length > 1) {
+            foundPrice = priceByIndex.get(indexParts[indexParts.length - 1]);
+          }
+        }
+
+        if (foundPrice) {
+          // Select price based on settings
+          let priceToUse = foundPrice.avg;
+          if (autoSelectLowestPrice) {
+            priceToUse = foundPrice.min;
+          }
+
+          // Check unit match if required
+          if (matchUnits) {
+            // For now, we'll skip unit matching since we don't have unit data in resource_prices
+            // In a full implementation, we'd check if units match
+          }
+
+          resource.unitPrice.value = priceToUse;
+          updatedCount++;
+        } else if (zeroNotFoundPrices) {
+          resource.unitPrice.value = 0;
+          updatedCount++;
+        } else {
+          skippedCount++;
+        }
+      });
+    });
+
+    setEstimateData(newData);
+    showNotificationMessage(
+      `Zaktualizowano ${updatedCount} cen. Pominięto: ${skippedCount}`,
+      updatedCount > 0 ? 'success' : 'warning'
+    );
+    setShowCenyDialog(false);
+  };
+
+  // Change prices based on expression (Zmień ceny tab)
+  const handleChangePrices = () => {
+    const settings = priceUpdateSettings;
+    const newData = { ...estimateData };
+    let updatedCount = 0;
+
+    const typesToUpdate: KosztorysResourceType[] = [];
+    if (settings.applyToLabor) typesToUpdate.push('labor');
+    if (settings.applyToMaterial) typesToUpdate.push('material');
+    if (settings.applyToEquipment) typesToUpdate.push('equipment');
+
+    if (typesToUpdate.length === 0) {
+      showNotificationMessage('Wybierz co najmniej jeden typ nakładu do zmiany', 'warning');
+      return;
+    }
+
+    const value = parseFloat(settings.expression.value);
+    if (isNaN(value)) {
+      showNotificationMessage('Podaj prawidłową wartość', 'warning');
+      return;
+    }
+
+    // Zero all prices if checkbox is checked
+    if (settings.zeroPrices) {
+      Object.values(newData.positions).forEach(position => {
+        position.resources.forEach(resource => {
+          if (typesToUpdate.includes(resource.type)) {
+            resource.unitPrice.value = 0;
+            updatedCount++;
+          }
+        });
+      });
+    } else {
+      // Apply expression to prices
+      Object.values(newData.positions).forEach(position => {
+        position.resources.forEach(resource => {
+          if (!typesToUpdate.includes(resource.type)) return;
+
+          const currentPrice = settings.expression.field === 'cena'
+            ? resource.unitPrice.value
+            : resource.unitPrice.value * (resource.norm?.value || 1);
+
+          let newPrice = currentPrice;
+          switch (settings.expression.operation) {
+            case 'add': newPrice = currentPrice + value; break;
+            case 'subtract': newPrice = currentPrice - value; break;
+            case 'multiply': newPrice = currentPrice * value; break;
+            case 'divide': newPrice = value !== 0 ? currentPrice / value : currentPrice; break;
+          }
+
+          if (settings.expression.field === 'cena') {
+            resource.unitPrice.value = Math.max(0, newPrice);
+          } else {
+            // If changing value, calculate back to unit price
+            const norm = resource.norm?.value || 1;
+            resource.unitPrice.value = Math.max(0, newPrice / norm);
+          }
+          updatedCount++;
+        });
+      });
+    }
+
+    setEstimateData(newData);
+    showNotificationMessage(`Zmieniono ${updatedCount} cen`, 'success');
+    setShowCenyDialog(false);
   };
 
   // Save estimate
@@ -7920,12 +8090,12 @@ export const KosztorysEditorPage: React.FC = () => {
       {/* Ceny (Prices Update) Dialog */}
       {showCenyDialog && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full shadow-xl">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
             {/* Dialog header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">Uaktualnij ceny w kosztorysie</h2>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h2 className="text-base font-bold text-gray-900">Uaktualnij ceny w kosztorysie</h2>
               <button onClick={() => setShowCenyDialog(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -7933,7 +8103,7 @@ export const KosztorysEditorPage: React.FC = () => {
             <div className="flex border-b border-gray-200">
               <button
                 onClick={() => setCenyDialogTab('wstaw')}
-                className={`px-6 py-3 text-sm font-medium ${
+                className={`px-4 py-2 text-sm font-medium ${
                   cenyDialogTab === 'wstaw'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-500 hover:text-gray-800'
@@ -7943,7 +8113,7 @@ export const KosztorysEditorPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setCenyDialogTab('zmien')}
-                className={`px-6 py-3 text-sm font-medium ${
+                className={`px-4 py-2 text-sm font-medium ${
                   cenyDialogTab === 'zmien'
                     ? 'text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-500 hover:text-gray-800'
@@ -7954,87 +8124,87 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
 
             {/* Tab content */}
-            <div className="p-4 space-y-4">
+            <div className="p-3 space-y-3">
               {/* Zastosuj do section */}
               <div>
-                <p className="text-sm text-gray-600 mb-2">Zastosuj do</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
+                <p className="text-xs text-gray-600 mb-1.5">Zastosuj do</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-0.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToLabor}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToLabor: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300"
+                        className="w-3.5 h-3.5 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-800">Robocizna</span>
+                      <span className="text-xs text-gray-800">Robocizna</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToMaterial}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToMaterial: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300"
+                        className="w-3.5 h-3.5 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-800">Materiały</span>
+                      <span className="text-xs text-gray-800">Materiały</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToEquipment}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToEquipment: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300"
+                        className="w-3.5 h-3.5 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-800">Sprzęt</span>
+                      <span className="text-xs text-gray-800">Sprzęt</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.applyToWaste}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, applyToWaste: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300"
+                        className="w-3.5 h-3.5 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-800">Odpady</span>
+                      <span className="text-xs text-gray-800">Odpady</span>
                     </label>
                   </div>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
+                  <div className="space-y-0.5">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={priceUpdateSettings.unitPositionPrices}
                         onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, unitPositionPrices: e.target.checked }))}
-                        className="w-4 h-4 rounded border-gray-300"
+                        className="w-3.5 h-3.5 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-800">Ceny jednostkowe pozycji</span>
+                      <span className="text-xs text-gray-800">Ceny jednostkowe pozycji</span>
                     </label>
                     {cenyDialogTab === 'wstaw' && (
                       <>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={priceUpdateSettings.emptyUnitPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, emptyUnitPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Puste ceny jednostkowe pozycji</span>
+                          <span className="text-xs text-gray-800">Puste ceny jednostkowe pozycji</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={priceUpdateSettings.objectPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, objectPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Ceny obiektów</span>
+                          <span className="text-xs text-gray-800">Ceny obiektów</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={priceUpdateSettings.onlyZeroPrices}
                             onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, onlyZeroPrices: e.target.checked }))}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Uaktualnij tylko ceny zerowe</span>
+                          <span className="text-xs text-gray-800">Uaktualnij tylko ceny zerowe</span>
                         </label>
                       </>
                     )}
@@ -8048,30 +8218,30 @@ export const KosztorysEditorPage: React.FC = () => {
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button
                       onClick={() => setShowPriceSourcesExpanded(!showPriceSourcesExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-800 hover:bg-gray-50"
                     >
                       <span>Źródła cen</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={(e) => { e.stopPropagation(); setShowPriceSourcesModal(true); }}
-                          className="p-1 hover:bg-gray-100 rounded"
+                          className="p-0.5 hover:bg-gray-100 rounded"
                         >
-                          <FileSpreadsheet className="w-4 h-4 text-gray-400" />
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-gray-400" />
                         </button>
-                        {showPriceSourcesExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        {showPriceSourcesExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       </div>
                     </button>
                     {showPriceSourcesExpanded && (
-                      <div className="px-4 pb-3 space-y-2 border-t border-gray-100">
-                        <div className="flex items-center justify-between py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-800">Cennik eKosztorysowanie</span>
-                            <button className="text-gray-400 hover:text-gray-600" title="Informacje o cenniku eKosztorysowanie. Cennik jest aktualny">
-                              <HelpCircle className="w-4 h-4" />
+                      <div className="px-3 pb-2 space-y-1 border-t border-gray-100">
+                        <div className="flex items-center justify-between py-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-gray-800">Cennik Systemowy</span>
+                            <button className="text-gray-400 hover:text-gray-600" title="Cennik systemowy. Cennik jest aktualny">
+                              <HelpCircle className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <button className="text-gray-400 hover:text-red-500">
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -8082,44 +8252,44 @@ export const KosztorysEditorPage: React.FC = () => {
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button
                       onClick={() => setShowSearchOptionsExpanded(!showSearchOptionsExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-800 hover:bg-gray-50"
                     >
                       <span>Opcje wyszukiwania cen</span>
-                      {showSearchOptionsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {showSearchOptionsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                     {showSearchOptionsExpanded && (
-                      <div className="px-4 pb-3 space-y-3 border-t border-gray-100">
-                        <select className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mt-3">
+                      <div className="px-3 pb-2 space-y-1.5 border-t border-gray-100 pt-2">
+                        <select className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded">
                           <option value="">Wybierz opcję szukiwania cen</option>
                           <option value="index">Szukaj po indeksie</option>
                           <option value="name">Szukaj po nazwie</option>
                         </select>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={searchByNameWhenNoIndex}
                             onChange={(e) => setSearchByNameWhenNoIndex(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Szukaj po nazwie gdy brak wyników wg indeksu</span>
+                          <span className="text-xs text-gray-800">Szukaj po nazwie gdy brak wyników wg indeksu</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={searchAllIndexTypes}
                             onChange={(e) => setSearchAllIndexTypes(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Szukaj we wszystkich typach indeksów</span>
+                          <span className="text-xs text-gray-800">Szukaj we wszystkich typach indeksów</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={matchUnits}
                             onChange={(e) => setMatchUnits(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Zgodność jednostek miar</span>
+                          <span className="text-xs text-gray-800">Zgodność jednostek miar</span>
                         </label>
                       </div>
                     )}
@@ -8129,44 +8299,44 @@ export const KosztorysEditorPage: React.FC = () => {
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <button
                       onClick={() => setShowAdvancedExpanded(!showAdvancedExpanded)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-800 hover:bg-gray-50"
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs text-gray-800 hover:bg-gray-50"
                     >
                       <span>Zaawansowane</span>
-                      {showAdvancedExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {showAdvancedExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                     </button>
                     {showAdvancedExpanded && (
-                      <div className="px-4 pb-3 space-y-3 border-t border-gray-100 mt-2">
-                        <label className="flex items-center gap-2">
+                      <div className="px-3 pb-2 space-y-1.5 border-t border-gray-100 pt-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={zeroNotFoundPrices}
                             onChange={(e) => setZeroNotFoundPrices(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Zeruj ceny nieznalezione</span>
+                          <span className="text-xs text-gray-800">Zeruj ceny nieznalezione</span>
                         </label>
-                        <label className="flex items-center gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={autoSelectLowestPrice}
                             onChange={(e) => setAutoSelectLowestPrice(e.target.checked)}
-                            className="w-4 h-4 rounded border-gray-300"
+                            className="w-3.5 h-3.5 rounded border-gray-300"
                           />
-                          <span className="text-sm text-gray-800">Po znalezieniu kilku cen automatycznie wybieraj tą najniższą</span>
+                          <span className="text-xs text-gray-800">Po znalezieniu kilku cen automatycznie wybieraj najniższą</span>
                         </label>
                       </div>
                     )}
                   </div>
 
                   {/* Skip step process checkbox */}
-                  <label className="flex items-center gap-2 pt-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer pt-1">
                     <input
                       type="checkbox"
                       checked={priceUpdateSettings.skipStepProcess}
                       onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, skipStepProcess: e.target.checked }))}
-                      className="w-4 h-4 rounded border-blue-600 text-blue-600"
+                      className="w-3.5 h-3.5 rounded border-blue-600 text-blue-600"
                     />
-                    <span className="text-sm text-gray-800">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
+                    <span className="text-xs text-gray-800">Pomiń proces krokowy (automatyczne wstawienie cen)</span>
                   </label>
                 </>
               )}
@@ -8175,15 +8345,15 @@ export const KosztorysEditorPage: React.FC = () => {
                 <>
                   {/* Wyrażenie section */}
                   <div>
-                    <p className="text-sm text-gray-600 mb-2">Wyrażenie</p>
-                    <div className="flex gap-2">
+                    <p className="text-xs text-gray-600 mb-1.5">Wyrażenie</p>
+                    <div className="flex gap-1.5">
                       <select
                         value={priceUpdateSettings.expression.field}
                         onChange={(e) => setPriceUpdateSettings(prev => ({
                           ...prev,
                           expression: { ...prev.expression, field: e.target.value as 'cena' | 'wartosc' }
                         }))}
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                        className="px-2 py-1.5 text-xs border border-gray-300 rounded"
                       >
                         <option value="cena">Cena</option>
                         <option value="wartosc">Wartość</option>
@@ -8194,7 +8364,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           ...prev,
                           expression: { ...prev.expression, operation: e.target.value as 'add' | 'subtract' | 'multiply' | 'divide' }
                         }))}
-                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                        className="px-2 py-1.5 text-xs border border-gray-300 rounded"
                       >
                         <option value="add">Dodaj (+)</option>
                         <option value="subtract">Odejmij (-)</option>
@@ -8209,42 +8379,36 @@ export const KosztorysEditorPage: React.FC = () => {
                           expression: { ...prev.expression, value: e.target.value }
                         }))}
                         placeholder="Wartość"
-                        className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                        className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded"
                       />
                     </div>
                   </div>
 
                   {/* Wyzeruj ceny checkbox */}
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={priceUpdateSettings.zeroPrices}
                       onChange={(e) => setPriceUpdateSettings(prev => ({ ...prev, zeroPrices: e.target.checked }))}
-                      className="w-4 h-4 rounded border-gray-300"
+                      className="w-3.5 h-3.5 rounded border-gray-300"
                     />
-                    <span className="text-sm text-gray-800">Wyzeruj ceny</span>
+                    <span className="text-xs text-gray-800">Wyzeruj ceny</span>
                   </label>
                 </>
               )}
             </div>
 
             {/* Dialog footer */}
-            <div className="p-4 border-t border-gray-200 flex justify-end gap-3">
+            <div className="p-3 border-t border-gray-200 flex justify-end gap-2">
               <button
                 onClick={() => setShowCenyDialog(false)}
-                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-3 py-1.5 text-sm text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Anuluj
               </button>
               <button
-                onClick={() => {
-                  showNotificationMessage(
-                    cenyDialogTab === 'wstaw' ? 'Rozpoczęto wstawianie cen...' : 'Zastosowano zmiany cen',
-                    'success'
-                  );
-                  setShowCenyDialog(false);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={() => cenyDialogTab === 'wstaw' ? handleApplyPrices() : handleChangePrices()}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 {cenyDialogTab === 'wstaw' ? 'Rozpocznij wstawianie' : 'Zastosuj'}
               </button>
