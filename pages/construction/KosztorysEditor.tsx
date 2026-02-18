@@ -2022,19 +2022,14 @@ export const KosztorysEditorPage: React.FC = () => {
     if (settings.applyToLabor) typesToUpdate.push('labor');
     if (settings.applyToMaterial) typesToUpdate.push('material');
     if (settings.applyToEquipment) typesToUpdate.push('equipment');
+    if (settings.applyToWaste) typesToUpdate.push('waste');
 
     if (typesToUpdate.length === 0) {
       showNotificationMessage('Wybierz co najmniej jeden typ nakładu do zmiany', 'warning');
       return;
     }
 
-    const value = parseFloat(settings.expression.value);
-    if (isNaN(value)) {
-      showNotificationMessage('Podaj prawidłową wartość', 'warning');
-      return;
-    }
-
-    // Zero all prices if checkbox is checked
+    // Zero all prices if checkbox is checked — no expression needed
     if (settings.zeroPrices) {
       Object.values(newData.positions).forEach(position => {
         position.resources.forEach(resource => {
@@ -2045,6 +2040,13 @@ export const KosztorysEditorPage: React.FC = () => {
         });
       });
     } else {
+      // Validate expression value
+      const value = parseFloat(settings.expression.value);
+      if (isNaN(value)) {
+        showNotificationMessage('Podaj prawidłową wartość', 'warning');
+        return;
+      }
+
       // Apply expression to prices
       Object.values(newData.positions).forEach(position => {
         position.resources.forEach(resource => {
