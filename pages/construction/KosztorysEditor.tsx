@@ -884,6 +884,9 @@ export const KosztorysEditorPage: React.FC = () => {
   const [priceImportSource, setPriceImportSource] = useState<'sekocenbud' | 'orgbud'>('sekocenbud');
   const [priceImportDragging, setPriceImportDragging] = useState(false);
 
+  // Replace resources confirmation modal
+  const [showReplaceResourcesConfirm, setShowReplaceResourcesConfirm] = useState(false);
+
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [commentsFilter, setCommentsFilter] = useState<'all' | 'verification' | 'completion' | 'none'>('all');
@@ -1808,11 +1811,7 @@ export const KosztorysEditorPage: React.FC = () => {
       const knrRes = resourcesByXid.get(knrPosition.xid) || [];
       if (knrRes.length === 0) return;
 
-      // Check mode
-      if (mode === 'missing' && position.resources.length > 0) {
-        // Skip positions that already have resources
-        return;
-      }
+      let positionUpdated = false;
 
       if (mode === 'replace') {
         // Clear existing resources
@@ -1824,6 +1823,21 @@ export const KosztorysEditorPage: React.FC = () => {
         const resourceType: KosztorysResourceType =
           res.type === 'R' ? 'labor' :
           res.type === 'M' ? 'material' : 'equipment';
+
+        // For "missing" mode, check if this specific resource already exists
+        if (mode === 'missing') {
+          const existingResource = position.resources.find(r => {
+            // Check by index if available
+            if (res.rms_index && r.index === res.rms_index) return true;
+            // Check by name and type
+            if (r.name === res.rms_name && r.type === resourceType) return true;
+            return false;
+          });
+          if (existingResource) {
+            // Resource already exists, skip
+            return;
+          }
+        }
 
         // Find unit
         const unitMatch = UNITS_REFERENCE.find(u => u.unit === res.rms_unit);
@@ -1845,15 +1859,18 @@ export const KosztorysEditorPage: React.FC = () => {
 
         position.resources.push(newResource);
         addedResources++;
+        positionUpdated = true;
       });
 
-      updatedPositions++;
+      if (positionUpdated) {
+        updatedPositions++;
+      }
     });
 
-    if (updatedPositions === 0) {
+    if (addedResources === 0) {
       showNotificationMessage(
         mode === 'missing'
-          ? 'Wszystkie pozycje z kodem KNR już mają nakłady'
+          ? 'Wszystkie nakłady KNR już są uzupełnione'
           : 'Nie znaleziono nakładów do dodania',
         'warning'
       );
@@ -4592,8 +4609,8 @@ export const KosztorysEditorPage: React.FC = () => {
                   Uzupełnij tylko brakujące
                 </button>
                 <button
-                  onClick={() => { setShowUzupelnijDropdown(false); handleUzupelnijNaklady('replace'); }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                  onClick={() => { setShowUzupelnijDropdown(false); setShowReplaceResourcesConfirm(true); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 text-red-600"
                 >
                   Zastąp wszystkie nakłady
                 </button>
@@ -8528,6 +8545,55 @@ export const KosztorysEditorPage: React.FC = () => {
                 className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 {cenyDialogTab === 'wstaw' ? 'Rozpocznij wstawianie' : 'Zastosuj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replace Resources Confirmation Modal */}
+      {showReplaceResourcesConfirm && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+              <h2 className="text-base font-bold text-red-600 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                Zastąpienie wszystkich nakładów
+              </h2>
+              <button onClick={() => setShowReplaceResourcesConfirm(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-700 mb-3">
+                <strong>Uwaga!</strong> Ta operacja usunie wszystkie istniejące nakłady (robocizna, materiały, sprzęt)
+                ze wszystkich pozycji powiązanych z katalogiem KNR i zastąpi je nakładami z bazy normatywnej.
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-xs text-red-700">
+                  <strong>Zostaną usunięte:</strong> wszystkie ręcznie dodane nakłady, ceny,
+                  modyfikacje i niestandardowe wartości norm.
+                </p>
+              </div>
+              <p className="text-sm text-gray-600">
+                Czy na pewno chcesz kontynuować?
+              </p>
+            </div>
+            <div className="p-3 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => setShowReplaceResourcesConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => {
+                  setShowReplaceResourcesConfirm(false);
+                  handleUzupelnijNaklady('replace');
+                }}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Tak, zastąp wszystkie
               </button>
             </div>
           </div>
