@@ -4324,7 +4324,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 <td className="px-3 py-2 text-sm text-right text-gray-600">{resource.unit.label}</td>
                 <td className={`px-3 py-2 text-sm text-right ${viewOptionsPanel.highlightZeroPrices && resource.unitPrice.value === 0 ? 'text-amber-600 font-semibold bg-amber-50' : 'text-gray-600'}`}>{formatNumber(resource.unitPrice.value, 3)}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(resQuantity, 2)}</td>
-                <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(resResult?.totalCost || 0, 2)}</td>
+                <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(resResult?.calculatedValue || 0, 2)}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-500">{formatNumber(0, 3)}</td>
                 <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(resQuantity, 3)}</td>
               </tr>
@@ -4689,8 +4689,82 @@ export const KosztorysEditorPage: React.FC = () => {
           return renderSection(subsection, subIndex, depth + 1);
         })}
 
-        {/* Positions in section */}
-        {isExpanded && section.positionIds.map((posId, posIndex) => {
+        {/* Positions in section - aggregated for naklady view */}
+        {isExpanded && viewMode === 'naklady' && (() => {
+          // Aggregate resources by index within this section
+          const aggregated: Record<string, {
+            index: string;
+            name: string;
+            unit: string;
+            type: string;
+            unitPrice: number;
+            totalQuantity: number;
+            totalValue: number;
+          }> = {};
+
+          for (const posId of section.positionIds) {
+            const position = estimateData.positions[posId];
+            if (!position) continue;
+            const posResult = calculationResult?.positions[posId];
+            const posQuantity = posResult?.quantity || 0;
+
+            for (const resource of position.resources) {
+              const resIndex = resource.originIndex?.index || resource.index || '-';
+              const resResult = posResult?.resources.find(r => r.id === resource.id);
+              const resQuantity = resResult?.calculatedQuantity || resource.norm.value * posQuantity;
+              const resValue = resResult?.calculatedValue || resQuantity * resource.unitPrice.value;
+
+              const key = `${resIndex}_${resource.type}`;
+              if (aggregated[key]) {
+                aggregated[key].totalQuantity += resQuantity;
+                aggregated[key].totalValue += resValue;
+              } else {
+                aggregated[key] = {
+                  index: resIndex,
+                  name: resource.name,
+                  unit: resource.unit.label,
+                  type: resource.type,
+                  unitPrice: resource.unitPrice.value,
+                  totalQuantity: resQuantity,
+                  totalValue: resValue,
+                };
+              }
+            }
+          }
+
+          const sorted = Object.values(aggregated).sort((a, b) => {
+            const typeOrder: Record<string, number> = { labor: 0, material: 1, equipment: 2, waste: 3 };
+            const ta = typeOrder[a.type] ?? 4;
+            const tb = typeOrder[b.type] ?? 4;
+            if (ta !== tb) return ta - tb;
+            return a.index.localeCompare(b.index);
+          });
+
+          return sorted.map((agg, idx) => (
+            <tr key={`agg-${section.id}-${agg.index}-${agg.type}`} className={`border-b border-gray-100 ${depthColors.bg}`}>
+              <td className="px-3 py-2 text-sm">
+                <span className="flex items-center gap-1">
+                  {idx + 1}
+                  <span className={`w-2 h-2 rounded-full ${
+                    agg.type === 'labor' ? 'bg-blue-500' :
+                    agg.type === 'material' ? 'bg-green-500' : 'bg-orange-500'
+                  }`}></span>
+                </span>
+              </td>
+              <td className="px-3 py-2 text-sm font-mono text-gray-600">{agg.index}</td>
+              <td className="px-3 py-2 text-sm text-gray-800">{agg.name}</td>
+              <td className="px-3 py-2 text-sm text-right text-gray-600">{agg.unit}</td>
+              <td className={`px-3 py-2 text-sm text-right ${viewOptionsPanel.highlightZeroPrices && agg.unitPrice === 0 ? 'text-amber-600 font-semibold bg-amber-50' : 'text-gray-600'}`}>{formatNumber(agg.unitPrice, 3)}</td>
+              <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(agg.totalQuantity, 2)}</td>
+              <td className="px-3 py-2 text-sm text-right font-medium">{formatNumber(agg.totalValue, 2)}</td>
+              <td className="px-3 py-2 text-sm text-right text-gray-500">{formatNumber(0, 3)}</td>
+              <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(agg.totalQuantity, 3)}</td>
+            </tr>
+          ));
+        })()}
+
+        {/* Positions in section - individual rendering for non-naklady views */}
+        {isExpanded && viewMode !== 'naklady' && section.positionIds.map((posId, posIndex) => {
           const position = estimateData.positions[posId];
           if (!position) return null;
           return renderPositionRow(position, posIndex + 1, section.id, depth);
@@ -6891,8 +6965,22 @@ export const KosztorysEditorPage: React.FC = () => {
               </button>
             </div>
           )}
-          {/* Narzuty View - matching eKosztorysowanie layout */}
-          {viewMode === 'narzuty' && leftPanelMode !== 'export' && (
+          {/* Narzuty View - summary with calculated values */}
+          {viewMode === 'narzuty' && leftPanelMode !== 'export' && (() => {
+            const laborTotal = calculationResult?.totalLabor || 0;
+            const materialTotal = calculationResult?.totalMaterial || 0;
+            const equipmentTotal = calculationResult?.totalEquipment || 0;
+
+            const kpOverhead = estimateData.root.overheads.find(o => o.name.includes('Kp'));
+            const zOverhead = estimateData.root.overheads.find(o => o.name.includes('Zysk'));
+            const kzOverhead = estimateData.root.overheads.find(o => o.name.includes('zakupu'));
+
+            const kpValue = kpOverhead ? laborTotal * (kpOverhead.value / 100) : 0;
+            const kzValue = kzOverhead ? materialTotal * (kzOverhead.value / 100) : 0;
+            const zBase = laborTotal + kpValue;
+            const zValue = zOverhead ? zBase * (zOverhead.value / 100) : 0;
+
+            return (
             <div className="p-4 space-y-6">
               {/* Koszt zakupu materiałów */}
               <div>
@@ -6904,21 +6992,27 @@ export const KosztorysEditorPage: React.FC = () => {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Nazwa</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Grupa</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Od materiałów</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Podstawa (M)</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Wartość</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estimateData.root.overheads.filter(o => o.type === 'purchase_costs').map((overhead, index) => (
-                      <tr key={overhead.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
-                        <td className="px-3 py-2 text-sm text-gray-800">{overhead.name || 'Koszty zakupu'}</td>
+                    {kzOverhead ? (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-600">1</td>
+                        <td className="px-3 py-2 text-sm text-gray-800">{kzOverhead.name || 'Koszty zakupu'}</td>
                         <td className="px-3 py-2 text-sm text-right text-gray-600">Kz</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">{overhead.value}%</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">-</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">✓</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{kzOverhead.value}%</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(materialTotal, 2)}</td>
+                        <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatNumber(kzValue, 2)}</td>
                       </tr>
-                    ))}
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-4 text-sm text-gray-400 text-center">
+                          Brak kosztów zakupu
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -6933,35 +7027,97 @@ export const KosztorysEditorPage: React.FC = () => {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Nazwa</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-20">Od robocizny</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Od materiałów</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-20">Od sprzętu</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Podstawa</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Wartość</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Obliczane od</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Ust. na poziomie</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {estimateData.root.overheads.filter(o => o.type === 'indirect_costs' || o.type === 'profit').map((overhead, index) => (
-                      <tr key={overhead.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
-                        <td className="px-3 py-2 text-sm text-gray-800">
-                          {overhead.type === 'indirect_costs' ? 'Koszty pośrednie' : 'Zysk'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">
-                          {overhead.type === 'indirect_costs' ? 'Kp' : 'Z'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">{overhead.value}%</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">
-                          {overhead.base === 'labor' || overhead.base === 'labor_and_equipment' ? '✓' : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">-</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">
-                          {overhead.base === 'equipment' || overhead.base === 'labor_and_equipment' ? '✓' : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-600">R+S</td>
+                    {kpOverhead && (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-600">1</td>
+                        <td className="px-3 py-2 text-sm text-gray-800">Koszty pośrednie</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">Kp</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{kpOverhead.value}%</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(laborTotal, 2)}</td>
+                        <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatNumber(kpValue, 2)}</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">R</td>
                         <td className="px-3 py-2 text-sm text-right text-gray-600">kosztorys</td>
                       </tr>
-                    ))}
+                    )}
+                    {zOverhead && (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-600">{kpOverhead ? 2 : 1}</td>
+                        <td className="px-3 py-2 text-sm text-gray-800">Zysk</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">Z</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{zOverhead.value}%</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(zBase, 2)}</td>
+                        <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatNumber(zValue, 2)}</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">R+Kp</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">kosztorys</td>
+                      </tr>
+                    )}
+                    {!kpOverhead && !zOverhead && (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-4 text-sm text-gray-400 text-center">
+                          Brak narzutów procentowych
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Podsumowanie narzutów */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Podsumowanie</h3>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Składnik</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-28">Wartość</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Robocizna (R)</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(laborTotal, 2)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Materiały (M)</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(materialTotal, 2)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-800">Sprzęt (S)</td>
+                      <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(equipmentTotal, 2)}</td>
+                    </tr>
+                    <tr className="border-b border-gray-100 hover:bg-gray-50 bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">Koszty bezpośrednie (R+M+S)</td>
+                      <td className="px-3 py-2 text-sm text-right font-medium text-gray-900">{formatNumber(calculationResult?.totalDirect || 0, 2)}</td>
+                    </tr>
+                    {kpOverhead && kpOverhead.value > 0 && (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-800">Koszty pośrednie Kp ({kpOverhead.value}% od R)</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(kpValue, 2)}</td>
+                      </tr>
+                    )}
+                    {zOverhead && zOverhead.value > 0 && (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-800">Zysk Z ({zOverhead.value}% od R+Kp)</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(zValue, 2)}</td>
+                      </tr>
+                    )}
+                    {kzOverhead && kzOverhead.value > 0 && (
+                      <tr className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-gray-800">Koszty zakupu Kz ({kzOverhead.value}% od M)</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-600">{formatNumber(kzValue, 2)}</td>
+                      </tr>
+                    )}
+                    <tr className="border-b border-gray-200 bg-blue-50">
+                      <td className="px-3 py-2 text-sm font-bold text-blue-900">Razem z narzutami</td>
+                      <td className="px-3 py-2 text-sm text-right font-bold text-blue-900">{formatNumber(calculationResult?.totalValue || 0, 2)}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -6977,14 +7133,12 @@ export const KosztorysEditorPage: React.FC = () => {
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Obliczane od</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24"></th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24"></th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Ust. na poziomie</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td colSpan={8} className="px-3 py-4 text-sm text-gray-400 text-center">
+                      <td colSpan={6} className="px-3 py-4 text-sm text-gray-400 text-center">
                         Brak dodatków
                       </td>
                     </tr>
@@ -7002,16 +7156,13 @@ export const KosztorysEditorPage: React.FC = () => {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Nazwa</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Skrót</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-16">Stawka</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-20">Od robocizny</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Od materiałów</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-20">Od sprzętu</th>
                       <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Obliczane od</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Ust. na poziomie</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400 w-24">Wartość</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td colSpan={9} className="px-3 py-4 text-sm text-gray-400 text-center">
+                      <td colSpan={6} className="px-3 py-4 text-sm text-gray-400 text-center">
                         Brak stawek VAT
                       </td>
                     </tr>
@@ -7019,7 +7170,8 @@ export const KosztorysEditorPage: React.FC = () => {
                 </table>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Zestawienia View - matching eKosztorysowanie summary layout */}
           {viewMode === 'zestawienia' && leftPanelMode !== 'export' && (
