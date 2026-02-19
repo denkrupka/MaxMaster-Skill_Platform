@@ -95,6 +95,7 @@ interface ContactFormData {
 }
 
 interface ExistingClient {
+  contractor_id?: string;
   client_name: string;
   nip: string | null;
   company_street: string | null;
@@ -279,6 +280,10 @@ export const EstimatesPage: React.FC = () => {
   const [showNewEstimateModal, setShowNewEstimateModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [estimateToDelete, setEstimateToDelete] = useState<any>(null);
+
+  // Estimate details modal state
+  const [showEstimateDetailModal, setShowEstimateDetailModal] = useState(false);
+  const [selectedEstimateDetail, setSelectedEstimateDetail] = useState<any>(null);
   const [formData, setFormData] = useState<RequestFormData>(initialFormData);
   const [contacts, setContacts] = useState<ContactFormData[]>([{ ...initialContactData }]);
   const [gusLoading, setGusLoading] = useState(false);
@@ -308,6 +313,11 @@ export const EstimatesPage: React.FC = () => {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState<ExistingClient[]>([]);
+
+  // Client contacts (existing representatives)
+  const [clientContacts, setClientContacts] = useState<any[]>([]);
+  const [showAddContactForm, setShowAddContactForm] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState('');
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -495,7 +505,7 @@ export const EstimatesPage: React.FC = () => {
     try {
       const { data: contractorsData } = await supabase
         .from('contractors')
-        .select('name, nip, legal_address')
+        .select('id, name, nip, legal_address')
         .eq('company_id', currentUser.company_id)
         .eq('contractor_type', 'customer')
         .is('deleted_at', null)
@@ -512,6 +522,7 @@ export const EstimatesPage: React.FC = () => {
       if (contractorsData) {
         contractorsData.forEach(c => {
           allClients.push({
+            contractor_id: c.id,
             client_name: c.name,
             nip: c.nip,
             company_street: null,
@@ -1051,6 +1062,20 @@ export const EstimatesPage: React.FC = () => {
     setShowObjectAddressSuggestions(false);
   };
 
+  const loadClientContacts = async (contractorId: string) => {
+    try {
+      const { data } = await supabase
+        .from('contractor_client_contacts')
+        .select('*')
+        .eq('client_id', contractorId)
+        .order('last_name');
+      setClientContacts(data || []);
+    } catch (err) {
+      console.error('Error loading client contacts:', err);
+      setClientContacts([]);
+    }
+  };
+
   const selectExistingClient = (client: ExistingClient) => {
     setFormData(prev => ({
       ...prev,
@@ -1064,6 +1089,31 @@ export const EstimatesPage: React.FC = () => {
     }));
     setClientSearchQuery('');
     setShowClientDropdown(false);
+    // Load contacts for this client
+    if (client.contractor_id) {
+      loadClientContacts(client.contractor_id);
+    } else {
+      setClientContacts([]);
+    }
+    setSelectedContactId('');
+    setShowAddContactForm(false);
+  };
+
+  const selectExistingContact = (contactId: string) => {
+    setSelectedContactId(contactId);
+    const contact = clientContacts.find(c => c.id === contactId);
+    if (contact) {
+      // Set this contact as the first/only contact in the form
+      setContacts([{
+        first_name: contact.first_name || '',
+        last_name: contact.last_name || '',
+        phone: contact.phone || '',
+        email: contact.email || '',
+        position: contact.position || '',
+        is_primary: true
+      }]);
+      setShowAddContactForm(false);
+    }
   };
 
   // Contact management
@@ -1646,13 +1696,25 @@ export const EstimatesPage: React.FC = () => {
                               <RotateCcw className="w-4 h-4" />
                             </button>
                           ) : (
-                            <button
-                              onClick={() => openDeleteConfirm(estimate)}
-                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Usuń"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => {
+                                  setSelectedEstimateDetail(estimate);
+                                  setShowEstimateDetailModal(true);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                title="Szczegóły"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => openDeleteConfirm(estimate)}
+                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                title="Usuń"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1878,7 +1940,12 @@ export const EstimatesPage: React.FC = () => {
                     </h3>
                     <button
                       type="button"
-                      onClick={addContact}
+                      onClick={() => {
+                        if (!showAddContactForm) {
+                          addContact();
+                        }
+                        setShowAddContactForm(!showAddContactForm);
+                      }}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
                     >
                       <UserPlus className="w-4 h-4" />
@@ -1886,97 +1953,128 @@ export const EstimatesPage: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="space-y-4">
-                    {contacts.map((contact, index) => (
-                      <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={contact.is_primary}
-                                onChange={() => updateContact(index, 'is_primary', true)}
-                                className="w-4 h-4 text-blue-600 rounded"
-                              />
-                              <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
-                                {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
-                                Główny kontakt
-                              </span>
-                            </label>
-                          </div>
-                          {contacts.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeContact(index)}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-4 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
-                            <input
-                              type="text"
-                              value={contact.first_name}
-                              onChange={e => updateContact(index, 'first_name', e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                              placeholder="Jan"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
-                            <input
-                              type="text"
-                              value={contact.last_name}
-                              onChange={e => updateContact(index, 'last_name', e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                              placeholder="Kowalski"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
-                            <input
-                              type="tel"
-                              value={contact.phone}
-                              onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                              placeholder="+48 XXX XXX XXX"
-                              maxLength={16}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
-                            <input
-                              type="text"
-                              value={contact.position}
-                              onChange={e => updateContact(index, 'position', e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                              placeholder="Kierownik projektu"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
-                            <input
-                              type="email"
-                              value={contact.email}
-                              onChange={e => updateContact(index, 'email', e.target.value)}
-                              className={`w-full px-3 py-2 border rounded-lg text-sm ${
-                                contact.email && !isValidEmail(contact.email)
-                                  ? 'border-red-300 focus:ring-red-500'
-                                  : 'border-slate-200 focus:ring-blue-500'
-                              }`}
-                              placeholder="email@firma.pl"
-                            />
-                            {contact.email && !isValidEmail(contact.email) && (
-                              <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                  {/* Dropdown to select existing contact */}
+                  {clientContacts.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Wybierz istniejącego przedstawiciela</label>
+                      <select
+                        value={selectedContactId}
+                        onChange={e => selectExistingContact(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                      >
+                        <option value="">— Wybierz z listy —</option>
+                        {clientContacts.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.first_name} {c.last_name}{c.position ? ` (${c.position})` : ''}{c.is_main_contact ? ' ★' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Manual add contact form - shown only when "Dodaj" is clicked */}
+                  {showAddContactForm && (
+                    <div className="space-y-4">
+                      {contacts.map((contact, index) => (
+                        <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={contact.is_primary}
+                                  onChange={() => updateContact(index, 'is_primary', true)}
+                                  className="w-4 h-4 text-blue-600 rounded"
+                                />
+                                <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                                  {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
+                                  Główny kontakt
+                                </span>
+                              </label>
+                            </div>
+                            {contacts.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeContact(index)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             )}
                           </div>
+                          <div className="grid grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                              <input
+                                type="text"
+                                value={contact.first_name}
+                                onChange={e => updateContact(index, 'first_name', e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                                placeholder="Jan"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                              <input
+                                type="text"
+                                value={contact.last_name}
+                                onChange={e => updateContact(index, 'last_name', e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                                placeholder="Kowalski"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                              <input
+                                type="tel"
+                                value={contact.phone}
+                                onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                                placeholder="+48 XXX XXX XXX"
+                                maxLength={16}
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                              <input
+                                type="text"
+                                value={contact.position}
+                                onChange={e => updateContact(index, 'position', e.target.value)}
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                                placeholder="Kierownik projektu"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                              <input
+                                type="email"
+                                value={contact.email}
+                                onChange={e => updateContact(index, 'email', e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                                  contact.email && !isValidEmail(contact.email)
+                                    ? 'border-red-300 focus:ring-red-500'
+                                    : 'border-slate-200 focus:ring-blue-500'
+                                }`}
+                                placeholder="email@firma.pl"
+                              />
+                              {contact.email && !isValidEmail(contact.email) && (
+                                <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Show selected contact summary if selected from dropdown and form is hidden */}
+                  {!showAddContactForm && selectedContactId && contacts.length > 0 && contacts[0].first_name && (
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm">
+                      <span className="font-medium text-blue-800">{contacts[0].first_name} {contacts[0].last_name}</span>
+                      {contacts[0].position && <span className="text-blue-600 ml-2">({contacts[0].position})</span>}
+                      {contacts[0].phone && <span className="text-blue-600 ml-2">{contacts[0].phone}</span>}
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Object info */}
@@ -2950,6 +3048,176 @@ export const EstimatesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Estimate Detail Modal */}
+      {showEstimateDetailModal && selectedEstimateDetail && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="font-mono text-lg font-bold text-slate-900">
+                    {selectedEstimateDetail.estimate_number}
+                  </span>
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                    selectedEstimateDetail.status === 'approved' ? 'bg-green-100 text-green-700' :
+                    selectedEstimateDetail.status === 'pending_approval' ? 'bg-yellow-100 text-yellow-700' :
+                    selectedEstimateDetail.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>
+                    {selectedEstimateDetail.status === 'draft' ? 'Wersja robocza' :
+                     selectedEstimateDetail.status === 'pending_approval' ? 'Do akceptacji' :
+                     selectedEstimateDetail.status === 'approved' ? 'Zaakceptowany' :
+                     selectedEstimateDetail.status === 'rejected' ? 'Odrzucony' : selectedEstimateDetail.status}
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  {selectedEstimateDetail.request?.investment_name || selectedEstimateDetail.settings?.name || 'Kosztorys'}
+                </h2>
+                <p className="text-sm text-slate-500">{selectedEstimateDetail.request?.client_name || '—'}</p>
+              </div>
+              <button
+                onClick={() => setShowEstimateDetailModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-lg"
+              >
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-6">
+                {/* Left column */}
+                <div className="space-y-5">
+                  {/* Dane Klienta */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-blue-500" />
+                      Dane Klienta
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Nazwa firmy:</span>
+                        <span className="font-medium">{selectedEstimateDetail.request?.client_name || '—'}</span>
+                      </div>
+                      {selectedEstimateDetail.request?.address && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Adres:</span>
+                          <span className="font-medium text-right">{selectedEstimateDetail.request.address}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dane Obiektu */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-amber-500" />
+                      Dane Obiektu
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Inwestycja:</span>
+                        <span className="font-medium">{selectedEstimateDetail.request?.investment_name || '—'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right column */}
+                <div className="space-y-5">
+                  {/* Parametry */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-indigo-500" />
+                      Parametry
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      {selectedEstimateDetail.request?.work_types?.length > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Rodzaj prac:</span>
+                          <span className="font-medium text-right">
+                            {selectedEstimateDetail.request.work_types.map((wt: any) =>
+                              `${wt.work_type?.code} - ${wt.work_type?.name}`
+                            ).join(', ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Terminy */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-orange-500" />
+                      Terminy
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Data utworzenia:</span>
+                        <span className="font-medium">
+                          {new Date(selectedEstimateDetail.created_at).toLocaleDateString('pl-PL')}
+                        </span>
+                      </div>
+                      {selectedEstimateDetail.updated_at && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Ostatnia zmiana:</span>
+                          <span className="font-medium">
+                            {new Date(selectedEstimateDetail.updated_at).toLocaleDateString('pl-PL')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Wartość */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <Wallet className="w-5 h-5 text-green-500" />
+                      Wartość
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Netto:</span>
+                        <span className="font-medium">
+                          {(selectedEstimateDetail.subtotal_net || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Brutto:</span>
+                        <span className="font-bold text-green-700">
+                          {(selectedEstimateDetail.total_gross || 0).toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  setShowEstimateDetailModal(false);
+                  window.location.hash = `#/construction/kosztorys/${selectedEstimateDetail.id}`;
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+              >
+                <Pencil className="w-4 h-4" />
+                Edytuj w formularzu
+              </button>
+              <button
+                onClick={() => setShowEstimateDetailModal(false)}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg border border-slate-200"
+              >
+                Zamknij
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -3185,7 +3453,12 @@ export const EstimatesPage: React.FC = () => {
                   </h3>
                   <button
                     type="button"
-                    onClick={addContact}
+                    onClick={() => {
+                      if (!showAddContactForm) {
+                        addContact();
+                      }
+                      setShowAddContactForm(!showAddContactForm);
+                    }}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
                   >
                     <UserPlus className="w-4 h-4" />
@@ -3193,97 +3466,128 @@ export const EstimatesPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  {contacts.map((contact, index) => (
-                    <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={contact.is_primary}
-                              onChange={() => updateContact(index, 'is_primary', true)}
-                              className="w-4 h-4 text-blue-600 rounded"
-                            />
-                            <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
-                              {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
-                              Główny kontakt
-                            </span>
-                          </label>
-                        </div>
-                        {contacts.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeContact(index)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-4 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
-                          <input
-                            type="text"
-                            value={contact.first_name}
-                            onChange={e => updateContact(index, 'first_name', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Jan"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
-                          <input
-                            type="text"
-                            value={contact.last_name}
-                            onChange={e => updateContact(index, 'last_name', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Kowalski"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
-                          <input
-                            type="tel"
-                            value={contact.phone}
-                            onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="+48 XXX XXX XXX"
-                            maxLength={16}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
-                          <input
-                            type="text"
-                            value={contact.position}
-                            onChange={e => updateContact(index, 'position', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Kierownik projektu"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
-                          <input
-                            type="email"
-                            value={contact.email}
-                            onChange={e => updateContact(index, 'email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg text-sm ${
-                              contact.email && !isValidEmail(contact.email)
-                                ? 'border-red-300 focus:ring-red-500'
-                                : 'border-slate-200 focus:ring-blue-500'
-                            }`}
-                            placeholder="email@firma.pl"
-                          />
-                          {contact.email && !isValidEmail(contact.email) && (
-                            <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                {/* Dropdown to select existing contact */}
+                {clientContacts.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Wybierz istniejącego przedstawiciela</label>
+                    <select
+                      value={selectedContactId}
+                      onChange={e => selectExistingContact(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">— Wybierz z listy —</option>
+                      {clientContacts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.first_name} {c.last_name}{c.position ? ` (${c.position})` : ''}{c.is_main_contact ? ' ★' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Manual add contact form */}
+                {showAddContactForm && (
+                  <div className="space-y-4">
+                    {contacts.map((contact, index) => (
+                      <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={contact.is_primary}
+                                onChange={() => updateContact(index, 'is_primary', true)}
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                                {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
+                                Główny kontakt
+                              </span>
+                            </label>
+                          </div>
+                          {contacts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeContact(index)}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                            <input
+                              type="text"
+                              value={contact.first_name}
+                              onChange={e => updateContact(index, 'first_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Jan"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                            <input
+                              type="text"
+                              value={contact.last_name}
+                              onChange={e => updateContact(index, 'last_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kowalski"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                            <input
+                              type="tel"
+                              value={contact.phone}
+                              onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="+48 XXX XXX XXX"
+                              maxLength={16}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                            <input
+                              type="text"
+                              value={contact.position}
+                              onChange={e => updateContact(index, 'position', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kierownik projektu"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={e => updateContact(index, 'email', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                                contact.email && !isValidEmail(contact.email)
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-200 focus:ring-blue-500'
+                              }`}
+                              placeholder="email@firma.pl"
+                            />
+                            {contact.email && !isValidEmail(contact.email) && (
+                              <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Show selected contact summary */}
+                {!showAddContactForm && selectedContactId && contacts.length > 0 && contacts[0].first_name && (
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm">
+                    <span className="font-medium text-blue-800">{contacts[0].first_name} {contacts[0].last_name}</span>
+                    {contacts[0].position && <span className="text-blue-600 ml-2">({contacts[0].position})</span>}
+                    {contacts[0].phone && <span className="text-blue-600 ml-2">{contacts[0].phone}</span>}
+                  </div>
+                )}
               </div>
 
               {/* 3. Object info */}

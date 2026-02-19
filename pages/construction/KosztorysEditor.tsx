@@ -1390,7 +1390,7 @@ export const KosztorysEditorPage: React.FC = () => {
         .from('kosztorys_estimates')
         .select(`
           *,
-          request:kosztorys_requests(id, investment_name, client_name, address),
+          request:kosztorys_requests(id, investment_name, client_name, address, nip, company_street, company_street_number, company_city, company_postal_code, contacts:kosztorys_request_contacts(*)),
           items:kosztorys_estimate_items(*),
           equipment_items:kosztorys_estimate_equipment(*, equipment:kosztorys_equipment(*))
         `)
@@ -1470,6 +1470,22 @@ export const KosztorysEditorPage: React.FC = () => {
             expandedSections: new Set(allSectionIds),
             expandedPositions: new Set(allPositionIds),
           }));
+
+          // Auto-fill title page from request data (only empty fields)
+          if (data.request) {
+            setTitlePageData(prev => ({
+              ...prev,
+              title: prev.title || data.request?.investment_name || '',
+              orderName: prev.orderName || data.request?.investment_name || '',
+              orderAddress: prev.orderAddress || data.request?.address || '',
+              clientName: prev.clientName || data.request?.client_name || '',
+              clientAddress: prev.clientAddress || [
+                data.request?.company_street,
+                data.request?.company_street_number
+              ].filter(Boolean).join(' ') + (data.request?.company_city ? `, ${data.request?.company_postal_code || ''} ${data.request?.company_city}` : ''),
+            }));
+          }
+
           setLoading(false);
           return;
         }
@@ -1569,6 +1585,21 @@ export const KosztorysEditorPage: React.FC = () => {
           ...prev,
           expandedPositions: new Set(positionIds),
         }));
+
+        // Auto-fill title page from request data
+        if (data.request) {
+          setTitlePageData(prev => ({
+            ...prev,
+            title: prev.title || data.request?.investment_name || '',
+            orderName: prev.orderName || data.request?.investment_name || '',
+            orderAddress: prev.orderAddress || data.request?.address || '',
+            clientName: prev.clientName || data.request?.client_name || '',
+            clientAddress: prev.clientAddress || [
+              data.request?.company_street,
+              data.request?.company_street_number
+            ].filter(Boolean).join(' ') + (data.request?.company_city ? `, ${data.request?.company_postal_code || ''} ${data.request?.company_city}` : ''),
+          }));
+        }
       }
     } catch (error) {
       console.error('Error loading estimate:', error);
@@ -10497,49 +10528,83 @@ export const KosztorysEditorPage: React.FC = () => {
 
       {/* Exit Confirmation Modal */}
       {/* Offer exists modal */}
+      {/* Offer exists modal */}
       {showOfferExistsModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-5 border-b border-blue-100">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <ReceiptText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Oferta już istnieje</h2>
+                    <p className="text-sm text-gray-500">Wybierz co chcesz zrobić</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowOfferExistsModal(false)}
+                  className="p-1.5 hover:bg-white/60 rounded-lg text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
             <div className="p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-2">Oferta już istnieje</h2>
-              <p className="text-sm text-gray-600 mb-1">
-                Na podstawie tego kosztorysu została już wystawiona oferta:
-              </p>
-              <p className="text-sm font-medium text-gray-800 mb-6">
-                {existingOfferName}
-              </p>
-              <div className="flex flex-col gap-2">
+              {/* Existing offer info card */}
+              <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+                <p className="text-xs text-slate-500 mb-1">Istniejąca oferta</p>
+                <p className="text-sm font-semibold text-slate-800">{existingOfferName}</p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="space-y-3">
                 <button
                   onClick={async () => {
                     setShowOfferExistsModal(false);
                     await createNewOfferFromEstimate();
                   }}
-                  className="w-full px-4 py-2.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors group"
                 >
-                  Utwórz nową ofertę
+                  <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center group-hover:bg-blue-400">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold">Utwórz nową ofertę</p>
+                    <p className="text-xs text-blue-200">Niezależna oferta z aktualnymi danymi</p>
+                  </div>
                 </button>
+
                 <button
                   onClick={() => {
                     setShowOfferExistsModal(false);
                     navigate(`/construction/offers?offerId=${existingOfferId}`);
                   }}
-                  className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300 text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors group"
                 >
-                  Przejdź do istniejącej oferty
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-slate-200">
+                    <ArrowUpRight className="w-4 h-4 text-slate-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-slate-800">Przejdź do istniejącej oferty</p>
+                    <p className="text-xs text-slate-500">Otwórz bez zmian</p>
+                  </div>
                 </button>
+
                 <button
-                  onClick={() => {
-                    setShowOfferUpdateConfirm(true);
-                  }}
-                  className="w-full px-4 py-2.5 text-sm text-orange-700 hover:bg-orange-50 rounded-lg border border-orange-300 text-left"
+                  onClick={() => setShowOfferUpdateConfirm(true)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-orange-200 rounded-xl hover:bg-orange-50 transition-colors group"
                 >
-                  Aktualizuj istniejącą ofertę
-                </button>
-                <button
-                  onClick={() => setShowOfferExistsModal(false)}
-                  className="w-full px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg text-center mt-1"
-                >
-                  Anuluj
+                  <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-200">
+                    <RefreshCw className="w-4 h-4 text-orange-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-orange-700">Aktualizuj istniejącą ofertę</p>
+                    <p className="text-xs text-orange-500">Zastąp danymi z kosztorysu</p>
+                  </div>
                 </button>
               </div>
             </div>
@@ -10549,26 +10614,33 @@ export const KosztorysEditorPage: React.FC = () => {
 
       {/* Offer update confirmation modal */}
       {showOfferUpdateConfirm && (
-        <div className="fixed inset-0 z-[60] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-5 border-b border-red-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-red-700">Potwierdzenie aktualizacji</h2>
+                  <p className="text-sm text-red-500">Ta operacja jest nieodwracalna</p>
+                </div>
+              </div>
+            </div>
             <div className="p-6">
-              <h2 className="text-lg font-bold text-red-600 mb-2">Potwierdzenie aktualizacji</h2>
-              <p className="text-sm text-gray-600 mb-2">
-                Wszystkie dane z poprzedniej oferty zostaną zastąpione aktualnymi danymi z kosztorysu.
-              </p>
-              <p className="text-sm font-medium text-red-600 mb-6">
-                Tej operacji nie można cofnąć.
+              <p className="text-sm text-gray-600 mb-6">
+                Wszystkie sekcje i pozycje z poprzedniej oferty zostaną <span className="font-semibold text-red-600">trwale usunięte</span> i zastąpione aktualnymi danymi z kosztorysu.
               </p>
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowOfferUpdateConfirm(false)}
-                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
+                  className="px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-xl border border-gray-200"
                 >
                   Anuluj
                 </button>
                 <button
                   onClick={updateExistingOfferFromEstimate}
-                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium"
                 >
                   Tak, aktualizuj ofertę
                 </button>
