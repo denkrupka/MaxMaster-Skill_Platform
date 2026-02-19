@@ -103,6 +103,7 @@ interface ExistingClient {
   company_city: string | null;
   company_postal_code: string | null;
   company_country: string | null;
+  source: 'contractor' | 'request_history';
 }
 
 interface RequestFormData {
@@ -288,6 +289,8 @@ export const EstimatesPage: React.FC = () => {
   const [contacts, setContacts] = useState<ContactFormData[]>([{ ...initialContactData }]);
   const [gusLoading, setGusLoading] = useState(false);
   const [gusError, setGusError] = useState<string | null>(null);
+  const [gusSuccess, setGusSuccess] = useState<string | null>(null);
+  const [clientSelected, setClientSelected] = useState(false);
 
   // Users for assignment
   const [users, setUsers] = useState<UserType[]>([]);
@@ -383,6 +386,11 @@ export const EstimatesPage: React.FC = () => {
         c.client_name.toLowerCase().includes(query) ||
         (c.nip && c.nip.includes(query))
       );
+      // Sort: contractors first, then historical; alphabetically within each group
+      filtered.sort((a, b) => {
+        if (a.source !== b.source) return a.source === 'contractor' ? -1 : 1;
+        return a.client_name.localeCompare(b.client_name);
+      });
       setFilteredClients(filtered);
       setShowClientDropdown(filtered.length > 0 || clientSearchQuery.trim().length >= 2);
     } else {
@@ -547,7 +555,8 @@ export const EstimatesPage: React.FC = () => {
             company_street_number: null,
             company_city: city,
             company_postal_code: null,
-            company_country: 'Polska'
+            company_country: 'Polska',
+            source: 'contractor'
           });
 
           if (c.nip) {
@@ -599,7 +608,8 @@ export const EstimatesPage: React.FC = () => {
           allClients.push({
             ...r,
             contractor_id: matchedContractor?.id,
-            nip: r.nip || matchedContractor?.nip || null
+            nip: r.nip || matchedContractor?.nip || null,
+            source: 'request_history'
           });
         });
       }
@@ -1131,7 +1141,23 @@ export const EstimatesPage: React.FC = () => {
         .select('*')
         .eq('client_id', contractorId)
         .order('last_name');
-      setClientContacts(data || []);
+      const contactsList = data || [];
+      setClientContacts(contactsList);
+
+      // Auto-select main contact if available
+      const mainContact = contactsList.find((c: any) => c.is_main_contact === true);
+      if (mainContact) {
+        setSelectedContactId(mainContact.id);
+        setContacts([{
+          first_name: mainContact.first_name || '',
+          last_name: mainContact.last_name || '',
+          phone: mainContact.phone || '',
+          email: mainContact.email || '',
+          position: mainContact.position || '',
+          is_primary: true
+        }]);
+        setShowAddContactForm(false);
+      }
     } catch (err) {
       console.error('Error loading client contacts:', err);
       setClientContacts([]);
@@ -1202,6 +1228,58 @@ export const EstimatesPage: React.FC = () => {
     }
   };
 
+  const lookupContractorByNip = async (nip: string): Promise<{ contractor_id: string; name: string; street: string; streetNumber: string; city: string; postalCode: string; country: string } | null> => {
+    if (!currentUser) return null;
+    try {
+      const rawNip = nip.replace(/\D/g, '');
+      const { data: allContractors } = await supabase
+        .from('contractors')
+        .select('id, name, nip, legal_address')
+        .eq('company_id', currentUser.company_id)
+        .is('deleted_at', null);
+
+      const match = allContractors?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+      if (!match) return null;
+
+      // Parse address from legal_address field
+      let street = '', streetNumber = '', city = '', postalCode = '', country = 'Polska';
+      if (match.legal_address) {
+        const addr = String(match.legal_address);
+        const postalMatch = addr.match(/(\d{2}-\d{3})\s+(.+)/);
+        if (postalMatch) {
+          postalCode = postalMatch[1];
+          city = postalMatch[2].trim().split(/[,\n]/)[0].trim();
+        }
+        // Try to extract street and number from the part before postal code
+        const beforePostal = addr.split(/\d{2}-\d{3}/)[0]?.trim();
+        if (beforePostal) {
+          const cleanedStreet = beforePostal.replace(/[,\n]+$/, '').trim();
+          const numMatch = cleanedStreet.match(/^(.+?)\s+(\d+\S*)$/);
+          if (numMatch) {
+            street = numMatch[1];
+            streetNumber = numMatch[2];
+          } else {
+            street = cleanedStreet;
+          }
+        }
+      }
+
+      // Enrich with address data from existingClients (which has data merged from historical requests)
+      const enriched = existingClients.find(c => c.contractor_id === match.id);
+      if (enriched) {
+        if (!street && enriched.company_street) street = enriched.company_street;
+        if (!streetNumber && enriched.company_street_number) streetNumber = enriched.company_street_number;
+        if (!city && enriched.company_city) city = enriched.company_city;
+        if (!postalCode && enriched.company_postal_code) postalCode = enriched.company_postal_code;
+      }
+
+      return { contractor_id: match.id, name: match.name, street, streetNumber, city, postalCode, country };
+    } catch (err) {
+      console.error('Error looking up contractor by NIP:', err);
+      return null;
+    }
+  };
+
   const selectExistingClient = (client: ExistingClient) => {
     // If client has contractor_id but no NIP, look up NIP from contractor entries
     let nip = client.nip || '';
@@ -1232,6 +1310,7 @@ export const EstimatesPage: React.FC = () => {
     }
     setSelectedContactId('');
     setShowAddContactForm(false);
+    setClientSelected(true);
   };
 
   const selectExistingContact = (contactId: string) => {
@@ -1318,7 +1397,29 @@ export const EstimatesPage: React.FC = () => {
     }
     setGusLoading(true);
     setGusError(null);
+    setGusSuccess(null);
+
     try {
+      // Step 1: Check local contractor database first
+      const localContractor = await lookupContractorByNip(formData.nip);
+      if (localContractor) {
+        setFormData(prev => ({
+          ...prev,
+          client_name: localContractor.name,
+          company_street: localContractor.street || prev.company_street,
+          company_street_number: localContractor.streetNumber || prev.company_street_number,
+          company_city: localContractor.city || prev.company_city,
+          company_postal_code: localContractor.postalCode || prev.company_postal_code,
+          company_country: localContractor.country || 'Polska'
+        }));
+        await loadClientContactsById(localContractor.contractor_id);
+        setGusSuccess('Klient znaleziony w bazie kontrahentów');
+        setClientSelected(true);
+        setGusLoading(false);
+        return;
+      }
+
+      // Step 2: Not found locally - fetch from GUS API
       const result = await fetchCompanyByNip(formData.nip);
       if (result.success && result.data) {
         const data = result.data;
@@ -1442,6 +1543,9 @@ export const EstimatesPage: React.FC = () => {
       setFormData(initialFormData);
       setContacts([{ ...initialContactData }]);
       setSelectedWorkTypes([]);
+      setGusSuccess(null);
+      setClientSelected(false);
+      setClientContacts([]);
       window.location.hash = `#/construction/formulary/${newRequest.id}`;
     } catch (err) {
       console.error('Error saving new estimate:', err);
@@ -1457,6 +1561,9 @@ export const EstimatesPage: React.FC = () => {
     setContacts([{ ...initialContactData }]);
     setSelectedWorkTypes([]);
     setGusError(null);
+    setGusSuccess(null);
+    setClientSelected(false);
+    setClientContacts([]);
     setShowCompanyAddressSuggestions(false);
     setShowObjectAddressSuggestions(false);
     setShowWorkTypesDropdown(false);
@@ -1910,7 +2017,11 @@ export const EstimatesPage: React.FC = () => {
                       <input
                         type="text"
                         value={formData.nip}
-                        onChange={e => setFormData(prev => ({ ...prev, nip: e.target.value }))}
+                        onChange={e => {
+                          setFormData(prev => ({ ...prev, nip: e.target.value }));
+                          setGusError(null);
+                          setGusSuccess(null);
+                        }}
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                         placeholder="XXX-XXX-XX-XX"
                       />
@@ -1929,6 +2040,9 @@ export const EstimatesPage: React.FC = () => {
                   </div>
                   {gusError && (
                     <p className="text-sm text-red-600">{gusError}</p>
+                  )}
+                  {gusSuccess && (
+                    <p className="text-sm text-green-600">{gusSuccess}</p>
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1956,15 +2070,36 @@ export const EstimatesPage: React.FC = () => {
                         <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                           {filteredClients.length > 0 ? (
                             <>
-                              <div className="px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b">
-                                Istniejący klienci
-                              </div>
-                              {filteredClients.map((client, i) => (
+                              {filteredClients.some(c => c.source === 'contractor') && (
+                                <div className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border-b">
+                                  Kontrahenci z bazy
+                                </div>
+                              )}
+                              {filteredClients.filter(c => c.source === 'contractor').map((client, i) => (
                                 <button
-                                  key={i}
+                                  key={`c-${i}`}
                                   type="button"
                                   onClick={() => selectExistingClient(client)}
                                   className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0"
+                                >
+                                  <div className="font-medium text-slate-900">{client.client_name}</div>
+                                  <div className="text-xs text-slate-500 flex gap-2">
+                                    {client.nip && <span>NIP: {client.nip}</span>}
+                                    {client.company_city && <span>{client.company_city}</span>}
+                                  </div>
+                                </button>
+                              ))}
+                              {filteredClients.some(c => c.source === 'request_history') && (
+                                <div className="px-3 py-2 text-xs font-semibold text-slate-400 bg-slate-50 border-b border-t">
+                                  Z historii zapytań
+                                </div>
+                              )}
+                              {filteredClients.filter(c => c.source === 'request_history').map((client, i) => (
+                                <button
+                                  key={`h-${i}`}
+                                  type="button"
+                                  onClick={() => selectExistingClient(client)}
+                                  className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0 opacity-75"
                                 >
                                   <div className="font-medium text-slate-900">{client.client_name}</div>
                                   <div className="text-xs text-slate-500 flex gap-2">
@@ -2102,11 +2237,16 @@ export const EstimatesPage: React.FC = () => {
                         <option value="">— Wybierz z listy —</option>
                         {clientContacts.map(c => (
                           <option key={c.id} value={c.id}>
-                            {c.first_name} {c.last_name}{c.position ? ` (${c.position})` : ''}{c.is_main_contact ? ' ★' : ''}
+                            {c.is_main_contact ? '★ ' : ''}{c.first_name} {c.last_name}{c.position ? ` — ${c.position}` : ''}
                           </option>
                         ))}
                       </select>
                     </div>
+                  )}
+
+                  {/* No representatives info */}
+                  {clientSelected && clientContacts.length === 0 && !showAddContactForm && (
+                    <p className="text-sm text-slate-500 italic">Brak przedstawicieli w bazie dla tego klienta. Kliknij "Dodaj" aby dodać.</p>
                   )}
 
                   {/* Manual add contact form - shown only when "Dodaj" is clicked */}
@@ -3423,7 +3563,11 @@ export const EstimatesPage: React.FC = () => {
                     <input
                       type="text"
                       value={formData.nip}
-                      onChange={e => setFormData(prev => ({ ...prev, nip: e.target.value }))}
+                      onChange={e => {
+                        setFormData(prev => ({ ...prev, nip: e.target.value }));
+                        setGusError(null);
+                        setGusSuccess(null);
+                      }}
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="XXX-XXX-XX-XX"
                     />
@@ -3442,6 +3586,9 @@ export const EstimatesPage: React.FC = () => {
                 </div>
                 {gusError && (
                   <p className="text-sm text-red-600">{gusError}</p>
+                )}
+                {gusSuccess && (
+                  <p className="text-sm text-green-600">{gusSuccess}</p>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
@@ -3469,15 +3616,36 @@ export const EstimatesPage: React.FC = () => {
                       <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                         {filteredClients.length > 0 ? (
                           <>
-                            <div className="px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b">
-                              Istniejący klienci
-                            </div>
-                            {filteredClients.map((client, i) => (
+                            {filteredClients.some(c => c.source === 'contractor') && (
+                              <div className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border-b">
+                                Kontrahenci z bazy
+                              </div>
+                            )}
+                            {filteredClients.filter(c => c.source === 'contractor').map((client, i) => (
                               <button
-                                key={i}
+                                key={`c-${i}`}
                                 type="button"
                                 onClick={() => selectExistingClient(client)}
                                 className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0"
+                              >
+                                <div className="font-medium text-slate-900">{client.client_name}</div>
+                                <div className="text-xs text-slate-500 flex gap-2">
+                                  {client.nip && <span>NIP: {client.nip}</span>}
+                                  {client.company_city && <span>{client.company_city}</span>}
+                                </div>
+                              </button>
+                            ))}
+                            {filteredClients.some(c => c.source === 'request_history') && (
+                              <div className="px-3 py-2 text-xs font-semibold text-slate-400 bg-slate-50 border-b border-t">
+                                Z historii zapytań
+                              </div>
+                            )}
+                            {filteredClients.filter(c => c.source === 'request_history').map((client, i) => (
+                              <button
+                                key={`h-${i}`}
+                                type="button"
+                                onClick={() => selectExistingClient(client)}
+                                className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0 opacity-75"
                               >
                                 <div className="font-medium text-slate-900">{client.client_name}</div>
                                 <div className="text-xs text-slate-500 flex gap-2">
@@ -3615,11 +3783,16 @@ export const EstimatesPage: React.FC = () => {
                       <option value="">— Wybierz z listy —</option>
                       {clientContacts.map(c => (
                         <option key={c.id} value={c.id}>
-                          {c.first_name} {c.last_name}{c.position ? ` (${c.position})` : ''}{c.is_main_contact ? ' ★' : ''}
+                          {c.is_main_contact ? '★ ' : ''}{c.first_name} {c.last_name}{c.position ? ` — ${c.position}` : ''}
                         </option>
                       ))}
                     </select>
                   </div>
+                )}
+
+                {/* No representatives info */}
+                {clientSelected && clientContacts.length === 0 && !showAddContactForm && (
+                  <p className="text-sm text-slate-500 italic">Brak przedstawicieli w bazie dla tego klienta. Kliknij "Dodaj" aby dodać.</p>
                 )}
 
                 {/* Manual add contact form */}
