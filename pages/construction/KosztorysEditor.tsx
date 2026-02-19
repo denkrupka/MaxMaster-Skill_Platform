@@ -2320,6 +2320,243 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
+  // Create offer from estimate
+  const handleCreateOfferFromEstimate = async () => {
+    if (!estimate || !currentUser) return;
+
+    // Save first
+    await handleSave();
+
+    try {
+      // Generate offer number
+      const countRes = await supabase
+        .from('offers')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', currentUser.company_id);
+      const nextNum = (countRes.count || 0) + 1;
+      const offerNumber = `OFR-${new Date().getFullYear()}-${String(nextNum).padStart(4, '0')}`;
+
+      const vatRate = estimate.settings?.vatRate ?? 23;
+      const isExempt = vatRate < 0;
+      const totalNet = calculationResult?.totalValue || 0;
+      const vatAmount = isExempt ? 0 : totalNet * (vatRate / 100);
+      const totalGross = totalNet + vatAmount;
+
+      // Create offer
+      const { data: newOffer, error: offerError } = await supabase
+        .from('offers')
+        .insert({
+          company_id: currentUser.company_id,
+          name: `Oferta - ${estimate.settings.name || 'Kosztorys'}`,
+          number: offerNumber,
+          status: 'draft',
+          total_amount: totalNet,
+          discount_percent: 0,
+          discount_amount: 0,
+          final_amount: totalGross,
+          valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          notes: `Wygenerowano z kosztorysu: ${estimate.settings.name}`,
+          created_by_id: currentUser.id
+        })
+        .select()
+        .single();
+
+      if (offerError) throw offerError;
+
+      // Create sections and items from estimate data
+      for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+        const section = estimateData.sections[sectionId];
+        if (!section) continue;
+
+        const { data: newSection } = await supabase
+          .from('offer_sections')
+          .insert({
+            offer_id: newOffer.id,
+            name: section.name,
+            sort_order: sIdx
+          })
+          .select()
+          .single();
+
+        if (newSection) {
+          for (const [pIdx, posId] of section.positionIds.entries()) {
+            const position = estimateData.positions[posId];
+            if (!position) continue;
+            const posResult = calculationResult?.positions[posId];
+            const quantity = posResult?.quantity || 0;
+            const unitCost = posResult?.unitCost || 0;
+
+            await supabase
+              .from('offer_items')
+              .insert({
+                offer_id: newOffer.id,
+                section_id: newSection.id,
+                name: position.name,
+                description: position.base,
+                quantity: quantity,
+                unit_price: unitCost,
+                sort_order: pIdx,
+                is_optional: false
+              });
+          }
+        }
+      }
+
+      showNotificationMessage('Oferta została utworzona', 'success');
+      navigate('/construction/offers');
+    } catch (error: any) {
+      console.error('Error creating offer:', error);
+      showNotificationMessage('Błąd podczas tworzenia oferty', 'error');
+    }
+  };
+
+  // Create gantt schedule from estimate
+  const handleCreateGanttFromEstimate = async () => {
+    if (!estimate || !currentUser) return;
+
+    // Save first
+    await handleSave();
+
+    try {
+      // Create a project for this estimate
+      const { data: newProject, error: projError } = await supabase
+        .from('projects')
+        .insert({
+          company_id: currentUser.company_id,
+          name: estimate.settings.name || 'Projekt kosztorysu',
+          name_mode: 'custom',
+          status: 'active',
+          color: '#3b82f6',
+          billing_type: 'ryczalt',
+          created_by_id: currentUser.id
+        })
+        .select()
+        .single();
+
+      if (projError) throw projError;
+
+      const startDate = new Date();
+      let currentDate = new Date(startDate);
+      let sortOrder = 0;
+
+      // Create tasks from sections and positions
+      for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+        const section = estimateData.sections[sectionId];
+        if (!section) continue;
+
+        const sectionStart = new Date(currentDate);
+
+        // Create parent task for section
+        const { data: sectionTask } = await supabase
+          .from('gantt_tasks')
+          .insert({
+            project_id: newProject.id,
+            title: `${sIdx + 1}. ${section.name}`,
+            start_date: currentDate.toISOString().split('T')[0],
+            end_date: currentDate.toISOString().split('T')[0],
+            duration_days: 0,
+            progress: 0,
+            color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][sIdx % 5],
+            is_milestone: false,
+            sort_order: sortOrder++
+          })
+          .select()
+          .single();
+
+        let sectionEndDate = new Date(currentDate);
+
+        // Create child tasks for positions
+        for (const [pIdx, posId] of section.positionIds.entries()) {
+          const position = estimateData.positions[posId];
+          if (!position) continue;
+          const posResult = calculationResult?.positions[posId];
+          const quantity = posResult?.quantity || 0;
+
+          // Estimate duration: base 1 day, +1 per 10 units of quantity
+          const duration = Math.max(1, Math.ceil(quantity / 10));
+          const posStart = new Date(currentDate);
+          const posEnd = new Date(posStart);
+          posEnd.setDate(posEnd.getDate() + duration);
+
+          await supabase
+            .from('gantt_tasks')
+            .insert({
+              project_id: newProject.id,
+              parent_id: sectionTask?.id || null,
+              title: position.name,
+              start_date: posStart.toISOString().split('T')[0],
+              end_date: posEnd.toISOString().split('T')[0],
+              duration_days: duration,
+              progress: 0,
+              color: sectionTask?.color || '#3b82f6',
+              is_milestone: false,
+              sort_order: sortOrder++
+            });
+
+          // Move current date forward (positions sequential within section)
+          currentDate = new Date(posEnd);
+          if (currentDate > sectionEndDate) {
+            sectionEndDate = new Date(currentDate);
+          }
+        }
+
+        // Update section task end date
+        if (sectionTask) {
+          const sectionDuration = Math.max(1, Math.round((sectionEndDate.getTime() - sectionStart.getTime()) / (1000 * 60 * 60 * 24)));
+          await supabase
+            .from('gantt_tasks')
+            .update({
+              end_date: sectionEndDate.toISOString().split('T')[0],
+              duration_days: sectionDuration
+            })
+            .eq('id', sectionTask.id);
+        }
+      }
+
+      // Add finish milestone
+      await supabase
+        .from('gantt_tasks')
+        .insert({
+          project_id: newProject.id,
+          title: 'Zakończenie projektu',
+          start_date: currentDate.toISOString().split('T')[0],
+          end_date: currentDate.toISOString().split('T')[0],
+          duration_days: 0,
+          progress: 0,
+          color: '#ef4444',
+          is_milestone: true,
+          sort_order: sortOrder++
+        });
+
+      // Add FS dependencies between sections
+      const { data: allTasks } = await supabase
+        .from('gantt_tasks')
+        .select('id, parent_id, sort_order')
+        .eq('project_id', newProject.id)
+        .is('parent_id', null)
+        .order('sort_order');
+
+      if (allTasks && allTasks.length > 1) {
+        for (let i = 1; i < allTasks.length; i++) {
+          await supabase
+            .from('gantt_dependencies')
+            .insert({
+              project_id: newProject.id,
+              predecessor_id: allTasks[i - 1].id,
+              successor_id: allTasks[i].id,
+              type: 'FS'
+            });
+        }
+      }
+
+      showNotificationMessage('Harmonogram został utworzony', 'success');
+      navigate('/construction/gantt');
+    } catch (error: any) {
+      console.error('Error creating gantt:', error);
+      showNotificationMessage('Błąd podczas tworzenia harmonogramu', 'error');
+    }
+  };
+
   // Clean orphan positions from data (positions that exist but aren't in any section)
   const cleanOrphanPositions = (data: KosztorysCostEstimateData): KosztorysCostEstimateData => {
     // Get all position IDs that are actually referenced
@@ -5145,6 +5382,24 @@ export const KosztorysEditorPage: React.FC = () => {
             title="Zapisz"
           >
             {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          </button>
+
+          {/* Utwórz ofertę */}
+          <button
+            onClick={handleCreateOfferFromEstimate}
+            className="p-1.5 text-gray-500 hover:bg-green-100 hover:text-green-700 rounded"
+            title="Utwórz ofertę"
+          >
+            <FileSpreadsheet className="w-5 h-5" />
+          </button>
+
+          {/* Utwórz harmonogram */}
+          <button
+            onClick={handleCreateGanttFromEstimate}
+            className="p-1.5 text-gray-500 hover:bg-orange-100 hover:text-orange-700 rounded"
+            title="Utwórz harmonogram"
+          >
+            <FileBarChart className="w-5 h-5" />
           </button>
         </div>
       </div>
