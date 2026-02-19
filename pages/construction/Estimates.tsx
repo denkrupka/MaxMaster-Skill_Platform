@@ -1062,7 +1062,7 @@ export const EstimatesPage: React.FC = () => {
     setShowObjectAddressSuggestions(false);
   };
 
-  const loadClientContacts = async (contractorId: string) => {
+  const loadClientContactsById = async (contractorId: string) => {
     try {
       const { data } = await supabase
         .from('contractor_client_contacts')
@@ -1072,6 +1072,51 @@ export const EstimatesPage: React.FC = () => {
       setClientContacts(data || []);
     } catch (err) {
       console.error('Error loading client contacts:', err);
+      setClientContacts([]);
+    }
+  };
+
+  // Find contractor by NIP or name and load their contacts
+  const findAndLoadContacts = async (nip?: string, name?: string) => {
+    if (!currentUser) return;
+    try {
+      // Try by NIP first (exact match with multiple formats)
+      if (nip) {
+        const rawNip = nip.replace(/\D/g, '');
+        const { data: allContractors } = await supabase
+          .from('contractors')
+          .select('id, nip')
+          .eq('company_id', currentUser.company_id)
+          .eq('contractor_type', 'customer')
+          .is('deleted_at', null);
+
+        const match = allContractors?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+        if (match) {
+          await loadClientContactsById(match.id);
+          return;
+        }
+      }
+
+      // Try by name
+      if (name) {
+        const { data } = await supabase
+          .from('contractors')
+          .select('id')
+          .eq('company_id', currentUser.company_id)
+          .eq('contractor_type', 'customer')
+          .is('deleted_at', null)
+          .ilike('name', `%${name}%`)
+          .limit(1);
+
+        if (data && data.length > 0) {
+          await loadClientContactsById(data[0].id);
+          return;
+        }
+      }
+
+      setClientContacts([]);
+    } catch (err) {
+      console.error('Error finding contractor:', err);
       setClientContacts([]);
     }
   };
@@ -1091,9 +1136,11 @@ export const EstimatesPage: React.FC = () => {
     setShowClientDropdown(false);
     // Load contacts for this client
     if (client.contractor_id) {
-      loadClientContacts(client.contractor_id);
+      loadClientContactsById(client.contractor_id);
+    } else if (client.nip) {
+      findAndLoadContacts(client.nip);
     } else {
-      setClientContacts([]);
+      findAndLoadContacts(undefined, client.client_name);
     }
     setSelectedContactId('');
     setShowAddContactForm(false);
@@ -1196,6 +1243,8 @@ export const EstimatesPage: React.FC = () => {
           company_postal_code: data.postalCode || prev.company_postal_code,
           company_country: data.country || 'Polska'
         }));
+        // Load contacts by NIP
+        findAndLoadContacts(formData.nip);
       } else {
         setGusError(result.error || 'Nie udało się pobrać danych');
       }
