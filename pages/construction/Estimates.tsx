@@ -281,6 +281,8 @@ export const EstimatesPage: React.FC = () => {
   const [showNewEstimateModal, setShowNewEstimateModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
   const [estimateToDelete, setEstimateToDelete] = useState<any>(null);
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+  const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
 
   // Estimate details modal state
   const [showEstimateDetailModal, setShowEstimateDetailModal] = useState(false);
@@ -1411,18 +1413,7 @@ export const EstimatesPage: React.FC = () => {
     try {
       const primaryContact = validContacts.find(c => c.is_primary) || validContacts[0];
 
-      // Generate request number
-      const { count } = await supabase
-        .from('kosztorys_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', currentUser.company_id);
-
-      const requestNumber = `ZAP-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(5, '0')}`;
-
-      const requestData = {
-        company_id: currentUser.company_id,
-        request_number: requestNumber,
-        status: 'in_progress',
+      const requestFields = {
         client_name: formData.client_name.trim(),
         nip: normalizeNip(formData.nip) || null,
         company_street: formData.company_street.trim() || null,
@@ -1457,21 +1448,52 @@ export const EstimatesPage: React.FC = () => {
         notes: formData.notes.trim() || null,
         request_source: formData.request_source || null,
         assigned_user_id: formData.assigned_user_id || currentUser.id,
-        created_by_id: currentUser.id
       };
 
-      const { data: newRequest, error } = await supabase
-        .from('kosztorys_requests')
-        .insert(requestData)
-        .select()
-        .single();
+      let requestId: string;
 
-      if (error || !newRequest) throw error || new Error('Failed to create request');
+      if (editingRequestId) {
+        // UPDATE existing request
+        const { error } = await supabase
+          .from('kosztorys_requests')
+          .update(requestFields)
+          .eq('id', editingRequestId);
+
+        if (error) throw error;
+        requestId = editingRequestId;
+
+        // Delete old contacts and work types, re-insert
+        await supabase.from('kosztorys_request_contacts').delete().eq('request_id', requestId);
+        await supabase.from('kosztorys_request_work_types').delete().eq('request_id', requestId);
+      } else {
+        // CREATE new request
+        const { count } = await supabase
+          .from('kosztorys_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('company_id', currentUser.company_id);
+
+        const requestNumber = `ZAP-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(5, '0')}`;
+
+        const { data: newRequest, error } = await supabase
+          .from('kosztorys_requests')
+          .insert({
+            ...requestFields,
+            company_id: currentUser.company_id,
+            request_number: requestNumber,
+            status: 'in_progress',
+            created_by_id: currentUser.id
+          })
+          .select()
+          .single();
+
+        if (error || !newRequest) throw error || new Error('Failed to create request');
+        requestId = newRequest.id;
+      }
 
       // Save contacts
       if (validContacts.length > 0) {
         const contactsData = validContacts.map(c => ({
-          request_id: newRequest.id,
+          request_id: requestId,
           first_name: c.first_name.trim(),
           last_name: c.last_name.trim(),
           phone: c.phone?.trim() || null,
@@ -1485,13 +1507,13 @@ export const EstimatesPage: React.FC = () => {
       // Save work types
       if (selectedWorkTypes.length > 0) {
         const workTypesData = selectedWorkTypes.map(workTypeId => ({
-          request_id: newRequest.id,
+          request_id: requestId,
           work_type_id: workTypeId
         }));
         await supabase.from('kosztorys_request_work_types').insert(workTypesData);
       }
 
-      // Navigate to formulary
+      // Close modal and reset
       setShowNewEstimateModal(false);
       setFormData(initialFormData);
       setContacts([{ ...initialContactData }]);
@@ -1499,9 +1521,18 @@ export const EstimatesPage: React.FC = () => {
       setGusSuccess(null);
       setClientSelected(false);
       setClientContacts([]);
-      window.location.hash = `#/construction/formulary/${newRequest.id}`;
+      setEditingRequestId(null);
+      setEditingEstimateId(null);
+
+      if (editingRequestId) {
+        // Reload estimates list after edit
+        await loadKosztorysEstimates();
+      } else {
+        // Navigate to formulary for new estimate
+        window.location.hash = `#/construction/formulary/${requestId}`;
+      }
     } catch (err) {
-      console.error('Error saving new estimate:', err);
+      console.error('Error saving estimate:', err);
       alert('Błąd podczas zapisywania kosztorysu');
     } finally {
       setSaving(false);
@@ -1523,6 +1554,93 @@ export const EstimatesPage: React.FC = () => {
     setClientSearchQuery('');
     setShowClientDropdown(false);
     setEditingObjectCode(false);
+    setEditingRequestId(null);
+    setEditingEstimateId(null);
+  };
+
+  // Open edit modal for existing estimate
+  const handleOpenEditModal = async (estimate: any) => {
+    if (!estimate?.request?.id) return;
+
+    try {
+      // Load full request data
+      const { data: request, error } = await supabase
+        .from('kosztorys_requests')
+        .select(`
+          *,
+          contacts:kosztorys_request_contacts(*),
+          work_types:kosztorys_request_work_types(work_type_id)
+        `)
+        .eq('id', estimate.request.id)
+        .single();
+
+      if (error || !request) {
+        console.error('Error loading request for editing:', error);
+        return;
+      }
+
+      // Pre-fill form data
+      setFormData({
+        client_name: request.client_name || '',
+        nip: request.nip || '',
+        company_street: request.company_street || '',
+        company_street_number: request.company_street_number || '',
+        company_city: request.company_city || '',
+        company_postal_code: request.company_postal_code || '',
+        company_country: request.company_country || 'Polska',
+        internal_notes: request.internal_notes || '',
+        contact_person: request.contact_person || '',
+        phone: request.phone || '',
+        email: request.email || '',
+        investment_name: request.investment_name || '',
+        object_code: request.object_code || '',
+        object_type: request.object_type || 'residential',
+        object_type_id: request.object_type_id || '',
+        object_category_id: request.object_category_id || '',
+        installation_types: request.installation_types || 'IE',
+        object_street: request.object_street || '',
+        object_street_number: request.object_street_number || '',
+        object_city: request.object_city || '',
+        object_postal_code: request.object_postal_code || '',
+        object_country: request.object_country || 'Polska',
+        main_material_side: request.main_material_side || '',
+        minor_material_side: request.minor_material_side || '',
+        planned_response_date: request.planned_response_date || '',
+        notes: request.notes || '',
+        request_source: request.request_source || 'email',
+        assigned_user_id: request.assigned_user_id || ''
+      });
+
+      // Pre-fill contacts
+      if (request.contacts && request.contacts.length > 0) {
+        setContacts(request.contacts.map((c: any) => ({
+          id: c.id,
+          first_name: c.first_name || '',
+          last_name: c.last_name || '',
+          phone: c.phone || '',
+          email: c.email || '',
+          position: c.position || '',
+          is_primary: c.is_primary || false
+        })));
+        setShowAddContactForm(true);
+      }
+
+      // Pre-fill work types
+      if (request.work_types && request.work_types.length > 0) {
+        setSelectedWorkTypes(request.work_types.map((wt: any) => wt.work_type_id));
+      }
+
+      // Set client search query for display
+      setClientSearchQuery(request.client_name || '');
+
+      // Set editing state
+      setEditingRequestId(request.id);
+      setEditingEstimateId(estimate.id);
+      setShowEstimateDetailModal(false);
+      setShowNewEstimateModal(true);
+    } catch (err) {
+      console.error('Error opening edit modal:', err);
+    }
   };
 
   // Soft delete/restore estimate
@@ -1895,12 +2013,9 @@ export const EstimatesPage: React.FC = () => {
                           ) : (
                             <div className="flex items-center justify-center gap-1">
                               <button
-                                onClick={() => {
-                                  setSelectedEstimateDetail(estimate);
-                                  setShowEstimateDetailModal(true);
-                                }}
+                                onClick={() => handleOpenEditModal(estimate)}
                                 className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                title="Szczegóły"
+                                title="Edytuj"
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
@@ -1949,7 +2064,7 @@ export const EstimatesPage: React.FC = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-                <h2 className="text-xl font-bold text-slate-900">Nowy kosztorys</h2>
+                <h2 className="text-xl font-bold text-slate-900">{editingRequestId ? 'Edytuj kosztorys' : 'Nowy kosztorys'}</h2>
                 <button onClick={handleCloseNewEstimateModal} className="p-2 hover:bg-slate-100 rounded-lg">
                   <X className="w-5 h-5" />
                 </button>
@@ -2167,7 +2282,10 @@ export const EstimatesPage: React.FC = () => {
                       type="button"
                       onClick={() => {
                         if (!showAddContactForm) {
-                          addContact();
+                          // Only add new empty contact if contacts array is completely empty
+                          if (contacts.length === 0) {
+                            addContact();
+                          }
                         }
                         setShowAddContactForm(!showAddContactForm);
                       }}
@@ -2294,6 +2412,14 @@ export const EstimatesPage: React.FC = () => {
                           </div>
                         </div>
                       ))}
+                      <button
+                        type="button"
+                        onClick={() => addContact()}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Dodaj kolejny kontakt
+                      </button>
                     </div>
                   )}
 
@@ -2590,7 +2716,7 @@ export const EstimatesPage: React.FC = () => {
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Utwórz i przejdź do formularza
+                  {editingRequestId ? 'Zapisz zmiany' : 'Utwórz i przejdź do formularza'}
                 </button>
               </div>
             </div>
@@ -3495,7 +3621,7 @@ export const EstimatesPage: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">Nowy kosztorys</h2>
+              <h2 className="text-xl font-bold text-slate-900">{editingRequestId ? 'Edytuj kosztorys' : 'Nowy kosztorys'}</h2>
               <button onClick={handleCloseNewEstimateModal} className="p-2 hover:bg-slate-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
@@ -3713,7 +3839,9 @@ export const EstimatesPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       if (!showAddContactForm) {
-                        addContact();
+                        if (contacts.length === 0) {
+                          addContact();
+                        }
                       }
                       setShowAddContactForm(!showAddContactForm);
                     }}
@@ -3840,6 +3968,14 @@ export const EstimatesPage: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => addContact()}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Dodaj kolejny kontakt
+                    </button>
                   </div>
                 )}
 
@@ -4136,7 +4272,7 @@ export const EstimatesPage: React.FC = () => {
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Utwórz i przejdź do formularza
+                {editingRequestId ? 'Zapisz zmiany' : 'Utwórz i przejdź do formularza'}
               </button>
             </div>
           </div>

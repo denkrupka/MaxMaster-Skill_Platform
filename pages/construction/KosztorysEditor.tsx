@@ -823,7 +823,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 // =====================================================
 export const KosztorysEditorPage: React.FC = () => {
   const { state } = useAppContext();
-  const { currentUser } = state;
+  const { currentUser, currentCompany } = state;
   const { estimateId } = useParams<{ estimateId?: string }>();
   const navigate = useNavigate();
 
@@ -1473,16 +1473,32 @@ export const KosztorysEditorPage: React.FC = () => {
 
           // Auto-fill title page from request data (only empty fields)
           if (data.request) {
+            const clientAddr = [
+              [data.request?.company_street, data.request?.company_street_number].filter(Boolean).join(' '),
+              [data.request?.company_postal_code, data.request?.company_city].filter(Boolean).join(' ')
+            ].filter(Boolean).join(', ');
+            const clientAddrWithNip = clientAddr + (data.request?.nip ? `\nNIP: ${data.request.nip}` : '');
+
             setTitlePageData(prev => ({
               ...prev,
               title: prev.title || data.request?.investment_name || '',
               orderName: prev.orderName || data.request?.investment_name || '',
               orderAddress: prev.orderAddress || data.request?.address || '',
               clientName: prev.clientName || data.request?.client_name || '',
-              clientAddress: prev.clientAddress || [
-                data.request?.company_street,
-                data.request?.company_street_number
-              ].filter(Boolean).join(' ') + (data.request?.company_city ? `, ${data.request?.company_postal_code || ''} ${data.request?.company_city}` : ''),
+              clientAddress: prev.clientAddress || clientAddrWithNip,
+              // Auto-fill company (entity preparing estimate) from current company
+              companyName: prev.companyName || currentCompany?.legal_name || currentCompany?.name || '',
+              companyAddress: prev.companyAddress || [
+                [currentCompany?.address_street].filter(Boolean).join(' '),
+                [currentCompany?.address_postal_code, currentCompany?.address_city].filter(Boolean).join(' ')
+              ].filter(Boolean).join(', '),
+              // Auto-fill contractor (executor) from current company
+              contractorName: prev.contractorName || currentCompany?.legal_name || currentCompany?.name || '',
+              contractorAddress: prev.contractorAddress || [
+                [currentCompany?.address_street].filter(Boolean).join(' '),
+                [currentCompany?.address_postal_code, currentCompany?.address_city].filter(Boolean).join(' ')
+              ].filter(Boolean).join(', '),
+              contractorNIP: prev.contractorNIP || currentCompany?.tax_id || '',
             }));
           }
 
@@ -1588,16 +1604,30 @@ export const KosztorysEditorPage: React.FC = () => {
 
         // Auto-fill title page from request data
         if (data.request) {
+          const clientAddr = [
+            [data.request?.company_street, data.request?.company_street_number].filter(Boolean).join(' '),
+            [data.request?.company_postal_code, data.request?.company_city].filter(Boolean).join(' ')
+          ].filter(Boolean).join(', ');
+          const clientAddrWithNip = clientAddr + (data.request?.nip ? `\nNIP: ${data.request.nip}` : '');
+
           setTitlePageData(prev => ({
             ...prev,
             title: prev.title || data.request?.investment_name || '',
             orderName: prev.orderName || data.request?.investment_name || '',
             orderAddress: prev.orderAddress || data.request?.address || '',
             clientName: prev.clientName || data.request?.client_name || '',
-            clientAddress: prev.clientAddress || [
-              data.request?.company_street,
-              data.request?.company_street_number
-            ].filter(Boolean).join(' ') + (data.request?.company_city ? `, ${data.request?.company_postal_code || ''} ${data.request?.company_city}` : ''),
+            clientAddress: prev.clientAddress || clientAddrWithNip,
+            companyName: prev.companyName || currentCompany?.legal_name || currentCompany?.name || '',
+            companyAddress: prev.companyAddress || [
+              [currentCompany?.address_street].filter(Boolean).join(' '),
+              [currentCompany?.address_postal_code, currentCompany?.address_city].filter(Boolean).join(' ')
+            ].filter(Boolean).join(', '),
+            contractorName: prev.contractorName || currentCompany?.legal_name || currentCompany?.name || '',
+            contractorAddress: prev.contractorAddress || [
+              [currentCompany?.address_street].filter(Boolean).join(' '),
+              [currentCompany?.address_postal_code, currentCompany?.address_city].filter(Boolean).join(' ')
+            ].filter(Boolean).join(', '),
+            contractorNIP: prev.contractorNIP || currentCompany?.tax_id || '',
           }));
         }
       }

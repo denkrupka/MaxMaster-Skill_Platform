@@ -2006,7 +2006,9 @@ export const RequestsPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       if (!showAddContactForm) {
-                        addContact();
+                        if (contacts.length === 0) {
+                          addContact();
+                        }
                       }
                       setShowAddContactForm(!showAddContactForm);
                     }}
@@ -2133,6 +2135,14 @@ export const RequestsPage: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => addContact()}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Dodaj kolejny kontakt
+                    </button>
                   </div>
                 )}
 
