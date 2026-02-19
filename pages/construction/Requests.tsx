@@ -99,6 +99,7 @@ interface ContactFormData {
 }
 
 interface ExistingClient {
+  contractor_id?: string;
   client_name: string;
   nip: string | null;
   company_street: string | null;
@@ -255,6 +256,11 @@ export const RequestsPage: React.FC = () => {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [filteredClients, setFilteredClients] = useState<ExistingClient[]>([]);
 
+  // Client contacts (existing representatives)
+  const [clientContacts, setClientContacts] = useState<any[]>([]);
+  const [showAddContactForm, setShowAddContactForm] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState('');
+
   useEffect(() => {
     if (currentUser) {
       loadRequests();
@@ -400,7 +406,7 @@ export const RequestsPage: React.FC = () => {
       // Load customers from contractors table
       const { data: contractorsData } = await supabase
         .from('contractors')
-        .select('name, nip, legal_address')
+        .select('id, name, nip, legal_address')
         .eq('company_id', currentUser.company_id)
         .eq('contractor_type', 'customer')
         .is('deleted_at', null)
@@ -419,6 +425,7 @@ export const RequestsPage: React.FC = () => {
       if (contractorsData) {
         contractorsData.forEach(c => {
           allClients.push({
+            contractor_id: c.id,
             client_name: c.name,
             nip: c.nip,
             company_street: null,
@@ -695,6 +702,20 @@ export const RequestsPage: React.FC = () => {
     }
   }, [showTemplateManagement]);
 
+  const loadClientContactsForRequest = async (contractorId: string) => {
+    try {
+      const { data } = await supabase
+        .from('contractor_client_contacts')
+        .select('*')
+        .eq('client_id', contractorId)
+        .order('last_name');
+      setClientContacts(data || []);
+    } catch (err) {
+      console.error('Error loading client contacts:', err);
+      setClientContacts([]);
+    }
+  };
+
   const selectExistingClient = (client: ExistingClient) => {
     setFormData(prev => ({
       ...prev,
@@ -708,6 +729,30 @@ export const RequestsPage: React.FC = () => {
     }));
     setClientSearchQuery('');
     setShowClientDropdown(false);
+    // Load contacts for this client
+    if (client.contractor_id) {
+      loadClientContactsForRequest(client.contractor_id);
+    } else {
+      setClientContacts([]);
+    }
+    setSelectedContactId('');
+    setShowAddContactForm(false);
+  };
+
+  const selectExistingContactForRequest = (contactId: string) => {
+    setSelectedContactId(contactId);
+    const contact = clientContacts.find(c => c.id === contactId);
+    if (contact) {
+      setContacts([{
+        first_name: contact.first_name || '',
+        last_name: contact.last_name || '',
+        phone: contact.phone || '',
+        email: contact.email || '',
+        position: contact.position || '',
+        is_primary: true
+      }]);
+      setShowAddContactForm(false);
+    }
   };
 
   const generateRequestNumber = () => {
@@ -1738,7 +1783,12 @@ export const RequestsPage: React.FC = () => {
                   </h3>
                   <button
                     type="button"
-                    onClick={addContact}
+                    onClick={() => {
+                      if (!showAddContactForm) {
+                        addContact();
+                      }
+                      setShowAddContactForm(!showAddContactForm);
+                    }}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
                   >
                     <UserPlus className="w-4 h-4" />
@@ -1746,97 +1796,128 @@ export const RequestsPage: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  {contacts.map((contact, index) => (
-                    <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={contact.is_primary}
-                              onChange={() => updateContact(index, 'is_primary', true)}
-                              className="w-4 h-4 text-blue-600 rounded"
-                            />
-                            <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
-                              {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
-                              Główny kontakt
-                            </span>
-                          </label>
-                        </div>
-                        {contacts.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeContact(index)}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-4 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
-                          <input
-                            type="text"
-                            value={contact.first_name}
-                            onChange={e => updateContact(index, 'first_name', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Jan"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
-                          <input
-                            type="text"
-                            value={contact.last_name}
-                            onChange={e => updateContact(index, 'last_name', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Kowalski"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
-                          <input
-                            type="tel"
-                            value={contact.phone}
-                            onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="+48 XXX XXX XXX"
-                            maxLength={16}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
-                          <input
-                            type="text"
-                            value={contact.position}
-                            onChange={e => updateContact(index, 'position', e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            placeholder="Kierownik projektu"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
-                          <input
-                            type="email"
-                            value={contact.email}
-                            onChange={e => updateContact(index, 'email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg text-sm ${
-                              contact.email && !isValidEmail(contact.email)
-                                ? 'border-red-300 focus:ring-red-500'
-                                : 'border-slate-200 focus:ring-blue-500'
-                            }`}
-                            placeholder="email@firma.pl"
-                          />
-                          {contact.email && !isValidEmail(contact.email) && (
-                            <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                {/* Dropdown to select existing contact */}
+                {clientContacts.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Wybierz istniejącego przedstawiciela</label>
+                    <select
+                      value={selectedContactId}
+                      onChange={e => selectExistingContactForRequest(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">— Wybierz z listy —</option>
+                      {clientContacts.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.first_name} {c.last_name}{c.position ? ` (${c.position})` : ''}{c.is_main_contact ? ' ★' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Manual add contact form */}
+                {showAddContactForm && (
+                  <div className="space-y-4">
+                    {contacts.map((contact, index) => (
+                      <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={contact.is_primary}
+                                onChange={() => updateContact(index, 'is_primary', true)}
+                                className="w-4 h-4 text-blue-600 rounded"
+                              />
+                              <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                                {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
+                                Główny kontakt
+                              </span>
+                            </label>
+                          </div>
+                          {contacts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeContact(index)}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                            <input
+                              type="text"
+                              value={contact.first_name}
+                              onChange={e => updateContact(index, 'first_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Jan"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                            <input
+                              type="text"
+                              value={contact.last_name}
+                              onChange={e => updateContact(index, 'last_name', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kowalski"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                            <input
+                              type="tel"
+                              value={contact.phone}
+                              onChange={e => updateContact(index, 'phone', formatPhoneNumber(e.target.value))}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="+48 XXX XXX XXX"
+                              maxLength={16}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                            <input
+                              type="text"
+                              value={contact.position}
+                              onChange={e => updateContact(index, 'position', e.target.value)}
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              placeholder="Kierownik projektu"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={e => updateContact(index, 'email', e.target.value)}
+                              className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                                contact.email && !isValidEmail(contact.email)
+                                  ? 'border-red-300 focus:ring-red-500'
+                                  : 'border-slate-200 focus:ring-blue-500'
+                              }`}
+                              placeholder="email@firma.pl"
+                            />
+                            {contact.email && !isValidEmail(contact.email) && (
+                              <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Show selected contact summary */}
+                {!showAddContactForm && selectedContactId && contacts.length > 0 && contacts[0].first_name && (
+                  <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm">
+                    <span className="font-medium text-blue-800">{contacts[0].first_name} {contacts[0].last_name}</span>
+                    {contacts[0].position && <span className="text-blue-600 ml-2">({contacts[0].position})</span>}
+                    {contacts[0].phone && <span className="text-blue-600 ml-2">{contacts[0].phone}</span>}
+                  </div>
+                )}
               </div>
 
               {/* 3. Object info */}
