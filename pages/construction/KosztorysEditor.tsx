@@ -15,7 +15,7 @@ import {
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
   GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
   HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen,
-  CalendarClock, ReceiptText
+  CalendarClock, ReceiptText, SearchCheck
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -887,6 +887,12 @@ export const KosztorysEditorPage: React.FC = () => {
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [showAddPageDropdown, setShowAddPageDropdown] = useState(false);
   const [selectedPagesToAdd, setSelectedPagesToAdd] = useState<Set<string>>(new Set());
+
+  // Offer exists modal state
+  const [showOfferExistsModal, setShowOfferExistsModal] = useState(false);
+  const [showOfferUpdateConfirm, setShowOfferUpdateConfirm] = useState(false);
+  const [existingOfferId, setExistingOfferId] = useState<string | null>(null);
+  const [existingOfferName, setExistingOfferName] = useState('');
 
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
@@ -2321,15 +2327,52 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
-  // Create offer from estimate
-  const handleCreateOfferFromEstimate = async () => {
+  // Helper: populate offer sections & items from estimate data
+  const populateOfferFromEstimate = async (offerId: string) => {
+    for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+      const section = estimateData.sections[sectionId];
+      if (!section) continue;
+
+      const { data: newSection } = await supabase
+        .from('offer_sections')
+        .insert({
+          offer_id: offerId,
+          name: section.name,
+          sort_order: sIdx
+        })
+        .select()
+        .single();
+
+      if (newSection) {
+        for (const [pIdx, posId] of section.positionIds.entries()) {
+          const position = estimateData.positions[posId];
+          if (!position) continue;
+          const posResult = calculationResult?.positions[posId];
+          const quantity = posResult?.quantity || 0;
+          const unitCost = posResult?.unitCost || 0;
+
+          await supabase
+            .from('offer_items')
+            .insert({
+              offer_id: offerId,
+              section_id: newSection.id,
+              name: position.name,
+              description: position.base,
+              quantity: quantity,
+              unit_price: unitCost,
+              sort_order: pIdx,
+              is_optional: false
+            });
+        }
+      }
+    }
+  };
+
+  // Helper: create a new offer from estimate
+  const createNewOfferFromEstimate = async () => {
     if (!estimate || !currentUser) return;
 
-    // Save first
-    await handleSave();
-
     try {
-      // Generate offer number
       const countRes = await supabase
         .from('offers')
         .select('id', { count: 'exact', head: true })
@@ -2343,7 +2386,6 @@ export const KosztorysEditorPage: React.FC = () => {
       const vatAmount = isExempt ? 0 : totalNet * (vatRate / 100);
       const totalGross = totalNet + vatAmount;
 
-      // Create offer
       const { data: newOffer, error: offerError } = await supabase
         .from('offers')
         .insert({
@@ -2357,6 +2399,7 @@ export const KosztorysEditorPage: React.FC = () => {
           final_amount: totalGross,
           valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           notes: `Wygenerowano z kosztorysu: ${estimate.settings.name}`,
+          internal_notes: `kosztorys_source:${estimate.id}`,
           created_by_id: currentUser.id
         })
         .select()
@@ -2364,50 +2407,82 @@ export const KosztorysEditorPage: React.FC = () => {
 
       if (offerError) throw offerError;
 
-      // Create sections and items from estimate data
-      for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
-        const section = estimateData.sections[sectionId];
-        if (!section) continue;
-
-        const { data: newSection } = await supabase
-          .from('offer_sections')
-          .insert({
-            offer_id: newOffer.id,
-            name: section.name,
-            sort_order: sIdx
-          })
-          .select()
-          .single();
-
-        if (newSection) {
-          for (const [pIdx, posId] of section.positionIds.entries()) {
-            const position = estimateData.positions[posId];
-            if (!position) continue;
-            const posResult = calculationResult?.positions[posId];
-            const quantity = posResult?.quantity || 0;
-            const unitCost = posResult?.unitCost || 0;
-
-            await supabase
-              .from('offer_items')
-              .insert({
-                offer_id: newOffer.id,
-                section_id: newSection.id,
-                name: position.name,
-                description: position.base,
-                quantity: quantity,
-                unit_price: unitCost,
-                sort_order: pIdx,
-                is_optional: false
-              });
-          }
-        }
-      }
+      await populateOfferFromEstimate(newOffer.id);
 
       showNotificationMessage('Oferta została utworzona', 'success');
       navigate(`/construction/offers?offerId=${newOffer.id}`);
     } catch (error: any) {
       console.error('Error creating offer:', error);
       showNotificationMessage('Błąd podczas tworzenia oferty', 'error');
+    }
+  };
+
+  // Helper: update existing offer with current estimate data
+  const updateExistingOfferFromEstimate = async () => {
+    if (!estimate || !currentUser || !existingOfferId) return;
+
+    try {
+      const vatRate = estimate.settings?.vatRate ?? 23;
+      const isExempt = vatRate < 0;
+      const totalNet = calculationResult?.totalValue || 0;
+      const vatAmount = isExempt ? 0 : totalNet * (vatRate / 100);
+      const totalGross = totalNet + vatAmount;
+
+      // Update offer totals
+      await supabase
+        .from('offers')
+        .update({
+          name: `Oferta - ${estimate.settings.name || 'Kosztorys'}`,
+          total_amount: totalNet,
+          final_amount: totalGross,
+          notes: `Wygenerowano z kosztorysu: ${estimate.settings.name} (zaktualizowano)`
+        })
+        .eq('id', existingOfferId);
+
+      // Delete old sections and items
+      await supabase.from('offer_items').delete().eq('offer_id', existingOfferId);
+      await supabase.from('offer_sections').delete().eq('offer_id', existingOfferId);
+
+      // Recreate from current estimate
+      await populateOfferFromEstimate(existingOfferId);
+
+      setShowOfferUpdateConfirm(false);
+      setShowOfferExistsModal(false);
+      showNotificationMessage('Oferta została zaktualizowana', 'success');
+      navigate(`/construction/offers?offerId=${existingOfferId}`);
+    } catch (error: any) {
+      console.error('Error updating offer:', error);
+      showNotificationMessage('Błąd podczas aktualizacji oferty', 'error');
+    }
+  };
+
+  // Create offer from estimate - with existence check
+  const handleCreateOfferFromEstimate = async () => {
+    if (!estimate || !currentUser) return;
+
+    await handleSave();
+
+    try {
+      // Check if an offer already exists for this estimate
+      const { data: existingOffers } = await supabase
+        .from('offers')
+        .select('id, name, number')
+        .eq('company_id', currentUser.company_id)
+        .is('deleted_at', null)
+        .like('internal_notes', `kosztorys_source:${estimate.id}%`);
+
+      if (existingOffers && existingOffers.length > 0) {
+        // Offer already exists - show modal
+        setExistingOfferId(existingOffers[0].id);
+        setExistingOfferName(existingOffers[0].number ? `${existingOffers[0].number} - ${existingOffers[0].name}` : existingOffers[0].name);
+        setShowOfferExistsModal(true);
+      } else {
+        // No existing offer - create new one directly
+        await createNewOfferFromEstimate();
+      }
+    } catch (error: any) {
+      console.error('Error checking existing offers:', error);
+      await createNewOfferFromEstimate();
     }
   };
 
@@ -5347,22 +5422,19 @@ export const KosztorysEditorPage: React.FC = () => {
           {/* Weryfikuj button */}
           <button
             onClick={handleSprawdzKosztorys}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded"
+            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+            title="Weryfikuj"
           >
-            <Sparkles className="w-4 h-4" />
-            Weryfikuj
+            <SearchCheck className="w-5 h-5" />
           </button>
 
           {/* Widok button - opens right panel */}
           <button
             onClick={() => setRightPanelMode(rightPanelMode === 'viewOptions' ? 'closed' : 'viewOptions')}
-            className={`flex items-center gap-1 px-2 py-1.5 text-sm rounded ${
-              rightPanelMode === 'viewOptions' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`p-1.5 rounded ${rightPanelMode === 'viewOptions' ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}
             title="Opcje widoku"
           >
-            <Eye className="w-4 h-4" />
-            Widok
+            <Eye className="w-5 h-5" />
           </button>
 
           {/* Settings icon - opens right panel */}
@@ -10424,6 +10496,88 @@ export const KosztorysEditorPage: React.FC = () => {
       )}
 
       {/* Exit Confirmation Modal */}
+      {/* Offer exists modal */}
+      {showOfferExistsModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-2">Oferta już istnieje</h2>
+              <p className="text-sm text-gray-600 mb-1">
+                Na podstawie tego kosztorysu została już wystawiona oferta:
+              </p>
+              <p className="text-sm font-medium text-gray-800 mb-6">
+                {existingOfferName}
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={async () => {
+                    setShowOfferExistsModal(false);
+                    await createNewOfferFromEstimate();
+                  }}
+                  className="w-full px-4 py-2.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-left"
+                >
+                  Utwórz nową ofertę
+                </button>
+                <button
+                  onClick={() => {
+                    setShowOfferExistsModal(false);
+                    navigate(`/construction/offers?offerId=${existingOfferId}`);
+                  }}
+                  className="w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300 text-left"
+                >
+                  Przejdź do istniejącej oferty
+                </button>
+                <button
+                  onClick={() => {
+                    setShowOfferUpdateConfirm(true);
+                  }}
+                  className="w-full px-4 py-2.5 text-sm text-orange-700 hover:bg-orange-50 rounded-lg border border-orange-300 text-left"
+                >
+                  Aktualizuj istniejącą ofertę
+                </button>
+                <button
+                  onClick={() => setShowOfferExistsModal(false)}
+                  className="w-full px-4 py-2 text-sm text-gray-500 hover:bg-gray-50 rounded-lg text-center mt-1"
+                >
+                  Anuluj
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Offer update confirmation modal */}
+      {showOfferUpdateConfirm && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-red-600 mb-2">Potwierdzenie aktualizacji</h2>
+              <p className="text-sm text-gray-600 mb-2">
+                Wszystkie dane z poprzedniej oferty zostaną zastąpione aktualnymi danymi z kosztorysu.
+              </p>
+              <p className="text-sm font-medium text-red-600 mb-6">
+                Tej operacji nie można cofnąć.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowOfferUpdateConfirm(false)}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg border border-gray-300"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={updateExistingOfferFromEstimate}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  Tak, aktualizuj ofertę
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showExitConfirmModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full shadow-xl">
