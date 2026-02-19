@@ -101,13 +101,11 @@ export async function fetchCompanyByNip(nip: string, skipDuplicateCheck: boolean
     const result = await response.json();
 
     if (!result.success) {
-      // If company is already registered, we still want the data for kosztorys
-      if (result.data?.already_registered && skipDuplicateCheck) {
-        // Company exists but we need to fetch data anyway - return error for now
-        // In future, we could fetch from our own database
+      // If company is already registered locally - signal this to the caller
+      if (result.data?.already_registered) {
         return {
           success: false,
-          error: 'Firma jest już zarejestrowana w systemie. Możesz wybrać ją z listy klientów.'
+          error: 'ALREADY_REGISTERED'
         };
       }
       return {

@@ -406,16 +406,15 @@ export const RequestsPage: React.FC = () => {
   const loadExistingClients = async () => {
     if (!currentUser) return;
     try {
-      // Load customers from contractors table
-      const { data: contractorsData } = await supabase
-        .from('contractors')
-        .select('id, name, nip, legal_address')
+      // Load clients/suppliers from contractors_clients portal table
+      const { data: portalClients } = await supabase
+        .from('contractors_clients')
+        .select('id, name, nip, address_street, address_city, address_postal_code, address_country, contractor_type')
         .eq('company_id', currentUser.company_id)
-        .eq('contractor_type', 'customer')
-        .is('deleted_at', null)
+        .eq('is_archived', false)
         .order('name');
 
-      // Also load from previous requests for clients not in contractors
+      // Also load from previous requests for historical data
       const { data: requestsData } = await supabase
         .from('kosztorys_requests')
         .select('client_name, nip, company_street, company_street_number, company_city, company_postal_code, company_country')
@@ -423,91 +422,64 @@ export const RequestsPage: React.FC = () => {
         .order('client_name');
 
       const allClients: ExistingClient[] = [];
+      const portalByNip = new Map<string, number>();
+      const portalByName = new Map<string, number>();
 
-      // Helper: extract first meaningful word from company name (>2 chars)
-      const getFirstWord = (n: string) => {
-        const words = n.split(/[\s.,]+/).filter(w => w.length > 2);
-        return words[0]?.toLowerCase() || '';
-      };
-
-      // Build contractor lookup maps
-      const contractorsByNip = new Map<string, { id: string; nip: string; idx: number }>();
-      const contractorsByFirstWord = new Map<string, { id: string; nip: string | null; idx: number }>();
-
-      // Add contractors (customers)
-      if (contractorsData) {
-        contractorsData.forEach(c => {
-          // Try to parse city from legal_address
-          let city: string | null = null;
-          if (c.legal_address) {
-            const postalMatch = String(c.legal_address).match(/(\d{2}-\d{3})\s+(.+)/);
-            if (postalMatch) city = postalMatch[2].trim().split(/[,\n]/)[0].trim();
-          }
-
+      // Add portal clients (contractors_clients)
+      if (portalClients) {
+        portalClients.forEach(c => {
           const idx = allClients.length;
           allClients.push({
             contractor_id: c.id,
             client_name: c.name,
             nip: c.nip,
-            company_street: null,
+            company_street: c.address_street,
             company_street_number: null,
-            company_city: city,
-            company_postal_code: null,
-            company_country: 'Polska',
+            company_city: c.address_city,
+            company_postal_code: c.address_postal_code,
+            company_country: c.address_country === 'PL' ? 'Polska' : (c.address_country || 'Polska'),
             source: 'contractor'
           });
-
-          if (c.nip) {
-            contractorsByNip.set(c.nip.replace(/\D/g, ''), { id: c.id, nip: c.nip, idx });
-          }
-          const fw = getFirstWord(c.name);
-          if (fw) contractorsByFirstWord.set(fw, { id: c.id, nip: c.nip, idx });
+          if (c.nip) portalByNip.set(c.nip.replace(/\D/g, ''), idx);
+          portalByName.set(c.name.toLowerCase(), idx);
         });
       }
 
-      // Add clients from requests (if not already in list)
+      // Add clients from requests (if not already in portal list)
       if (requestsData) {
         requestsData.forEach(r => {
-          // Check if exact name match exists - enrich contractor entry
-          const existingByName = allClients.find(c => c.client_name.toLowerCase() === r.client_name.toLowerCase());
-          if (existingByName) {
-            if (!existingByName.company_street && r.company_street) {
-              existingByName.company_street = r.company_street;
-              existingByName.company_street_number = r.company_street_number;
-              existingByName.company_city = r.company_city;
-              existingByName.company_postal_code = r.company_postal_code;
+          // Skip if exact name match exists in portal
+          if (portalByName.has(r.client_name.toLowerCase())) {
+            const idx = portalByName.get(r.client_name.toLowerCase())!;
+            // Enrich portal entry with address from request if missing
+            if (!allClients[idx].company_street && r.company_street) {
+              allClients[idx].company_street = r.company_street;
+              allClients[idx].company_street_number = r.company_street_number;
+              allClients[idx].company_city = r.company_city;
+              allClients[idx].company_postal_code = r.company_postal_code;
             }
             return;
           }
-
-          // Try to link this request to a contractor by NIP or first word of name
-          let matchedContractor: { id: string; nip: string | null } | undefined;
-          if (r.nip) {
-            const m = contractorsByNip.get(r.nip.replace(/\D/g, ''));
-            if (m) {
-              matchedContractor = m;
-              // Enrich contractor entry with address
-              if (!allClients[m.idx].company_street && r.company_street) {
-                allClients[m.idx].company_street = r.company_street;
-                allClients[m.idx].company_street_number = r.company_street_number;
-                allClients[m.idx].company_city = r.company_city;
-                allClients[m.idx].company_postal_code = r.company_postal_code;
-              }
+          // Skip if NIP match exists in portal
+          if (r.nip && portalByNip.has(r.nip.replace(/\D/g, ''))) {
+            const idx = portalByNip.get(r.nip.replace(/\D/g, ''))!;
+            if (!allClients[idx].company_street && r.company_street) {
+              allClients[idx].company_street = r.company_street;
+              allClients[idx].company_street_number = r.company_street_number;
+              allClients[idx].company_city = r.company_city;
+              allClients[idx].company_postal_code = r.company_postal_code;
             }
+            return;
           }
-          if (!matchedContractor) {
-            const fw = getFirstWord(r.client_name);
-            if (fw) {
-              const m = contractorsByFirstWord.get(fw);
-              if (m) matchedContractor = m;
-            }
-          }
-
-          // Add request entry (with contractor_id + nip if matched)
+          // Add as historical entry
           allClients.push({
-            ...r,
-            contractor_id: matchedContractor?.id,
-            nip: r.nip || matchedContractor?.nip || null,
+            client_name: r.client_name,
+            nip: r.nip,
+            company_street: r.company_street,
+            company_street_number: r.company_street_number,
+            company_city: r.company_city,
+            company_postal_code: r.company_postal_code,
+            company_country: r.company_country,
             source: 'request_history'
           });
         });
@@ -808,32 +780,29 @@ export const RequestsPage: React.FC = () => {
   const findAndLoadContacts = async (nip?: string, name?: string) => {
     if (!currentUser) return;
     try {
-      // Try by NIP first (exact match with multiple formats)
+      // Try by NIP first
       if (nip) {
         const rawNip = nip.replace(/\D/g, '');
-        const { data: allContractors } = await supabase
-          .from('contractors')
+        const { data: portalClients } = await supabase
+          .from('contractors_clients')
           .select('id, nip')
           .eq('company_id', currentUser.company_id)
-          .eq('contractor_type', 'customer')
-          .is('deleted_at', null);
+          .eq('is_archived', false);
 
-        const match = allContractors?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+        const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
         if (match) {
           await loadClientContactsById(match.id);
           return;
         }
       }
 
-      // Try by name - multiple strategies
+      // Try by name
       if (name) {
-        // Strategy 1: direct substring match
         const { data } = await supabase
-          .from('contractors')
+          .from('contractors_clients')
           .select('id')
           .eq('company_id', currentUser.company_id)
-          .eq('contractor_type', 'customer')
-          .is('deleted_at', null)
+          .eq('is_archived', false)
           .ilike('name', `%${name}%`)
           .limit(1);
 
@@ -842,15 +811,14 @@ export const RequestsPage: React.FC = () => {
           return;
         }
 
-        // Strategy 2: match by first significant word (e.g. "MaxMaster" from "MaxMaster Sp. z o.o.")
+        // Strategy 2: match by first significant word
         const firstWord = name.split(/[\s.,]+/).find(w => w.length > 2);
         if (firstWord && firstWord.toLowerCase() !== name.toLowerCase()) {
           const { data: data2 } = await supabase
-            .from('contractors')
+            .from('contractors_clients')
             .select('id')
             .eq('company_id', currentUser.company_id)
-            .eq('contractor_type', 'customer')
-            .is('deleted_at', null)
+            .eq('is_archived', false)
             .ilike('name', `%${firstWord}%`)
             .limit(1);
 
@@ -872,48 +840,25 @@ export const RequestsPage: React.FC = () => {
     if (!currentUser) return null;
     try {
       const rawNip = nip.replace(/\D/g, '');
-      const { data: allContractors } = await supabase
-        .from('contractors')
-        .select('id, name, nip, legal_address')
+      // Search in contractors_clients portal table
+      const { data: portalClients } = await supabase
+        .from('contractors_clients')
+        .select('id, name, nip, address_street, address_city, address_postal_code, address_country')
         .eq('company_id', currentUser.company_id)
-        .is('deleted_at', null);
+        .eq('is_archived', false);
 
-      const match = allContractors?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+      const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
       if (!match) return null;
 
-      // Parse address from legal_address field
-      let street = '', streetNumber = '', city = '', postalCode = '', country = 'Polska';
-      if (match.legal_address) {
-        const addr = String(match.legal_address);
-        const postalMatch = addr.match(/(\d{2}-\d{3})\s+(.+)/);
-        if (postalMatch) {
-          postalCode = postalMatch[1];
-          city = postalMatch[2].trim().split(/[,\n]/)[0].trim();
-        }
-        // Try to extract street and number from the part before postal code
-        const beforePostal = addr.split(/\d{2}-\d{3}/)[0]?.trim();
-        if (beforePostal) {
-          const cleanedStreet = beforePostal.replace(/[,\n]+$/, '').trim();
-          const numMatch = cleanedStreet.match(/^(.+?)\s+(\d+\S*)$/);
-          if (numMatch) {
-            street = numMatch[1];
-            streetNumber = numMatch[2];
-          } else {
-            street = cleanedStreet;
-          }
-        }
-      }
-
-      // Enrich with address data from existingClients (which has data merged from historical requests)
-      const enriched = existingClients.find(c => c.contractor_id === match.id);
-      if (enriched) {
-        if (!street && enriched.company_street) street = enriched.company_street;
-        if (!streetNumber && enriched.company_street_number) streetNumber = enriched.company_street_number;
-        if (!city && enriched.company_city) city = enriched.company_city;
-        if (!postalCode && enriched.company_postal_code) postalCode = enriched.company_postal_code;
-      }
-
-      return { contractor_id: match.id, name: match.name, street, streetNumber, city, postalCode, country };
+      return {
+        contractor_id: match.id,
+        name: match.name,
+        street: match.address_street || '',
+        streetNumber: '',
+        city: match.address_city || '',
+        postalCode: match.address_postal_code || '',
+        country: match.address_country === 'PL' ? 'Polska' : (match.address_country || 'Polska')
+      };
     } catch (err) {
       console.error('Error looking up contractor by NIP:', err);
       return null;
@@ -1064,6 +1009,11 @@ export const RequestsPage: React.FC = () => {
         }));
         // Load contacts by NIP
         findAndLoadContacts(formData.nip);
+      } else if (result.error === 'ALREADY_REGISTERED') {
+        // GUS says company exists in system but local lookup missed it - show helpful message
+        setGusSuccess('Klient jest już zarejestrowany w systemie. Wybierz go z listy klientów.');
+        findAndLoadContacts(formData.nip);
+        setClientSelected(true);
       } else {
         setGusError(result.error || 'Nie udało się pobrać danych');
       }
