@@ -51,10 +51,24 @@ export const GanttPage: React.FC = () => {
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const autoSelectDone = useRef(false);
 
   useEffect(() => {
     if (currentUser) loadProjects();
   }, [currentUser]);
+
+  // Auto-select project from URL param (e.g. ?projectId=xxx)
+  useEffect(() => {
+    if (loading || autoSelectDone.current || !projects.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get('projectId');
+    if (projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (project) setSelectedProject(project);
+      window.history.replaceState({}, '', window.location.pathname);
+      autoSelectDone.current = true;
+    }
+  }, [loading, projects]);
 
   useEffect(() => {
     if (selectedProject) loadGanttData();

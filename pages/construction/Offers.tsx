@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Plus, Search, FileText, Send, CheckCircle, XCircle, Eye, Pencil,
   Trash2, Copy, Download, ExternalLink, Loader2, Filter, Calendar,
@@ -111,6 +111,8 @@ export const OffersPage: React.FC = () => {
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [selectedKosztorysId, setSelectedKosztorysId] = useState('');
 
+  const autoSelectDone = useRef(false);
+
   // ============================================
   // DATA LOADING
   // ============================================
@@ -164,6 +166,23 @@ export const OffersPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Auto-select offer from URL param (e.g. ?offerId=xxx)
+  useEffect(() => {
+    if (loading || autoSelectDone.current || !offers.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const offerId = params.get('offerId');
+    if (offerId) {
+      const offer = offers.find(o => o.id === offerId);
+      if (offer) {
+        setSelectedOffer(offer);
+        loadOfferDetails(offerId);
+      }
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+      autoSelectDone.current = true;
+    }
+  }, [loading, offers]);
 
   const loadOfferDetails = async (offerId: string) => {
     try {

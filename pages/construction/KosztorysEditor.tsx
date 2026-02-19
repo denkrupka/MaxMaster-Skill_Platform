@@ -14,7 +14,8 @@ import {
   MessageSquare, Search, Filter, MoreHorizontal, Loader2, Monitor,
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
   GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
-  HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen
+  HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen,
+  CalendarClock, ReceiptText
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -2403,7 +2404,7 @@ export const KosztorysEditorPage: React.FC = () => {
       }
 
       showNotificationMessage('Oferta została utworzona', 'success');
-      navigate('/construction/offers');
+      navigate(`/construction/offers?offerId=${newOffer.id}`);
     } catch (error: any) {
       console.error('Error creating offer:', error);
       showNotificationMessage('Błąd podczas tworzenia oferty', 'error');
@@ -2427,8 +2428,7 @@ export const KosztorysEditorPage: React.FC = () => {
           name_mode: 'custom',
           status: 'active',
           color: '#3b82f6',
-          billing_type: 'ryczalt',
-          created_by_id: currentUser.id
+          billing_type: 'ryczalt'
         })
         .select()
         .single();
@@ -2550,7 +2550,7 @@ export const KosztorysEditorPage: React.FC = () => {
       }
 
       showNotificationMessage('Harmonogram został utworzony', 'success');
-      navigate('/construction/gantt');
+      navigate(`/construction/gantt?projectId=${newProject.id}`);
     } catch (error: any) {
       console.error('Error creating gantt:', error);
       showNotificationMessage('Błąd podczas tworzenia harmonogramu', 'error');
@@ -5390,7 +5390,7 @@ export const KosztorysEditorPage: React.FC = () => {
             className="p-1.5 text-gray-500 hover:bg-green-100 hover:text-green-700 rounded"
             title="Utwórz ofertę"
           >
-            <FileSpreadsheet className="w-5 h-5" />
+            <ReceiptText className="w-5 h-5" />
           </button>
 
           {/* Utwórz harmonogram */}
@@ -5399,7 +5399,7 @@ export const KosztorysEditorPage: React.FC = () => {
             className="p-1.5 text-gray-500 hover:bg-orange-100 hover:text-orange-700 rounded"
             title="Utwórz harmonogram"
           >
-            <FileBarChart className="w-5 h-5" />
+            <CalendarClock className="w-5 h-5" />
           </button>
         </div>
       </div>
