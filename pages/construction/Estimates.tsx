@@ -519,26 +519,88 @@ export const EstimatesPage: React.FC = () => {
 
       const allClients: ExistingClient[] = [];
 
+      // Helper: extract first meaningful word from company name (>2 chars)
+      const getFirstWord = (n: string) => {
+        const words = n.split(/[\s.,]+/).filter(w => w.length > 2);
+        return words[0]?.toLowerCase() || '';
+      };
+
+      // Build contractor lookup maps
+      const contractorsByNip = new Map<string, { id: string; nip: string; idx: number }>();
+      const contractorsByFirstWord = new Map<string, { id: string; nip: string | null; idx: number }>();
+
       if (contractorsData) {
         contractorsData.forEach(c => {
+          // Try to parse city from legal_address (free text like "ul. X 1, 01-588 Warszawa")
+          let city: string | null = null;
+          if (c.legal_address) {
+            const postalMatch = String(c.legal_address).match(/(\d{2}-\d{3})\s+(.+)/);
+            if (postalMatch) city = postalMatch[2].trim().split(/[,\n]/)[0].trim();
+          }
+
+          const idx = allClients.length;
           allClients.push({
             contractor_id: c.id,
             client_name: c.name,
             nip: c.nip,
             company_street: null,
             company_street_number: null,
-            company_city: null,
+            company_city: city,
             company_postal_code: null,
             company_country: 'Polska'
           });
+
+          if (c.nip) {
+            contractorsByNip.set(c.nip.replace(/\D/g, ''), { id: c.id, nip: c.nip, idx });
+          }
+          const fw = getFirstWord(c.name);
+          if (fw) contractorsByFirstWord.set(fw, { id: c.id, nip: c.nip, idx });
         });
       }
 
       if (requestsData) {
         requestsData.forEach(r => {
-          if (!allClients.find(c => c.client_name.toLowerCase() === r.client_name.toLowerCase())) {
-            allClients.push(r);
+          // Check if exact name match exists - enrich contractor entry
+          const existingByName = allClients.find(c => c.client_name.toLowerCase() === r.client_name.toLowerCase());
+          if (existingByName) {
+            if (!existingByName.company_street && r.company_street) {
+              existingByName.company_street = r.company_street;
+              existingByName.company_street_number = r.company_street_number;
+              existingByName.company_city = r.company_city;
+              existingByName.company_postal_code = r.company_postal_code;
+            }
+            return;
           }
+
+          // Try to link this request to a contractor by NIP or first word of name
+          let matchedContractor: { id: string; nip: string | null } | undefined;
+          if (r.nip) {
+            const m = contractorsByNip.get(r.nip.replace(/\D/g, ''));
+            if (m) {
+              matchedContractor = m;
+              // Enrich contractor entry with address
+              if (!allClients[m.idx].company_street && r.company_street) {
+                allClients[m.idx].company_street = r.company_street;
+                allClients[m.idx].company_street_number = r.company_street_number;
+                allClients[m.idx].company_city = r.company_city;
+                allClients[m.idx].company_postal_code = r.company_postal_code;
+              }
+            }
+          }
+          if (!matchedContractor) {
+            const fw = getFirstWord(r.client_name);
+            if (fw) {
+              const m = contractorsByFirstWord.get(fw);
+              if (m) matchedContractor = m;
+            }
+          }
+
+          // Add request entry (with contractor_id + nip if matched)
+          allClients.push({
+            ...r,
+            contractor_id: matchedContractor?.id,
+            nip: r.nip || matchedContractor?.nip || null
+          });
         });
       }
 
@@ -1097,8 +1159,9 @@ export const EstimatesPage: React.FC = () => {
         }
       }
 
-      // Try by name
+      // Try by name - multiple strategies
       if (name) {
+        // Strategy 1: direct substring match
         const { data } = await supabase
           .from('contractors')
           .select('id')
@@ -1112,6 +1175,24 @@ export const EstimatesPage: React.FC = () => {
           await loadClientContactsById(data[0].id);
           return;
         }
+
+        // Strategy 2: match by first significant word (e.g. "MaxMaster" from "MaxMaster Sp. z o.o.")
+        const firstWord = name.split(/[\s.,]+/).find(w => w.length > 2);
+        if (firstWord && firstWord.toLowerCase() !== name.toLowerCase()) {
+          const { data: data2 } = await supabase
+            .from('contractors')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .eq('contractor_type', 'customer')
+            .is('deleted_at', null)
+            .ilike('name', `%${firstWord}%`)
+            .limit(1);
+
+          if (data2 && data2.length > 0) {
+            await loadClientContactsById(data2[0].id);
+            return;
+          }
+        }
       }
 
       setClientContacts([]);
@@ -1122,10 +1203,17 @@ export const EstimatesPage: React.FC = () => {
   };
 
   const selectExistingClient = (client: ExistingClient) => {
+    // If client has contractor_id but no NIP, look up NIP from contractor entries
+    let nip = client.nip || '';
+    if (!nip && client.contractor_id) {
+      const contractorEntry = existingClients.find(c => c.contractor_id === client.contractor_id && c.nip);
+      if (contractorEntry) nip = contractorEntry.nip || '';
+    }
+
     setFormData(prev => ({
       ...prev,
       client_name: client.client_name,
-      nip: client.nip || '',
+      nip,
       company_street: client.company_street || '',
       company_street_number: client.company_street_number || '',
       company_city: client.company_city || '',
@@ -1137,8 +1225,8 @@ export const EstimatesPage: React.FC = () => {
     // Load contacts for this client
     if (client.contractor_id) {
       loadClientContactsById(client.contractor_id);
-    } else if (client.nip) {
-      findAndLoadContacts(client.nip);
+    } else if (nip) {
+      findAndLoadContacts(nip);
     } else {
       findAndLoadContacts(undefined, client.client_name);
     }
