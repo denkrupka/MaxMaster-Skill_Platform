@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
-  Wrench, Package, Monitor, FileText, Link2, ChevronDown,
+  Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen,
   Settings, AlertCircle, ChevronRight, ClipboardList, GripVertical,
   Layers, FolderOpen
 } from 'lucide-react';
@@ -23,16 +23,13 @@ import type {
 } from '../../types';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment' | 'templates' | 'mapping' | 'rodzaj_prac' | 'wall_types';
+type TabType = 'work_types' | 'materials' | 'equipment' | 'slownik';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
-  { id: 'rodzaj_prac', label: 'Rodzaj prac', icon: ClipboardList },
-  { id: 'wall_types', label: 'Rodzaje ścian', icon: Layers },
-  { id: 'work_types', label: 'Typy prac', icon: Wrench },
+  { id: 'work_types', label: 'Robocizna', icon: Wrench },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
-  { id: 'templates', label: 'Szablony', icon: FileText },
-  { id: 'mapping', label: 'Mapowanie', icon: Link2 },
+  { id: 'slownik', label: 'Słownik', icon: BookOpen },
 ];
 
 // ============ Единицы измерения ============
@@ -122,7 +119,8 @@ export const DictionariesPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
 
-  const [activeTab, setActiveTab] = useState<TabType>('rodzaj_prac');
+  const [activeTab, setActiveTab] = useState<TabType>('work_types');
+  const [slownikSubTab, setSlownikSubTab] = useState<'rodzaj_prac' | 'wall_types'>('rodzaj_prac');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -3298,11 +3296,9 @@ export const DictionariesPage: React.FC = () => {
 
   // ============ Statistics ============
   const stats = [
-    { label: 'Typy prac', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
+    { label: 'Robocizna', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
     { label: 'Materiały', value: materials.length, icon: Package, color: 'text-green-600' },
     { label: 'Sprzęt', value: equipment.length, icon: Monitor, color: 'text-orange-600' },
-    { label: 'Szablony', value: templateTasks.length, icon: FileText, color: 'text-purple-600' },
-    { label: 'Reguły', value: mappingRules.length, icon: Link2, color: 'text-cyan-600' },
   ];
 
   return (
@@ -3310,9 +3306,9 @@ export const DictionariesPage: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Słowniki kosztorysowania</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Zarządzanie kartoteką</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Zarządzanie typami prac, materiałami, sprzętem i szablonami
+            Zarządzanie robocizną, materiałami i sprzętem
           </p>
         </div>
         <button
@@ -3326,7 +3322,7 @@ export const DictionariesPage: React.FC = () => {
       </div>
 
       {/* Statistics */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         {stats.map((stat, index) => (
           <div key={index} className="bg-white rounded-lg shadow p-4 flex items-center gap-3">
             <stat.icon className={`w-8 h-8 ${stat.color}`} />
@@ -3366,13 +3362,40 @@ export const DictionariesPage: React.FC = () => {
             </div>
           ) : (
             <>
-              {activeTab === 'rodzaj_prac' && renderRodzajPracTab()}
-              {activeTab === 'wall_types' && renderWallTypesTab()}
               {activeTab === 'work_types' && renderWorkTypesTab()}
               {activeTab === 'materials' && renderMaterialsTab()}
               {activeTab === 'equipment' && renderEquipmentTab()}
-              {activeTab === 'templates' && renderTemplatesTab()}
-              {activeTab === 'mapping' && renderMappingTab()}
+              {activeTab === 'slownik' && (
+                <div>
+                  {/* Słownik sub-tabs */}
+                  <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
+                    <button
+                      onClick={() => setSlownikSubTab('rodzaj_prac')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+                        slownikSubTab === 'rodzaj_prac'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <ClipboardList className="w-4 h-4" />
+                      Rodzaj prac
+                    </button>
+                    <button
+                      onClick={() => setSlownikSubTab('wall_types')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+                        slownikSubTab === 'wall_types'
+                          ? 'bg-white text-blue-600 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Layers className="w-4 h-4" />
+                      Rodzaj ścian
+                    </button>
+                  </div>
+                  {slownikSubTab === 'rodzaj_prac' && renderRodzajPracTab()}
+                  {slownikSubTab === 'wall_types' && renderWallTypesTab()}
+                </div>
+              )}
             </>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
   Save, XCircle, RotateCcw, Inbox, BookOpen, Wallet, Building2,
   User, Calendar, Phone, Mail, Star, UserPlus, MapPin, Filter, Briefcase
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { fetchCompanyByNip, validateNip, normalizeNip } from '../../lib/gusApi';
@@ -81,7 +82,7 @@ const isValidEmail = (email: string): boolean => {
 };
 
 // Main tab type
-type MainTabType = 'estimates' | 'requests' | 'dictionaries' | 'price-lists';
+type MainTabType = 'estimates' | 'requests' | 'dictionaries';
 
 // Contact form interface
 interface ContactFormData {
@@ -250,6 +251,7 @@ const EditableCell: React.FC<{
 export const EstimatesPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser } = state;
+  const navigate = useNavigate();
 
   // Main tab state for navigation between sections
   const [activeMainTab, setActiveMainTab] = useState<MainTabType>('estimates');
@@ -1529,7 +1531,7 @@ export const EstimatesPage: React.FC = () => {
         await loadKosztorysEstimates();
       } else {
         // Navigate to formulary for new estimate
-        window.location.hash = `#/construction/formulary/${requestId}`;
+        navigate(`/construction/formulary/${requestId}`);
       }
     } catch (err) {
       console.error('Error saving estimate:', err);
@@ -1783,18 +1785,7 @@ export const EstimatesPage: React.FC = () => {
             }`}
           >
             <BookOpen className="w-4 h-4" />
-            Słownik
-          </button>
-          <button
-            onClick={() => setActiveMainTab('price-lists')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
-              activeMainTab === 'price-lists'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Wallet className="w-4 h-4" />
-            Cennik
+            Kartoteka
           </button>
         </div>
 
@@ -1974,7 +1965,7 @@ export const EstimatesPage: React.FC = () => {
                       <tr
                         key={estimate.id}
                         className="hover:bg-slate-50 cursor-pointer"
-                        onClick={() => window.location.hash = `#/construction/kosztorys/${estimate.id}`}
+                        onClick={() => navigate(`/construction/kosztorys/${estimate.id}`)}
                       >
                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{estimate.estimate_number}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{estimate.request?.investment_name || '-'}</td>
@@ -2052,12 +2043,7 @@ export const EstimatesPage: React.FC = () => {
           </div>
         )}
 
-        {/* Price Lists Tab */}
-        {activeMainTab === 'price-lists' && (
-          <div className="-m-6">
-            <PriceListsPage />
-          </div>
-        )}
+        {/* Price Lists Tab - removed */}
 
         {/* New Estimate Modal */}
         {showNewEstimateModal && (
@@ -3556,7 +3542,7 @@ export const EstimatesPage: React.FC = () => {
               <button
                 onClick={() => {
                   setShowEstimateDetailModal(false);
-                  window.location.hash = `#/construction/kosztorys/${selectedEstimateDetail.id}`;
+                  navigate(`/construction/kosztorys/${selectedEstimateDetail.id}`);
                 }}
                 className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
               >
