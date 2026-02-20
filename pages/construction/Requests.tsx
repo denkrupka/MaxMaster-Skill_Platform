@@ -1495,12 +1495,6 @@ export const RequestsPage: React.FC = () => {
 
   return (
     <div className="p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Zapytania o kosztorys</h1>
-        <p className="text-slate-600 mt-1">Zarządzanie zapytaniami ofertowymi</p>
-      </div>
-
       {/* Stats cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
