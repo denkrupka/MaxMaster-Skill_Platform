@@ -1303,13 +1303,7 @@ export const KosztorysEditorPage: React.FC = () => {
           return;
         }
 
-        // Debug: log raw DB data for root catalogs to see actual name vs basis
-        console.log('Raw root catalogs from DB:', (rootResult.data || []).slice(0, 5).map((f: any) => ({
-          basis: f.basis, name: f.name, nameEqualsBasis: f.name === f.basis
-        })));
-
         const catalog = (rootResult.data || []).map(folderToItem);
-        console.log('Loaded root catalogs:', catalog.length, 'with descriptions:', catalog.filter(c => c.name).length);
         setKnrCatalog(catalog);
       } catch (error) {
         console.error('Error loading KNR catalog:', error);
@@ -1335,13 +1329,6 @@ export const KosztorysEditorPage: React.FC = () => {
       if (error) {
         console.error('Error loading child folders:', error);
         return;
-      }
-
-      // Debug: log raw child data
-      if (children && children.length > 0) {
-        console.log('Child folders for', parentId, ':', children.slice(0, 3).map((f: any) => ({
-          basis: f.basis, name: f.name, nameEqualsBasis: f.name === f.basis
-        })));
       }
 
       const childItems = (children || []).map(folderToItem);
