@@ -875,6 +875,12 @@ export const KosztorysEditorPage: React.FC = () => {
   const [catalogUnitIndex, setCatalogUnitIndex] = useState('060'); // Default to m3
   const [knrCatalog, setKnrCatalog] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [loadedPositions, setLoadedPositions] = useState<Map<string, CatalogItem[]>>(new Map());
+  const [loadedResources, setLoadedResources] = useState<Map<string, CatalogNorm[]>>(new Map());
+  const [loadingFolder, setLoadingFolder] = useState<string | null>(null);
+  const [selectedTableItem, setSelectedTableItem] = useState<CatalogItem | null>(null);
+  const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogItem[] | null>(null);
+  const [catalogSearchLoading, setCatalogSearchLoading] = useState(false);
 
   // Dropdown states
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
@@ -1244,113 +1250,47 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Load KNR catalog from database
+  // Load KNR catalog folders from database (lazy loading - positions loaded on demand)
   useEffect(() => {
-    const loadKnrCatalog = async () => {
+    const loadKnrFolders = async () => {
       setCatalogLoading(true);
       try {
-        // Fetch folders (catalogs, chapters, tables)
-        const { data: folders, error: foldersError } = await supabase
-          .from('knr_folders')
-          .select('*')
-          .eq('is_system', true)
-          .order('path', { ascending: true });
+        // Fetch ALL folders with pagination (Supabase default limit is 1000)
+        const allFolders: any[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        while (true) {
+          const { data: page, error } = await supabase
+            .from('knr_folders')
+            .select('*')
+            .eq('is_system', true)
+            .order('path', { ascending: true })
+            .range(offset, offset + pageSize - 1);
 
-        if (foldersError) {
-          console.error('Error loading KNR folders:', foldersError);
-          setCatalogLoading(false);
-          return;
+          if (error) {
+            console.error('Error loading KNR folders:', error);
+            setCatalogLoading(false);
+            return;
+          }
+          if (!page || page.length === 0) break;
+          allFolders.push(...page);
+          if (page.length < pageSize) break;
+          offset += pageSize;
         }
 
-        // Fetch positions
-        const { data: positions, error: positionsError } = await supabase
-          .from('knr_positions')
-          .select('*')
-          .eq('is_system', true);
+        console.log('Loaded KNR folders:', allFolders.length);
 
-        if (positionsError) {
-          console.error('Error loading KNR positions:', positionsError);
-          setCatalogLoading(false);
-          return;
-        }
-
-        // Fetch position resources (norms)
-        const { data: resources, error: resourcesError } = await supabase
-          .from('knr_position_resources')
-          .select('*');
-
-        if (resourcesError) {
-          console.error('Error loading KNR resources:', resourcesError);
-          // Continue without resources - positions will have empty norms
-        }
-
-        // Build resource map by position_xid
-        const resourcesByPosition = new Map<string, any[]>();
-        (resources || []).forEach(res => {
-          const existing = resourcesByPosition.get(res.position_xid) || [];
-          existing.push(res);
-          resourcesByPosition.set(res.position_xid, existing);
-        });
-
-        // Build folder map by xid
-        const folderMap = new Map<string, any>();
-        (folders || []).forEach(f => folderMap.set(f.xid, f));
-
-        // Build position map by folder_xid
-        const positionsByFolder = new Map<string, any[]>();
-        (positions || []).forEach(pos => {
-          const existing = positionsByFolder.get(pos.folder_xid) || [];
-          existing.push(pos);
-          positionsByFolder.set(pos.folder_xid, existing);
-        });
-
-        // Convert flat structure to nested CatalogItem[]
-        const buildCatalogTree = (): CatalogItem[] => {
-          // Get root catalogs (depth = 0, no parent)
-          const rootFolders = (folders || []).filter(f => f.depth === 0 || !f.parent_xid);
+        // Convert flat folders to nested CatalogItem[] (no positions yet)
+        const buildFolderTree = (): CatalogItem[] => {
+          const rootFolders = allFolders.filter(f => f.depth === 0 || !f.parent_xid);
 
           const buildFolderItem = (folder: any): CatalogItem => {
-            // Get children folders
-            const childFolders = (folders || []).filter(f => f.parent_xid === folder.xid);
+            const childFolders = allFolders.filter(f => f.parent_xid === folder.xid);
 
-            // Get positions for this folder
-            const folderPositions = positionsByFolder.get(folder.xid) || [];
+            const children: CatalogItem[] = childFolders
+              .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
+              .map(buildFolderItem);
 
-            // Convert positions to CatalogItem
-            const positionItems: CatalogItem[] = folderPositions
-              .sort((a, b) => a.ordinal_number - b.ordinal_number)
-              .map(pos => {
-                const posResources = resourcesByPosition.get(pos.xid) || [];
-                const norms: CatalogNorm[] = posResources
-                  .sort((a, b) => a.ordinal_number - b.ordinal_number)
-                  .map(res => ({
-                    type: (res.type === 'R' ? 'labor' : res.type === 'M' ? 'material' : 'equipment') as KosztorysResourceType,
-                    value: parseFloat(res.norm) || 0,
-                    unit: res.rms_unit || '',
-                    name: res.rms_name || '',
-                    index: res.rms_index || undefined,
-                    rmsCode: res.rms_code || undefined,
-                  }));
-
-                return {
-                  id: pos.xid,
-                  code: pos.basis,
-                  name: pos.name,
-                  type: 'position' as const,
-                  unit: pos.unit,
-                  norms: norms.length > 0 ? norms : undefined,
-                };
-              });
-
-            // Build children (folders + positions)
-            const children: CatalogItem[] = [
-              ...childFolders
-                .sort((a, b) => a.basis.localeCompare(b.basis))
-                .map(buildFolderItem),
-              ...positionItems,
-            ];
-
-            // Determine type based on depth
             let type: 'catalog' | 'chapter' | 'table' = 'catalog';
             if (folder.depth === 1) type = 'chapter';
             else if (folder.depth >= 2) type = 'table';
@@ -1360,17 +1300,19 @@ export const KosztorysEditorPage: React.FC = () => {
               code: folder.basis,
               name: folder.name,
               type,
-              children: children.length > 0 ? children : undefined,
+              // Tables (depth >= 2) with no child folders still get empty children array
+              // so they show as expandable - positions will be loaded lazily
+              children: children.length > 0 ? children : (type === 'table' ? [] : undefined),
             };
           };
 
           return rootFolders
-            .sort((a, b) => a.basis.localeCompare(b.basis))
+            .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
             .map(buildFolderItem);
         };
 
-        const catalog = buildCatalogTree();
-        console.log('Loaded KNR catalog:', catalog.length, 'root items');
+        const catalog = buildFolderTree();
+        console.log('Built KNR catalog tree:', catalog.length, 'root items');
         setKnrCatalog(catalog);
       } catch (error) {
         console.error('Error loading KNR catalog:', error);
@@ -1379,8 +1321,101 @@ export const KosztorysEditorPage: React.FC = () => {
       }
     };
 
-    loadKnrCatalog();
+    loadKnrFolders();
   }, []);
+
+  // Load positions for a folder lazily
+  const loadPositionsForFolder = async (folderId: string) => {
+    if (loadedPositions.has(folderId)) return; // Already cached
+    setLoadingFolder(folderId);
+    try {
+      const { data: positions, error } = await supabase
+        .from('knr_positions')
+        .select('*')
+        .eq('folder_xid', folderId)
+        .order('ordinal_number', { ascending: true });
+
+      if (error) {
+        console.error('Error loading positions for folder:', error);
+        return;
+      }
+
+      const positionItems: CatalogItem[] = (positions || []).map(pos => ({
+        id: pos.xid,
+        code: pos.basis,
+        name: pos.name,
+        type: 'position' as const,
+        unit: pos.unit,
+      }));
+
+      setLoadedPositions(prev => {
+        const next = new Map(prev);
+        next.set(folderId, positionItems);
+        return next;
+      });
+
+      // Update the catalog tree to include positions in the folder
+      setKnrCatalog(prevCatalog => {
+        const addPositionsToFolder = (items: CatalogItem[]): CatalogItem[] => {
+          return items.map(item => {
+            if (item.id === folderId) {
+              const existingFolderChildren = (item.children || []).filter(c => c.type !== 'position');
+              return {
+                ...item,
+                children: [...existingFolderChildren, ...positionItems],
+              };
+            }
+            if (item.children) {
+              return { ...item, children: addPositionsToFolder(item.children) };
+            }
+            return item;
+          });
+        };
+        return addPositionsToFolder(prevCatalog);
+      });
+    } catch (error) {
+      console.error('Error loading positions:', error);
+    } finally {
+      setLoadingFolder(null);
+    }
+  };
+
+  // Load resources (norms) for a position lazily
+  const loadResourcesForPosition = async (positionId: string): Promise<CatalogNorm[]> => {
+    if (loadedResources.has(positionId)) return loadedResources.get(positionId)!;
+    try {
+      const { data: resources, error } = await supabase
+        .from('knr_position_resources')
+        .select('*')
+        .eq('position_xid', positionId)
+        .order('ordinal_number', { ascending: true });
+
+      if (error) {
+        console.error('Error loading resources for position:', error);
+        return [];
+      }
+
+      const norms: CatalogNorm[] = (resources || []).map(res => ({
+        type: (res.type === 'R' ? 'labor' : res.type === 'M' ? 'material' : 'equipment') as KosztorysResourceType,
+        value: parseFloat(res.norm) || 0,
+        unit: res.rms_unit || '',
+        name: res.rms_name || '',
+        index: res.rms_index || undefined,
+        rmsCode: res.rms_code || undefined,
+      }));
+
+      setLoadedResources(prev => {
+        const next = new Map(prev);
+        next.set(positionId, norms);
+        return next;
+      });
+
+      return norms;
+    } catch (error) {
+      console.error('Error loading resources:', error);
+      return [];
+    }
+  };
 
   const loadEstimate = async (id: string) => {
     setLoading(true);
@@ -3856,20 +3891,24 @@ export const KosztorysEditorPage: React.FC = () => {
     }));
   };
 
-  // Toggle catalog item expand
-  const toggleCatalogItem = (itemId: string) => {
+  // Toggle catalog item expand (also triggers lazy loading for tables)
+  const toggleCatalogItem = (itemId: string, item?: CatalogItem) => {
     setExpandedCatalogItems(prev => {
       const newExpanded = new Set(prev);
       if (newExpanded.has(itemId)) {
         newExpanded.delete(itemId);
       } else {
         newExpanded.add(itemId);
+        // Load positions lazily when expanding a table folder
+        if (item && item.type === 'table' && !loadedPositions.has(itemId)) {
+          loadPositionsForFolder(itemId);
+        }
       }
       return newExpanded;
     });
   };
 
-  // Filter catalog items by search
+  // Filter catalog folders by search (for tree view - only filters loaded folders)
   const filterCatalogItems = (items: CatalogItem[], search: string): CatalogItem[] => {
     if (!search.trim()) return items;
     const lowerSearch = search.toLowerCase();
@@ -3878,7 +3917,7 @@ export const KosztorysEditorPage: React.FC = () => {
       const matchesCode = item.code.toLowerCase().includes(lowerSearch);
       const matchesName = item.name.toLowerCase().includes(lowerSearch);
 
-      if (item.children) {
+      if (item.children && item.children.length > 0) {
         const filteredChildren = filterCatalogItems(item.children, search);
         if (filteredChildren.length > 0 || matchesCode || matchesName) {
           acc.push({ ...item, children: filteredChildren.length > 0 ? filteredChildren : item.children });
@@ -3891,40 +3930,110 @@ export const KosztorysEditorPage: React.FC = () => {
     }, []);
   };
 
+  // Search catalog via Supabase (for positions that aren't loaded yet)
+  const searchCatalogDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchCatalogFromDb = (search: string) => {
+    if (searchCatalogDebounceRef.current) {
+      clearTimeout(searchCatalogDebounceRef.current);
+    }
+
+    if (!search.trim() || search.trim().length < 2) {
+      setCatalogSearchResults(null);
+      setCatalogSearchLoading(false);
+      return;
+    }
+
+    setCatalogSearchLoading(true);
+    searchCatalogDebounceRef.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('knr_positions')
+          .select('*')
+          .eq('is_system', true)
+          .or(`basis.ilike.%${search.trim()}%,name.ilike.%${search.trim()}%`)
+          .order('basis', { ascending: true })
+          .limit(50);
+
+        if (error) {
+          console.error('Error searching catalog:', error);
+          setCatalogSearchResults(null);
+          return;
+        }
+
+        const results: CatalogItem[] = (data || []).map(pos => ({
+          id: pos.xid,
+          code: pos.basis,
+          name: pos.name,
+          type: 'position' as const,
+          unit: pos.unit,
+        }));
+
+        setCatalogSearchResults(results);
+      } catch (error) {
+        console.error('Error searching catalog:', error);
+      } finally {
+        setCatalogSearchLoading(false);
+      }
+    }, 300);
+  };
+
   // Render catalog tree
   const renderCatalogTree = (items: CatalogItem[], level: number): React.ReactNode => {
-    const filteredItems = level === 0 ? filterCatalogItems(items, catalogSearch) : items;
+    const filteredItems = level === 0 && !catalogSearchResults ? filterCatalogItems(items, catalogSearch) : items;
 
     return filteredItems.map(item => {
       const isExpanded = expandedCatalogItems.has(item.id);
-      const hasChildren = item.children && item.children.length > 0;
+      const isTable = item.type === 'table';
+      const hasChildren = item.children !== undefined; // tables always expandable (positions loaded lazily)
       const isSelected = selectedCatalogItem?.id === item.id;
+      const isSelectedTable = selectedTableItem?.id === item.id;
       const isPosition = item.type === 'position';
+      const isLoading = loadingFolder === item.id;
 
       return (
         <div key={item.id}>
           <div
             className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
-              isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+              isSelected || isSelectedTable ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
             } ${isPosition ? 'border border-gray-200' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={() => {
-              if (hasChildren) {
-                toggleCatalogItem(item.id);
-              }
               if (isPosition) {
                 setSelectedCatalogItem(item);
-                // Set default unit from catalog item
+                setSelectedTableItem(null);
+                // Load resources lazily
+                loadResourcesForPosition(item.id).then(norms => {
+                  if (norms.length > 0) {
+                    setSelectedCatalogItem(prev => prev?.id === item.id ? { ...prev, norms } : prev);
+                  }
+                });
                 const defaultUnit = UNITS_REFERENCE.find(u => u.unit === item.unit);
                 if (defaultUnit) {
                   setCatalogUnitIndex(defaultUnit.index);
                 }
+              } else if (isTable) {
+                // Select table to show positions in right panel
+                setSelectedTableItem(item);
+                setSelectedCatalogItem(null);
+                toggleCatalogItem(item.id, item);
+                // Load positions if not yet loaded
+                if (!loadedPositions.has(item.id)) {
+                  loadPositionsForFolder(item.id);
+                }
+              } else if (hasChildren) {
+                toggleCatalogItem(item.id, item);
               }
             }}
           >
             {hasChildren ? (
               <button className="p-0.5 -ml-1 hover:bg-gray-200 rounded flex-shrink-0">
-                {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                {isLoading ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : isExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
               </button>
             ) : isPosition ? (
               <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
@@ -3935,13 +4044,21 @@ export const KosztorysEditorPage: React.FC = () => {
               <div className={`font-mono ${isPosition ? 'text-blue-600' : 'text-gray-600'}`}>
                 {item.code}
               </div>
-              <div className={`text-gray-500 ${level > 1 ? 'truncate' : ''}`} title={item.name}>
+              <div className="text-gray-500" title={item.name}>
                 {item.name}
               </div>
             </div>
           </div>
           {hasChildren && isExpanded && (
-            <div>{renderCatalogTree(item.children!, level + 1)}</div>
+            <div>
+              {renderCatalogTree(item.children || [], level + 1)}
+              {isLoading && (
+                <div className="flex items-center gap-1 py-1 text-xs text-gray-400" style={{ paddingLeft: `${(level + 1) * 12 + 8}px` }}>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Ładowanie pozycji...
+                </div>
+              )}
+            </div>
           )}
         </div>
       );
@@ -6418,14 +6535,23 @@ export const KosztorysEditorPage: React.FC = () => {
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Szukaj pozycji"
+                        placeholder="Szukaj pozycji (min. 2 znaki)"
                         value={catalogSearch}
-                        onChange={e => setCatalogSearch(e.target.value)}
+                        onChange={e => {
+                          setCatalogSearch(e.target.value);
+                          searchCatalogFromDb(e.target.value);
+                        }}
                         className="w-full pl-8 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
+                      {catalogSearchLoading && (
+                        <Loader2 className="absolute right-7 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-gray-400" />
+                      )}
                       {catalogSearch && (
                         <button
-                          onClick={() => setCatalogSearch('')}
+                          onClick={() => {
+                            setCatalogSearch('');
+                            setCatalogSearchResults(null);
+                          }}
                           className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-gray-100 rounded"
                         >
                           <X className="w-3 h-3 text-gray-400" />
@@ -6454,38 +6580,136 @@ export const KosztorysEditorPage: React.FC = () => {
                   <span>Opis</span>
                 </div>
 
-                {/* Catalog tree */}
-                <div className="flex-1 overflow-y-auto p-2">
-                  {/* Katalog Systemowy section */}
-                  <div className="mb-2">
-                    <button
-                      className="w-full flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded"
-                      onClick={() => {/* toggle system catalog */}}
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                      <span>Katalog systemowy</span>
-                      {catalogLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
-                    </button>
-                    <div className="ml-2">
-                      {catalogLoading ? (
-                        <div className="flex items-center justify-center py-4 text-sm text-gray-500">
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          Ładowanie katalogu...
+                {/* Catalog tree + position list */}
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  {/* Tree view */}
+                  <div className={`overflow-y-auto p-2 ${selectedTableItem ? 'h-1/2 border-b border-gray-200' : 'flex-1'}`}>
+                    {/* Search results */}
+                    {catalogSearchResults ? (
+                      <div>
+                        <div className="px-2 py-1 text-xs text-gray-500 mb-1">
+                          Wyniki wyszukiwania ({catalogSearchResults.length})
                         </div>
-                      ) : knrCatalog.length > 0 ? (
-                        renderCatalogTree(knrCatalog, 0)
-                      ) : (
-                        renderCatalogTree(KNR_CATALOG, 0)
-                      )}
-                    </div>
+                        {catalogSearchResults.length > 0 ? (
+                          catalogSearchResults.map(item => (
+                            <div
+                              key={item.id}
+                              className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
+                                selectedCatalogItem?.id === item.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+                              } border border-gray-200`}
+                              onClick={() => {
+                                setSelectedCatalogItem(item);
+                                setSelectedTableItem(null);
+                                loadResourcesForPosition(item.id).then(norms => {
+                                  if (norms.length > 0) {
+                                    setSelectedCatalogItem(prev => prev?.id === item.id ? { ...prev!, norms } : prev);
+                                  }
+                                });
+                                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === item.unit);
+                                if (defaultUnit) {
+                                  setCatalogUnitIndex(defaultUnit.index);
+                                }
+                              }}
+                            >
+                              <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-mono text-blue-600">{item.code}</div>
+                                <div className="text-gray-500">{item.name}</div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-gray-400 text-center py-4">Brak wyników</div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Katalog Systemowy section */
+                      <div className="mb-2">
+                        <button
+                          className="w-full flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded"
+                          onClick={() => {/* toggle system catalog */}}
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                          <span>Katalog systemowy</span>
+                          {catalogLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+                        </button>
+                        <div className="ml-2">
+                          {catalogLoading ? (
+                            <div className="flex items-center justify-center py-4 text-sm text-gray-500">
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                              Ładowanie katalogu...
+                            </div>
+                          ) : knrCatalog.length > 0 ? (
+                            renderCatalogTree(knrCatalog, 0)
+                          ) : (
+                            renderCatalogTree(KNR_CATALOG, 0)
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Position list panel - shown when a table folder is selected */}
+                  {selectedTableItem && (
+                    <div className="h-1/2 overflow-y-auto border-t border-gray-200">
+                      <div className="sticky top-0 bg-white px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">
+                          {selectedTableItem.code} - Pozycje
+                        </span>
+                        <button
+                          onClick={() => setSelectedTableItem(null)}
+                          className="p-0.5 hover:bg-gray-100 rounded"
+                        >
+                          <X className="w-3 h-3 text-gray-400" />
+                        </button>
+                      </div>
+                      <div className="p-1">
+                        {loadingFolder === selectedTableItem.id ? (
+                          <div className="flex items-center justify-center py-4 text-xs text-gray-500">
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            Ładowanie pozycji...
+                          </div>
+                        ) : (loadedPositions.get(selectedTableItem.id) || []).length > 0 ? (
+                          (loadedPositions.get(selectedTableItem.id) || []).map(pos => (
+                            <div
+                              key={pos.id}
+                              className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
+                                selectedCatalogItem?.id === pos.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+                              } border border-gray-100 mb-0.5`}
+                              onClick={() => {
+                                setSelectedCatalogItem(pos);
+                                loadResourcesForPosition(pos.id).then(norms => {
+                                  if (norms.length > 0) {
+                                    setSelectedCatalogItem(prev => prev?.id === pos.id ? { ...prev!, norms } : prev);
+                                  }
+                                });
+                                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === pos.unit);
+                                if (defaultUnit) {
+                                  setCatalogUnitIndex(defaultUnit.index);
+                                }
+                              }}
+                            >
+                              <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-mono text-blue-600">{pos.code}</div>
+                                <div className="text-gray-500">{pos.name}</div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-gray-400 text-center py-4">Brak pozycji</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Insert position form */}
                 {selectedCatalogItem?.type === 'position' && (
                   <div className="p-3 border-t border-gray-200 bg-gray-50">
-                    <p className="text-xs text-gray-600 mb-2 truncate" title={selectedCatalogItem.name}>
-                      {selectedCatalogItem.code}
+                    <p className="text-xs font-mono text-blue-600 mb-0.5">{selectedCatalogItem.code}</p>
+                    <p className="text-xs text-gray-600 mb-2" title={selectedCatalogItem.name}>
+                      {selectedCatalogItem.name}
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1">
@@ -6520,7 +6744,18 @@ export const KosztorysEditorPage: React.FC = () => {
                       </div>
                     </div>
                     <button
-                      onClick={() => insertFromCatalog(selectedCatalogItem)}
+                      onClick={async () => {
+                        // Ensure resources are loaded before inserting
+                        let itemToInsert = selectedCatalogItem;
+                        if (!itemToInsert.norms) {
+                          const norms = await loadResourcesForPosition(itemToInsert.id);
+                          if (norms.length > 0) {
+                            itemToInsert = { ...itemToInsert, norms };
+                            setSelectedCatalogItem(itemToInsert);
+                          }
+                        }
+                        insertFromCatalog(itemToInsert);
+                      }}
                       className="flex items-center justify-center font-semibold whitespace-nowrap focus-visible:ring-1 focus:ring-blue-400 focus:ring-opacity-50 focus:outline-none transition-colors bg-blue-600 hover:bg-blue-700 text-white aria-disabled:bg-opacity-30 text-sm gap-2.5 leading-tight px-2.5 py-1.5 [&_svg]:w-4 [&_svg]:h-4 rounded w-full mt-2"
                     >
                       Wstaw

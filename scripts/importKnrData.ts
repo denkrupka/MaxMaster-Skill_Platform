@@ -138,13 +138,25 @@ async function importPositions(): Promise<void> {
   console.log(`Found ${positionsData.length} positions`);
 
   // First, get all folder xids by path to find matching folders
-  const { data: folders } = await supabase
-    .from('knr_folders')
-    .select('xid, path')
-    .eq('is_system', true);
+  // Paginate to avoid Supabase default 1000-row limit (~4K folders)
+  const allFolders: { xid: string; path: string }[] = [];
+  let folderOffset = 0;
+  const folderPageSize = 1000;
+  while (true) {
+    const { data: folderPage } = await supabase
+      .from('knr_folders')
+      .select('xid, path')
+      .eq('is_system', true)
+      .range(folderOffset, folderOffset + folderPageSize - 1);
+    if (!folderPage || folderPage.length === 0) break;
+    allFolders.push(...folderPage);
+    if (folderPage.length < folderPageSize) break;
+    folderOffset += folderPageSize;
+  }
+  console.log(`  Loaded ${allFolders.length} folders for path matching`);
 
   const foldersByPath = new Map<string, string>();
-  folders?.forEach(f => foldersByPath.set(f.path, f.xid));
+  allFolders.forEach(f => foldersByPath.set(f.path, f.xid));
 
   // Process positions in batches
   const batchSize = 100;
