@@ -1256,87 +1256,97 @@ export const KosztorysEditorPage: React.FC = () => {
     const loadKnrFolders = async () => {
       setCatalogLoading(true);
       try {
-        // Fetch ALL folders with pagination (Supabase default limit is 1000)
-        const allFolders: any[] = [];
-        let offset = 0;
-        const pageSize = 1000;
-        while (true) {
-          const { data: page, error } = await supabase
-            .from('knr_folders')
-            .select('*')
-            .eq('is_system', true)
-            .order('path', { ascending: true })
-            .range(offset, offset + pageSize - 1);
+        // Fetch folders and units in parallel
+        // Only select needed columns for speed
+        const foldersPromise = (async () => {
+          const allFolders: any[] = [];
+          let offset = 0;
+          const pageSize = 1000;
+          while (true) {
+            const { data: page, error } = await supabase
+              .from('knr_folders')
+              .select('xid,basis,name,depth,parent_xid')
+              .eq('is_system', true)
+              .order('basis', { ascending: true })
+              .range(offset, offset + pageSize - 1);
 
-          if (error) {
-            console.error('Error loading KNR folders:', error);
-            setCatalogLoading(false);
-            return;
+            if (error) {
+              console.error('Error loading KNR folders:', error);
+              return [];
+            }
+            if (!page || page.length === 0) break;
+            allFolders.push(...page);
+            if (page.length < pageSize) break;
+            offset += pageSize;
           }
-          if (!page || page.length === 0) break;
-          allFolders.push(...page);
-          if (page.length < pageSize) break;
-          offset += pageSize;
-        }
+          return allFolders;
+        })();
 
-        console.log('Loaded KNR folders:', allFolders.length);
-
-        // Helper: get display description for folder
-        // If name has a real description (differs from basis) — show it
-        // If name === basis (duplicate) — return empty string (just show code)
-        const getFolderDescription = (folder: any): string => {
-          const name = (folder.name || '').trim();
-          const basis = (folder.basis || '').trim();
-          if (!name || name === basis) return '';
-          return name;
-        };
-
-        // Convert flat folders to nested CatalogItem[] (no positions yet)
-        const buildFolderTree = (): CatalogItem[] => {
-          const rootFolders = allFolders.filter(f => f.depth === 0 || !f.parent_xid);
-
-          const buildFolderItem = (folder: any): CatalogItem => {
-            const childFolders = allFolders.filter(f => f.parent_xid === folder.xid);
-
-            const children: CatalogItem[] = childFolders
-              .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
-              .map(buildFolderItem);
-
-            let type: 'catalog' | 'chapter' | 'table' = 'catalog';
-            if (folder.depth === 1) type = 'chapter';
-            else if (folder.depth >= 2) type = 'table';
-
-            return {
-              id: folder.xid,
-              code: folder.basis,
-              name: getFolderDescription(folder),
-              type,
-              // Tables (depth >= 2) with no child folders still get empty children array
-              // so they show as expandable - positions will be loaded lazily
-              children: children.length > 0 ? children : (type === 'table' ? [] : undefined),
-            };
-          };
-
-          return rootFolders
-            .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
-            .map(buildFolderItem);
-        };
-
-        const catalog = buildFolderTree();
-        console.log('Built KNR catalog tree:', catalog.length, 'root items');
-        setKnrCatalog(catalog);
-
-        // Fetch unique units from knr_positions via RPC or sampling
-        // Units are a small set so even 1000 rows will cover all unique values
-        const { data: unitRows } = await supabase
+        const unitsPromise = supabase
           .from('knr_positions')
           .select('unit')
           .eq('is_system', true)
           .limit(1000);
-        if (unitRows) {
-          const uniqueUnits = [...new Set(unitRows.map((r: any) => r.unit).filter(Boolean))].sort();
+
+        const [allFolders, unitsResult] = await Promise.all([foldersPromise, unitsPromise]);
+
+        // Set unique units
+        if (unitsResult.data) {
+          const uniqueUnits = [...new Set(unitsResult.data.map((r: any) => r.unit).filter(Boolean))].sort();
           setKnrUnits(uniqueUnits);
         }
+
+        if (allFolders.length === 0) {
+          setCatalogLoading(false);
+          return;
+        }
+
+        console.log('Loaded KNR folders:', allFolders.length);
+
+        // Build children map for O(n) tree construction (instead of O(n²) filter)
+        const childrenByParent = new Map<string, any[]>();
+        const rootFolders: any[] = [];
+        for (const f of allFolders) {
+          if (f.depth === 0 || !f.parent_xid) {
+            rootFolders.push(f);
+          } else {
+            const siblings = childrenByParent.get(f.parent_xid);
+            if (siblings) {
+              siblings.push(f);
+            } else {
+              childrenByParent.set(f.parent_xid, [f]);
+            }
+          }
+        }
+
+        // Recursive tree builder using the pre-built Map
+        const buildFolderItem = (folder: any): CatalogItem => {
+          const childFolders = (childrenByParent.get(folder.xid) || [])
+            .sort((a: any, b: any) => a.basis.localeCompare(b.basis));
+
+          const children: CatalogItem[] = childFolders.map(buildFolderItem);
+
+          let type: 'catalog' | 'chapter' | 'table' = 'catalog';
+          if (folder.depth === 1) type = 'chapter';
+          else if (folder.depth >= 2) type = 'table';
+
+          return {
+            id: folder.xid,
+            code: folder.basis,
+            name: folder.name || '',
+            type,
+            // Tables with no child folders still get empty children array
+            // so they show as expandable — positions will be loaded lazily
+            children: children.length > 0 ? children : (type === 'table' ? [] : undefined),
+          };
+        };
+
+        const catalog = rootFolders
+          .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
+          .map(buildFolderItem);
+
+        console.log('Built KNR catalog tree:', catalog.length, 'root items');
+        setKnrCatalog(catalog);
       } catch (error) {
         console.error('Error loading KNR catalog:', error);
       } finally {
