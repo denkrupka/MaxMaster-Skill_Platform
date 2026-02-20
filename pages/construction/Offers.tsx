@@ -79,7 +79,7 @@ export const OffersPage: React.FC = () => {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [estimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<OfferStatus | 'all'>('all');
@@ -107,7 +107,7 @@ export const OffersPage: React.FC = () => {
   // Import from estimate state
   const [selectedEstimateId, setSelectedEstimateId] = useState('');
   const [importLoading, setImportLoading] = useState(false);
-  const [importSource, setImportSource] = useState<'estimates' | 'kosztorys'>('estimates');
+  const [importSource, setImportSource] = useState<'estimates' | 'kosztorys'>('kosztorys');
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [selectedKosztorysId, setSelectedKosztorysId] = useState('');
 
@@ -124,7 +124,7 @@ export const OffersPage: React.FC = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [offersRes, projectsRes, contractorsRes, estimatesRes, kosztorysRes] = await Promise.all([
+      const [offersRes, projectsRes, contractorsRes, kosztorysRes] = await Promise.all([
         supabase
           .from('offers')
           .select('*, project:projects(*), client:contractors(*)')
@@ -142,12 +142,6 @@ export const OffersPage: React.FC = () => {
           .eq('contractor_type', 'customer')
           .is('deleted_at', null),
         supabase
-          .from('estimates')
-          .select('*, project:projects(name)')
-          .eq('company_id', currentUser.company_id)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false }),
-        supabase
           .from('kosztorys_estimates')
           .select('*, request:kosztorys_requests(investment_name, client_name)')
           .eq('company_id', currentUser.company_id)
@@ -158,7 +152,6 @@ export const OffersPage: React.FC = () => {
       if (offersRes.data) setOffers(offersRes.data);
       if (projectsRes.data) setProjects(projectsRes.data);
       if (contractorsRes.data) setContractors(contractorsRes.data);
-      if (estimatesRes.data) setEstimates(estimatesRes.data);
       if (kosztorysRes.data) setKosztorysEstimates(kosztorysRes.data);
     } catch (err) {
       console.error('Error loading offers:', err);
@@ -724,7 +717,7 @@ export const OffersPage: React.FC = () => {
       setSections(result.sections);
       setShowImportFromEstimate(false);
       setSelectedKosztorysId('');
-      setImportSource('estimates');
+      setImportSource('kosztorys');
     } catch (err) {
       console.error('Error importing from kosztorys:', err);
       alert('Błąd podczas importu z modułu kosztorysowania');
