@@ -1281,46 +1281,13 @@ export const KosztorysEditorPage: React.FC = () => {
 
         console.log('Loaded KNR folders:', allFolders.length);
 
-        // Helper: clean up folder name for display
-        // - If name equals basis (duplicate), extract description from path
-        // - If name is "( Rozdział XX ) * Description", show just "Description"
-        // - If name is "( Rozdział XX )" with no description, try path
-        const cleanFolderName = (folder: any): string => {
-          const name = folder.name || '';
-          const basis = folder.basis || '';
-          const path = folder.path || '';
-
-          // Extract description after " * " if present (e.g. "( Rozdział 01 ) * Konstrukcje murowe")
-          const starMatch = name.match(/\*\s*(.+)/);
-          if (starMatch) return starMatch[1].trim();
-
-          // If name is just duplicate of basis, try to get from path
-          if (name === basis || name.trim() === '') {
-            // Path is like "Catalog / Chapter / Table" — last segment is this folder
-            const pathParts = path.split(' / ');
-            if (pathParts.length > 1) {
-              const lastPart = pathParts[pathParts.length - 1];
-              // If last part also equals basis, try the part before
-              if (lastPart !== basis) {
-                const starMatch2 = lastPart.match(/\*\s*(.+)/);
-                return starMatch2 ? starMatch2[1].trim() : lastPart;
-              }
-            }
-            return ''; // No useful description available
-          }
-
-          // If name is just "( Rozdział XX )" without description
-          if (/^\(\s*Rozdzia[lł]\s+\d+\s*\)$/.test(name.trim())) {
-            // Try to get better name from path
-            const pathParts = path.split(' / ');
-            if (pathParts.length > 1) {
-              const lastPart = pathParts[pathParts.length - 1];
-              const starMatch2 = lastPart.match(/\*\s*(.+)/);
-              if (starMatch2) return starMatch2[1].trim();
-            }
-            return name; // Keep original if nothing better
-          }
-
+        // Helper: get display description for folder
+        // If name has a real description (differs from basis) — show it
+        // If name === basis (duplicate) — return empty string (just show code)
+        const getFolderDescription = (folder: any): string => {
+          const name = (folder.name || '').trim();
+          const basis = (folder.basis || '').trim();
+          if (!name || name === basis) return '';
           return name;
         };
 
@@ -1342,7 +1309,7 @@ export const KosztorysEditorPage: React.FC = () => {
             return {
               id: folder.xid,
               code: folder.basis,
-              name: cleanFolderName(folder),
+              name: getFolderDescription(folder),
               type,
               // Tables (depth >= 2) with no child folders still get empty children array
               // so they show as expandable - positions will be loaded lazily
