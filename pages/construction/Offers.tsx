@@ -1848,63 +1848,61 @@ export const OffersPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-slate-200">
-            {filteredOffers.map(offer => (
-              <div
-                key={offer.id}
-                className="p-4 hover:bg-slate-50 cursor-pointer transition"
-                onClick={() => { setSelectedOffer(offer); loadOfferDetails(offer.id); }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-slate-900">{offer.name}</h3>
-                      <p className="text-sm text-slate-500">
-                        {offer.number || 'Brak numeru'} • {(offer as any).client?.name || 'Brak klienta'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900">{formatCurrency(offer.final_amount)}</p>
-                      <p className="text-xs text-slate-500">Ważna do: {formatDate(offer.valid_until)}</p>
-                    </div>
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nr</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Klient</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Kwota</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ważna do</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {filteredOffers.map(offer => (
+                <tr
+                  key={offer.id}
+                  className="hover:bg-slate-50 cursor-pointer"
+                  onClick={() => { setSelectedOffer(offer); loadOfferDetails(offer.id); }}
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-slate-900">{offer.number || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{offer.name}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{(offer as any).client?.name || '-'}</td>
+                  <td className="px-4 py-3">
                     <StatusBadge status={offer.status} />
-                    <div className="flex gap-1">
+                  </td>
+                  <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">
+                    {formatCurrency(offer.final_amount)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500">
+                    {offer.valid_until ? formatDate(offer.valid_until) : '-'}
+                  </td>
+                  <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-center gap-1">
                       {offer.status === 'draft' && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleSendOffer(offer); }}
-                          className="p-2 hover:bg-blue-50 rounded-lg text-blue-600"
+                          onClick={() => handleSendOffer(offer)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
                           title="Wyślij"
                         >
                           <Send className="w-4 h-4" />
                         </button>
                       )}
-                      {offer.public_url && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); copyPublicLink(offer); }}
-                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
-                          title="Kopiuj link"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                      )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteOffer(offer); }}
-                        className="p-2 hover:bg-red-50 rounded-lg text-red-600"
+                        onClick={() => handleDeleteOffer(offer)}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
                         title="Usuń"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

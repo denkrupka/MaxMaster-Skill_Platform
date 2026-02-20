@@ -313,58 +313,98 @@ export const GanttPage: React.FC = () => {
 
   // Project selection
   if (!selectedProject) {
+    const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
     return (
       <div className="p-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Harmonogram Gantta</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Harmonogram</h1>
           <p className="text-slate-600 mt-1">Wybierz projekt, aby wyświetlić harmonogram</p>
         </div>
 
-        <div className="mb-4">
-          <div className="relative">
+        <div className="mb-4 flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[250px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               placeholder="Szukaj projektu..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects
-            .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-            .map(project => (
-              <button
-                key={project.id}
-                onClick={() => setSelectedProject(project)}
-                className="text-left p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition group"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: project.color + '20' }}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          </div>
+        ) : filteredProjects.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+            <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">
+              {projects.length === 0
+                ? 'Brak projektów. Utwórz projekt, aby dodać harmonogram.'
+                : 'Brak projektów pasujących do wyszukiwania.'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Projekt</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Data rozpoczęcia</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Data zakończenia</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredProjects.map(project => (
+                  <tr
+                    key={project.id}
+                    className="hover:bg-slate-50 cursor-pointer"
+                    onClick={() => setSelectedProject(project)}
                   >
-                    <Calendar className="w-5 h-5" style={{ color: project.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-slate-900 truncate group-hover:text-blue-600">
-                      {project.name}
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                      {project.start_date && project.end_date
-                        ? `${formatDate(project.start_date)} - ${formatDate(project.end_date)}`
-                        : 'Brak dat'
-                      }
-                    </p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-blue-500" />
-                </div>
-              </button>
-            ))}
-        </div>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: (project.color || '#3b82f6') + '20' }}
+                        >
+                          <Calendar className="w-4 h-4" style={{ color: project.color || '#3b82f6' }} />
+                        </div>
+                        <span className="font-medium text-slate-900">{project.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        project.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        project.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                        project.status === 'on_hold' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>
+                        {project.status === 'active' ? 'Aktywny' :
+                         project.status === 'completed' ? 'Zakończony' :
+                         project.status === 'on_hold' ? 'Wstrzymany' :
+                         project.status === 'planning' ? 'Planowanie' : project.status || '-'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {project.start_date ? new Date(project.start_date).toLocaleDateString('pl-PL') : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {project.end_date ? new Date(project.end_date).toLocaleDateString('pl-PL') : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <ChevronRight className="w-5 h-5 text-slate-400 inline-block" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   }
