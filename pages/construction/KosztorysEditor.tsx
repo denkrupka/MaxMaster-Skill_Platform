@@ -872,15 +872,16 @@ export const KosztorysEditorPage: React.FC = () => {
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
   const [catalogQuantity, setCatalogQuantity] = useState('10');
   const [catalogMultiplier, setCatalogMultiplier] = useState('1');
-  const [catalogUnitIndex, setCatalogUnitIndex] = useState('060'); // Default to m3
+  // catalogUnitIndex removed — replaced by catalogSelectedUnit (raw unit string from DB)
   const [knrCatalog, setKnrCatalog] = useState<CatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [loadedPositions, setLoadedPositions] = useState<Map<string, CatalogItem[]>>(new Map());
   const [loadedResources, setLoadedResources] = useState<Map<string, CatalogNorm[]>>(new Map());
   const [loadingFolder, setLoadingFolder] = useState<string | null>(null);
-  const [selectedTableItem, setSelectedTableItem] = useState<CatalogItem | null>(null);
   const [catalogSearchResults, setCatalogSearchResults] = useState<CatalogItem[] | null>(null);
   const [catalogSearchLoading, setCatalogSearchLoading] = useState(false);
+  const [knrUnits, setKnrUnits] = useState<string[]>([]);
+  const [catalogSelectedUnit, setCatalogSelectedUnit] = useState<string>('m3');
 
   // Dropdown states
   const [showDzialDropdown, setShowDzialDropdown] = useState(false);
@@ -1280,6 +1281,49 @@ export const KosztorysEditorPage: React.FC = () => {
 
         console.log('Loaded KNR folders:', allFolders.length);
 
+        // Helper: clean up folder name for display
+        // - If name equals basis (duplicate), extract description from path
+        // - If name is "( Rozdział XX ) * Description", show just "Description"
+        // - If name is "( Rozdział XX )" with no description, try path
+        const cleanFolderName = (folder: any): string => {
+          const name = folder.name || '';
+          const basis = folder.basis || '';
+          const path = folder.path || '';
+
+          // Extract description after " * " if present (e.g. "( Rozdział 01 ) * Konstrukcje murowe")
+          const starMatch = name.match(/\*\s*(.+)/);
+          if (starMatch) return starMatch[1].trim();
+
+          // If name is just duplicate of basis, try to get from path
+          if (name === basis || name.trim() === '') {
+            // Path is like "Catalog / Chapter / Table" — last segment is this folder
+            const pathParts = path.split(' / ');
+            if (pathParts.length > 1) {
+              const lastPart = pathParts[pathParts.length - 1];
+              // If last part also equals basis, try the part before
+              if (lastPart !== basis) {
+                const starMatch2 = lastPart.match(/\*\s*(.+)/);
+                return starMatch2 ? starMatch2[1].trim() : lastPart;
+              }
+            }
+            return ''; // No useful description available
+          }
+
+          // If name is just "( Rozdział XX )" without description
+          if (/^\(\s*Rozdzia[lł]\s+\d+\s*\)$/.test(name.trim())) {
+            // Try to get better name from path
+            const pathParts = path.split(' / ');
+            if (pathParts.length > 1) {
+              const lastPart = pathParts[pathParts.length - 1];
+              const starMatch2 = lastPart.match(/\*\s*(.+)/);
+              if (starMatch2) return starMatch2[1].trim();
+            }
+            return name; // Keep original if nothing better
+          }
+
+          return name;
+        };
+
         // Convert flat folders to nested CatalogItem[] (no positions yet)
         const buildFolderTree = (): CatalogItem[] => {
           const rootFolders = allFolders.filter(f => f.depth === 0 || !f.parent_xid);
@@ -1298,7 +1342,7 @@ export const KosztorysEditorPage: React.FC = () => {
             return {
               id: folder.xid,
               code: folder.basis,
-              name: folder.name,
+              name: cleanFolderName(folder),
               type,
               // Tables (depth >= 2) with no child folders still get empty children array
               // so they show as expandable - positions will be loaded lazily
@@ -1314,6 +1358,18 @@ export const KosztorysEditorPage: React.FC = () => {
         const catalog = buildFolderTree();
         console.log('Built KNR catalog tree:', catalog.length, 'root items');
         setKnrCatalog(catalog);
+
+        // Fetch unique units from knr_positions via RPC or sampling
+        // Units are a small set so even 1000 rows will cover all unique values
+        const { data: unitRows } = await supabase
+          .from('knr_positions')
+          .select('unit')
+          .eq('is_system', true)
+          .limit(1000);
+        if (unitRows) {
+          const uniqueUnits = [...new Set(unitRows.map((r: any) => r.unit).filter(Boolean))].sort();
+          setKnrUnits(uniqueUnits);
+        }
       } catch (error) {
         console.error('Error loading KNR catalog:', error);
       } finally {
@@ -3983,10 +4039,8 @@ export const KosztorysEditorPage: React.FC = () => {
 
     return filteredItems.map(item => {
       const isExpanded = expandedCatalogItems.has(item.id);
-      const isTable = item.type === 'table';
       const hasChildren = item.children !== undefined; // tables always expandable (positions loaded lazily)
       const isSelected = selectedCatalogItem?.id === item.id;
-      const isSelectedTable = selectedTableItem?.id === item.id;
       const isPosition = item.type === 'position';
       const isLoading = loadingFolder === item.id;
 
@@ -3994,31 +4048,21 @@ export const KosztorysEditorPage: React.FC = () => {
         <div key={item.id}>
           <div
             className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
-              isSelected || isSelectedTable ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+              isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
             } ${isPosition ? 'border border-gray-200' : ''}`}
             style={{ paddingLeft: `${level * 12 + 8}px` }}
             onClick={() => {
               if (isPosition) {
                 setSelectedCatalogItem(item);
-                setSelectedTableItem(null);
                 // Load resources lazily
                 loadResourcesForPosition(item.id).then(norms => {
                   if (norms.length > 0) {
                     setSelectedCatalogItem(prev => prev?.id === item.id ? { ...prev, norms } : prev);
                   }
                 });
-                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === item.unit);
-                if (defaultUnit) {
-                  setCatalogUnitIndex(defaultUnit.index);
-                }
-              } else if (isTable) {
-                // Select table to show positions in right panel
-                setSelectedTableItem(item);
-                setSelectedCatalogItem(null);
-                toggleCatalogItem(item.id, item);
-                // Load positions if not yet loaded
-                if (!loadedPositions.has(item.id)) {
-                  loadPositionsForFolder(item.id);
+                // Auto-set unit from position
+                if (item.unit) {
+                  setCatalogSelectedUnit(item.unit);
                 }
               } else if (hasChildren) {
                 toggleCatalogItem(item.id, item);
@@ -4044,9 +4088,11 @@ export const KosztorysEditorPage: React.FC = () => {
               <div className={`font-mono ${isPosition ? 'text-blue-600' : 'text-gray-600'}`}>
                 {item.code}
               </div>
-              <div className="text-gray-500" title={item.name}>
-                {item.name}
-              </div>
+              {item.name && (
+                <div className="text-gray-500" title={item.name}>
+                  {item.name}
+                </div>
+              )}
             </div>
           </div>
           {hasChildren && isExpanded && (
@@ -4069,13 +4115,16 @@ export const KosztorysEditorPage: React.FC = () => {
   const insertFromCatalog = (catalogItem: CatalogItem) => {
     if (!catalogItem || catalogItem.type !== 'position') return;
 
-    // Use selected unit from dropdown instead of catalog default
-    const unit = UNITS_REFERENCE.find(u => u.index === catalogUnitIndex) || UNITS_REFERENCE[0];
+    // Use selected unit from dropdown (raw unit string from knr_positions)
+    const selectedUnit = catalogSelectedUnit;
+    const unitRef = UNITS_REFERENCE.find(u => u.unit === selectedUnit);
+    const unitLabel = selectedUnit;
+    const unitIndex = unitRef?.index || '060';
     const newPosition = createNewPosition(
       catalogItem.code,
       catalogItem.name,
-      unit.unit,
-      unit.index
+      unitLabel,
+      unitIndex
     );
 
     // Add measurement
@@ -6580,124 +6629,65 @@ export const KosztorysEditorPage: React.FC = () => {
                   <span>Opis</span>
                 </div>
 
-                {/* Catalog tree + position list */}
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  {/* Tree view */}
-                  <div className={`overflow-y-auto p-2 ${selectedTableItem ? 'h-1/2 border-b border-gray-200' : 'flex-1'}`}>
-                    {/* Search results */}
-                    {catalogSearchResults ? (
-                      <div>
-                        <div className="px-2 py-1 text-xs text-gray-500 mb-1">
-                          Wyniki wyszukiwania ({catalogSearchResults.length})
-                        </div>
-                        {catalogSearchResults.length > 0 ? (
-                          catalogSearchResults.map(item => (
-                            <div
-                              key={item.id}
-                              className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
-                                selectedCatalogItem?.id === item.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
-                              } border border-gray-200`}
-                              onClick={() => {
-                                setSelectedCatalogItem(item);
-                                setSelectedTableItem(null);
-                                loadResourcesForPosition(item.id).then(norms => {
-                                  if (norms.length > 0) {
-                                    setSelectedCatalogItem(prev => prev?.id === item.id ? { ...prev!, norms } : prev);
-                                  }
-                                });
-                                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === item.unit);
-                                if (defaultUnit) {
-                                  setCatalogUnitIndex(defaultUnit.index);
+                {/* Catalog tree */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  {/* Search results */}
+                  {catalogSearchResults ? (
+                    <div>
+                      <div className="px-2 py-1 text-xs text-gray-500 mb-1">
+                        Wyniki wyszukiwania ({catalogSearchResults.length})
+                      </div>
+                      {catalogSearchResults.length > 0 ? (
+                        catalogSearchResults.map(item => (
+                          <div
+                            key={item.id}
+                            className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
+                              selectedCatalogItem?.id === item.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
+                            } border border-gray-200`}
+                            onClick={() => {
+                              setSelectedCatalogItem(item);
+                              loadResourcesForPosition(item.id).then(norms => {
+                                if (norms.length > 0) {
+                                  setSelectedCatalogItem(prev => prev?.id === item.id ? { ...prev!, norms } : prev);
                                 }
-                              }}
-                            >
-                              <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-mono text-blue-600">{item.code}</div>
-                                <div className="text-gray-500">{item.name}</div>
-                              </div>
+                              });
+                              if (item.unit) {
+                                setCatalogSelectedUnit(item.unit);
+                              }
+                            }}
+                          >
+                            <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-mono text-blue-600">{item.code}</div>
+                              <div className="text-gray-500">{item.name}</div>
                             </div>
-                          ))
-                        ) : (
-                          <div className="text-xs text-gray-400 text-center py-4">Brak wyników</div>
-                        )}
-                      </div>
-                    ) : (
-                      /* Katalog Systemowy section */
-                      <div className="mb-2">
-                        <button
-                          className="w-full flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded"
-                          onClick={() => {/* toggle system catalog */}}
-                        >
-                          <ChevronDown className="w-4 h-4" />
-                          <span>Katalog systemowy</span>
-                          {catalogLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
-                        </button>
-                        <div className="ml-2">
-                          {catalogLoading ? (
-                            <div className="flex items-center justify-center py-4 text-sm text-gray-500">
-                              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                              Ładowanie katalogu...
-                            </div>
-                          ) : knrCatalog.length > 0 ? (
-                            renderCatalogTree(knrCatalog, 0)
-                          ) : (
-                            renderCatalogTree(KNR_CATALOG, 0)
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Position list panel - shown when a table folder is selected */}
-                  {selectedTableItem && (
-                    <div className="h-1/2 overflow-y-auto border-t border-gray-200">
-                      <div className="sticky top-0 bg-white px-3 py-2 border-b border-gray-100 flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">
-                          {selectedTableItem.code} - Pozycje
-                        </span>
-                        <button
-                          onClick={() => setSelectedTableItem(null)}
-                          className="p-0.5 hover:bg-gray-100 rounded"
-                        >
-                          <X className="w-3 h-3 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="p-1">
-                        {loadingFolder === selectedTableItem.id ? (
-                          <div className="flex items-center justify-center py-4 text-xs text-gray-500">
-                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                            Ładowanie pozycji...
                           </div>
-                        ) : (loadedPositions.get(selectedTableItem.id) || []).length > 0 ? (
-                          (loadedPositions.get(selectedTableItem.id) || []).map(pos => (
-                            <div
-                              key={pos.id}
-                              className={`flex items-start gap-1 py-1.5 px-2 rounded cursor-pointer text-xs ${
-                                selectedCatalogItem?.id === pos.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50'
-                              } border border-gray-100 mb-0.5`}
-                              onClick={() => {
-                                setSelectedCatalogItem(pos);
-                                loadResourcesForPosition(pos.id).then(norms => {
-                                  if (norms.length > 0) {
-                                    setSelectedCatalogItem(prev => prev?.id === pos.id ? { ...prev!, norms } : prev);
-                                  }
-                                });
-                                const defaultUnit = UNITS_REFERENCE.find(u => u.unit === pos.unit);
-                                if (defaultUnit) {
-                                  setCatalogUnitIndex(defaultUnit.index);
-                                }
-                              }}
-                            >
-                              <FileText className="w-3 h-3 text-gray-400 flex-shrink-0 mt-0.5" />
-                              <div className="flex-1 min-w-0">
-                                <div className="font-mono text-blue-600">{pos.code}</div>
-                                <div className="text-gray-500">{pos.name}</div>
-                              </div>
-                            </div>
-                          ))
+                        ))
+                      ) : (
+                        <div className="text-xs text-gray-400 text-center py-4">Brak wyników</div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Katalog Systemowy section */
+                    <div className="mb-2">
+                      <button
+                        className="w-full flex items-center gap-1 px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded"
+                        onClick={() => {/* toggle system catalog */}}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                        <span>Katalog systemowy</span>
+                        {catalogLoading && <Loader2 className="w-3 h-3 animate-spin ml-1" />}
+                      </button>
+                      <div className="ml-2">
+                        {catalogLoading ? (
+                          <div className="flex items-center justify-center py-4 text-sm text-gray-500">
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Ładowanie katalogu...
+                          </div>
+                        ) : knrCatalog.length > 0 ? (
+                          renderCatalogTree(knrCatalog, 0)
                         ) : (
-                          <div className="text-xs text-gray-400 text-center py-4">Brak pozycji</div>
+                          renderCatalogTree(KNR_CATALOG, 0)
                         )}
                       </div>
                     </div>
@@ -6724,12 +6714,12 @@ export const KosztorysEditorPage: React.FC = () => {
                       <div className="w-20">
                         <label className="text-xs text-gray-500">j.m.</label>
                         <select
-                          value={catalogUnitIndex}
-                          onChange={e => setCatalogUnitIndex(e.target.value)}
+                          value={catalogSelectedUnit}
+                          onChange={e => setCatalogSelectedUnit(e.target.value)}
                           className="w-full px-1 py-1.5 text-xs border border-gray-400 rounded focus:ring-1 focus:ring-blue-400 focus:outline-none bg-white"
                         >
-                          {UNITS_REFERENCE.map(unit => (
-                            <option key={unit.index} value={unit.index}>{unit.unit}</option>
+                          {(knrUnits.length > 0 ? knrUnits : UNITS_REFERENCE.map(u => u.unit)).map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
                           ))}
                         </select>
                       </div>
