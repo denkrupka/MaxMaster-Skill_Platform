@@ -901,6 +901,12 @@ export const KosztorysEditorPage: React.FC = () => {
   const [existingOfferId, setExistingOfferId] = useState<string | null>(null);
   const [existingOfferName, setExistingOfferName] = useState('');
 
+  // Gantt exists modal state
+  const [showGanttExistsModal, setShowGanttExistsModal] = useState(false);
+  const [showGanttUpdateConfirm, setShowGanttUpdateConfirm] = useState(false);
+  const [existingProjectId, setExistingProjectId] = useState<string | null>(null);
+  const [existingProjectName, setExistingProjectName] = useState('');
+
   // Ceny (Prices) dialog state
   const [showCenyDialog, setShowCenyDialog] = useState(false);
   const [cenyDialogTab, setCenyDialogTab] = useState<'wstaw' | 'zmien'>('wstaw');
@@ -1008,7 +1014,7 @@ export const KosztorysEditorPage: React.FC = () => {
 
   // Alerts state
   const [alertsCount, setAlertsCount] = useState({ current: 0, total: 13 });
-  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; positionId?: string; resourceId?: string; positionName?: string }[]>([]);
+  const [alerts, setAlerts] = useState<{ id: string; type: 'warning' | 'error'; message: string; reason: string; path: string; itemType: string; itemName: string; positionId?: string; resourceId?: string; positionName?: string }[]>([]);
   const [alertsExpanded, setAlertsExpanded] = useState(false);
 
   // Print dialog state
@@ -1170,6 +1176,37 @@ export const KosztorysEditorPage: React.FC = () => {
       return posIds;
     };
 
+    // Helper: build path string showing section names (e.g. "Roboty ziemne \ Wykopy")
+    const buildPositionPath = (positionId: string): string => {
+      const pathParts: string[] = [];
+      const findInSection = (sectionId: string, ancestors: string[]): boolean => {
+        const section = estimateData.sections[sectionId];
+        if (!section) return false;
+        const current = [...ancestors, section.name];
+        if (section.positionIds.includes(positionId)) {
+          pathParts.push(...current);
+          return true;
+        }
+        for (const subId of section.subsectionIds || []) {
+          if (findInSection(subId, current)) return true;
+        }
+        return false;
+      };
+      for (const sectionId of estimateData.root.sectionIds) {
+        if (findInSection(sectionId, [])) break;
+      }
+      return pathParts.join(' \\ ') || '';
+    };
+
+    const resourceTypeLabel = (type: string) => {
+      switch (type) {
+        case 'labor': return 'Robocizna';
+        case 'material': return 'Materiał';
+        case 'equipment': return 'Sprzęt';
+        default: return type;
+      }
+    };
+
     // Get all visible position IDs in order (through sections)
     let visiblePositionIds: string[] = [];
     // First add positions from root (if any direct positions)
@@ -1183,32 +1220,27 @@ export const KosztorysEditorPage: React.FC = () => {
     // Filter out orphan position IDs (IDs that don't exist in positions object)
     visiblePositionIds = visiblePositionIds.filter(id => estimateData.positions[id]);
 
-    // Debug: log position locations
-    console.log('=== POSITIONS DEBUG ===');
-    console.log('Root positionIds:', rootPosIds.length, rootPosIds);
-    console.log('Total visible positions:', visiblePositionIds.length);
-    visiblePositionIds.forEach((id, idx) => {
-      const pos = estimateData.positions[id];
-      console.log(`  ${idx + 1}. [${pos?.base || 'NO BASE'}] "${pos?.name}" - resources: ${pos?.resources?.length || 0}`);
-    });
-
     // Validate only visible positions
     visiblePositionIds.forEach((positionId) => {
       const position = estimateData.positions[positionId];
 
       posIndex++;
 
-      // Generate position identifier (use base/catalog code if available, otherwise ordinal number)
-      const posIdentifier = position.base?.trim() || `#${posIndex}`;
+      const posPath = buildPositionPath(positionId);
+      const posName = position.name || `Pozycja ${posIndex}`;
 
       // Check for zero unit price (total cost = 0 but has resources)
       if (position.resources.length > 0) {
-        position.resources.forEach((resource, resIndex) => {
+        position.resources.forEach((resource) => {
           if (resource.unitPrice.value === 0) {
             newAlerts.push({
               id: `${resource.id}-price`,
               type: 'warning',
-              message: `${posIdentifier}: Nakład ${resIndex + 1} - cena zerowa`,
+              message: posName,
+              reason: 'Cena zerowa',
+              path: posPath,
+              itemType: `Nakład (${resourceTypeLabel(resource.type)})`,
+              itemName: resource.name || '-',
               positionId: position.id,
               resourceId: resource.id,
               positionName: position.name,
@@ -1222,7 +1254,11 @@ export const KosztorysEditorPage: React.FC = () => {
         newAlerts.push({
           id: `${position.id}-nores`,
           type: 'warning',
-          message: `${posIdentifier}: Brak nakładów`,
+          message: posName,
+          reason: 'Brak nakładów',
+          path: posPath,
+          itemType: 'Pozycja',
+          itemName: '-',
           positionId: position.id,
           positionName: position.name,
         });
@@ -2615,12 +2651,126 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   };
 
-  // Create gantt schedule from estimate
-  const handleCreateGanttFromEstimate = async () => {
-    if (!estimate || !currentUser) return;
+  // Helper: populate gantt tasks and dependencies for a given project
+  const populateGanttFromEstimate = async (projectId: string) => {
+    const startDate = new Date();
+    let currentDate = new Date(startDate);
+    let sortOrder = 0;
 
-    // Save first
-    await handleSave();
+    // Create tasks from sections and positions
+    for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
+      const section = estimateData.sections[sectionId];
+      if (!section) continue;
+
+      const sectionStart = new Date(currentDate);
+
+      // Create parent task for section
+      const { data: sectionTask } = await supabase
+        .from('gantt_tasks')
+        .insert({
+          project_id: projectId,
+          title: `${sIdx + 1}. ${section.name}`,
+          start_date: currentDate.toISOString().split('T')[0],
+          end_date: currentDate.toISOString().split('T')[0],
+          duration_days: 0,
+          progress: 0,
+          color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][sIdx % 5],
+          is_milestone: false,
+          sort_order: sortOrder++
+        })
+        .select()
+        .single();
+
+      let sectionEndDate = new Date(currentDate);
+
+      // Create child tasks for positions
+      for (const [pIdx, posId] of section.positionIds.entries()) {
+        const position = estimateData.positions[posId];
+        if (!position) continue;
+        const posResult = calculationResult?.positions[posId];
+        const quantity = posResult?.quantity || 0;
+
+        // Estimate duration: base 1 day, +1 per 10 units of quantity
+        const duration = Math.max(1, Math.ceil(quantity / 10));
+        const posStart = new Date(currentDate);
+        const posEnd = new Date(posStart);
+        posEnd.setDate(posEnd.getDate() + duration);
+
+        await supabase
+          .from('gantt_tasks')
+          .insert({
+            project_id: projectId,
+            parent_id: sectionTask?.id || null,
+            title: position.name,
+            start_date: posStart.toISOString().split('T')[0],
+            end_date: posEnd.toISOString().split('T')[0],
+            duration_days: duration,
+            progress: 0,
+            color: sectionTask?.color || '#3b82f6',
+            is_milestone: false,
+            sort_order: sortOrder++
+          });
+
+        // Move current date forward (positions sequential within section)
+        currentDate = new Date(posEnd);
+        if (currentDate > sectionEndDate) {
+          sectionEndDate = new Date(currentDate);
+        }
+      }
+
+      // Update section task end date
+      if (sectionTask) {
+        const sectionDuration = Math.max(1, Math.round((sectionEndDate.getTime() - sectionStart.getTime()) / (1000 * 60 * 60 * 24)));
+        await supabase
+          .from('gantt_tasks')
+          .update({
+            end_date: sectionEndDate.toISOString().split('T')[0],
+            duration_days: sectionDuration
+          })
+          .eq('id', sectionTask.id);
+      }
+    }
+
+    // Add finish milestone
+    await supabase
+      .from('gantt_tasks')
+      .insert({
+        project_id: projectId,
+        title: 'Zakończenie projektu',
+        start_date: currentDate.toISOString().split('T')[0],
+        end_date: currentDate.toISOString().split('T')[0],
+        duration_days: 0,
+        progress: 0,
+        color: '#ef4444',
+        is_milestone: true,
+        sort_order: sortOrder++
+      });
+
+    // Add FS dependencies between sections
+    const { data: allTasks } = await supabase
+      .from('gantt_tasks')
+      .select('id, parent_id, sort_order')
+      .eq('project_id', projectId)
+      .is('parent_id', null)
+      .order('sort_order');
+
+    if (allTasks && allTasks.length > 1) {
+      for (let i = 1; i < allTasks.length; i++) {
+        await supabase
+          .from('gantt_dependencies')
+          .insert({
+            project_id: projectId,
+            predecessor_id: allTasks[i - 1].id,
+            successor_id: allTasks[i].id,
+            type: 'FS'
+          });
+      }
+    }
+  };
+
+  // Helper: create a brand new project + gantt from the estimate
+  const createNewGanttFromEstimate = async () => {
+    if (!estimate || !currentUser) return;
 
     try {
       // Create a project for this estimate
@@ -2632,132 +2782,73 @@ export const KosztorysEditorPage: React.FC = () => {
           name_mode: 'custom',
           status: 'active',
           color: '#3b82f6',
-          billing_type: 'ryczalt'
+          billing_type: 'ryczalt',
+          description: `kosztorys_source:${estimate.id}`
         })
         .select()
         .single();
 
       if (projError) throw projError;
 
-      const startDate = new Date();
-      let currentDate = new Date(startDate);
-      let sortOrder = 0;
-
-      // Create tasks from sections and positions
-      for (const [sIdx, sectionId] of estimateData.root.sectionIds.entries()) {
-        const section = estimateData.sections[sectionId];
-        if (!section) continue;
-
-        const sectionStart = new Date(currentDate);
-
-        // Create parent task for section
-        const { data: sectionTask } = await supabase
-          .from('gantt_tasks')
-          .insert({
-            project_id: newProject.id,
-            title: `${sIdx + 1}. ${section.name}`,
-            start_date: currentDate.toISOString().split('T')[0],
-            end_date: currentDate.toISOString().split('T')[0],
-            duration_days: 0,
-            progress: 0,
-            color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][sIdx % 5],
-            is_milestone: false,
-            sort_order: sortOrder++
-          })
-          .select()
-          .single();
-
-        let sectionEndDate = new Date(currentDate);
-
-        // Create child tasks for positions
-        for (const [pIdx, posId] of section.positionIds.entries()) {
-          const position = estimateData.positions[posId];
-          if (!position) continue;
-          const posResult = calculationResult?.positions[posId];
-          const quantity = posResult?.quantity || 0;
-
-          // Estimate duration: base 1 day, +1 per 10 units of quantity
-          const duration = Math.max(1, Math.ceil(quantity / 10));
-          const posStart = new Date(currentDate);
-          const posEnd = new Date(posStart);
-          posEnd.setDate(posEnd.getDate() + duration);
-
-          await supabase
-            .from('gantt_tasks')
-            .insert({
-              project_id: newProject.id,
-              parent_id: sectionTask?.id || null,
-              title: position.name,
-              start_date: posStart.toISOString().split('T')[0],
-              end_date: posEnd.toISOString().split('T')[0],
-              duration_days: duration,
-              progress: 0,
-              color: sectionTask?.color || '#3b82f6',
-              is_milestone: false,
-              sort_order: sortOrder++
-            });
-
-          // Move current date forward (positions sequential within section)
-          currentDate = new Date(posEnd);
-          if (currentDate > sectionEndDate) {
-            sectionEndDate = new Date(currentDate);
-          }
-        }
-
-        // Update section task end date
-        if (sectionTask) {
-          const sectionDuration = Math.max(1, Math.round((sectionEndDate.getTime() - sectionStart.getTime()) / (1000 * 60 * 60 * 24)));
-          await supabase
-            .from('gantt_tasks')
-            .update({
-              end_date: sectionEndDate.toISOString().split('T')[0],
-              duration_days: sectionDuration
-            })
-            .eq('id', sectionTask.id);
-        }
-      }
-
-      // Add finish milestone
-      await supabase
-        .from('gantt_tasks')
-        .insert({
-          project_id: newProject.id,
-          title: 'Zakończenie projektu',
-          start_date: currentDate.toISOString().split('T')[0],
-          end_date: currentDate.toISOString().split('T')[0],
-          duration_days: 0,
-          progress: 0,
-          color: '#ef4444',
-          is_milestone: true,
-          sort_order: sortOrder++
-        });
-
-      // Add FS dependencies between sections
-      const { data: allTasks } = await supabase
-        .from('gantt_tasks')
-        .select('id, parent_id, sort_order')
-        .eq('project_id', newProject.id)
-        .is('parent_id', null)
-        .order('sort_order');
-
-      if (allTasks && allTasks.length > 1) {
-        for (let i = 1; i < allTasks.length; i++) {
-          await supabase
-            .from('gantt_dependencies')
-            .insert({
-              project_id: newProject.id,
-              predecessor_id: allTasks[i - 1].id,
-              successor_id: allTasks[i].id,
-              type: 'FS'
-            });
-        }
-      }
+      await populateGanttFromEstimate(newProject.id);
 
       showNotificationMessage('Harmonogram został utworzony', 'success');
       navigate(`/construction/gantt?projectId=${newProject.id}`);
     } catch (error: any) {
       console.error('Error creating gantt:', error);
       showNotificationMessage('Błąd podczas tworzenia harmonogramu', 'error');
+    }
+  };
+
+  // Helper: update existing project's gantt with current estimate data
+  const updateExistingGanttFromEstimate = async () => {
+    if (!estimate || !currentUser || !existingProjectId) return;
+
+    try {
+      // Delete old dependencies and tasks
+      await supabase.from('gantt_dependencies').delete().eq('project_id', existingProjectId);
+      await supabase.from('gantt_tasks').delete().eq('project_id', existingProjectId);
+
+      // Recreate from current estimate
+      await populateGanttFromEstimate(existingProjectId);
+
+      setShowGanttUpdateConfirm(false);
+      setShowGanttExistsModal(false);
+      showNotificationMessage('Harmonogram został zaktualizowany', 'success');
+      navigate(`/construction/gantt?projectId=${existingProjectId}`);
+    } catch (error: any) {
+      console.error('Error updating gantt:', error);
+      showNotificationMessage('Błąd podczas aktualizacji harmonogramu', 'error');
+    }
+  };
+
+  // Create gantt schedule from estimate - with existence check
+  const handleCreateGanttFromEstimate = async () => {
+    if (!estimate || !currentUser) return;
+
+    // Save first
+    await handleSave();
+
+    try {
+      // Check if a project already exists for this estimate
+      const { data: existingProjects } = await supabase
+        .from('projects')
+        .select('id, name')
+        .eq('company_id', currentUser.company_id)
+        .like('description', `kosztorys_source:${estimate.id}%`);
+
+      if (existingProjects && existingProjects.length > 0) {
+        // Project already exists - show modal
+        setExistingProjectId(existingProjects[0].id);
+        setExistingProjectName(existingProjects[0].name);
+        setShowGanttExistsModal(true);
+      } else {
+        // No existing project - create new one directly
+        await createNewGanttFromEstimate();
+      }
+    } catch (error: any) {
+      console.error('Error checking existing projects:', error);
+      await createNewGanttFromEstimate();
     }
   };
 
@@ -4278,15 +4369,54 @@ export const KosztorysEditorPage: React.FC = () => {
   const handleSprawdzKosztorys = () => {
     const newAlerts: typeof alerts = [];
 
+    // Helper: build path string showing section names
+    const buildPath = (positionId: string): string => {
+      const pathParts: string[] = [];
+      const findInSection = (sectionId: string, ancestors: string[]): boolean => {
+        const section = estimateData.sections[sectionId];
+        if (!section) return false;
+        const current = [...ancestors, section.name];
+        if (section.positionIds.includes(positionId)) {
+          pathParts.push(...current);
+          return true;
+        }
+        for (const subId of section.subsectionIds || []) {
+          if (findInSection(subId, current)) return true;
+        }
+        return false;
+      };
+      for (const sectionId of estimateData.root.sectionIds) {
+        if (findInSection(sectionId, [])) break;
+      }
+      return pathParts.join(' \\ ') || '';
+    };
+
+    const resourceTypeLabel = (type: string) => {
+      switch (type) {
+        case 'labor': return 'Robocizna';
+        case 'material': return 'Materiał';
+        case 'equipment': return 'Sprzęt';
+        default: return type;
+      }
+    };
+
     // Check all positions
     Object.values(estimateData.positions).forEach((position, index) => {
+      const posPath = buildPath(position.id);
+      const posName = position.name || `Pozycja ${index + 1}`;
+
       // Check for empty name
       if (!position.name.trim()) {
         newAlerts.push({
           id: `${position.id}-name`,
           type: 'error',
-          message: `Pozycja ${index + 1}: Brak nazwy`,
+          message: `Pozycja ${index + 1}`,
+          reason: 'Brak nazwy',
+          path: posPath,
+          itemType: 'Pozycja',
+          itemName: '-',
           positionId: position.id,
+          positionName: position.name,
         });
       }
 
@@ -4296,19 +4426,29 @@ export const KosztorysEditorPage: React.FC = () => {
         newAlerts.push({
           id: `${position.id}-qty`,
           type: 'warning',
-          message: `Pozycja ${index + 1}: Przedmiar równy 0`,
+          message: posName,
+          reason: 'Przedmiar równy 0',
+          path: posPath,
+          itemType: 'Pozycja',
+          itemName: '-',
           positionId: position.id,
+          positionName: position.name,
         });
       }
 
       // Check resources for zero prices
-      position.resources.forEach((resource, resIndex) => {
+      position.resources.forEach((resource) => {
         if (resource.unitPrice.value === 0) {
           newAlerts.push({
             id: `${resource.id}-price`,
             type: 'warning',
-            message: `Pozycja ${index + 1}, nakład ${resIndex + 1}: Cena zerowa`,
+            message: posName,
+            reason: 'Cena zerowa',
+            path: posPath,
+            itemType: `Nakład (${resourceTypeLabel(resource.type)})`,
+            itemName: resource.name || '-',
             positionId: position.id,
+            positionName: position.name,
           });
         }
       });
@@ -4318,8 +4458,13 @@ export const KosztorysEditorPage: React.FC = () => {
         newAlerts.push({
           id: `${position.id}-nores`,
           type: 'warning',
-          message: `Pozycja ${index + 1}: Brak nakładów`,
+          message: posName,
+          reason: 'Brak nakładów',
+          path: posPath,
+          itemType: 'Pozycja',
+          itemName: '-',
           positionId: position.id,
+          positionName: position.name,
         });
       }
     });
@@ -9428,7 +9573,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 alerts[alertsCount.current]?.type === 'error' ? 'text-[#EF4444]' : 'text-amber-600'
               }`}>
                 <AlertCircle className="w-3 h-3" />
-                {alerts[alertsCount.current]?.message || 'Alerty w kosztorysie'}
+                {alerts[alertsCount.current]?.message || 'Alerty w kosztorysie'}{alerts[alertsCount.current]?.reason ? `: ${alerts[alertsCount.current].reason}` : ''}
               </span>
               <button
                 onClick={() => setAlertsExpanded(!alertsExpanded)}
@@ -9468,7 +9613,7 @@ export const KosztorysEditorPage: React.FC = () => {
                 onClick={() => {
                   // Delete all positions without resources
                   const positionsToDelete = alerts
-                    .filter(a => a.message.includes('Brak nakładów') && a.positionId)
+                    .filter(a => a.reason === 'Brak nakładów' && a.positionId)
                     .map(a => a.positionId!);
 
                   if (positionsToDelete.length === 0) return;
@@ -9518,10 +9663,12 @@ export const KosztorysEditorPage: React.FC = () => {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 sticky top-[41px]">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Typ</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opis</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase max-w-[300px]">Nazwa pozycji</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase w-20">Akcja</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lokalizacja</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Pozycja</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Typ</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nazwa</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Alert</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">Komunikat</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -9531,7 +9678,26 @@ export const KosztorysEditorPage: React.FC = () => {
                   className={`hover:bg-gray-50 cursor-pointer ${index === alertsCount.current ? 'bg-blue-50' : ''}`}
                   onClick={() => handleNavigateToAlert(index)}
                 >
-                  <td className="px-4 py-2">
+                  <td className="px-3 py-2 text-gray-500 text-xs max-w-[200px] truncate" title={alert.path}>
+                    {alert.path || '-'}
+                  </td>
+                  <td className="px-3 py-2 text-gray-700 font-medium max-w-[280px] truncate" title={alert.positionName || alert.message}>
+                    {alert.message}
+                  </td>
+                  <td className="px-3 py-2 text-gray-600 text-xs whitespace-nowrap">
+                    {alert.itemType}
+                  </td>
+                  <td className="px-3 py-2 text-gray-600 text-xs max-w-[180px] truncate" title={alert.itemName}>
+                    {alert.itemName}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`text-xs font-medium ${
+                      alert.type === 'error' ? 'text-red-600' : 'text-amber-600'
+                    }`}>
+                      {alert.reason}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                       alert.type === 'error'
                         ? 'bg-red-100 text-red-700'
@@ -9540,23 +9706,6 @@ export const KosztorysEditorPage: React.FC = () => {
                       <AlertCircle className="w-3 h-3" />
                       {alert.type === 'error' ? 'Błąd' : 'Ostrzeżenie'}
                     </span>
-                  </td>
-                  <td className="px-4 py-2 text-gray-700">{alert.message}</td>
-                  <td className="px-4 py-2 text-gray-600 max-w-[300px] truncate" title={alert.positionName || ''}>
-                    {alert.positionName || '-'}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1 ml-auto"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleNavigateToAlert(index);
-                        setAlertsExpanded(false);
-                      }}
-                    >
-                      <ArrowUpRight className="w-3 h-3" />
-                      Idź do
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -10882,6 +11031,128 @@ export const KosztorysEditorPage: React.FC = () => {
                   className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium"
                 >
                   Tak, aktualizuj ofertę
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gantt exists modal */}
+      {showGanttExistsModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 px-6 py-5 border-b border-orange-100">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                    <CalendarClock className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Harmonogram już istnieje</h2>
+                    <p className="text-sm text-gray-500">Wybierz co chcesz zrobić</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowGanttExistsModal(false)}
+                  className="p-1.5 hover:bg-white/60 rounded-lg text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {/* Existing project info card */}
+              <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+                <p className="text-xs text-slate-500 mb-1">Istniejący harmonogram</p>
+                <p className="text-sm font-semibold text-slate-800">{existingProjectName}</p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    setShowGanttExistsModal(false);
+                    await createNewGanttFromEstimate();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center group-hover:bg-blue-400">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold">Utwórz nowy harmonogram</p>
+                    <p className="text-xs text-blue-200">Niezależny harmonogram z aktualnymi danymi</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowGanttExistsModal(false);
+                    navigate(`/construction/gantt?projectId=${existingProjectId}`);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-slate-200">
+                    <ArrowUpRight className="w-4 h-4 text-slate-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-slate-800">Przejdź do istniejącego</p>
+                    <p className="text-xs text-slate-500">Otwórz bez zmian</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setShowGanttUpdateConfirm(true)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-orange-200 rounded-xl hover:bg-orange-50 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center group-hover:bg-orange-200">
+                    <RefreshCw className="w-4 h-4 text-orange-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-orange-700">Aktualizuj istniejący</p>
+                    <p className="text-xs text-orange-500">Zastąp danymi z kosztorysu</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Gantt update confirmation modal */}
+      {showGanttUpdateConfirm && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-5 border-b border-red-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-red-700">Potwierdzenie aktualizacji</h2>
+                  <p className="text-sm text-red-500">Ta operacja jest nieodwracalna</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-6">
+                Wszystkie zadania i zależności z istniejącego harmonogramu zostaną <span className="font-semibold text-red-600">trwale usunięte</span> i zastąpione aktualnymi danymi z kosztorysu.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowGanttUpdateConfirm(false)}
+                  className="px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 rounded-xl border border-gray-200"
+                >
+                  Anuluj
+                </button>
+                <button
+                  onClick={updateExistingGanttFromEstimate}
+                  className="px-4 py-2.5 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium"
+                >
+                  Tak, aktualizuj harmonogram
                 </button>
               </div>
             </div>
