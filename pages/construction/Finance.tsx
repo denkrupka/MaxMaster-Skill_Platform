@@ -349,11 +349,7 @@ export const FinancePage: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Finanse</h1>
-          <p className="text-slate-600 mt-1">Zarządzanie operacjami finansowymi</p>
-        </div>
+      <div className="mb-6 flex justify-end">
         <div className="flex gap-2">
           {activeTab === 'operations' && (
             <button

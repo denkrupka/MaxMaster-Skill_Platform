@@ -820,14 +820,6 @@ export const CompanyReportsPage: React.FC = () => {
 
   return (
     <div className="p-4 lg:p-6 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Raporty</h1>
-        <p className="text-slate-500 mt-1">
-          Analizuj czas pracy, obecnosc i wynagrodzenia pracownikow
-        </p>
-      </div>
-
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-6 max-w-fit">
         {tabs.map(tab => (

@@ -273,11 +273,6 @@ export const DrawingsPage: React.FC = () => {
   if (!selectedProject) {
     return (
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Rysunki techniczne</h1>
-          <p className="text-slate-600 mt-1">Wybierz projekt, aby zarządzać rysunkami</p>
-        </div>
-
         <div className="mb-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />

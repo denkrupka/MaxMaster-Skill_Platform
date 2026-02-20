@@ -1742,10 +1742,6 @@ export const EstimatesPage: React.FC = () => {
   if (!selectedProject) {
     return (
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Kosztorysowanie</h1>
-          <p className="text-slate-600 mt-1">Centralny hub zarządzania kosztorysami, zapytaniami, słownikami i cennikami</p>
-        </div>
 
         {/* Main Navigation Tabs */}
         <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-lg w-fit">

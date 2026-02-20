@@ -330,11 +330,6 @@ export const DMSPage: React.FC = () => {
   if (!selectedProject) {
     return (
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Dokumenty</h1>
-          <p className="text-slate-600 mt-1">Wybierz projekt, aby zarządzać dokumentami</p>
-        </div>
-
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map(project => (
             <button

@@ -1170,12 +1170,6 @@ export const CompanySubscriptionPage: React.FC = () => {
 
   return (
     <div className="p-4 lg:p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Subskrypcja</h1>
-        <p className="text-slate-500 mt-1">Zarządzaj modułami i płatnościami</p>
-      </div>
-
       {/* Success/Error Messages */}
       {success && (
         <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">

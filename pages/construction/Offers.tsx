@@ -1783,11 +1783,7 @@ export const OffersPage: React.FC = () => {
   // ============================================
   const renderListView = () => (
     <div className="p-6">
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Oferty</h1>
-          <p className="text-slate-600 mt-1">Zarządzaj ofertami handlowymi</p>
-        </div>
+      <div className="mb-6 flex justify-end">
         <button
           onClick={() => { resetOfferForm(); setShowCreateModal(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"

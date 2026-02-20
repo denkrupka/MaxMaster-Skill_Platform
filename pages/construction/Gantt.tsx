@@ -376,10 +376,6 @@ export const GanttPage: React.FC = () => {
     const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
     return (
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Harmonogram</h1>
-          <p className="text-slate-600 mt-1">Wybierz projekt, aby wyświetlić harmonogram</p>
-        </div>
 
         <div className="mb-4 flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[250px]">
