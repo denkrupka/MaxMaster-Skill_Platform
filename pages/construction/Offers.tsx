@@ -160,10 +160,13 @@ export const OffersPage: React.FC = () => {
     }
   };
 
-  // Auto-select offer from URL param (e.g. ?offerId=xxx)
+  // Auto-select offer from URL param (e.g. #/construction/offers?offerId=xxx)
   useEffect(() => {
     if (loading || autoSelectDone.current || !offers.length) return;
-    const params = new URLSearchParams(window.location.search);
+    // HashRouter: params are inside the hash, not in window.location.search
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    const params = qIndex >= 0 ? new URLSearchParams(hash.substring(qIndex)) : new URLSearchParams();
     const offerId = params.get('offerId');
     if (offerId) {
       const offer = offers.find(o => o.id === offerId);
@@ -171,8 +174,9 @@ export const OffersPage: React.FC = () => {
         setSelectedOffer(offer);
         loadOfferDetails(offerId);
       }
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
+      // Clean up URL — keep path inside hash, remove query
+      const hashPath = qIndex >= 0 ? hash.substring(0, qIndex) : hash;
+      window.history.replaceState({}, '', window.location.pathname + hashPath);
       autoSelectDone.current = true;
     }
   }, [loading, offers]);
