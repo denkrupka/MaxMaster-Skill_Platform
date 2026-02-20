@@ -5,6 +5,7 @@ import {
   ChevronLeft, Link as LinkIcon, Milestone, Search, X, Save,
   Pencil, Trash2, Flag
 } from 'lucide-react';
+// useSearchParams removed — HashRouter requires manual hash parsing
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { Project, GanttTask, GanttDependency, GanttDependencyType } from '../../types';
@@ -21,7 +22,6 @@ interface GanttTaskWithChildren extends GanttTask {
 export const GanttPage: React.FC = () => {
   const { state } = useAppContext();
   const { currentUser, users } = state;
-
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<GanttTaskWithChildren[]>([]);
@@ -43,7 +43,7 @@ export const GanttPage: React.FC = () => {
     parent_id: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
-    duration_days: 1,
+    duration: 1,
     progress: 0,
     color: '#3b82f6',
     is_milestone: false,
@@ -57,15 +57,20 @@ export const GanttPage: React.FC = () => {
     if (currentUser) loadProjects();
   }, [currentUser]);
 
-  // Auto-select project from URL param (e.g. ?projectId=xxx)
+  // Auto-select project from URL param (e.g. #/construction/gantt?projectId=xxx)
   useEffect(() => {
     if (loading || autoSelectDone.current || !projects.length) return;
-    const params = new URLSearchParams(window.location.search);
+    // HashRouter: params are inside the hash, not in window.location.search
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    const params = qIndex >= 0 ? new URLSearchParams(hash.substring(qIndex)) : new URLSearchParams();
     const projectId = params.get('projectId');
     if (projectId) {
       const project = projects.find(p => p.id === projectId);
       if (project) setSelectedProject(project);
-      window.history.replaceState({}, '', window.location.pathname);
+      // Clean up URL — keep path inside hash, remove query
+      const hashPath = qIndex >= 0 ? hash.substring(0, qIndex) : hash;
+      window.history.replaceState({}, '', window.location.pathname + hashPath);
       autoSelectDone.current = true;
     }
   }, [loading, projects]);
@@ -222,9 +227,9 @@ export const GanttPage: React.FC = () => {
     try {
       // Calculate end date from duration if not set
       let endDate = taskForm.end_date;
-      if (!endDate && taskForm.start_date && taskForm.duration_days) {
+      if (!endDate && taskForm.start_date && taskForm.duration) {
         const start = new Date(taskForm.start_date);
-        start.setDate(start.getDate() + taskForm.duration_days);
+        start.setDate(start.getDate() + taskForm.duration);
         endDate = start.toISOString().split('T')[0];
       }
 
@@ -234,7 +239,7 @@ export const GanttPage: React.FC = () => {
         parent_id: taskForm.parent_id || null,
         start_date: taskForm.start_date,
         end_date: endDate,
-        duration_days: taskForm.duration_days,
+        duration: taskForm.duration,
         progress: taskForm.progress,
         color: taskForm.color,
         is_milestone: taskForm.is_milestone,
@@ -293,7 +298,7 @@ export const GanttPage: React.FC = () => {
       parent_id: '',
       start_date: new Date().toISOString().split('T')[0],
       end_date: '',
-      duration_days: 1,
+      duration: 1,
       progress: 0,
       color: '#3b82f6',
       is_milestone: false,
@@ -486,7 +491,7 @@ export const GanttPage: React.FC = () => {
                         parent_id: task.parent_id || '',
                         start_date: task.start_date?.split('T')[0] || '',
                         end_date: task.end_date?.split('T')[0] || '',
-                        duration_days: task.duration_days || 1,
+                        duration: task.duration || 1,
                         progress: task.progress || 0,
                         color: task.color || '#3b82f6',
                         is_milestone: task.is_milestone || false,
@@ -709,10 +714,10 @@ export const GanttPage: React.FC = () => {
                       <label className="block text-sm font-medium text-slate-700 mb-1">Czas trwania (dni)</label>
                       <input
                         type="number"
-                        value={taskForm.duration_days}
+                        value={taskForm.duration}
                         onChange={e => {
                           const days = parseInt(e.target.value) || 1;
-                          const newForm = { ...taskForm, duration_days: days };
+                          const newForm = { ...taskForm, duration: days };
                           if (taskForm.start_date) {
                             const start = new Date(taskForm.start_date);
                             start.setDate(start.getDate() + days);
