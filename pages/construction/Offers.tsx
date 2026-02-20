@@ -89,6 +89,9 @@ export const OffersPage: React.FC = () => {
   const [showImportFromEstimate, setShowImportFromEstimate] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', project_id: '', client_id: '', valid_until: '', notes: '' });
 
   // Editor state
   const [offerData, setOfferData] = useState({
@@ -486,6 +489,42 @@ export const OffersPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error deleting offer:', err);
+    }
+  };
+
+  const handleOpenEditOffer = (offer: Offer) => {
+    setEditingOffer(offer);
+    setEditForm({
+      name: offer.name || '',
+      project_id: (offer as any).project?.id || offer.project_id || '',
+      client_id: (offer as any).client?.id || offer.client_id || '',
+      valid_until: offer.valid_until ? offer.valid_until.split('T')[0] : '',
+      notes: offer.notes || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEditOffer = async () => {
+    if (!editingOffer || !currentUser) return;
+    setSavingOffer(true);
+    try {
+      await supabase
+        .from('offers')
+        .update({
+          name: editForm.name.trim(),
+          project_id: editForm.project_id || null,
+          client_id: editForm.client_id || null,
+          valid_until: editForm.valid_until || null,
+          notes: editForm.notes || null
+        })
+        .eq('id', editingOffer.id);
+      await loadData();
+      setShowEditModal(false);
+      setEditingOffer(null);
+    } catch (err) {
+      console.error('Error updating offer:', err);
+    } finally {
+      setSavingOffer(false);
     }
   };
 
@@ -1881,15 +1920,13 @@ export const OffersPage: React.FC = () => {
                   </td>
                   <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-1">
-                      {offer.status === 'draft' && (
-                        <button
-                          onClick={() => handleSendOffer(offer)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                          title="Wyślij"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleOpenEditOffer(offer)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                        title="Edytuj"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleDeleteOffer(offer)}
                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -1916,6 +1953,91 @@ export const OffersPage: React.FC = () => {
       {selectedOffer ? renderOfferDetail() : renderListView()}
       {showCreateModal && renderCreateModal()}
       {showImportFromEstimate && renderImportFromEstimateModal()}
+
+      {/* Edit offer modal */}
+      {showEditModal && editingOffer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">Edytuj ofertę</h2>
+              <button onClick={() => { setShowEditModal(false); setEditingOffer(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                <select
+                  value={editForm.project_id}
+                  onChange={e => setEditForm({ ...editForm, project_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Wybierz projekt --</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
+                <select
+                  value={editForm.client_id}
+                  onChange={e => setEditForm({ ...editForm, client_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Wybierz klienta --</option>
+                  {contractors.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
+                <input
+                  type="date"
+                  value={editForm.valid_until}
+                  onChange={e => setEditForm({ ...editForm, valid_until: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowEditModal(false); setEditingOffer(null); }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveEditOffer}
+                disabled={savingOffer || !editForm.name.trim()}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingOffer && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zapisz zmiany
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -37,6 +37,11 @@ export const GanttPage: React.FC = () => {
   const [editingTask, setEditingTask] = useState<GanttTask | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Project edit modal state
+  const [showProjectEditModal, setShowProjectEditModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [projectForm, setProjectForm] = useState({ name: '', status: 'active', start_date: '', end_date: '' });
+
   // Task form
   const [taskForm, setTaskForm] = useState({
     title: '',
@@ -92,6 +97,61 @@ export const GanttPage: React.FC = () => {
       console.error('Error loading projects:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEditProject = (project: Project) => {
+    setEditingProject(project);
+    setProjectForm({
+      name: project.name || '',
+      status: project.status || 'active',
+      start_date: project.start_date ? project.start_date.split('T')[0] : '',
+      end_date: project.end_date ? project.end_date.split('T')[0] : ''
+    });
+    setShowProjectEditModal(true);
+  };
+
+  const handleSaveProject = async () => {
+    if (!editingProject || !currentUser) return;
+    setSaving(true);
+    try {
+      await supabase
+        .from('projects')
+        .update({
+          name: projectForm.name.trim(),
+          status: projectForm.status,
+          start_date: projectForm.start_date || null,
+          end_date: projectForm.end_date || null
+        })
+        .eq('id', editingProject.id);
+      await loadProjects();
+      setShowProjectEditModal(false);
+      setEditingProject(null);
+    } catch (err) {
+      console.error('Error updating project:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteProject = async (project: Project) => {
+    if (!confirm(`Czy na pewno chcesz usunąć projekt "${project.name}"?`)) return;
+    try {
+      await supabase
+        .from('gantt_dependencies')
+        .delete()
+        .eq('project_id', project.id);
+      await supabase
+        .from('gantt_tasks')
+        .delete()
+        .eq('project_id', project.id);
+      await supabase
+        .from('projects')
+        .delete()
+        .eq('id', project.id);
+      await loadProjects();
+    } catch (err) {
+      console.error('Error deleting project:', err);
     }
   };
 
@@ -396,8 +456,23 @@ export const GanttPage: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-slate-600">
                       {project.end_date ? new Date(project.end_date).toLocaleDateString('pl-PL') : '-'}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <ChevronRight className="w-5 h-5 text-slate-400 inline-block" />
+                    <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => handleOpenEditProject(project)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                          title="Edytuj"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProject(project)}
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="Usuń"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -837,6 +912,80 @@ export const GanttPage: React.FC = () => {
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingTask ? 'Zapisz' : 'Dodaj'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project edit modal */}
+      {showProjectEditModal && editingProject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">Edytuj projekt</h2>
+              <button onClick={() => { setShowProjectEditModal(false); setEditingProject(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa projektu *</label>
+                <input
+                  type="text"
+                  value={projectForm.name}
+                  onChange={e => setProjectForm({ ...projectForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                <select
+                  value={projectForm.status}
+                  onChange={e => setProjectForm({ ...projectForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="active">Aktywny</option>
+                  <option value="planning">Planowanie</option>
+                  <option value="on_hold">Wstrzymany</option>
+                  <option value="completed">Zakończony</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data rozpoczęcia</label>
+                  <input
+                    type="date"
+                    value={projectForm.start_date}
+                    onChange={e => setProjectForm({ ...projectForm, start_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data zakończenia</label>
+                  <input
+                    type="date"
+                    value={projectForm.end_date}
+                    onChange={e => setProjectForm({ ...projectForm, end_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => { setShowProjectEditModal(false); setEditingProject(null); }}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleSaveProject}
+                disabled={saving || !projectForm.name.trim()}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Zapisz zmiany
               </button>
             </div>
           </div>
