@@ -1251,44 +1251,44 @@ export const KosztorysEditorPage: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Load KNR catalog folders from database (lazy loading - positions loaded on demand)
+  // Helper: convert DB folder row to CatalogItem
+  const folderToItem = (folder: any): CatalogItem => {
+    let type: 'catalog' | 'chapter' | 'table' = 'catalog';
+    if (folder.depth === 1) type = 'chapter';
+    else if (folder.depth >= 2) type = 'table';
+
+    // Show name only when it's a real description (not a duplicate of basis)
+    const displayName = (folder.name && folder.name !== folder.basis) ? folder.name : '';
+
+    return {
+      id: folder.xid,
+      code: folder.basis,
+      name: displayName,
+      type,
+      // All non-position folders are expandable (children loaded lazily)
+      children: [],
+    };
+  };
+
+  // Load ONLY root catalogs (depth 0) on mount — everything else loads on expand
   useEffect(() => {
-    const loadKnrFolders = async () => {
+    const loadRootCatalogs = async () => {
       setCatalogLoading(true);
       try {
-        // Fetch folders and units in parallel
-        // Only select needed columns for speed
-        const foldersPromise = (async () => {
-          const allFolders: any[] = [];
-          let offset = 0;
-          const pageSize = 1000;
-          while (true) {
-            const { data: page, error } = await supabase
-              .from('knr_folders')
-              .select('xid,basis,name,depth,parent_xid')
-              .eq('is_system', true)
-              .order('basis', { ascending: true })
-              .range(offset, offset + pageSize - 1);
-
-            if (error) {
-              console.error('Error loading KNR folders:', error);
-              return [];
-            }
-            if (!page || page.length === 0) break;
-            allFolders.push(...page);
-            if (page.length < pageSize) break;
-            offset += pageSize;
-          }
-          return allFolders;
-        })();
-
-        const unitsPromise = supabase
-          .from('knr_positions')
-          .select('unit')
-          .eq('is_system', true)
-          .limit(1000);
-
-        const [allFolders, unitsResult] = await Promise.all([foldersPromise, unitsPromise]);
+        // Fetch root catalogs and units in parallel
+        const [rootResult, unitsResult] = await Promise.all([
+          supabase
+            .from('knr_folders')
+            .select('xid,basis,name,depth,parent_xid')
+            .eq('is_system', true)
+            .eq('depth', 0)
+            .order('basis', { ascending: true }),
+          supabase
+            .from('knr_positions')
+            .select('unit')
+            .eq('is_system', true)
+            .limit(1000),
+        ]);
 
         // Set unique units
         if (unitsResult.data) {
@@ -1296,56 +1296,13 @@ export const KosztorysEditorPage: React.FC = () => {
           setKnrUnits(uniqueUnits);
         }
 
-        if (allFolders.length === 0) {
-          setCatalogLoading(false);
+        if (rootResult.error) {
+          console.error('Error loading root catalogs:', rootResult.error);
           return;
         }
 
-        console.log('Loaded KNR folders:', allFolders.length);
-
-        // Build children map for O(n) tree construction (instead of O(n²) filter)
-        const childrenByParent = new Map<string, any[]>();
-        const rootFolders: any[] = [];
-        for (const f of allFolders) {
-          if (f.depth === 0 || !f.parent_xid) {
-            rootFolders.push(f);
-          } else {
-            const siblings = childrenByParent.get(f.parent_xid);
-            if (siblings) {
-              siblings.push(f);
-            } else {
-              childrenByParent.set(f.parent_xid, [f]);
-            }
-          }
-        }
-
-        // Recursive tree builder using the pre-built Map
-        const buildFolderItem = (folder: any): CatalogItem => {
-          const childFolders = (childrenByParent.get(folder.xid) || [])
-            .sort((a: any, b: any) => a.basis.localeCompare(b.basis));
-
-          const children: CatalogItem[] = childFolders.map(buildFolderItem);
-
-          let type: 'catalog' | 'chapter' | 'table' = 'catalog';
-          if (folder.depth === 1) type = 'chapter';
-          else if (folder.depth >= 2) type = 'table';
-
-          return {
-            id: folder.xid,
-            code: folder.basis,
-            name: folder.name || '',
-            type,
-            // Tables with no child folders still get empty children array
-            // so they show as expandable — positions will be loaded lazily
-            children: children.length > 0 ? children : (type === 'table' ? [] : undefined),
-          };
-        };
-
-        const catalog = rootFolders
-          .sort((a: any, b: any) => a.basis.localeCompare(b.basis))
-          .map(buildFolderItem);
-
-        console.log('Built KNR catalog tree:', catalog.length, 'root items');
+        const catalog = (rootResult.data || []).map(folderToItem);
+        console.log('Loaded root catalogs:', catalog.length);
         setKnrCatalog(catalog);
       } catch (error) {
         console.error('Error loading KNR catalog:', error);
@@ -1354,8 +1311,50 @@ export const KosztorysEditorPage: React.FC = () => {
       }
     };
 
-    loadKnrFolders();
+    loadRootCatalogs();
   }, []);
+
+  // Load child folders for a parent folder lazily (on expand)
+  const loadChildFolders = async (parentId: string) => {
+    setLoadingFolder(parentId);
+    try {
+      const { data: children, error } = await supabase
+        .from('knr_folders')
+        .select('xid,basis,name,depth,parent_xid')
+        .eq('is_system', true)
+        .eq('parent_xid', parentId)
+        .order('basis', { ascending: true });
+
+      if (error) {
+        console.error('Error loading child folders:', error);
+        return;
+      }
+
+      const childItems = (children || []).map(folderToItem);
+
+      // Update the tree to add these children
+      setKnrCatalog(prev => {
+        const updateChildren = (items: CatalogItem[]): CatalogItem[] => {
+          return items.map(item => {
+            if (item.id === parentId) {
+              // Merge: keep existing position children, add new folder children
+              const existingPositions = (item.children || []).filter(c => c.type === 'position');
+              return { ...item, children: [...childItems, ...existingPositions] };
+            }
+            if (item.children) {
+              return { ...item, children: updateChildren(item.children) };
+            }
+            return item;
+          });
+        };
+        return updateChildren(prev);
+      });
+    } catch (error) {
+      console.error('Error loading child folders:', error);
+    } finally {
+      setLoadingFolder(null);
+    }
+  };
 
   // Load positions for a folder lazily
   const loadPositionsForFolder = async (folderId: string) => {
@@ -3932,9 +3931,16 @@ export const KosztorysEditorPage: React.FC = () => {
         newExpanded.delete(itemId);
       } else {
         newExpanded.add(itemId);
-        // Load positions lazily when expanding a table folder
-        if (item && item.type === 'table' && !loadedPositions.has(itemId)) {
-          loadPositionsForFolder(itemId);
+        if (item) {
+          // Check if children are already loaded (not just the empty placeholder array)
+          const hasLoadedChildren = item.children && item.children.length > 0;
+          if (item.type === 'table' && !loadedPositions.has(itemId)) {
+            // Table: load positions
+            loadPositionsForFolder(itemId);
+          } else if (!hasLoadedChildren && item.type !== 'position') {
+            // Catalog or chapter: load child folders
+            loadChildFolders(itemId);
+          }
         }
       }
       return newExpanded;
