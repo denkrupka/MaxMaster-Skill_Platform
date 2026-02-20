@@ -3321,19 +3321,6 @@ export const DictionariesPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {stats.map((stat, index) => (
-          <div key={index} className="bg-white rounded-lg shadow p-4 flex items-center gap-3">
-            <stat.icon className={`w-8 h-8 ${stat.color}`} />
-            <div>
-              <div className="text-2xl font-bold text-slate-900">{stat.value}</div>
-              <div className="text-xs text-slate-500">{stat.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow">
         <div className="border-b border-slate-200">
