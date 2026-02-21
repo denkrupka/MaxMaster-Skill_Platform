@@ -56,6 +56,7 @@ interface OninenProductDetail {
 
 interface Props {
   integrationId?: string;
+  onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
 }
 
 // ═══ Helper: invoke oninen-proxy edge function ═══
@@ -143,7 +144,8 @@ const ProductDetail: React.FC<{
   product: OninenProduct;
   integrationId?: string;
   onClose: () => void;
-}> = ({ product, integrationId, onClose }) => {
+  onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
+}> = ({ product, integrationId, onClose, onSelectProduct }) => {
   const [detail, setDetail] = useState<OninenProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +164,7 @@ const ProductDetail: React.FC<{
   }, [product.slug, integrationId]);
 
   if (loading) return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl p-12 text-center" onClick={e => e.stopPropagation()}>
         <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
         <p className="text-sm text-slate-500">Ładowanie danych produktu...</p>
@@ -171,7 +173,7 @@ const ProductDetail: React.FC<{
   );
 
   if (error || !detail) return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl p-8 text-center max-w-sm" onClick={e => e.stopPropagation()}>
         <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
         <p className="text-sm text-red-600 mb-1">Błąd: {error || 'Produkt nie znaleziony'}</p>
@@ -188,7 +190,7 @@ const ProductDetail: React.FC<{
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
@@ -256,6 +258,25 @@ const ProductDetail: React.FC<{
                 </span>
               )}
             </div>
+
+            {onSelectProduct && (
+              <button
+                onClick={() => {
+                  onSelectProduct({
+                    name: detail.name,
+                    price: detail.priceEnd ?? null,
+                    sku: detail.sku,
+                    ean: detail.ean,
+                    unit: detail.unit,
+                  });
+                  onClose();
+                }}
+                className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 mb-2"
+              >
+                <Package className="w-4 h-4" />
+                Dodaj do kosztorysu
+              </button>
+            )}
 
             {detail.url && (
               <a
@@ -410,7 +431,7 @@ const ProductCardList: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
 };
 
 // ═══ MAIN COMPONENT ═══
-export const OninenIntegrator: React.FC<Props> = ({ integrationId }) => {
+export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct }) => {
   const [categories, setCategories] = useState<OninenCategory[]>([]);
   const [catLoading, setCatLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState<OninenCategory | null>(null);
@@ -670,6 +691,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId }) => {
           product={detailProduct}
           integrationId={integrationId}
           onClose={() => setDetailProduct(null)}
+          onSelectProduct={onSelectProduct}
         />
       )}
     </div>
