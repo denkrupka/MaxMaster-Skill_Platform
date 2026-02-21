@@ -915,33 +915,56 @@ export const OffersPage: React.FC = () => {
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* Basic info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
-              <input
-                type="text"
-                value={offerData.name}
-                onChange={e => setOfferData({ ...offerData, name: e.target.value })}
-                placeholder="np. Oferta na instalację elektryczną"
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+          {/* 1. Offer details */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-slate-400" />
+              Dane oferty
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
+                <input
+                  type="text"
+                  value={offerData.name}
+                  onChange={e => setOfferData({ ...offerData, name: e.target.value })}
+                  placeholder="np. Oferta na instalację elektryczną"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                <select
+                  value={offerData.project_id}
+                  onChange={e => setOfferData({ ...offerData, project_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">-- Wybierz projekt --</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
+                <input
+                  type="date"
+                  value={offerData.valid_until}
+                  onChange={e => setOfferData({ ...offerData, valid_until: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
+          </div>
+
+          {/* 2. Client */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-slate-400" />
+              Klient
+            </h3>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
-              <select
-                value={offerData.project_id}
-                onChange={e => setOfferData({ ...offerData, project_id: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Wybierz projekt --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Wybierz klienta</label>
               <select
                 value={offerData.client_id}
                 onChange={e => setOfferData({ ...offerData, client_id: e.target.value })}
@@ -953,18 +976,9 @@ export const OffersPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
-              <input
-                type="date"
-                value={offerData.valid_until}
-                onChange={e => setOfferData({ ...offerData, valid_until: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
           </div>
 
-          {/* Import from estimate */}
+          {/* 3. Import from estimate */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1091,82 +1105,92 @@ export const OffersPage: React.FC = () => {
             )}
           </div>
 
-          {/* Discounts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Rabat procentowy (%)</label>
-              <input
-                type="number"
-                value={offerData.discount_percent}
-                onChange={e => setOfferData({ ...offerData, discount_percent: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                min="0"
-                max="100"
-                step="0.1"
-              />
+          {/* 5. Discounts & Totals */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <Percent className="w-5 h-5 text-slate-400" />
+              Rabaty i podsumowanie
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Rabat procentowy (%)</label>
+                <input
+                  type="number"
+                  value={offerData.discount_percent}
+                  onChange={e => setOfferData({ ...offerData, discount_percent: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Rabat kwotowy (PLN)</label>
+                <input
+                  type="number"
+                  value={offerData.discount_amount}
+                  onChange={e => setOfferData({ ...offerData, discount_amount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Rabat kwotowy (PLN)</label>
-              <input
-                type="number"
-                value={offerData.discount_amount}
-                onChange={e => setOfferData({ ...offerData, discount_amount: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                min="0"
-                step="0.01"
-              />
+            <div className="bg-slate-50 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-slate-600">Suma pozycji:</span>
+                <span className="font-medium">{formatCurrency(totals.total)}</span>
+              </div>
+              {(offerData.discount_percent > 0 || offerData.discount_amount > 0) && (
+                <>
+                  {offerData.discount_percent > 0 && (
+                    <div className="flex justify-between items-center mb-2 text-red-600">
+                      <span>Rabat {offerData.discount_percent}%:</span>
+                      <span>-{formatCurrency(totals.discountPct)}</span>
+                    </div>
+                  )}
+                  {offerData.discount_amount > 0 && (
+                    <div className="flex justify-between items-center mb-2 text-red-600">
+                      <span>Rabat kwotowy:</span>
+                      <span>-{formatCurrency(totals.discountFixed)}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                <span className="text-lg font-semibold text-slate-900">Do zapłaty:</span>
+                <span className="text-xl font-bold text-blue-600">{formatCurrency(totals.final)}</span>
+              </div>
             </div>
           </div>
 
-          {/* Totals */}
-          <div className="bg-slate-50 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-slate-600">Suma pozycji:</span>
-              <span className="font-medium">{formatCurrency(totals.total)}</span>
-            </div>
-            {(offerData.discount_percent > 0 || offerData.discount_amount > 0) && (
-              <>
-                {offerData.discount_percent > 0 && (
-                  <div className="flex justify-between items-center mb-2 text-red-600">
-                    <span>Rabat {offerData.discount_percent}%:</span>
-                    <span>-{formatCurrency(totals.discountPct)}</span>
-                  </div>
-                )}
-                {offerData.discount_amount > 0 && (
-                  <div className="flex justify-between items-center mb-2 text-red-600">
-                    <span>Rabat kwotowy:</span>
-                    <span>-{formatCurrency(totals.discountFixed)}</span>
-                  </div>
-                )}
-              </>
-            )}
-            <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-              <span className="text-lg font-semibold text-slate-900">Do zapłaty:</span>
-              <span className="text-xl font-bold text-blue-600">{formatCurrency(totals.final)}</span>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi dla klienta</label>
-              <textarea
-                value={offerData.notes}
-                onChange={e => setOfferData({ ...offerData, notes: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                placeholder="Widoczne dla klienta..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notatki wewnętrzne</label>
-              <textarea
-                value={offerData.internal_notes}
-                onChange={e => setOfferData({ ...offerData, internal_notes: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                placeholder="Widoczne tylko dla zespołu..."
-              />
+          {/* 6. Notes */}
+          <div className="space-y-4">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-slate-400" />
+              Notatki
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi dla klienta</label>
+                <textarea
+                  value={offerData.notes}
+                  onChange={e => setOfferData({ ...offerData, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Widoczne dla klienta..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notatki wewnętrzne</label>
+                <textarea
+                  value={offerData.internal_notes}
+                  onChange={e => setOfferData({ ...offerData, internal_notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Widoczne tylko dla zespołu..."
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1961,31 +1985,55 @@ export const OffersPage: React.FC = () => {
               </button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
+              {/* 1. Offer details */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-slate-400" />
+                  Dane oferty
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
+                    <input
+                      type="text"
+                      value={editForm.name}
+                      onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                    <select
+                      value={editForm.project_id}
+                      onChange={e => setEditForm({ ...editForm, project_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Wybierz projekt --</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
+                    <input
+                      type="date"
+                      value={editForm.valid_until}
+                      onChange={e => setEditForm({ ...editForm, valid_until: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
+              </div>
+
+              {/* 2. Client */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-slate-400" />
+                  Klient
+                </h3>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
-                  <select
-                    value={editForm.project_id}
-                    onChange={e => setEditForm({ ...editForm, project_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Wybierz projekt --</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Wybierz klienta</label>
                   <select
                     value={editForm.client_id}
                     onChange={e => setEditForm({ ...editForm, client_id: e.target.value })}
@@ -1997,24 +2045,24 @@ export const OffersPage: React.FC = () => {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* 3. Notes */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-slate-400" />
+                  Notatki
+                </h3>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
-                  <input
-                    type="date"
-                    value={editForm.valid_until}
-                    onChange={e => setEditForm({ ...editForm, valid_until: e.target.value })}
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                    rows={3}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Dodatkowe informacje..."
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>
-                <textarea
-                  value={editForm.notes}
-                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
