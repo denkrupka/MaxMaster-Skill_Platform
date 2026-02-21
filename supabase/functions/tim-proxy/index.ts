@@ -359,16 +359,25 @@ serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Verify user JWT
+    // Verify user JWT (soft — some actions work without auth)
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('No authorization header')
-
-    const token = authHeader.replace('Bearer ', '')
-    const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token)
-    if (authError || !userData?.user) throw new Error('Authentication failed')
+    let userId: string | null = null
+    if (authHeader) {
+      const token = authHeader.replace('Bearer ', '')
+      try {
+        const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token)
+        if (!authError && userData?.user) userId = userData.user.id
+      } catch { /* auth optional */ }
+    }
 
     const body = await req.json()
     const { action } = body
+
+    // Actions that modify data require authentication
+    const authRequired = ['login', 'logout']
+    if (authRequired.includes(action) && !userId) {
+      return errorResponse('Authentication required', 401)
+    }
 
     switch (action) {
       // ═══ LOGIN ═══
