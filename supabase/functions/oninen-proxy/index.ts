@@ -239,6 +239,12 @@ function errorResponse(message: string, status = 400): Response {
   return json({ error: message }, status)
 }
 
+// ═══ HELPERS ═══
+function stripHtml(html: string): string {
+  if (!html) return ''
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 // ═══ PRODUCT MAPPER (shared between products + search) ═══
 function mapProduct(p: any) {
   const priceItems = p.price?.items || []
@@ -253,7 +259,7 @@ function mapProduct(p: any) {
     name: p.name || '',
     sku: p.index || p.catalogindex || '',
     slug: p.slug || '',
-    url: p.slug ? `${BASE}/product/${p.slug}` : '',
+    url: p.slug ? `${BASE}/produkt/${p.slug}` : '',
     image: p.imagemd || p.imageth || '',
     priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
     priceCatalog: priceCatalog != null ? parseFloat(String(priceCatalog)) : null,
@@ -604,7 +610,7 @@ serve(async (req) => {
           name: p.name || '',
           sku: p.index || p.catalogindex || '',
           slug: productSlug,
-          url: `${BASE}/product/${p.slug || productSlug}`,
+          url: `${BASE}/produkt/${p.slug || productSlug}`,
           image: extImages[0] || p.imagemd || p.imageth || '',
           images: extImages,
           priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
@@ -616,7 +622,7 @@ serve(async (req) => {
           brand: brandName,
           unit: p.unit || 'szt',
           ean: typeof ean === 'string' ? ean : '',
-          description,
+          description: stripHtml(description),
           specs,
           deliveryTime: p.bestdel?.delivery || '',
           deliveryCost: p.bestdel?.cost || '',
