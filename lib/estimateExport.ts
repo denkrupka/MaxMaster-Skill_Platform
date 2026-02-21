@@ -27,18 +27,25 @@ interface ExportEstimateData {
  */
 export async function loadEstimateForExport(estimateId: string): Promise<ExportEstimateData | null> {
   try {
-    // Load estimate with request
+    // Load estimate
     const { data: estimate, error } = await supabase
       .from('kosztorys_estimates')
-      .select(`
-        *,
-        request:kosztorys_requests(*),
-        price_list:kosztorys_price_lists(*)
-      `)
+      .select('*')
       .eq('id', estimateId)
       .single();
 
     if (error || !estimate) return null;
+
+    // Load request separately
+    let request = null;
+    if (estimate.request_id) {
+      const { data: reqData } = await supabase
+        .from('kosztorys_requests')
+        .select('*')
+        .eq('id', estimate.request_id)
+        .single();
+      request = reqData;
+    }
 
     // Load items
     const { data: items } = await supabase
@@ -55,19 +62,19 @@ export async function loadEstimateForExport(estimateId: string): Promise<ExportE
       .order('position_number');
 
     return {
-      estimate,
-      request: estimate.request,
+      estimate: { ...estimate, request },
+      request,
       items: items || [],
       equipment: equipment || [],
       totals: {
-        workTotal: estimate.work_total || 0,
-        materialTotal: estimate.material_total || 0,
-        equipmentTotal: estimate.equipment_total || 0,
-        laborHoursTotal: estimate.labor_hours_total || 0,
-        grandTotal: estimate.grand_total || 0,
+        workTotal: estimate.total_works || 0,
+        materialTotal: estimate.total_materials || 0,
+        equipmentTotal: estimate.total_equipment || 0,
+        laborHoursTotal: 0,
+        grandTotal: estimate.subtotal_net || estimate.total_gross || 0,
         marginPercent: estimate.margin_percent || 0,
         discountPercent: estimate.discount_percent || 0,
-        finalTotal: estimate.final_total || 0,
+        finalTotal: estimate.total_gross || 0,
       },
     };
   } catch (error) {
