@@ -65,9 +65,14 @@ async function timProxy(action: string, params: Record<string, any> = {}): Promi
   const { data, error } = await supabase.functions.invoke('tim-proxy', {
     body: { action, ...params },
   });
-  if (error) throw new Error(error.message || 'Edge function error');
-  if (data?.error) throw new Error(data.error);
-  return data;
+  if (error) {
+    console.error('[tim-proxy]', action, 'error:', error);
+    throw new Error(error.message || 'Edge function error');
+  }
+  // Handle case where data is a string (not auto-parsed)
+  const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+  if (parsed?.error) throw new Error(parsed.error);
+  return parsed;
 }
 
 // ═══ Helper: get manufacturer string ═══
@@ -447,7 +452,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
         setSearchTotal(r.total || 0);
         setSearchLoading(false);
       })
-      .catch(() => { setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
+      .catch(e => { console.error('[tim-proxy] search error:', e); setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
   }, [integrationId]);
 
   const onSearchChange = (v: string) => {
