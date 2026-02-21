@@ -469,7 +469,7 @@ serve(async (req) => {
         const html = await fetchPage('/', jar)
         const links = extractLinks(html)
 
-        const skip = new Set(['centrum-pomocy', 'kategorie', 'producenci', 'promocje', 'strefa-nowosci', 'strefa-porad', 'centrum-uslug', 'kontakt', 'najnowsze-produkty', 'strefa-dla-przemyslu', 'outlet', 'koszyk-rwd'])
+        const skip = new Set(['centrum-pomocy', 'kategorie', 'producenci', 'promocje', 'strefa-nowosci', 'strefa-porad', 'centrum-uslug', 'kontakt', 'najnowsze-produkty', 'strefa-dla-przemyslu', 'outlet', 'koszyk-rwd', 'warunki-i-koszty-dostawy', 'regulamin-opinii', 'mapa-serwisu', 'zostan-sprzedawca'])
 
         const mainCats: Array<{ name: string; slug: string }> = []
         const subMap: Record<string, Array<{ name: string; slug: string }>> = {}
@@ -600,7 +600,7 @@ serve(async (req) => {
           }
 
           // NUXT data extraction via regex
-          let manufacturer = '', ref_num = '', ean = '', series = ''
+          let manufacturer = '', ref_num = '', ean = '', series = '', description = ''
           const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
           if (nuxtMatch) {
             const raw = nuxtMatch[1]
@@ -609,6 +609,21 @@ serve(async (req) => {
             ref_num = ex(/"ref_num"[^"]*?"([^"]+)"/)
             ean = ex(/"ean"[^"]*?"(\d{8,16})"/)
             series = ex(/"series_name"[^"]*?"([^"]+)"/) || ex(/"series"[^}]*?"name"[^"]*?"([^"]+)"/)
+          }
+
+          // Manufacturer fallback from JSON-LD
+          if (!manufacturer && ldProduct?.brand?.name) {
+            manufacturer = ldProduct.brand.name
+          }
+          if (!manufacturer && ldProduct?.manufacturer?.name) {
+            manufacturer = ldProduct.manufacturer.name
+          }
+
+          // Description from JSON-LD or meta
+          description = ldProduct?.description || ''
+          if (!description) {
+            const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)
+            if (metaDesc) description = metaDesc[1]
           }
 
           // Breadcrumb from JSON-LD
@@ -626,12 +641,19 @@ serve(async (req) => {
             if (h1Match) name = h1Match[1].replace(/<[^>]*>/g, '').trim()
           }
 
+          // Image: JSON-LD → og:image → first big <img>
+          let image = ldProduct?.image ? (Array.isArray(ldProduct.image) ? ldProduct.image[0] : ldProduct.image) : ''
+          if (!image) {
+            const ogImg = html.match(/<meta\s+property="og:image"\s+content="([^"]*)"/)
+            if (ogImg) image = ogImg[1]
+          }
+
           product = {
             sku: sku || extractSku(url),
             name,
             price: ldProduct?.offers?.price ? parseFloat(ldProduct.offers.price) : null,
-            image: ldProduct?.image ? (Array.isArray(ldProduct.image) ? ldProduct.image[0] : ldProduct.image) : '',
-            url, manufacturer, ref_num, ean, series,
+            image,
+            url, manufacturer, ref_num, ean, series, description,
             rating: ldProduct?.aggregateRating?.ratingValue || null,
             reviewCount: ldProduct?.aggregateRating?.reviewCount || null,
             breadcrumb,

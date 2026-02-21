@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Search, Loader2, X, Plus, ChevronRight,
+  Search, Loader2, X, ChevronRight,
   FolderOpen, Grid3X3, List, Package, AlertTriangle,
   ExternalLink, ChevronLeft
 } from 'lucide-react';
@@ -19,6 +19,7 @@ interface TIMProduct {
   url?: string;
   image?: string;
   price?: number | null;
+  publicPrice?: number | null;
   rating?: number | null;
   manufacturer?: string | { name: string };
   default_image?: string;
@@ -37,6 +38,7 @@ interface TIMProductDetail {
   ref_num?: string;
   ean?: string;
   series?: string;
+  description?: string;
   rating?: number | null;
   reviewCount?: number | null;
   breadcrumb?: string;
@@ -58,6 +60,19 @@ async function timProxy(action: string, params: Record<string, any> = {}): Promi
   if (error) throw new Error(error.message || 'Edge function error');
   if (data?.error) throw new Error(data.error);
   return data;
+}
+
+// ═══ Helper: get manufacturer string ═══
+function getMfr(p: TIMProduct): string {
+  if (!p.manufacturer) return '';
+  return typeof p.manufacturer === 'object' ? (p.manufacturer as any)?.name || '' : p.manufacturer;
+}
+
+// ═══ Helper: get price value ═══
+function getPrice(p: TIMProduct): number | null {
+  if (p.price == null) return null;
+  if (typeof p.price === 'object') return (p.price as any).value ?? null;
+  return p.price;
 }
 
 // ═══ Category Tree Node ═══
@@ -107,6 +122,10 @@ const ProductDetail: React.FC<{
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Fallback image from product card
+  const fallbackImage = product.image || product.default_image || '';
+  const fallbackMfr = getMfr(product);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -141,8 +160,10 @@ const ProductDetail: React.FC<{
     </div>
   );
 
-  const mfr = detail.manufacturer || '—';
-  const pv = detail.price;
+  const mfr = detail.manufacturer || fallbackMfr || '—';
+  const img = detail.image || fallbackImage;
+  const personalPrice = detail.price;
+  const catalogPrice = detail.publicPrice;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -155,9 +176,9 @@ const ProductDetail: React.FC<{
 
         <div className="flex flex-wrap">
           {/* Image */}
-          <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center">
-            {detail.image ? (
-              <img src={detail.image} alt="" className="max-w-[90%] max-h-52 object-contain" />
+          <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+            {img ? (
+              <img src={img} alt="" className="max-w-[90%] max-h-52 object-contain" />
             ) : (
               <Package className="w-14 h-14 text-slate-200" />
             )}
@@ -171,11 +192,29 @@ const ProductDetail: React.FC<{
 
             {/* Price block */}
             <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena</div>
-              {pv != null ? (
-                <div className="text-xl font-bold text-orange-600">{pv} <span className="text-sm font-normal">zł netto</span></div>
+              {personalPrice != null ? (
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Twoja cena</div>
+                  <div className="text-xl font-bold text-orange-600">{personalPrice} <span className="text-sm font-normal">zł netto</span></div>
+                  {catalogPrice != null && catalogPrice !== personalPrice && (
+                    <div className="mt-1 text-xs text-slate-400">
+                      Cena katalogowa: <span className="line-through">{catalogPrice} zł</span>
+                      <span className="ml-1.5 text-green-600 font-medium">
+                        -{Math.round((1 - Number(personalPrice) / Number(catalogPrice)) * 100)}%
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : catalogPrice != null ? (
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena katalogowa</div>
+                  <div className="text-xl font-bold text-slate-700">{catalogPrice} <span className="text-sm font-normal">zł netto</span></div>
+                </>
               ) : (
-                <div className="text-xs text-slate-400">Niedostępna</div>
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena</div>
+                  <div className="text-xs text-slate-400">Niedostępna</div>
+                </>
               )}
             </div>
 
@@ -210,6 +249,98 @@ const ProductDetail: React.FC<{
             )}
           </div>
         </div>
+
+        {/* Description */}
+        {detail.description && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+            <p className="text-xs text-slate-500 leading-relaxed">{detail.description}</p>
+          </div>
+        )}
+
+        {/* Breadcrumb */}
+        {detail.breadcrumb && (
+          <div className="px-5 pb-4">
+            <p className="text-[10px] text-slate-400">{detail.breadcrumb}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ═══ Product Card (grid) ═══
+const ProductCardGrid: React.FC<{ p: TIMProduct; onClick: () => void }> = ({ p, onClick }) => {
+  const mfr = getMfr(p);
+  const price = getPrice(p);
+  const img = p.image || p.default_image;
+
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-orange-400 hover:shadow-md transition-all"
+    >
+      <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+        {img ? (
+          <img src={img} alt="" className="max-w-[85%] max-h-28 object-contain" />
+        ) : (
+          <Package className="w-10 h-10 text-slate-200" />
+        )}
+      </div>
+      <div className="p-2.5">
+        <div className="text-[10px] text-slate-400 font-mono">SKU: {p.sku || p._id}</div>
+        <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{p.name}</div>
+        {mfr && <div className="text-[10px] text-slate-400 mt-0.5">{mfr}</div>}
+        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+          {price != null ? (
+            <div>
+              <span className="text-sm font-bold text-orange-600">{price} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
+              {p.publicPrice != null && p.publicPrice !== price && (
+                <span className="ml-1.5 text-[10px] text-slate-400 line-through">{p.publicPrice}</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[10px] text-slate-300">—</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══ Product Card (list) ═══
+const ProductCardList: React.FC<{ p: TIMProduct; onClick: () => void }> = ({ p, onClick }) => {
+  const mfr = getMfr(p);
+  const price = getPrice(p);
+  const img = p.image || p.default_image;
+
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-orange-400 transition-colors"
+    >
+      <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+        {img ? (
+          <img src={img} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+        ) : (
+          <Package className="w-6 h-6 text-slate-200" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium text-slate-800 truncate">{p.name || '—'}</div>
+        <div className="text-[10px] text-slate-400 font-mono">{p.sku || p._id}{mfr ? ` · ${mfr}` : ''}</div>
+      </div>
+      <div className="flex-shrink-0 text-right">
+        {price != null ? (
+          <div>
+            <span className="text-sm font-bold text-orange-600">{price} zł</span>
+            {p.publicPrice != null && p.publicPrice !== price && (
+              <div className="text-[10px] text-slate-400 line-through">{p.publicPrice} zł</div>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-300">—</span>
+        )}
       </div>
     </div>
   );
@@ -228,6 +359,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState<TIMProduct[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
   const [detailProduct, setDetailProduct] = useState<TIMProduct | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
@@ -261,26 +393,33 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
 
-  // Search
+  // Search — always full-site (not per category)
   const doSearch = useCallback((q: string) => {
-    if (!q.trim()) { setSearchResult(null); return; }
-    setProdLoading(true);
+    if (!q.trim()) { setSearchResult(null); setSearchLoading(false); return; }
+    setSearchLoading(true);
     timProxy('search', { integrationId, q: q.trim() })
       .then(r => {
         setSearchResult(r.products || []);
-        setProdLoading(false);
+        setSearchLoading(false);
       })
-      .catch(() => { setSearchResult([]); setProdLoading(false); });
+      .catch(() => { setSearchResult([]); setSearchLoading(false); });
   }, [integrationId]);
 
   const onSearchChange = (v: string) => {
     setSearch(v);
     if (searchRef.current) clearTimeout(searchRef.current);
-    if (v.length >= 3) searchRef.current = setTimeout(() => doSearch(v), 500);
-    else setSearchResult(null);
+    if (v.length >= 3) {
+      setSearchLoading(true);
+      searchRef.current = setTimeout(() => doSearch(v), 500);
+    } else {
+      setSearchResult(null);
+      setSearchLoading(false);
+    }
   };
 
   const display = searchResult !== null ? searchResult : products;
+  const isLoading = searchLoading || prodLoading;
+  const hasContent = selectedCat || searchResult !== null || searchLoading;
 
   // Connection error
   if (connectionError && categories.length === 0) {
@@ -333,11 +472,11 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
               value={search}
               onChange={e => onSearchChange(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && doSearch(search)}
-              placeholder="Szukaj produkty (np. kabel YDY 3x2.5)..."
+              placeholder="Szukaj na TIM.pl (np. kabel YDY 3x2.5)..."
               className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
             />
             {search && (
-              <button onClick={() => { setSearch(''); setSearchResult(null); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setSearch(''); setSearchResult(null); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -365,7 +504,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
 
         {/* Content area */}
         <div className="flex-1 overflow-y-auto p-4">
-          {!selectedCat && !searchResult ? (
+          {!hasContent ? (
             /* Landing */
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Package className="w-12 h-12 text-slate-200 mb-4" />
@@ -390,10 +529,12 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
                 </div>
               )}
             </div>
-          ) : prodLoading ? (
+          ) : isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-orange-600 mr-2" />
-              <span className="text-sm text-slate-500">Ładowanie produktów...</span>
+              <span className="text-sm text-slate-500">
+                {searchLoading ? 'Szukam na TIM.pl...' : 'Ładowanie produktów...'}
+              </span>
             </div>
           ) : prodError ? (
             <div className="text-center py-8 bg-white rounded-lg border border-slate-200">
@@ -410,71 +551,28 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
                 <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
               )}
               {searchResult !== null && (
-                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania: {searchResult.length}</p>
+                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania «{search}»: {searchResult.length} produktów</p>
               )}
 
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {display.map((p, i) => {
-                    const mfr = typeof p.manufacturer === 'object' ? (p.manufacturer as any)?.name : p.manufacturer;
-                    const priceVal = p.price != null ? (typeof p.price === 'object' ? (p.price as any).value : p.price) : null;
-                    return (
-                      <div
-                        key={p.sku || p._id || i}
-                        onClick={() => setDetailProduct(p)}
-                        className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-orange-400 hover:shadow-md transition-all"
-                      >
-                        <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
-                          {p.image || p.default_image ? (
-                            <img src={p.image || p.default_image} alt="" className="max-w-[85%] max-h-28 object-contain" />
-                          ) : (
-                            <Package className="w-10 h-10 text-slate-200" />
-                          )}
-                        </div>
-                        <div className="p-2.5">
-                          <div className="text-[10px] text-slate-400 font-mono">SKU: {p.sku || p._id}</div>
-                          <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{p.name}</div>
-                          {mfr && <div className="text-[10px] text-slate-400 mt-0.5">{mfr}</div>}
-                          <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                            {priceVal != null ? (
-                              <span className="text-sm font-bold text-orange-600">{priceVal} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
-                            ) : (
-                              <span className="text-[10px] text-slate-300">—</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {display.map((p, i) => (
+                    <ProductCardGrid
+                      key={p.sku || p._id || i}
+                      p={p}
+                      onClick={() => setDetailProduct(p)}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {display.map((p, i) => {
-                    const mfr = typeof p.manufacturer === 'object' ? (p.manufacturer as any)?.name : p.manufacturer;
-                    const priceVal = p.price != null ? (typeof p.price === 'object' ? (p.price as any).value : p.price) : null;
-                    return (
-                      <div
-                        key={p.sku || p._id || i}
-                        onClick={() => setDetailProduct(p)}
-                        className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-orange-400 transition-colors"
-                      >
-                        <div className="w-12 h-12 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
-                          {p.image || p.default_image ? (
-                            <img src={p.image || p.default_image} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
-                          ) : (
-                            <Package className="w-6 h-6 text-slate-200" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-slate-800 truncate">{p.name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">{p.sku || p._id}{mfr ? ` · ${mfr}` : ''}</div>
-                        </div>
-                        {priceVal != null && (
-                          <span className="text-sm font-bold text-orange-600 flex-shrink-0">{priceVal} zł</span>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {display.map((p, i) => (
+                    <ProductCardList
+                      key={p.sku || p._id || i}
+                      p={p}
+                      onClick={() => setDetailProduct(p)}
+                    />
+                  ))}
                 </div>
               )}
 
