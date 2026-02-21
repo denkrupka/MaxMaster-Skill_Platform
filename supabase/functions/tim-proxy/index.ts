@@ -742,7 +742,10 @@ serve(async (req) => {
             const session = await getIntegrationSession(supabaseAdmin, integrationId)
             jar = session.jar
             gqlWorks = session.gqlWorks
-          } catch { /* anonymous */ }
+          } catch (sessErr) {
+            console.error('tim-proxy search: session load failed:', (sessErr as Error).message)
+            // Continue without session — anonymous search
+          }
         }
 
         // Use TIM REST API for search (client-side rendered page has no products in HTML)
@@ -752,11 +755,19 @@ serve(async (req) => {
           limit: String(limit),
         })
         const searchUrl = `${BASE}/rwd/search/?${searchParams}`
-        const headers = { ...makeHeaders(jar), 'Accept': 'application/json' }
-        const res = await fetch(searchUrl, { headers, redirect: 'follow' })
-        if (jar) parseCookiesFromHeaders(res.headers, jar)
+        const hdrs = { ...makeHeaders(jar), 'Accept': 'application/json' }
+        const res = await fetch(searchUrl, { headers: hdrs, redirect: 'follow' })
+        if (Object.keys(jar).length) parseCookiesFromHeaders(res.headers, jar)
 
-        const searchData = await res.json()
+        const responseText = await res.text()
+        let searchData: any
+        try {
+          searchData = JSON.parse(responseText)
+        } catch {
+          console.error('tim-proxy search: TIM returned non-JSON, status', res.status, 'body (first 500):', responseText.substring(0, 500))
+          // Return empty results rather than crashing
+          return json({ products: [], query: q, total: 0, source: 'public', debug: `TIM returned status ${res.status}, non-JSON response` })
+        }
         const rawProducts = searchData?.product || []
         const totalProducts = searchData?.total || 0
 
@@ -804,9 +815,11 @@ serve(async (req) => {
         return errorResponse(`Unknown action: ${action}`)
     }
   } catch (error) {
-    console.error('tim-proxy error:', error)
+    const msg = (error as Error).message || String(error)
+    const stack = (error as Error).stack || ''
+    console.error('tim-proxy error:', msg, stack)
     return new Response(
-      JSON.stringify({ error: (error as Error).message }),
+      JSON.stringify({ error: msg, _stack: stack.split('\n').slice(0, 3).join(' | ') }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

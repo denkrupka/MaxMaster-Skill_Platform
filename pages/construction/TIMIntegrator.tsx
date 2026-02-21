@@ -66,8 +66,19 @@ async function timProxy(action: string, params: Record<string, any> = {}): Promi
     body: { action, ...params },
   });
   if (error) {
-    console.error('[tim-proxy]', action, 'error:', error);
-    throw new Error(error.message || 'Edge function error');
+    // Try to extract body from FunctionsHttpError for more details
+    let detail = '';
+    try {
+      if (error.context?.body) {
+        const reader = error.context.body.getReader?.();
+        if (reader) {
+          const { value } = await reader.read();
+          detail = new TextDecoder().decode(value);
+        }
+      }
+    } catch { /* ignore */ }
+    console.error('[tim-proxy]', action, 'error:', error.message, detail || '');
+    throw new Error(detail ? `${error.message}: ${detail}` : (error.message || 'Edge function error'));
   }
   // Handle case where data is a string (not auto-parsed)
   const parsed = typeof data === 'string' ? JSON.parse(data) : data;
