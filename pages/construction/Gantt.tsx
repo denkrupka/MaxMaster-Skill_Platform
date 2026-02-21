@@ -66,7 +66,7 @@ const DEFAULT_WIZARD_FORM: WizardFormData = {
   resource_priority: 'slowest',
 };
 
-const TASK_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
+const TASK_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'];
 const PARENT_COLOR = '#3b82f6';
 
 // Searchable select dropdown component
@@ -105,10 +105,10 @@ const SearchableSelect: React.FC<{
         type="button"
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center gap-2 px-3 py-2.5 border rounded-xl text-left transition-all ${
-          open ? 'border-emerald-500 ring-2 ring-emerald-100' : value ? 'border-emerald-300' : 'border-slate-200 hover:border-slate-300'
+          open ? 'border-blue-500 ring-2 ring-blue-100' : value ? 'border-blue-300' : 'border-slate-200 hover:border-slate-300'
         } ${value ? 'text-slate-900' : 'text-slate-400'}`}
       >
-        {icon && <span className={value ? 'text-emerald-500' : 'text-slate-400'}>{icon}</span>}
+        {icon && <span className={value ? 'text-blue-600' : 'text-slate-400'}>{icon}</span>}
         <span className="flex-1 truncate">
           {selectedOption ? selectedOption.label : placeholder}
         </span>
@@ -133,7 +133,7 @@ const SearchableSelect: React.FC<{
                 value={searchVal}
                 onChange={e => setSearchVal(e.target.value)}
                 placeholder="Szukaj..."
-                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                 autoFocus
               />
             </div>
@@ -151,17 +151,17 @@ const SearchableSelect: React.FC<{
                   key={opt.id}
                   type="button"
                   onClick={() => { onChange(opt.id); setOpen(false); setSearchVal(''); }}
-                  className={`w-full text-left px-3 py-2.5 hover:bg-emerald-50 transition-colors flex items-center gap-2 ${
-                    value === opt.id ? 'bg-emerald-50' : ''
+                  className={`w-full text-left px-3 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-2 ${
+                    value === opt.id ? 'bg-blue-50' : ''
                   }`}
                 >
                   {value === opt.id ? (
-                    <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <Check className="w-4 h-4 text-blue-600 flex-shrink-0" />
                   ) : (
                     <span className="w-4 flex-shrink-0" />
                   )}
                   <div>
-                    <div className={`text-sm font-medium ${value === opt.id ? 'text-emerald-700' : 'text-slate-700'}`}>{opt.label}</div>
+                    <div className={`text-sm font-medium ${value === opt.id ? 'text-blue-700' : 'text-slate-700'}`}>{opt.label}</div>
                     {opt.sublabel && <div className="text-xs text-slate-400">{opt.sublabel}</div>}
                   </div>
                 </button>
@@ -206,6 +206,7 @@ export const GanttPage: React.FC = () => {
   const [allOffers, setAllOffers] = useState<any[]>([]);
   const [estimateStages, setEstimateStages] = useState<any[]>([]);
   const [estimateItems, setEstimateItems] = useState<any[]>([]);
+  const [estimateDataLoading, setEstimateDataLoading] = useState(false);
 
   // Task form
   const [taskForm, setTaskForm] = useState({
@@ -215,7 +216,7 @@ export const GanttPage: React.FC = () => {
     end_date: '',
     duration: 1,
     progress: 0,
-    color: '#22c55e',
+    color: '#3b82f6',
     is_milestone: false,
     assigned_to_id: ''
   });
@@ -293,6 +294,7 @@ export const GanttPage: React.FC = () => {
   // Load estimate_stages + estimate_tasks from project
   const loadEstimateDataFromProject = useCallback(async (projectId: string) => {
     if (!projectId) return;
+    setEstimateDataLoading(true);
     try {
       const [stagesRes, tasksRes] = await Promise.all([
         supabase.from('estimate_stages').select('*').eq('project_id', projectId).order('sort_order'),
@@ -302,12 +304,15 @@ export const GanttPage: React.FC = () => {
       if (tasksRes.data && tasksRes.data.length > 0) setEstimateItems(tasksRes.data);
     } catch (err) {
       console.error('Error loading estimate data:', err);
+    } finally {
+      setEstimateDataLoading(false);
     }
   }, []);
 
   // Load kosztorys_estimate_items from kosztorys
   const loadKosztorysData = useCallback(async (estimateId: string) => {
     if (!estimateId) return;
+    setEstimateDataLoading(true);
     try {
       const { data: items } = await supabase
         .from('kosztorys_estimate_items')
@@ -344,6 +349,8 @@ export const GanttPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading kosztorys data:', err);
+    } finally {
+      setEstimateDataLoading(false);
     }
   }, []);
 
@@ -382,16 +389,18 @@ export const GanttPage: React.FC = () => {
         const proj = projects.find(p => p.id === projectId);
         if (proj?.start_date) update.start_date = proj.start_date.split('T')[0];
         if (proj?.end_date) update.deadline = proj.end_date.split('T')[0];
-        loadEstimateDataFromProject(projectId);
       } else {
         setEstimateStages([]);
         setEstimateItems([]);
       }
       return update;
     });
+    // Async call OUTSIDE setWizardForm
+    if (projectId) loadEstimateDataFromProject(projectId);
   }, [allOffers, projects, loadEstimateDataFromProject]);
 
   const handleWizardEstimateChange = useCallback((estimateId: string) => {
+    let relatedProjectId: string | null = null;
     setWizardForm(prev => {
       const update = { ...prev, estimate_id: estimateId };
       if (estimateId) {
@@ -402,39 +411,44 @@ export const GanttPage: React.FC = () => {
           );
           if (relatedProject && !prev.project_id) {
             update.project_id = relatedProject.id;
-            loadEstimateDataFromProject(relatedProject.id);
+            relatedProjectId = relatedProject.id;
           }
         }
-        // Always load kosztorys items — they may override if project has no estimate data
-        loadKosztorysData(estimateId);
       } else {
         setEstimateStages([]);
         setEstimateItems([]);
       }
       return update;
     });
+    // Async calls OUTSIDE setWizardForm to ensure they execute properly
+    if (estimateId) {
+      if (relatedProjectId) loadEstimateDataFromProject(relatedProjectId);
+      loadKosztorysData(estimateId);
+    }
   }, [allEstimates, projects, loadEstimateDataFromProject, loadKosztorysData]);
 
   const handleWizardOfferChange = useCallback((offerId: string) => {
+    const offer = offerId ? allOffers.find(o => o.id === offerId) : null;
     setWizardForm(prev => {
       const update = { ...prev, offer_id: offerId };
-      if (offerId) {
-        const offer = allOffers.find(o => o.id === offerId);
-        if (offer?.project_id && !prev.project_id) {
+      if (offerId && offer) {
+        if (offer.project_id && !prev.project_id) {
           update.project_id = offer.project_id;
           const proj = projects.find(p => p.id === offer.project_id);
           if (proj?.start_date) update.start_date = proj.start_date.split('T')[0];
           if (proj?.end_date) update.deadline = proj.end_date.split('T')[0];
-          loadEstimateDataFromProject(offer.project_id);
         }
-        // Load offer sections as stages
-        loadOfferData(offer);
       } else {
         setEstimateStages([]);
         setEstimateItems([]);
       }
       return update;
     });
+    // Async calls OUTSIDE setWizardForm
+    if (offerId && offer) {
+      if (offer.project_id) loadEstimateDataFromProject(offer.project_id);
+      loadOfferData(offer);
+    }
   }, [allOffers, projects, loadEstimateDataFromProject, loadOfferData]);
 
   const openWizard = () => {
@@ -442,6 +456,7 @@ export const GanttPage: React.FC = () => {
     setWizardStep('project');
     setEstimateStages([]);
     setEstimateItems([]);
+    setEstimateDataLoading(false);
     setShowWizard(true);
   };
 
@@ -521,7 +536,7 @@ export const GanttPage: React.FC = () => {
           status: 'active',
           start_date: wizardForm.start_date || null,
           end_date: wizardForm.deadline || null,
-          color: '#22c55e'
+          color: '#3b82f6'
         }).select('*').single();
         if (!newProj) throw new Error('Failed to create project');
         projectId = newProj.id;
@@ -913,7 +928,7 @@ export const GanttPage: React.FC = () => {
   const resetTaskForm = () => {
     setTaskForm({
       title: '', parent_id: '', start_date: new Date().toISOString().split('T')[0],
-      end_date: '', duration: 1, progress: 0, color: '#22c55e', is_milestone: false, assigned_to_id: ''
+      end_date: '', duration: 1, progress: 0, color: '#3b82f6', is_milestone: false, assigned_to_id: ''
     });
   };
 
@@ -935,12 +950,12 @@ export const GanttPage: React.FC = () => {
               placeholder="Szukaj projektu..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
+              className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
             />
           </div>
           <button
             onClick={openWizard}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors font-medium shadow-sm"
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium shadow-sm"
           >
             <Plus className="w-5 h-5" />
             Utwórz Harmonogram
@@ -949,7 +964,7 @@ export const GanttPage: React.FC = () => {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
@@ -977,8 +992,8 @@ export const GanttPage: React.FC = () => {
                   <tr key={project.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedProject(project)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: (project.color || '#22c55e') + '20' }}>
-                          <Calendar className="w-4 h-4" style={{ color: project.color || '#22c55e' }} />
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: (project.color || '#3b82f6') + '20' }}>
+                          <Calendar className="w-4 h-4" style={{ color: project.color || '#3b82f6' }} />
                         </div>
                         <span className="font-medium text-slate-900">{project.name}</span>
                       </div>
@@ -1047,7 +1062,7 @@ export const GanttPage: React.FC = () => {
                       key={step.key}
                       onClick={() => { if (isPast) setWizardStep(step.key); }}
                       className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
-                        isActive ? 'border-emerald-500 text-emerald-600'
+                        isActive ? 'border-blue-500 text-blue-600'
                         : isPast ? 'border-transparent text-slate-500 hover:text-slate-700 cursor-pointer'
                         : 'border-transparent text-slate-300 cursor-default'
                       }`}
@@ -1117,11 +1132,11 @@ export const GanttPage: React.FC = () => {
                       <div>
                         <label className="block text-sm text-slate-500 mb-1.5">Start projektu</label>
                         <div className="flex items-center gap-2">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-                            <Play className="w-4 h-4 text-emerald-600" />
+                          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                            <Play className="w-4 h-4 text-blue-600" />
                           </div>
                           <input type="date" value={wizardForm.start_date} onChange={e => setWizardForm({ ...wizardForm, start_date: e.target.value })}
-                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400" />
+                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400" />
                         </div>
                       </div>
                       <div>
@@ -1131,7 +1146,7 @@ export const GanttPage: React.FC = () => {
                             <Calendar className="w-4 h-4 text-red-500" />
                           </div>
                           <input type="date" value={wizardForm.deadline} onChange={e => setWizardForm({ ...wizardForm, deadline: e.target.value })}
-                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400" />
+                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400" />
                         </div>
                       </div>
                     </div>
@@ -1142,7 +1157,7 @@ export const GanttPage: React.FC = () => {
                           <button key={day} type="button" onClick={() => {
                             const nd = [...wizardForm.working_days]; nd[i] = !nd[i]; setWizardForm({ ...wizardForm, working_days: nd });
                           }} className={`w-10 h-10 rounded-full text-sm font-medium transition-all ${
-                            wizardForm.working_days[i] ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                            wizardForm.working_days[i] ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
                           }`}>{day}</button>
                         ))}
                       </div>
@@ -1153,7 +1168,7 @@ export const GanttPage: React.FC = () => {
                         <div>
                           <label className="block text-sm text-slate-500 mb-1.5">Start</label>
                           <select value={wizardForm.day_start} onChange={e => setWizardForm({ ...wizardForm, day_start: e.target.value })}
-                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400">
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400">
                             {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </div>
@@ -1162,7 +1177,7 @@ export const GanttPage: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <input type="number" min={1} max={16} value={wizardForm.work_hours}
                               onChange={e => setWizardForm({ ...wizardForm, work_hours: parseInt(e.target.value) || 8 })}
-                              className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400" />
+                              className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400" />
                             <span className="text-sm text-slate-400 font-medium">h</span>
                           </div>
                         </div>
@@ -1182,49 +1197,57 @@ export const GanttPage: React.FC = () => {
                 {wizardStep === 'tasks' && (
                   <div className="space-y-3">
                     <label className="block text-sm text-slate-500 mb-2">Tryb importu</label>
+                    {estimateDataLoading && (
+                      <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-600 mb-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Ładowanie danych z kosztorysu...</span>
+                      </div>
+                    )}
                     <label className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      wizardForm.task_mode === 'empty' ? 'border-emerald-400 bg-emerald-50/50' : 'border-slate-200 hover:border-slate-300'
+                      wizardForm.task_mode === 'empty' ? 'border-blue-400 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300'
                     }`}>
                       <input type="radio" name="task_mode" checked={wizardForm.task_mode === 'empty'} onChange={() => setWizardForm({ ...wizardForm, task_mode: 'empty' })}
-                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400" />
+                        className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500" />
                       <div>
                         <div className="font-medium text-slate-800">Utwórz pusty harmonogram</div>
                         <div className="text-sm text-slate-400 mt-0.5">Zacznij od zera — dodasz zadania ręcznie.</div>
                       </div>
                     </label>
                     <label className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
-                      estimateStages.length === 0 ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
-                      : wizardForm.task_mode === 'general' ? 'border-emerald-400 bg-emerald-50/50 cursor-pointer'
+                      estimateDataLoading || estimateStages.length === 0 ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
+                      : wizardForm.task_mode === 'general' ? 'border-blue-400 bg-blue-50/50 cursor-pointer'
                       : 'border-slate-200 hover:border-slate-300 cursor-pointer'
                     }`}>
                       <input type="radio" name="task_mode" checked={wizardForm.task_mode === 'general'}
-                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'general' })} disabled={estimateStages.length === 0}
-                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400" />
+                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'general' })} disabled={estimateDataLoading || estimateStages.length === 0}
+                        className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-slate-800">Ogólny (Działy)</span>
-                          {estimateStages.length === 0 && <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>}
+                          {!estimateDataLoading && estimateStages.length === 0 && <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>}
+                          {estimateDataLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
                         </div>
                         <div className="text-sm text-slate-400 mt-0.5">
-                          {estimateStages.length === 0 ? 'Brak sekcji w wybranym źródle.' : `Importuje ${estimateStages.length} ${estimateStages.length === 1 ? 'dział' : 'działów'} jako zadania główne.`}
+                          {estimateDataLoading ? 'Ładowanie...' : estimateStages.length === 0 ? 'Brak sekcji w wybranym źródle.' : `Importuje ${estimateStages.length} ${estimateStages.length === 1 ? 'dział' : 'działów'} jako zadania główne.`}
                         </div>
                       </div>
                     </label>
                     <label className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
-                      estimateItems.length === 0 ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
-                      : wizardForm.task_mode === 'detailed' ? 'border-emerald-400 bg-emerald-50/50 cursor-pointer'
+                      estimateDataLoading || estimateItems.length === 0 ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
+                      : wizardForm.task_mode === 'detailed' ? 'border-blue-400 bg-blue-50/50 cursor-pointer'
                       : 'border-slate-200 hover:border-slate-300 cursor-pointer'
                     }`}>
                       <input type="radio" name="task_mode" checked={wizardForm.task_mode === 'detailed'}
-                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'detailed' })} disabled={estimateItems.length === 0}
-                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400" />
+                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'detailed' })} disabled={estimateDataLoading || estimateItems.length === 0}
+                        className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500" />
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-slate-800">Szczegółowy (Pozycje)</span>
-                          {estimateItems.length === 0 && <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>}
+                          {!estimateDataLoading && estimateItems.length === 0 && <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>}
+                          {estimateDataLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
                         </div>
                         <div className="text-sm text-slate-400 mt-0.5">
-                          {estimateItems.length === 0 ? 'Brak pozycji w wybranym źródle.' : `Przenosi każdą pozycję jako osobne zadanie (${estimateItems.filter((t: any) => !t.parent_id).length} pozycji).`}
+                          {estimateDataLoading ? 'Ładowanie...' : estimateItems.length === 0 ? 'Brak pozycji w wybranym źródle.' : `Przenosi każdą pozycję jako osobne zadanie (${estimateItems.filter((t: any) => !t.parent_id).length} pozycji).`}
                         </div>
                       </div>
                     </label>
@@ -1243,15 +1266,15 @@ export const GanttPage: React.FC = () => {
                           { val: 'equipment' as const, label: 'Priorytetyzuj sprzęt', desc: 'Decyduje czas pracy głównej maszyny (np. dźwigu).' },
                         ]).map(opt => (
                           <label key={opt.val} className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
-                            wizardForm.resource_priority === opt.val ? 'bg-white shadow-sm ring-1 ring-emerald-200' : 'hover:bg-white/50'
+                            wizardForm.resource_priority === opt.val ? 'bg-white shadow-sm ring-1 ring-blue-200' : 'hover:bg-white/50'
                           }`}>
                             <input type="radio" name="rp" checked={wizardForm.resource_priority === opt.val}
                               onChange={() => setWizardForm({ ...wizardForm, resource_priority: opt.val })}
-                              className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400" />
+                              className="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500" />
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-slate-800">{opt.label}</span>
-                                {opt.badge && <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">{opt.badge}</span>}
+                                {opt.badge && <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">{opt.badge}</span>}
                               </div>
                               <div className="text-sm text-slate-400 mt-0.5">{opt.desc}</div>
                             </div>
@@ -1283,12 +1306,12 @@ export const GanttPage: React.FC = () => {
                   )}
                   {wizardStepIndex < WIZARD_STEPS.length - 1 ? (
                     <button onClick={goNextStep} disabled={!canGoNext()}
-                      className="flex items-center gap-2 px-5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
+                      className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
                       Dalej <ChevronRight className="w-4 h-4" />
                     </button>
                   ) : (
                     <button onClick={handleCreateHarmonogram} disabled={wizardSaving}
-                      className="flex items-center gap-2 px-5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors font-medium">
+                      className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium">
                       {wizardSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       Utwórz Harmonogram
                     </button>
@@ -1314,7 +1337,7 @@ export const GanttPage: React.FC = () => {
         </button>
         <div className="h-5 w-px bg-slate-200" />
         <button onClick={() => { resetTaskForm(); setEditingTask(null); setShowTaskModal(true); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-medium">
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
           <Plus className="w-3.5 h-3.5" /> Dodaj
         </button>
         <div className="h-5 w-px bg-slate-200" />
@@ -1334,19 +1357,19 @@ export const GanttPage: React.FC = () => {
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
           <input type="text" placeholder="Szukaj zadań..." value={search} onChange={e => setSearch(e.target.value)}
-            className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-44 focus:ring-1 focus:ring-emerald-200 focus:border-emerald-400" />
+            className="pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg w-44 focus:ring-1 focus:ring-blue-200 focus:border-blue-400" />
         </div>
       </div>
 
       {loading ? (
-        <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
+        <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
       ) : flatTasks.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <p className="text-slate-500 mb-4">Brak zadań w harmonogramie</p>
             <button onClick={() => { resetTaskForm(); setShowTaskModal(true); }}
-              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600">Dodaj pierwsze zadanie</button>
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Dodaj pierwsze zadanie</button>
           </div>
         </div>
       ) : (
@@ -1377,7 +1400,7 @@ export const GanttPage: React.FC = () => {
                       </button>
                     ) : (
                       <span className="w-4 flex-shrink-0 flex justify-center">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.color || '#22c55e' }} />
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.color || '#3b82f6' }} />
                       </span>
                     )}
                     <span className="text-xs text-slate-400 mr-1 flex-shrink-0">{task.wbs}</span>
@@ -1394,7 +1417,7 @@ export const GanttPage: React.FC = () => {
                         title: task.title || getTaskTitle(task), parent_id: task.parent_id || '',
                         start_date: task.start_date?.split('T')[0] || '', end_date: task.end_date?.split('T')[0] || '',
                         duration: task.duration || 1, progress: task.progress || 0,
-                        color: task.color || '#22c55e', is_milestone: task.is_milestone || false,
+                        color: task.color || '#3b82f6', is_milestone: task.is_milestone || false,
                         assigned_to_id: task.assigned_to_id || ''
                       }); setShowTaskModal(true);
                     }} className="p-1 hover:bg-slate-200 rounded"><Pencil className="w-3 h-3 text-slate-400" /></button>
@@ -1480,7 +1503,7 @@ export const GanttPage: React.FC = () => {
                           </div>
                         ) : (
                           <div className="absolute z-10 rounded-sm overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                            style={{ left: pos.left, width: pos.width, top: (ROW_HEIGHT - 18) / 2, height: 18, backgroundColor: task.color || '#22c55e' }}
+                            style={{ left: pos.left, width: pos.width, top: (ROW_HEIGHT - 18) / 2, height: 18, backgroundColor: task.color || '#3b82f6' }}
                             title={`${title}: ${formatDateShort(new Date(task.start_date))} – ${formatDateShort(new Date(task.end_date))}`}>
                             {/* Progress */}
                             {task.progress > 0 && (
@@ -1521,7 +1544,7 @@ export const GanttPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={taskForm.is_milestone} onChange={e => setTaskForm({ ...taskForm, is_milestone: e.target.checked })} className="w-4 h-4 text-emerald-600 rounded" />
+                  <input type="checkbox" checked={taskForm.is_milestone} onChange={e => setTaskForm({ ...taskForm, is_milestone: e.target.checked })} className="w-4 h-4 text-blue-600 rounded" />
                   <span className="text-sm text-slate-700">Kamień milowy</span>
                 </label>
               </div>
@@ -1586,7 +1609,7 @@ export const GanttPage: React.FC = () => {
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
               <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">Anuluj</button>
               <button onClick={handleSaveTask} disabled={!taskForm.title || !taskForm.start_date || saving}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50">
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {editingTask ? 'Zapisz' : 'Dodaj'}
               </button>
@@ -1606,11 +1629,11 @@ export const GanttPage: React.FC = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa projektu *</label>
-                <input type="text" value={projectForm.name} onChange={e => setProjectForm({ ...projectForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-400" />
+                <input type="text" value={projectForm.name} onChange={e => setProjectForm({ ...projectForm, name: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                <select value={projectForm.status} onChange={e => setProjectForm({ ...projectForm, status: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-400">
+                <select value={projectForm.status} onChange={e => setProjectForm({ ...projectForm, status: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500">
                   <option value="active">Aktywny</option>
                   <option value="on_hold">Wstrzymany</option>
                   <option value="completed">Zakończony</option>
@@ -1619,18 +1642,18 @@ export const GanttPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Data rozpoczęcia</label>
-                  <input type="date" value={projectForm.start_date} onChange={e => setProjectForm({ ...projectForm, start_date: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-400" />
+                  <input type="date" value={projectForm.start_date} onChange={e => setProjectForm({ ...projectForm, start_date: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Data zakończenia</label>
-                  <input type="date" value={projectForm.end_date} onChange={e => setProjectForm({ ...projectForm, end_date: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-400" />
+                  <input type="date" value={projectForm.end_date} onChange={e => setProjectForm({ ...projectForm, end_date: e.target.value })} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
               <button onClick={() => { setShowProjectEditModal(false); setEditingProject(null); }} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Anuluj</button>
               <button onClick={handleSaveProject} disabled={saving || !projectForm.name.trim()}
-                className="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-2">
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />} Zapisz zmiany
               </button>
             </div>
