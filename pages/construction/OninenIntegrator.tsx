@@ -24,6 +24,8 @@ interface OninenProduct {
   priceCatalog?: number | null;
   stock?: number | null;
   stockLocal?: number | null;
+  dotStatus?: number | null;
+  availDescription?: string;
   brand?: string;
   unit?: string;
   deliveryTime?: string;
@@ -40,12 +42,15 @@ interface OninenProductDetail {
   priceCatalog?: number | null;
   stock?: number | null;
   stockLocal?: number | null;
+  dotStatus?: number | null;
+  availDescription?: string;
   brand?: string;
   unit?: string;
   ean?: string;
   description?: string;
   specs?: Array<{ name: string; value: string }>;
   deliveryTime?: string;
+  deliveryCost?: string;
   category?: string;
 }
 
@@ -77,15 +82,20 @@ async function oninenProxy(action: string, params: Record<string, any> = {}): Pr
   return parsed;
 }
 
-// ═══ Stock status color dot ═══
-function stockDot(qty: number | null | undefined): string {
+// ═══ Stock status color dot (Onninen dotstatus: 1=green, 2=yellow, 3=red) ═══
+function stockDotColor(dotStatus: number | null | undefined, qty?: number | null): string {
+  if (dotStatus === 1) return 'bg-green-500';
+  if (dotStatus === 2) return 'bg-yellow-500';
+  if (dotStatus === 3) return 'bg-red-500';
+  // Fallback to quantity-based
   if (qty == null) return 'bg-slate-300';
   if (qty > 10) return 'bg-green-500';
   if (qty > 0) return 'bg-yellow-500';
   return 'bg-red-500';
 }
 
-function stockLabel(qty: number | null | undefined, unit?: string): string {
+function stockLabel(qty: number | null | undefined, unit?: string, availDesc?: string): string {
+  if (availDesc) return availDesc;
   if (qty == null) return '—';
   if (qty <= 0) return 'Brak';
   return `${qty} ${unit || 'szt'}`;
@@ -108,7 +118,7 @@ const CatNode: React.FC<{
         onClick={() => { onPick(cat); if (hasSub) setOpen(!open); }}
         className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
           active
-            ? 'bg-orange-50 text-orange-700 font-semibold'
+            ? 'bg-blue-50 text-blue-700 font-semibold'
             : 'text-slate-600 hover:bg-slate-50'
         }`}
         style={{ paddingLeft: 8 + depth * 18 }}
@@ -154,7 +164,7 @@ const ProductDetail: React.FC<{
   if (loading) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl p-12 text-center" onClick={e => e.stopPropagation()}>
-        <Loader2 className="w-6 h-6 animate-spin text-orange-600 mx-auto mb-2" />
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
         <p className="text-sm text-slate-500">Ładowanie danych produktu...</p>
       </div>
     </div>
@@ -206,7 +216,7 @@ const ProductDetail: React.FC<{
               {detail.priceEnd != null ? (
                 <>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Twoja cena</div>
-                  <div className="text-xl font-bold text-orange-600">{detail.priceEnd.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                  <div className="text-xl font-bold text-blue-600">{detail.priceEnd.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
                   {detail.priceCatalog != null && discount != null && discount > 0 && (
                     <div className="mt-1 text-xs text-slate-400">
                       Cena katalogowa: <span className="line-through">{detail.priceCatalog.toFixed(2)} zł</span>
@@ -230,12 +240,12 @@ const ProductDetail: React.FC<{
             {/* Stock badges */}
             <div className="flex flex-wrap gap-1.5 mb-3">
               <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                <span className={`w-2 h-2 rounded-full ${stockDot(detail.stock)}`} />
-                Magazyn centralny: <b>{stockLabel(detail.stock, detail.unit)}</b>
+                <span className={`w-2 h-2 rounded-full ${stockDotColor(detail.dotStatus, detail.stock)}`} />
+                Magazyn centralny: <b>{stockLabel(detail.stock, detail.unit, detail.availDescription)}</b>
               </span>
               {detail.stockLocal != null && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                  <span className={`w-2 h-2 rounded-full ${stockDot(detail.stockLocal)}`} />
+                  <span className={`w-2 h-2 rounded-full ${stockDotColor(null, detail.stockLocal)}`} />
                   Lokalny: <b>{stockLabel(detail.stockLocal, detail.unit)}</b>
                 </span>
               )}
@@ -252,7 +262,7 @@ const ProductDetail: React.FC<{
                 href={detail.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full py-2.5 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
               >
                 <ExternalLink className="w-4 h-4" />
                 Otwórz na Onninen.pl
@@ -308,7 +318,7 @@ const ProductCardGrid: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-orange-400 hover:shadow-md transition-all"
+      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
     >
       <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
         {p.image ? (
@@ -324,7 +334,7 @@ const ProductCardGrid: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
         <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
           {p.priceEnd != null ? (
             <div>
-              <span className="text-sm font-bold text-orange-600">{p.priceEnd.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
+              <span className="text-sm font-bold text-blue-600">{p.priceEnd.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
               {discount != null && discount > 0 && (
                 <span className="ml-1.5 text-[10px] text-green-600 font-medium">-{discount}%</span>
               )}
@@ -335,8 +345,8 @@ const ProductCardGrid: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
             <span className="text-[10px] text-slate-300">—</span>
           )}
           <span className="flex items-center gap-1">
-            <span className={`w-2 h-2 rounded-full ${stockDot(p.stock)}`} />
-            <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit)}</span>
+            <span className={`w-2 h-2 rounded-full ${stockDotColor(p.dotStatus, p.stock)}`} />
+            <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit, p.availDescription)}</span>
           </span>
         </div>
       </div>
@@ -353,7 +363,7 @@ const ProductCardList: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-orange-400 transition-colors"
+      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
     >
       <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
         {p.image ? (
@@ -367,13 +377,13 @@ const ProductCardList: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
         <div className="text-[10px] text-slate-400 font-mono">{p.sku}{p.brand ? ` · ${p.brand}` : ''}</div>
       </div>
       <div className="flex-shrink-0 flex items-center gap-1">
-        <span className={`w-2 h-2 rounded-full ${stockDot(p.stock)}`} />
-        <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit)}</span>
+        <span className={`w-2 h-2 rounded-full ${stockDotColor(p.dotStatus, p.stock)}`} />
+        <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit, p.availDescription)}</span>
       </div>
       <div className="flex-shrink-0 text-right">
         {p.priceEnd != null ? (
           <div>
-            <span className="text-sm font-bold text-orange-600">{p.priceEnd.toFixed(2)} zł</span>
+            <span className="text-sm font-bold text-blue-600">{p.priceEnd.toFixed(2)} zł</span>
             {discount != null && discount > 0 && (
               <div className="text-[10px] text-green-600 font-medium">-{discount}%</div>
             )}
@@ -528,13 +538,13 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId }) => {
           <div className="flex gap-1 bg-slate-100 rounded p-0.5">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
             >
               <Grid3X3 className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
             >
               <List className="w-4 h-4" />
             </button>
@@ -562,7 +572,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId }) => {
                       <button
                         key={c.slug || c.id || i}
                         onClick={() => { setSelectedCat(c); setPage(1); }}
-                        className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-600 hover:border-orange-400 hover:text-orange-600 transition-colors"
+                        className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
                         {c.name}
                       </button>
@@ -573,7 +583,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId }) => {
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-orange-600 mr-2" />
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
               <span className="text-sm text-slate-500">
                 {searchLoading ? 'Szukam na Onninen.pl...' : 'Ładowanie produktów...'}
               </span>

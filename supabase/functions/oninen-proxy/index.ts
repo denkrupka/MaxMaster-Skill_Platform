@@ -173,6 +173,34 @@ function errorResponse(message: string, status = 400): Response {
   return json({ error: message }, status)
 }
 
+// ═══ PRODUCT MAPPER (shared between products + search) ═══
+function mapProduct(p: any) {
+  const priceItems = p.price?.items || []
+  const priceEnd = priceItems[0]?.priceend ?? null
+  const priceCatalog = priceItems[0]?.pricecatalog ?? null
+
+  const avail = p.avail || {}
+  const brands = p.brand || []
+  const brandName = Array.isArray(brands) && brands.length > 0 ? (brands[0].name || '') : ''
+
+  return {
+    name: p.name || '',
+    sku: p.index || p.catalogindex || '',
+    slug: p.slug || '',
+    url: p.slug ? `${BASE}/product/${p.slug}` : '',
+    image: p.imagemd || p.imageth || '',
+    priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
+    priceCatalog: priceCatalog != null ? parseFloat(String(priceCatalog)) : null,
+    stock: avail.quantitydc ?? null,
+    stockLocal: avail.quantitylc ?? null,
+    dotStatus: avail.dotstatus ?? null,
+    availDescription: avail.description || '',
+    brand: brandName,
+    unit: p.unit || 'szt',
+    deliveryTime: p.bestdel?.delivery || '',
+  }
+}
+
 // ═══ MAIN HANDLER ═══
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -219,8 +247,13 @@ serve(async (req) => {
           password,
         }, jar)
 
-        // Check for 2FA requirement
-        if (loginData?.needs2fa || loginData?.twoFactorRequired || loginData?.step === 'sms') {
+        // Check for login error (Onninen returns status: "noaccess")
+        if (loginData?.status === 'noaccess') {
+          throw new Error(loginData.message || 'Niepoprawne dane logowania')
+        }
+
+        // Check for 2FA requirement (Onninen returns type2fa > 0 or status: "2fa"/"sms")
+        if (loginData?.type2fa > 0 || loginData?.status === '2fa' || loginData?.status === 'sms' || loginData?.needs2fa) {
           const tempId = crypto.randomUUID()
           pending2fa.set(tempId, { jar, username, password, createdAt: Date.now() })
           return json({
@@ -230,10 +263,24 @@ serve(async (req) => {
           })
         }
 
-        // Check for login error
+        // Check for other errors
         if (loginData?.error || loginData?.errors) {
           const errMsg = loginData.error || (Array.isArray(loginData.errors) ? loginData.errors.join('; ') : String(loginData.errors))
           throw new Error(errMsg)
+        }
+
+        // If status is not "ok" or "success", and not recognized — still might be error
+        if (loginData?.status && loginData.status !== 'ok' && loginData.status !== 'success' && loginData.status !== 'logged') {
+          // Unknown status - might be 2FA or error, pass message through
+          if (loginData.message) {
+            const tempId = crypto.randomUUID()
+            pending2fa.set(tempId, { jar, username, password, createdAt: Date.now() })
+            return json({
+              needs2fa: true,
+              tempId,
+              message: loginData.message,
+            })
+          }
         }
 
         // Login success — save to DB
@@ -286,10 +333,17 @@ serve(async (req) => {
         if (!pending) return errorResponse('2FA session expired. Please login again.', 410)
 
         const { data: loginData } = await apiPost('/login', {
+          userName: pending.username,
+          password: pending.password,
           code2Fa: code2fa,
           rememberWorkstation: true,
           step: 1,
         }, pending.jar)
+
+        // Check for errors
+        if (loginData?.status === 'noaccess') {
+          throw new Error(loginData.message || 'Błąd weryfikacji')
+        }
 
         if (loginData?.error || loginData?.errors) {
           const errMsg = loginData.error || (Array.isArray(loginData.errors) ? loginData.errors.join('; ') : String(loginData.errors))
@@ -297,11 +351,11 @@ serve(async (req) => {
         }
 
         // If still needs 2FA (wrong code), keep pending
-        if (loginData?.needs2fa || loginData?.twoFactorRequired) {
+        if (loginData?.type2fa > 0 || loginData?.status === '2fa' || loginData?.status === 'sms' || loginData?.needs2fa) {
           return json({
             needs2fa: true,
             tempId,
-            message: 'Nieprawidłowy kod. Spróbuj ponownie.',
+            message: loginData?.message || 'Nieprawidłowy kod. Spróbuj ponownie.',
           })
         }
 
@@ -387,41 +441,19 @@ serve(async (req) => {
 
         const data = await apiGet('/groups?grouptype=categories', jar)
 
-        // Onninen returns flat list of categories with parentId
-        // Build a tree structure
-        const items: any[] = Array.isArray(data) ? data : (data?.items || data?.groups || data?.categories || [])
-
-        interface CatNode {
-          id: string
-          name: string
-          slug: string
-          parentId?: string
-          subcategories: CatNode[]
-        }
-
-        const nodeMap = new Map<string, CatNode>()
-        const roots: CatNode[] = []
-
-        for (const item of items) {
-          const node: CatNode = {
-            id: item.id || item.groupId || '',
-            name: item.name || item.title || '',
-            slug: item.slug || item.urlSlug || item.url || item.id || '',
-            parentId: item.parentId || item.parentGroupId || null,
-            subcategories: [],
-          }
-          nodeMap.set(node.id, node)
-        }
-
-        for (const node of nodeMap.values()) {
-          if (node.parentId && nodeMap.has(node.parentId)) {
-            nodeMap.get(node.parentId)!.subcategories.push(node)
-          } else {
-            roots.push(node)
+        // Onninen returns nested tree: {categories: [{slug, name, size, children: [...]}]}
+        function mapCat(c: any): any {
+          return {
+            name: c.name || '',
+            slug: c.slug || '',
+            image: c.imageurl || '',
+            count: c.size || 0,
+            subcategories: (c.children || []).map(mapCat),
           }
         }
 
-        return json({ categories: roots, total: roots.length })
+        const categories = (data?.categories || []).map(mapCat)
+        return json({ categories, total: categories.length })
       }
 
       // ═══ PRODUCTS ═══
@@ -437,42 +469,20 @@ serve(async (req) => {
           } catch { /* anonymous */ }
         }
 
-        const slug = cat.startsWith('/') ? cat.substring(1) : cat
-        const data = await apiGet(`/search?query=/${slug}&page=${page}`, jar)
+        // Onninen uses 0-indexed pages, frontend uses 1-indexed
+        const slug = cat.startsWith('/') ? cat : '/' + cat
+        const apiPage = Math.max(0, page - 1)
+        const data = await apiGet(`/search?query=${encodeURIComponent(slug)}&page=${apiPage}`, jar)
 
-        const rawProducts = data?.products || data?.items || data?.results || []
-        const products = rawProducts.map((p: any) => {
-          const priceItems = p.price?.items || p.prices || []
-          const priceEnd = priceItems[0]?.priceend ?? priceItems[0]?.priceEnd ?? p.priceEnd ?? p.price?.priceEnd ?? null
-          const priceCatalog = priceItems[0]?.pricecatalog ?? priceItems[0]?.priceCatalog ?? p.priceCatalog ?? p.price?.priceCatalog ?? null
+        // Products are nested: data.items[0].items[]
+        const wrapper = (data?.items || [])[0] || {}
+        const rawProducts: any[] = wrapper.items || []
 
-          const avail = p.avail || p.availability || {}
-          const stockDc = avail.quantitydc ?? avail.quantityDc ?? avail.quantity ?? null
-          const stockLocal = avail.quantitylocal ?? avail.quantityLocal ?? null
+        const products = rawProducts.map((p: any) => mapProduct(p))
 
-          const brands = p.brand || p.brands || []
-          const brandName = Array.isArray(brands) && brands.length > 0
-            ? (brands[0].name || brands[0])
-            : (typeof brands === 'string' ? brands : '')
-
-          return {
-            name: p.name || p.title || '',
-            sku: p.sku || p.productCode || p.code || '',
-            slug: p.slug || p.urlSlug || '',
-            url: p.slug ? `${BASE}/product/${p.slug}` : (p.url || ''),
-            image: p.image || p.imageUrl || (p.images && p.images[0]) || '',
-            priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
-            priceCatalog: priceCatalog != null ? parseFloat(String(priceCatalog)) : null,
-            stock: stockDc,
-            stockLocal,
-            brand: brandName,
-            unit: p.unit || p.salesUnit || 'szt',
-            deliveryTime: p.deliveryTime || avail.deliveryText || '',
-          }
-        })
-
-        const totalPages = data?.totalPages || data?.pagination?.totalPages || Math.ceil((data?.total || data?.totalCount || 0) / 24) || 1
-        const totalProducts = data?.total || data?.totalCount || products.length
+        const totalProducts = data?.total || wrapper.total || products.length
+        const lastPage = data?.lastpage ?? 0
+        const totalPages = lastPage + 1 // lastpage is 0-indexed
 
         return json({ products, page, totalPages, totalProducts, source: Object.keys(jar).length > 0 ? 'personal' : 'public' })
       }
@@ -490,40 +500,16 @@ serve(async (req) => {
           } catch { /* anonymous */ }
         }
 
-        const data = await apiGet(`/search?query=${encodeURIComponent(q.trim())}&page=${page}`, jar)
+        const apiPage = Math.max(0, page - 1)
+        const data = await apiGet(`/search?query=${encodeURIComponent(q.trim())}&page=${apiPage}`, jar)
 
-        const rawProducts = data?.products || data?.items || data?.results || []
-        const products = rawProducts.map((p: any) => {
-          const priceItems = p.price?.items || p.prices || []
-          const priceEnd = priceItems[0]?.priceend ?? priceItems[0]?.priceEnd ?? p.priceEnd ?? p.price?.priceEnd ?? null
-          const priceCatalog = priceItems[0]?.pricecatalog ?? priceItems[0]?.priceCatalog ?? p.priceCatalog ?? p.price?.priceCatalog ?? null
+        // Products are nested: data.items[0].items[]
+        const wrapper = (data?.items || [])[0] || {}
+        const rawProducts: any[] = wrapper.items || []
 
-          const avail = p.avail || p.availability || {}
-          const stockDc = avail.quantitydc ?? avail.quantityDc ?? avail.quantity ?? null
-          const stockLocal = avail.quantitylocal ?? avail.quantityLocal ?? null
+        const products = rawProducts.map((p: any) => mapProduct(p))
 
-          const brands = p.brand || p.brands || []
-          const brandName = Array.isArray(brands) && brands.length > 0
-            ? (brands[0].name || brands[0])
-            : (typeof brands === 'string' ? brands : '')
-
-          return {
-            name: p.name || p.title || '',
-            sku: p.sku || p.productCode || p.code || '',
-            slug: p.slug || p.urlSlug || '',
-            url: p.slug ? `${BASE}/product/${p.slug}` : (p.url || ''),
-            image: p.image || p.imageUrl || (p.images && p.images[0]) || '',
-            priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
-            priceCatalog: priceCatalog != null ? parseFloat(String(priceCatalog)) : null,
-            stock: stockDc,
-            stockLocal,
-            brand: brandName,
-            unit: p.unit || p.salesUnit || 'szt',
-            deliveryTime: p.deliveryTime || avail.deliveryText || '',
-          }
-        })
-
-        const totalProducts = data?.total || data?.totalCount || products.length
+        const totalProducts = data?.total || wrapper.total || products.length
 
         return json({ products, query: q, total: totalProducts, source: Object.keys(jar).length > 0 ? 'personal' : 'public' })
       }
@@ -543,44 +529,57 @@ serve(async (req) => {
 
         const data = await apiGet(`/card?slug=${encodeURIComponent(productSlug)}`, jar)
 
-        const p = data?.product || data || {}
-        const priceItems = p.price?.items || p.prices || []
-        const priceEnd = priceItems[0]?.priceend ?? priceItems[0]?.priceEnd ?? p.priceEnd ?? null
-        const priceCatalog = priceItems[0]?.pricecatalog ?? priceItems[0]?.priceCatalog ?? p.priceCatalog ?? null
+        // Product data is in data.card, with ext for extended info
+        const p = data?.card || {}
+        const ext = p.ext || {}
 
-        const avail = p.avail || p.availability || {}
-        const stockDc = avail.quantitydc ?? avail.quantityDc ?? avail.quantity ?? null
-        const stockLocal = avail.quantitylocal ?? avail.quantityLocal ?? null
+        const priceItems = p.price?.items || []
+        const priceEnd = priceItems[0]?.priceend ?? null
+        const priceCatalog = priceItems[0]?.pricecatalog ?? null
 
-        const brands = p.brand || p.brands || []
-        const brandName = Array.isArray(brands) && brands.length > 0
-          ? (brands[0].name || brands[0])
-          : (typeof brands === 'string' ? brands : '')
+        const avail = p.avail || {}
 
-        // Extract specs/attributes
-        const rawSpecs = p.attributes || p.specs || p.parameters || p.technicalData || []
-        const specs = Array.isArray(rawSpecs)
-          ? rawSpecs.map((s: any) => ({ name: s.name || s.label || '', value: String(s.value ?? '') }))
-          : []
+        const brands = p.brand || []
+        const brandName = Array.isArray(brands) && brands.length > 0 ? brands[0].name || '' : ''
+
+        // Attributes from ext.attributes
+        const rawAttrs = ext.attributes || []
+        const specs = rawAttrs.map((a: any) => ({ name: a.name || '', value: String(a.value ?? '') }))
+
+        // Images from ext.images
+        const extImages = (ext.images || []).map((img: any) => img.imageurl || img.imageurl_m || '')
+
+        // Category path from data.categorypath
+        const catPath = (data?.categorypath || []).map((c: any) => c.name).join(' > ')
+
+        // Description from ext
+        const description = ext.description || ext.descriptionsales || ''
+
+        // EAN from ext.barcodes
+        const barcodes = ext.barcodes || []
+        const ean = barcodes.length > 0 ? (barcodes[0].value || barcodes[0]) : ''
 
         const product = {
-          name: p.name || p.title || '',
-          sku: p.sku || p.productCode || p.code || '',
+          name: p.name || '',
+          sku: p.index || p.catalogindex || '',
           slug: productSlug,
-          url: `${BASE}/product/${productSlug}`,
-          image: p.image || p.imageUrl || (p.images && p.images[0]) || '',
-          images: p.images || [],
+          url: `${BASE}/product/${p.slug || productSlug}`,
+          image: extImages[0] || p.imagemd || p.imageth || '',
+          images: extImages,
           priceEnd: priceEnd != null ? parseFloat(String(priceEnd)) : null,
           priceCatalog: priceCatalog != null ? parseFloat(String(priceCatalog)) : null,
-          stock: stockDc,
-          stockLocal,
+          stock: avail.quantitydc ?? null,
+          stockLocal: avail.quantitylc ?? null,
+          dotStatus: avail.dotstatus ?? null,
+          availDescription: avail.description || '',
           brand: brandName,
-          unit: p.unit || p.salesUnit || 'szt',
-          ean: p.ean || p.gtin || '',
-          description: p.description || p.shortDescription || '',
+          unit: p.unit || 'szt',
+          ean: typeof ean === 'string' ? ean : '',
+          description,
           specs,
-          deliveryTime: p.deliveryTime || avail.deliveryText || '',
-          category: p.category || p.breadcrumb || '',
+          deliveryTime: p.bestdel?.delivery || '',
+          deliveryCost: p.bestdel?.cost || '',
+          category: catPath,
         }
 
         return json({ product, source: Object.keys(jar).length > 0 ? 'personal' : 'public' })

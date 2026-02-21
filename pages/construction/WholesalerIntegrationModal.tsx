@@ -13,8 +13,8 @@ const BRANZE = [
 // Wholesalers per branża
 const WHOLESALERS: Record<string, { id: string; name: string; logo?: string; color: string; description: string }[]> = {
   elektryczne: [
-    { id: 'tim', name: 'TIM S.A.', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
-    { id: 'oninen', name: 'Onninen', color: '#FF6B00', description: 'Hurtownia elektryczna i przemysłowa Onninen.pl - szeroki asortyment materiałów instalacyjnych' },
+    { id: 'tim', name: 'TIM S.A.', logo: '/logos/tim.svg', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
+    { id: 'oninen', name: 'Onninen', logo: '/logos/onninen.svg', color: '#003DA5', description: 'Hurtownia elektryczna i przemysłowa Onninen.pl - szeroki asortyment materiałów instalacyjnych' },
   ],
   sanitarne: [],
   klimatyzacyjne: [],
@@ -301,12 +301,18 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
-                            <div
-                              className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold"
-                              style={{ backgroundColor: w.color }}
-                            >
-                              {w.name.substring(0, 3).toUpperCase()}
-                            </div>
+                            {w.logo ? (
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-slate-200 p-1">
+                                <img src={w.logo} alt={w.name} className="max-w-full max-h-full object-contain" />
+                              </div>
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-xs font-bold"
+                                style={{ backgroundColor: w.color }}
+                              >
+                                {w.name.substring(0, 3).toUpperCase()}
+                              </div>
+                            )}
                             <div>
                               <div className="font-semibold text-slate-900">{w.name}</div>
                               <div className="text-xs text-slate-500 mt-0.5">{w.description}</div>
