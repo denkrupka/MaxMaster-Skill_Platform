@@ -622,7 +622,7 @@ serve(async (req) => {
           brand: brandName,
           unit: p.unit || 'szt',
           ean: typeof ean === 'string' ? ean : '',
-          description: stripHtml(description),
+          description,
           specs,
           deliveryTime: p.bestdel?.delivery || '',
           deliveryCost: p.bestdel?.cost || '',

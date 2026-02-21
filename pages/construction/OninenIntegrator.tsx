@@ -275,7 +275,18 @@ const ProductDetail: React.FC<{
         {detail.description && (
           <div className="px-5 pb-3">
             <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">{detail.description}</p>
+            <div
+              className="text-xs text-slate-600 leading-relaxed prose prose-xs max-w-none
+                [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-slate-700 [&_h2]:mt-3 [&_h2]:mb-1.5
+                [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-700 [&_h3]:mt-2.5 [&_h3]:mb-1
+                [&_p]:mb-2 [&_p]:text-slate-600
+                [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2 [&_ul]:space-y-0.5
+                [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-2 [&_ol]:space-y-0.5
+                [&_li]:text-slate-600
+                [&_strong]:font-semibold [&_strong]:text-slate-700
+                [&_a]:text-blue-600 [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: detail.description }}
+            />
           </div>
         )}
 
