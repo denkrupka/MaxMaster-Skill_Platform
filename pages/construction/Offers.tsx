@@ -1392,7 +1392,7 @@ export const OffersPage: React.FC = () => {
       // First get the estimate to find request_id
       const { data: estimate, error: estError } = await supabase
         .from('kosztorys_estimates')
-        .select('id, request_id, version, grand_total, final_total')
+        .select('id, request_id, version')
         .eq('id', selectedKosztorysId)
         .single();
 
