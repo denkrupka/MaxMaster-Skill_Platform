@@ -402,6 +402,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState<TIMProduct[] | null>(null);
+  const [searchTotal, setSearchTotal] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
   const [detailProduct, setDetailProduct] = useState<TIMProduct | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -443,17 +444,18 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
     timProxy('search', { integrationId, q: q.trim() })
       .then(r => {
         setSearchResult(r.products || []);
+        setSearchTotal(r.total || 0);
         setSearchLoading(false);
       })
-      .catch(() => { setSearchResult([]); setSearchLoading(false); });
+      .catch(() => { setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
   }, [integrationId]);
 
   const onSearchChange = (v: string) => {
     setSearch(v);
     if (searchRef.current) clearTimeout(searchRef.current);
-    if (v.length >= 3) {
+    if (v.length >= 2) {
       setSearchLoading(true);
-      searchRef.current = setTimeout(() => doSearch(v), 500);
+      searchRef.current = setTimeout(() => doSearch(v), 400);
     } else {
       setSearchResult(null);
       setSearchLoading(false);
@@ -519,7 +521,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
               className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
             />
             {search && (
-              <button onClick={() => { setSearch(''); setSearchResult(null); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setSearch(''); setSearchResult(null); setSearchTotal(0); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -594,7 +596,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId }) => {
                 <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
               )}
               {searchResult !== null && (
-                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania «{search}»: {searchResult.length} produktów</p>
+                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania «{search}»: {searchTotal > searchResult.length ? `${searchResult.length} z ${searchTotal}` : searchResult.length} produktów</p>
               )}
 
               {viewMode === 'grid' ? (

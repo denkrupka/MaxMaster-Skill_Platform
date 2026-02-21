@@ -721,9 +721,9 @@ serve(async (req) => {
         return json({ product, source })
       }
 
-      // ═══ SEARCH ═══
+      // ═══ SEARCH (via REST API rwd/search/) ═══
       case 'search': {
-        const { integrationId, q } = body
+        const { integrationId, q, page = 1, limit = 24 } = body
         if (!q) return errorResponse('Missing q')
 
         let jar: CookieJar = {}
@@ -736,74 +736,38 @@ serve(async (req) => {
           } catch { /* anonymous */ }
         }
 
-        const html = await fetchPage(`/catalogsearch/result/?q=${encodeURIComponent(q)}`, jar)
-        const jsonLdList = extractJsonLd(html)
+        // Use TIM REST API for search (client-side rendered page has no products in HTML)
+        const searchParams = new URLSearchParams({
+          q: q.trim(),
+          p: String(page),
+          limit: String(limit),
+        })
+        const searchUrl = `${BASE}/rwd/search/?${searchParams}`
+        const headers = { ...makeHeaders(jar), 'Accept': 'application/json' }
+        const res = await fetch(searchUrl, { headers, redirect: 'follow' })
+        if (jar) parseCookiesFromHeaders(res.headers, jar)
 
-        let products: any[] = []
-        for (const ld of jsonLdList) {
-          if (ld['@type'] === 'ItemList' && ld.itemListElement) {
-            products = ld.itemListElement.map((item: any) => {
-              const p = item.item || item
-              return {
-                name: p.name || '',
-                sku: extractSku(p.url || ''),
-                url: p.url || '',
-                image: Array.isArray(p.image) ? p.image[0] : (p.image || ''),
-                price: p.offers?.price ? parseFloat(p.offers.price) : null,
-              }
-            })
-            break
-          }
-        }
+        const searchData = await res.json()
+        const rawProducts = searchData?.product || []
+        const totalProducts = searchData?.total || 0
 
-        // HTML fallback: extract product links when JSON-LD is missing
-        if (products.length === 0) {
-          const seen = new Set<string>()
-          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
-          let lm: RegExpExecArray | null
-          while ((lm = linkRe.exec(html)) !== null) {
-            const href = lm[1]
-            const sku = extractSku(href)
-            if (!sku || seen.has(sku)) continue
-            seen.add(sku)
-            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
-            if (text.length < 3 || text.length > 200) continue
-            products.push({ name: text, sku, url: BASE + href, image: '', price: null })
+        let products: any[] = rawProducts.map((item: any) => {
+          const s = item._source || item
+          const imgPath = s.imageLink || ''
+          return {
+            name: s.name || '',
+            sku: s.sku || item._id || '',
+            url: s.productLink ? BASE + s.productLink : '',
+            image: imgPath ? (imgPath.startsWith('http') ? imgPath : BASE + imgPath) : '',
+            price: s.price || null,
+            publicPrice: s.price || null,
+            manufacturer: s.manufacturer || '',
+            stock: s.stock ?? null,
+            ean: s.ean || '',
           }
-          // Also try data-product-name or title attributes
-          if (products.length === 0) {
-            const titleRe = /<a\s[^>]*href="([^"]*\/p\/[^"]*)"[^>]*title="([^"]+)"[^>]*>/gi
-            while ((lm = titleRe.exec(html)) !== null) {
-              const href = lm[1]
-              const sku = extractSku(href)
-              if (!sku || seen.has(sku)) continue
-              seen.add(sku)
-              products.push({ name: lm[2].trim(), sku, url: href.startsWith('http') ? href : BASE + href, image: '', price: null })
-            }
-          }
-        }
+        })
 
-        // Extract images from HTML for products that don't have one
-        if (products.some((p: any) => !p.image)) {
-          const imgRe = /<img[^>]+src="(https?:\/\/[^"]+)"[^>]*alt="([^"]*)"[^>]*>/gi
-          const imgMap = new Map<string, string>()
-          let im: RegExpExecArray | null
-          while ((im = imgRe.exec(html)) !== null) {
-            const src = im[1]
-            const alt = im[2].trim()
-            if (alt && src.match(/\.(jpg|jpeg|png|webp)/i)) {
-              imgMap.set(alt.toLowerCase(), src)
-            }
-          }
-          for (const p of products) {
-            if (!p.image && p.name) {
-              const found = imgMap.get(p.name.toLowerCase())
-              if (found) p.image = found
-            }
-          }
-        }
-
-        // Personal prices
+        // Enrich with personal prices via GraphQL
         let source = 'public'
         const skuList = products.map((p: any) => p.sku).filter(Boolean)
         if (gqlWorks && skuList.length) {
@@ -824,7 +788,7 @@ serve(async (req) => {
           }
         }
 
-        return json({ products, query: q, total: products.length, source })
+        return json({ products, query: q, total: totalProducts, source })
       }
 
       default:
