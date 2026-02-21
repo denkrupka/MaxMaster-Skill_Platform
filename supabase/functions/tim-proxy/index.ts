@@ -744,62 +744,107 @@ serve(async (req) => {
             gqlWorks = session.gqlWorks
           } catch (sessErr) {
             console.error('tim-proxy search: session load failed:', (sessErr as Error).message)
-            // Continue without session — anonymous search
           }
         }
 
-        // Use TIM REST API for search (client-side rendered page has no products in HTML)
-        // TIM may return 503 due to WAF/rate-limiting from datacenter IPs — retry with delay
+        // If no session cookies, pre-fetch TIM homepage to get WAF/session cookies
+        // This is critical: TIM blocks /rwd/search/ requests without valid session cookies
+        if (Object.keys(jar).length === 0) {
+          try {
+            const homeRes = await fetch(BASE + '/', {
+              headers: { 'User-Agent': UA, 'Accept': 'text/html,*/*' },
+              redirect: 'follow',
+            })
+            parseCookiesFromHeaders(homeRes.headers, jar)
+            // Consume body to free connection
+            await homeRes.text()
+          } catch (e) {
+            console.error('tim-proxy search: homepage prefetch failed:', (e as Error).message)
+          }
+        }
+
+        // Search via /rwd/search/ REST API with retries
         const searchParams = new URLSearchParams({
           q: q.trim(),
           p: String(page),
           limit: String(limit),
         })
-        const searchUrl = `${BASE}/rwd/search/?${searchParams}`
 
         let searchData: any = null
         const maxRetries = 3
+
         for (let attempt = 0; attempt < maxRetries; attempt++) {
           if (attempt > 0) {
-            await new Promise(r => setTimeout(r, 800 * attempt)) // 800ms, 1600ms delay
-          }
-          const hdrs: Record<string, string> = {
-            ...makeHeaders(jar),
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
+            await new Promise(r => setTimeout(r, 1000 * attempt))
           }
           try {
+            const searchUrl = `${BASE}/rwd/search/?${searchParams}`
+            const hdrs: Record<string, string> = {
+              ...makeHeaders(jar),
+              'Accept': 'application/json, text/javascript, */*; q=0.01',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Sec-Fetch-Dest': 'empty',
+              'Sec-Fetch-Mode': 'cors',
+              'Sec-Fetch-Site': 'same-origin',
+            }
             const res = await fetch(searchUrl, { headers: hdrs, redirect: 'follow' })
-            if (Object.keys(jar).length) parseCookiesFromHeaders(res.headers, jar)
+            parseCookiesFromHeaders(res.headers, jar)
 
             if (res.status === 503 || res.status === 429) {
-              console.error(`tim-proxy search: TIM returned ${res.status}, attempt ${attempt + 1}/${maxRetries}`)
-              continue // retry
+              console.error(`tim-proxy search: TIM ${res.status}, attempt ${attempt + 1}/${maxRetries}`)
+              await res.text() // consume body
+              continue
             }
 
-            const responseText = await res.text()
+            const txt = await res.text()
             try {
-              searchData = JSON.parse(responseText)
-              break // success
+              searchData = JSON.parse(txt)
+              break
             } catch {
-              console.error('tim-proxy search: non-JSON response, status', res.status, 'attempt', attempt + 1)
-              if (attempt === maxRetries - 1) {
-                return json({ products: [], query: q, total: 0, source: 'public', debug: `TIM returned status ${res.status} after ${maxRetries} attempts` })
+              console.error(`tim-proxy search: non-JSON (${res.status}), attempt ${attempt + 1}`)
+              // On last attempt, try Fact-Finder fallback below
+            }
+          } catch (e) {
+            console.error(`tim-proxy search: fetch error attempt ${attempt + 1}:`, (e as Error).message)
+          }
+        }
+
+        // Fallback: try Fact-Finder search API (may work from some edge locations)
+        if (!searchData) {
+          try {
+            const ffUrl = `https://timsa.fact-finder.pl/FACT-Finder/Search.ff?channel=TIM-2025&query=${encodeURIComponent(q.trim())}&page=${page}&productsPerPage=${limit}&format=JSON`
+            const ffRes = await fetch(ffUrl, {
+              headers: { 'Accept': 'application/json', 'Origin': BASE, 'Referer': BASE + '/' },
+            })
+            if (ffRes.ok) {
+              const ffData = await ffRes.json()
+              // Fact-Finder returns records in searchResult.records
+              const records = ffData?.searchResult?.records || []
+              if (records.length > 0) {
+                searchData = {
+                  product: records.map((r: any) => ({
+                    _source: {
+                      name: r.record?.Name || r.record?.name || '',
+                      sku: r.record?.ProductNumber || r.record?.sku || r.id || '',
+                      productLink: r.record?.Deeplink || r.record?.deeplink || '',
+                      imageLink: r.record?.ImageUrl || r.record?.image || '',
+                      price: r.record?.Price ? parseFloat(r.record.Price) : null,
+                      manufacturer: r.record?.Manufacturer || r.record?.manufacturer || '',
+                    }
+                  })),
+                  total: ffData?.searchResult?.resultCount || records.length,
+                }
               }
+            } else {
+              console.error('tim-proxy search: Fact-Finder returned', ffRes.status)
             }
-          } catch (fetchErr) {
-            console.error('tim-proxy search: fetch error, attempt', attempt + 1, (fetchErr as Error).message)
-            if (attempt === maxRetries - 1) {
-              return json({ products: [], query: q, total: 0, source: 'public', debug: `Fetch failed: ${(fetchErr as Error).message}` })
-            }
+          } catch (ffErr) {
+            console.error('tim-proxy search: Fact-Finder fallback failed:', (ffErr as Error).message)
           }
         }
 
         if (!searchData) {
-          return json({ products: [], query: q, total: 0, source: 'public', debug: 'All retry attempts failed' })
+          return json({ products: [], query: q, total: 0, source: 'public', debug: 'All search methods failed (rwd + fact-finder)' })
         }
         const rawProducts = searchData?.product || []
         const totalProducts = searchData?.total || 0
