@@ -176,6 +176,7 @@ export const OffersPage: React.FC = () => {
   const [importSource, setImportSource] = useState<'estimates' | 'kosztorys'>('kosztorys');
   const [kosztorysEstimates, setKosztorysEstimates] = useState<any[]>([]);
   const [selectedKosztorysId, setSelectedKosztorysId] = useState('');
+  const [importedKosztorysName, setImportedKosztorysName] = useState<string | null>(null);
 
   const autoSelectDone = useRef(false);
 
@@ -1386,30 +1387,44 @@ export const OffersPage: React.FC = () => {
   const handleImportFromKosztorys = async () => {
     if (!selectedKosztorysId || !currentUser) return;
     setImportLoading(true);
+    setImportedKosztorysName(null);
     try {
-      // Load estimate with request data directly
+      // First get the estimate to find request_id
       const { data: estimate, error: estError } = await supabase
         .from('kosztorys_estimates')
-        .select('*, request:kosztorys_requests(*)')
+        .select('id, request_id, version, grand_total, final_total')
         .eq('id', selectedKosztorysId)
         .single();
 
       if (estError || !estimate) {
-        alert('Nie można załadować danych z kosztorysu');
+        console.error('Error loading estimate:', estError);
+        alert('Nie można załadować kosztorysu');
         setImportLoading(false);
         return;
       }
 
+      // Load request data separately
+      let req: any = null;
+      if (estimate.request_id) {
+        const { data: requestData } = await supabase
+          .from('kosztorys_requests')
+          .select('*')
+          .eq('id', estimate.request_id)
+          .single();
+        req = requestData;
+      }
+
       // Set offer name from kosztorys
+      const investmentName = req?.investment_name || 'Kosztorys';
+      const clientName = req?.client_name || '';
       setOfferData(prev => ({
         ...prev,
-        name: `Oferta - ${estimate.request?.investment_name || 'Kosztorys'}`,
-        notes: `Klient: ${estimate.request?.client_name || ''}\nInwestycja: ${estimate.request?.investment_name || ''}`,
+        name: `Oferta - ${investmentName}`,
+        notes: clientName ? `Klient: ${clientName}\nInwestycja: ${investmentName}` : '',
       }));
 
       // Pre-fill client data from kosztorys request
-      if (estimate.request) {
-        const req = estimate.request;
+      if (req) {
         setOfferClientData(prev => ({
           ...prev,
           client_name: req.client_name || prev.client_name,
@@ -1433,6 +1448,14 @@ export const OffersPage: React.FC = () => {
           notes: req.notes || prev.notes,
           assigned_user_id: req.assigned_user_id || prev.assigned_user_id,
         }));
+
+        // Try to load contacts for the client
+        if (req.nip) {
+          offerFindAndLoadContacts(req.nip, req.client_name);
+        } else if (req.client_name) {
+          offerFindAndLoadContacts(undefined, req.client_name);
+        }
+        setOfferClientSelected(true);
       }
 
       // Try to load items for sections (optional - may not exist yet)
@@ -1446,6 +1469,7 @@ export const OffersPage: React.FC = () => {
         console.log('No items to import, continuing with client data only');
       }
 
+      setImportedKosztorysName(investmentName + (clientName ? ` — ${clientName}` : ''));
       setShowImportFromEstimate(false);
       setSelectedKosztorysId('');
     } catch (err) {
@@ -1549,6 +1573,8 @@ export const OffersPage: React.FC = () => {
     });
     setSections([]);
     setSelectedEstimateId('');
+    setSelectedKosztorysId('');
+    setImportedKosztorysName(null);
     resetOfferClientData();
   };
 
@@ -2243,20 +2269,40 @@ export const OffersPage: React.FC = () => {
           </div>
 
           {/* 3. Import from estimate */}
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
-                <span className="font-medium text-blue-900">Importuj pozycje z kosztorysu</span>
+          {importedKosztorysName ? (
+            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div>
+                    <span className="font-medium text-green-900">Zaimportowano z kosztorysu</span>
+                    <p className="text-sm text-green-700 mt-0.5">{importedKosztorysName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setImportedKosztorysName(null); setShowImportFromEstimate(true); }}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition"
+                >
+                  Zmień kosztorys
+                </button>
               </div>
-              <button
-                onClick={() => setShowImportFromEstimate(true)}
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"
-              >
-                Wybierz kosztorys
-              </button>
             </div>
-          </div>
+          ) : (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                  <span className="font-medium text-blue-900">Importuj dane z kosztorysu</span>
+                </div>
+                <button
+                  onClick={() => setShowImportFromEstimate(true)}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition"
+                >
+                  Wybierz kosztorys
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
