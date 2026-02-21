@@ -72,20 +72,86 @@ async function apiPost(path: string, body: any, jar?: CookieJar): Promise<{ data
   return { data, headers: res.headers }
 }
 
-// ═══ 2FA PENDING STATE (in-memory, 10min TTL) ═══
-interface PendingLogin {
-  jar: CookieJar
-  username: string
-  password: string
-  createdAt: number
-}
-const pending2fa = new Map<string, PendingLogin>()
-const PENDING_TTL = 10 * 60 * 1000
+// ═══ 2FA PENDING STATE (stored in DB as temporary integration record) ═══
+// Edge functions are stateless — in-memory maps don't persist between calls.
+// We store pending 2FA state in wholesaler_integrations with is_active=false
+// and a special credentials.pending_2fa=true flag.
 
-function cleanPending() {
-  const now = Date.now()
-  for (const [id, p] of pending2fa) {
-    if (now - p.createdAt > PENDING_TTL) pending2fa.delete(id)
+async function savePending2fa(
+  supabaseAdmin: any,
+  tempId: string,
+  jar: CookieJar,
+  username: string,
+  password: string,
+  companyId: string,
+  wholesalerId: string,
+  wholesalerName: string,
+  branza: string,
+  existingIntegrationId?: string,
+): Promise<string> {
+  const credentialsData = {
+    pending_2fa: true,
+    temp_id: tempId,
+    username,
+    password,
+    cookies: jar,
+    created_at: new Date().toISOString(),
+  }
+
+  if (existingIntegrationId) {
+    await supabaseAdmin
+      .from('wholesaler_integrations')
+      .update({ credentials: credentialsData, is_active: false })
+      .eq('id', existingIntegrationId)
+    return existingIntegrationId
+  }
+
+  const { data: inserted, error } = await supabaseAdmin
+    .from('wholesaler_integrations')
+    .insert({
+      company_id: companyId,
+      wholesaler_id: wholesalerId,
+      wholesaler_name: wholesalerName,
+      branza,
+      credentials: credentialsData,
+      is_active: false,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw new Error('Failed to save 2FA state: ' + error.message)
+  return inserted.id
+}
+
+async function loadPending2fa(
+  supabaseAdmin: any,
+  tempId: string,
+): Promise<{ integration: any; jar: CookieJar; username: string; password: string } | null> {
+  // Find by temp_id in credentials
+  const { data: rows } = await supabaseAdmin
+    .from('wholesaler_integrations')
+    .select('*')
+    .eq('is_active', false)
+    .filter('credentials->>pending_2fa', 'eq', 'true')
+    .filter('credentials->>temp_id', 'eq', tempId)
+
+  if (!rows || rows.length === 0) return null
+  const integration = rows[0]
+  const creds = integration.credentials || {}
+
+  // Check TTL (10 min)
+  const age = Date.now() - new Date(creds.created_at).getTime()
+  if (age > 10 * 60 * 1000) {
+    // Expired — delete
+    await supabaseAdmin.from('wholesaler_integrations').delete().eq('id', integration.id)
+    return null
+  }
+
+  return {
+    integration,
+    jar: creds.cookies || {},
+    username: creds.username || '',
+    password: creds.password || '',
   }
 }
 
@@ -239,7 +305,6 @@ serve(async (req) => {
         const { username, password, companyId, wholesalerId, wholesalerName, branza, existingIntegrationId } = body
         if (!username || !password) return errorResponse('Username + password required')
 
-        cleanPending()
         const jar: CookieJar = {}
 
         const { data: loginData } = await apiPost('/login', {
@@ -255,7 +320,7 @@ serve(async (req) => {
         // Check for 2FA requirement (Onninen returns type2fa > 0 or status: "2fa"/"sms")
         if (loginData?.type2fa > 0 || loginData?.status === '2fa' || loginData?.status === 'sms' || loginData?.needs2fa) {
           const tempId = crypto.randomUUID()
-          pending2fa.set(tempId, { jar, username, password, createdAt: Date.now() })
+          await savePending2fa(supabaseAdmin, tempId, jar, username, password, companyId, wholesalerId, wholesalerName, branza, existingIntegrationId)
           return json({
             needs2fa: true,
             tempId,
@@ -271,10 +336,9 @@ serve(async (req) => {
 
         // If status is not "ok" or "success", and not recognized — still might be error
         if (loginData?.status && loginData.status !== 'ok' && loginData.status !== 'success' && loginData.status !== 'logged') {
-          // Unknown status - might be 2FA or error, pass message through
           if (loginData.message) {
             const tempId = crypto.randomUUID()
-            pending2fa.set(tempId, { jar, username, password, createdAt: Date.now() })
+            await savePending2fa(supabaseAdmin, tempId, jar, username, password, companyId, wholesalerId, wholesalerName, branza, existingIntegrationId)
             return json({
               needs2fa: true,
               tempId,
@@ -328,9 +392,8 @@ serve(async (req) => {
         const { tempId, code2fa, companyId, wholesalerId, wholesalerName, branza, existingIntegrationId } = body
         if (!tempId || !code2fa) return errorResponse('tempId + code2fa required')
 
-        cleanPending()
-        const pending = pending2fa.get(tempId)
-        if (!pending) return errorResponse('2FA session expired. Please login again.', 410)
+        const pending = await loadPending2fa(supabaseAdmin, tempId)
+        if (!pending) return errorResponse('Sesja 2FA wygasła. Zaloguj się ponownie.', 410)
 
         const { data: loginData } = await apiPost('/login', {
           userName: pending.username,
@@ -359,7 +422,7 @@ serve(async (req) => {
           })
         }
 
-        // 2FA success — save to DB
+        // 2FA success — update the same record to active with real credentials
         const credentialsData = {
           username: pending.username,
           password: pending.password,
@@ -367,36 +430,14 @@ serve(async (req) => {
           last_refresh: new Date().toISOString(),
         }
 
-        let integrationId: string
-        if (existingIntegrationId) {
-          await supabaseAdmin
-            .from('wholesaler_integrations')
-            .update({ credentials: credentialsData, is_active: true })
-            .eq('id', existingIntegrationId)
-          integrationId = existingIntegrationId
-        } else {
-          const { data: inserted, error: insertErr } = await supabaseAdmin
-            .from('wholesaler_integrations')
-            .insert({
-              company_id: companyId,
-              wholesaler_id: wholesalerId,
-              wholesaler_name: wholesalerName,
-              branza,
-              credentials: credentialsData,
-              is_active: true,
-            })
-            .select('id')
-            .single()
-
-          if (insertErr) throw new Error('Failed to save integration: ' + insertErr.message)
-          integrationId = inserted.id
-        }
-
-        pending2fa.delete(tempId)
+        await supabaseAdmin
+          .from('wholesaler_integrations')
+          .update({ credentials: credentialsData, is_active: true })
+          .eq('id', pending.integration.id)
 
         return json({
           success: true,
-          integrationId,
+          integrationId: pending.integration.id,
           username: pending.username,
         })
       }
@@ -406,8 +447,8 @@ serve(async (req) => {
         const { tempId } = body
         if (!tempId) return errorResponse('tempId required')
 
-        const pending = pending2fa.get(tempId)
-        if (!pending) return errorResponse('2FA session expired. Please login again.', 410)
+        const pending = await loadPending2fa(supabaseAdmin, tempId)
+        if (!pending) return errorResponse('Sesja 2FA wygasła. Zaloguj się ponownie.', 410)
 
         await apiPost('/login', { sendAgainType: true }, pending.jar)
 

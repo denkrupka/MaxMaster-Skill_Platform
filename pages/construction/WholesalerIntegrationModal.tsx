@@ -13,7 +13,7 @@ const BRANZE = [
 // Wholesalers per branża
 const WHOLESALERS: Record<string, { id: string; name: string; logo?: string; color: string; description: string }[]> = {
   elektryczne: [
-    { id: 'tim', name: 'TIM S.A.', logo: '/logos/tim.svg', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
+    { id: 'tim', name: 'TIM S.A.', logo: '/logos/tim.png', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
     { id: 'oninen', name: 'Onninen', logo: '/logos/onninen.svg', color: '#003DA5', description: 'Hurtownia elektryczna i przemysłowa Onninen.pl - szeroki asortyment materiałów instalacyjnych' },
   ],
   sanitarne: [],
@@ -302,7 +302,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-3">
                             {w.logo ? (
-                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white border border-slate-200 p-1">
+                              <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-white border border-slate-200 p-1.5 flex-shrink-0">
                                 <img src={w.logo} alt={w.name} className="max-w-full max-h-full object-contain" />
                               </div>
                             ) : (
@@ -373,7 +373,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 {needs2fa ? (
-                  <Smartphone className="w-4 h-4 text-orange-600" />
+                  <Smartphone className="w-4 h-4 text-blue-600" />
                 ) : (
                   <LogIn className="w-4 h-4 text-blue-600" />
                 )}
@@ -425,7 +425,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
               ) : (
                 /* 2FA SMS code form */
                 <>
-                  <div className="flex items-start gap-2 text-sm text-orange-700 bg-orange-50 p-3 rounded-lg">
+                  <div className="flex items-start gap-2 text-sm text-blue-700 bg-blue-50 p-3 rounded-lg">
                     <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     <span>{twoFaMessage}</span>
                   </div>
@@ -436,7 +436,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                       type="text"
                       value={code2fa}
                       onChange={e => setCode2fa(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center tracking-widest font-mono text-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center tracking-widest font-mono text-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                       placeholder="------"
                       disabled={authLoading}
                       onKeyDown={e => e.key === 'Enter' && handle2faSubmit()}
@@ -491,7 +491,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                 <button
                   onClick={handle2faSubmit}
                   disabled={authLoading || !code2fa}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {authLoading ? (
                     <>
