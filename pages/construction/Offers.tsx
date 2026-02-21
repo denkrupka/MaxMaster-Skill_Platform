@@ -1324,7 +1324,10 @@ export const OffersPage: React.FC = () => {
         </div>
 
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* 1. Offer details */}
+          {/* 1. Client (kosztorys-style) — FIRST, like in kosztorys */}
+          {renderClientFormSection()}
+
+          {/* 2. Offer details */}
           <div className="space-y-4">
             <h3 className="font-semibold text-slate-900 flex items-center gap-2">
               <FileText className="w-5 h-5 text-slate-400" />
@@ -1365,9 +1368,6 @@ export const OffersPage: React.FC = () => {
               </div>
             </div>
           </div>
-
-          {/* 2. Client (kosztorys-style) */}
-          {renderClientFormSection()}
 
           {/* 3. Import from estimate */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -1599,7 +1599,7 @@ export const OffersPage: React.FC = () => {
             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
           >
             {savingOffer && <Loader2 className="w-4 h-4 animate-spin" />}
-            Utwórz ofertę
+            Utwórz i przejdź do formularza
           </button>
         </div>
       </div>
@@ -2376,7 +2376,10 @@ export const OffersPage: React.FC = () => {
               </button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {/* 1. Offer details */}
+              {/* 1. Client (kosztorys-style) — FIRST, like in kosztorys */}
+              {renderClientFormSection()}
+
+              {/* 2. Offer details */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                   <FileText className="w-5 h-5 text-slate-400" />
@@ -2416,9 +2419,6 @@ export const OffersPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* 2. Client (kosztorys-style) */}
-              {renderClientFormSection()}
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
               <button
