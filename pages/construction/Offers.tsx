@@ -905,16 +905,16 @@ export const OffersPage: React.FC = () => {
   // RENDER: CREATE MODAL
   // ============================================
   const renderCreateModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-          <h2 className="text-lg font-semibold">Nowa oferta</h2>
-          <button onClick={() => { setShowCreateModal(false); resetOfferForm(); }} className="p-1 hover:bg-slate-100 rounded">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-slate-900">Nowa oferta</h2>
+          <button onClick={() => { setShowCreateModal(false); resetOfferForm(); }} className="p-2 hover:bg-slate-100 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {/* Basic info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -1171,19 +1171,19 @@ export const OffersPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
           <button
             onClick={() => { setShowCreateModal(false); resetOfferForm(); }}
-            className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
           >
             Anuluj
           </button>
           <button
             onClick={handleCreateOffer}
             disabled={!offerData.name.trim() || savingOffer}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
           >
-            {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {savingOffer && <Loader2 className="w-4 h-4 animate-spin" />}
             Utwórz ofertę
           </button>
         </div>
@@ -1953,57 +1953,59 @@ export const OffersPage: React.FC = () => {
       {/* Edit offer modal */}
       {showEditModal && editingOffer && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-900">Edytuj ofertę</h2>
               <button onClick={() => { setShowEditModal(false); setEditingOffer(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
-                <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
-                <select
-                  value={editForm.project_id}
-                  onChange={e => setEditForm({ ...editForm, project_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Wybierz projekt --</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
-                <select
-                  value={editForm.client_id}
-                  onChange={e => setEditForm({ ...editForm, client_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Wybierz klienta --</option>
-                  {contractors.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
-                <input
-                  type="date"
-                  value={editForm.valid_until}
-                  onChange={e => setEditForm({ ...editForm, valid_until: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa oferty *</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Projekt</label>
+                  <select
+                    value={editForm.project_id}
+                    onChange={e => setEditForm({ ...editForm, project_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Wybierz projekt --</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Klient</label>
+                  <select
+                    value={editForm.client_id}
+                    onChange={e => setEditForm({ ...editForm, client_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Wybierz klienta --</option>
+                    {contractors.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Ważna do</label>
+                  <input
+                    type="date"
+                    value={editForm.valid_until}
+                    onChange={e => setEditForm({ ...editForm, valid_until: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>

@@ -155,18 +155,22 @@ ALTER TABLE estimate_markups ENABLE ROW LEVEL SECURITY;
 
 -- 9. RLS Policies
 -- Unit measures: system-wide or company-scoped
+DROP POLICY IF EXISTS "unit_measures_access" ON unit_measures;
 CREATE POLICY "unit_measures_access" ON unit_measures
   FOR ALL USING (
     is_system = TRUE OR
     company_id IN (SELECT company_id FROM users WHERE id = auth.uid())
   );
 
+DROP POLICY IF EXISTS "valuation_groups_company_access" ON valuation_groups;
 CREATE POLICY "valuation_groups_company_access" ON valuation_groups
   FOR ALL USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()));
 
+DROP POLICY IF EXISTS "valuations_company_access" ON valuations;
 CREATE POLICY "valuations_company_access" ON valuations
   FOR ALL USING (company_id IN (SELECT company_id FROM users WHERE id = auth.uid()));
 
+DROP POLICY IF EXISTS "estimate_stages_project_access" ON estimate_stages;
 CREATE POLICY "estimate_stages_project_access" ON estimate_stages
   FOR ALL USING (project_id IN (
     SELECT p.id FROM projects p
@@ -174,6 +178,7 @@ CREATE POLICY "estimate_stages_project_access" ON estimate_stages
     WHERE u.id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "estimate_tasks_project_access" ON estimate_tasks;
 CREATE POLICY "estimate_tasks_project_access" ON estimate_tasks
   FOR ALL USING (project_id IN (
     SELECT p.id FROM projects p
@@ -181,6 +186,7 @@ CREATE POLICY "estimate_tasks_project_access" ON estimate_tasks
     WHERE u.id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "estimate_resources_project_access" ON estimate_resources;
 CREATE POLICY "estimate_resources_project_access" ON estimate_resources
   FOR ALL USING (project_id IN (
     SELECT p.id FROM projects p
@@ -188,6 +194,7 @@ CREATE POLICY "estimate_resources_project_access" ON estimate_resources
     WHERE u.id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "estimate_markups_project_access" ON estimate_markups;
 CREATE POLICY "estimate_markups_project_access" ON estimate_markups
   FOR ALL USING (project_id IN (
     SELECT p.id FROM projects p
@@ -218,20 +225,26 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_valuation_groups_updated_at ON valuation_groups;
 CREATE TRIGGER update_valuation_groups_updated_at BEFORE UPDATE ON valuation_groups
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_valuations_updated_at ON valuations;
 CREATE TRIGGER update_valuations_updated_at BEFORE UPDATE ON valuations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_estimate_stages_updated_at ON estimate_stages;
 CREATE TRIGGER update_estimate_stages_updated_at BEFORE UPDATE ON estimate_stages
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_estimate_tasks_updated_at ON estimate_tasks;
 CREATE TRIGGER update_estimate_tasks_updated_at BEFORE UPDATE ON estimate_tasks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_estimate_resources_updated_at ON estimate_resources;
 CREATE TRIGGER update_estimate_resources_updated_at BEFORE UPDATE ON estimate_resources
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_estimate_markups_updated_at ON estimate_markups;
 CREATE TRIGGER update_estimate_markups_updated_at BEFORE UPDATE ON estimate_markups
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

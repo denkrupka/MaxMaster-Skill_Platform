@@ -1579,6 +1579,50 @@ export interface EstimateTotals {
 }
 
 // =====================================================
+// МОДУЛЬ: ГАРМОНОГРАМ (GANTT)
+// =====================================================
+
+export type GanttDependencyType = 'FS' | 'FF' | 'SS' | 'SF';
+export type GanttTaskSource = 'estimate' | 'ticket' | 'manual' | 'milestone';
+
+export interface GanttTask {
+  id: string;
+  project_id: string;
+  estimate_task_id?: string | null;
+  ticket_id?: string | null;
+  title?: string;
+  parent_id?: string | null;
+  start_date?: string;
+  end_date?: string;
+  duration?: number;
+  progress: number;
+  has_custom_progress: boolean;
+  is_auto: boolean;
+  is_milestone: boolean;
+  color?: string;
+  sort_order: number;
+  source: GanttTaskSource;
+  source_id?: string | null;
+  assigned_to_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  estimate_task?: EstimateTask | null;
+  ticket?: any;
+  assigned_to?: any;
+}
+
+export interface GanttDependency {
+  id: string;
+  project_id: string;
+  predecessor_id: string;
+  successor_id: string;
+  dependency_type: GanttDependencyType;
+  lag: number;
+  created_at: string;
+}
+
+// =====================================================
 // МОДУЛЬ: ЭЛЕКТРОСМЕТА / KOSZTORYSOWANIE (ELEKTRYCZNE)
 // Система расчёта электромонтажных работ
 // =====================================================
@@ -3187,4 +3231,27 @@ export interface KosztorysEditorState {
   isDirty: boolean;
   lastSaved: string | null;
   treeRootExpanded?: boolean;
+}
+
+// =====================================================
+// WHOLESALER INTEGRATION TYPES
+// =====================================================
+
+export interface WholesalerIntegration {
+  id: string;
+  company_id: string;
+  wholesaler_id: string;
+  wholesaler_name: string;
+  branza: string;
+  credentials: {
+    username?: string;
+    password?: string;
+    cookies?: Record<string, string>;
+    gql_works?: boolean;
+    last_refresh?: string;
+    [key: string]: any;
+  };
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }

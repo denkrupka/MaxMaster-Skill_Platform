@@ -2672,7 +2672,7 @@ export const KosztorysEditorPage: React.FC = () => {
           title: `${sIdx + 1}. ${section.name}`,
           start_date: currentDate.toISOString().split('T')[0],
           end_date: currentDate.toISOString().split('T')[0],
-          duration_days: 0,
+          duration: 0,
           progress: 0,
           color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][sIdx % 5],
           is_milestone: false,
@@ -2704,7 +2704,7 @@ export const KosztorysEditorPage: React.FC = () => {
             title: position.name,
             start_date: posStart.toISOString().split('T')[0],
             end_date: posEnd.toISOString().split('T')[0],
-            duration_days: duration,
+            duration: duration,
             progress: 0,
             color: sectionTask?.color || '#3b82f6',
             is_milestone: false,
@@ -2725,7 +2725,7 @@ export const KosztorysEditorPage: React.FC = () => {
           .from('gantt_tasks')
           .update({
             end_date: sectionEndDate.toISOString().split('T')[0],
-            duration_days: sectionDuration
+            duration: sectionDuration
           })
           .eq('id', sectionTask.id);
       }
@@ -2739,7 +2739,7 @@ export const KosztorysEditorPage: React.FC = () => {
         title: 'Zakończenie projektu',
         start_date: currentDate.toISOString().split('T')[0],
         end_date: currentDate.toISOString().split('T')[0],
-        duration_days: 0,
+        duration: 0,
         progress: 0,
         color: '#ef4444',
         is_milestone: true,
@@ -2762,7 +2762,7 @@ export const KosztorysEditorPage: React.FC = () => {
             project_id: projectId,
             predecessor_id: allTasks[i - 1].id,
             successor_id: allTasks[i].id,
-            type: 'FS'
+            dependency_type: 'FS'
           });
       }
     }

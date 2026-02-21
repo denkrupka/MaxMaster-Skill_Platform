@@ -3,7 +3,7 @@ import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
   Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen,
   Settings, AlertCircle, ChevronRight, ClipboardList, GripVertical,
-  Layers, FolderOpen
+  Layers, FolderOpen, Store
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -20,7 +20,10 @@ import type {
   KosztorysFormWorkCategoryDB,
   KosztorysFormWorkTypeDB,
   KosztorysWorkTypeRecord,
+  WholesalerIntegration,
 } from '../../types';
+import { WholesalerIntegrationModal } from './WholesalerIntegrationModal';
+import { TIMIntegrator } from './TIMIntegrator';
 
 // ============ Типы для вкладок ============
 type TabType = 'work_types' | 'materials' | 'equipment' | 'slownik';
@@ -121,6 +124,11 @@ export const DictionariesPage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabType>('work_types');
   const [slownikSubTab, setSlownikSubTab] = useState<'rodzaj_prac' | 'wall_types'>('rodzaj_prac');
+  const [materialsSubTab, setMaterialsSubTab] = useState<'own' | string>('own');
+  const [equipmentSubTab, setEquipmentSubTab] = useState<'own' | string>('own');
+  const [slownikMainSubTab, setSlownikMainSubTab] = useState<'own' | string>('own');
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [integrations, setIntegrations] = useState<WholesalerIntegration[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -199,6 +207,19 @@ export const DictionariesPage: React.FC = () => {
     }
   }, [currentUser]);
 
+  const loadIntegrations = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('wholesaler_integrations')
+        .select('*')
+        .eq('company_id', currentUser.company_id);
+      if (!error) setIntegrations(data || []);
+    } catch (err) {
+      console.error('Error loading integrations:', err);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -211,6 +232,7 @@ export const DictionariesPage: React.FC = () => {
         loadRequestWorkTypes(),
         loadFormTemplates(),
         loadWallTypes(),
+        loadIntegrations(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -3332,43 +3354,181 @@ export const DictionariesPage: React.FC = () => {
           ) : (
             <>
               {activeTab === 'work_types' && renderWorkTypesTab()}
-              {activeTab === 'materials' && renderMaterialsTab()}
-              {activeTab === 'equipment' && renderEquipmentTab()}
-              {activeTab === 'slownik' && (
+
+              {activeTab === 'materials' && (
                 <div>
-                  {/* Słownik sub-tabs */}
-                  <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
+                  {/* Sub-tabs: Własny katalog + wholesaler tabs + Integrację button */}
+                  <div className="flex items-center gap-1 mb-4">
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                      <button
+                        onClick={() => setMaterialsSubTab('own')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                          materialsSubTab === 'own'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Własny katalog
+                      </button>
+                      {integrations.filter(i => i.is_active).map(integ => (
+                        <button
+                          key={integ.id}
+                          onClick={() => setMaterialsSubTab(integ.wholesaler_id)}
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                            materialsSubTab === integ.wholesaler_id
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {integ.wholesaler_name}
+                        </button>
+                      ))}
+                    </div>
                     <button
-                      onClick={() => setSlownikSubTab('rodzaj_prac')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
-                        slownikSubTab === 'rodzaj_prac'
-                          ? 'bg-white text-blue-600 shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
+                      onClick={() => setShowIntegrationModal(true)}
+                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
-                      <ClipboardList className="w-4 h-4" />
-                      Rodzaj prac
-                    </button>
-                    <button
-                      onClick={() => setSlownikSubTab('wall_types')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
-                        slownikSubTab === 'wall_types'
-                          ? 'bg-white text-blue-600 shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Layers className="w-4 h-4" />
-                      Rodzaj ścian
+                      <Store className="w-4 h-4" />
+                      Integrację
                     </button>
                   </div>
-                  {slownikSubTab === 'rodzaj_prac' && renderRodzajPracTab()}
-                  {slownikSubTab === 'wall_types' && renderWallTypesTab()}
+                  {materialsSubTab === 'own' && renderMaterialsTab()}
+                  {materialsSubTab === 'tim' && (
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'equipment' && (
+                <div>
+                  {/* Sub-tabs: Własny katalog + wholesaler tabs + Integrację button */}
+                  <div className="flex items-center gap-1 mb-4">
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                      <button
+                        onClick={() => setEquipmentSubTab('own')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                          equipmentSubTab === 'own'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Własny katalog
+                      </button>
+                      {integrations.filter(i => i.is_active).map(integ => (
+                        <button
+                          key={integ.id}
+                          onClick={() => setEquipmentSubTab(integ.wholesaler_id)}
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                            equipmentSubTab === integ.wholesaler_id
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {integ.wholesaler_name}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setShowIntegrationModal(true)}
+                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <Store className="w-4 h-4" />
+                      Integrację
+                    </button>
+                  </div>
+                  {equipmentSubTab === 'own' && renderEquipmentTab()}
+                  {equipmentSubTab === 'tim' && (
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'slownik' && (
+                <div>
+                  {/* Sub-tabs: Własny katalog + wholesaler tabs + Integrację button */}
+                  <div className="flex items-center gap-1 mb-4">
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                      <button
+                        onClick={() => setSlownikMainSubTab('own')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                          slownikMainSubTab === 'own'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Własny katalog
+                      </button>
+                      {integrations.filter(i => i.is_active).map(integ => (
+                        <button
+                          key={integ.id}
+                          onClick={() => setSlownikMainSubTab(integ.wholesaler_id)}
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                            slownikMainSubTab === integ.wholesaler_id
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {integ.wholesaler_name}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setShowIntegrationModal(true)}
+                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <Store className="w-4 h-4" />
+                      Integrację
+                    </button>
+                  </div>
+                  {slownikMainSubTab === 'own' && (
+                    <>
+                      {/* Słownik sub-tabs (Rodzaj prac / Rodzaj ścian) */}
+                      <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
+                        <button
+                          onClick={() => setSlownikSubTab('rodzaj_prac')}
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+                            slownikSubTab === 'rodzaj_prac'
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <ClipboardList className="w-4 h-4" />
+                          Rodzaj prac
+                        </button>
+                        <button
+                          onClick={() => setSlownikSubTab('wall_types')}
+                          className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
+                            slownikSubTab === 'wall_types'
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          <Layers className="w-4 h-4" />
+                          Rodzaj ścian
+                        </button>
+                      </div>
+                      {slownikSubTab === 'rodzaj_prac' && renderRodzajPracTab()}
+                      {slownikSubTab === 'wall_types' && renderWallTypesTab()}
+                    </>
+                  )}
+                  {slownikMainSubTab === 'tim' && (
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                  )}
                 </div>
               )}
             </>
           )}
         </div>
       </div>
+
+      {/* Wholesaler Integration Modal */}
+      <WholesalerIntegrationModal
+        isOpen={showIntegrationModal}
+        onClose={() => setShowIntegrationModal(false)}
+        companyId={currentUser?.company_id || ''}
+        integrations={integrations}
+        onIntegrationChange={loadIntegrations}
+      />
 
       {/* Notification */}
       {notification && (
