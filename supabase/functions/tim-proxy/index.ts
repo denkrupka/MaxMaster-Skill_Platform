@@ -636,26 +636,20 @@ serve(async (req) => {
             manufacturer = ldProduct.manufacturer.name
           }
 
-          // Description: JSON-LD → NUXT → meta → HTML div
-          description = ldProduct?.description || ''
-          if (!description && nuxtMatch) {
-            const descMatch = nuxtMatch[1].match(/"description"[^"]*?"([^"]{20,})"/)
-            if (descMatch) description = descMatch[1]
-          }
-          if (!description) {
-            const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)
-              || html.match(/<meta\s+content="([^"]*)"\s+name="description"/)
-            if (metaDesc) description = metaDesc[1]
-          }
-          // Try to get full description from HTML content
-          if (!description || description.length < 50) {
-            const descDiv = html.match(/<div[^>]*class="[^"]*product[_-]?description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-              || html.match(/<div[^>]*id="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-              || html.match(/<div[^>]*data-role="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
-            if (descDiv) {
-              const fullDesc = descDiv[1].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
-              if (fullDesc.length > (description?.length || 0)) description = fullDesc
-            }
+          // EAN fallback from JSON-LD
+          if (!ean && ldProduct?.gtin13) ean = ldProduct.gtin13
+
+          // Description from meta (short summary)
+          const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)
+            || html.match(/<meta\s+content="([^"]*)"\s+name="description"/)
+          description = metaDesc ? metaDesc[1] : (ldProduct?.description || '')
+
+          // Technical specs from JSON-LD additionalProperty
+          let specs: Array<{ name: string; value: string }> = []
+          if (ldProduct?.additionalProperty && Array.isArray(ldProduct.additionalProperty)) {
+            specs = ldProduct.additionalProperty
+              .filter((p: any) => p?.name && p?.value != null)
+              .map((p: any) => ({ name: p.name, value: String(p.value) }))
           }
 
           // Breadcrumb from JSON-LD
@@ -673,25 +667,22 @@ serve(async (req) => {
             if (h1Match) name = h1Match[1].replace(/<[^>]*>/g, '').trim()
           }
 
-          // Image: JSON-LD → og:image → NUXT data → product <img> tags
-          let image = ldProduct?.image ? (Array.isArray(ldProduct.image) ? ldProduct.image[0] : ldProduct.image) : ''
+          // Image: JSON-LD image (handles ImageObject with contentUrl) → og:image
+          let image = ''
+          if (ldProduct?.image) {
+            const imgEntry = Array.isArray(ldProduct.image) ? ldProduct.image[0] : ldProduct.image
+            if (typeof imgEntry === 'string') {
+              image = imgEntry
+            } else if (imgEntry?.contentUrl) {
+              image = imgEntry.contentUrl
+            } else if (imgEntry?.url) {
+              image = imgEntry.url
+            }
+          }
           if (!image) {
             const ogImg = html.match(/<meta\s+[^>]*property="og:image"[^>]*content="([^"]*)"/)
               || html.match(/<meta\s+content="([^"]*)"[^>]*property="og:image"/)
             if (ogImg) image = ogImg[1]
-          }
-          if (!image && nuxtMatch) {
-            const imgMatch = nuxtMatch[1].match(/"image_url"\s*[,:]\s*"(https?:\/\/[^"]+)"/)
-              || nuxtMatch[1].match(/"default_image"\s*[,:]\s*"(https?:\/\/[^"]+)"/)
-              || nuxtMatch[1].match(/"image"\s*[,:]\s*"(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"/)
-            if (imgMatch) image = imgMatch[1]
-          }
-          if (!image) {
-            const imgTag = html.match(/<img[^>]+src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*class="[^"]*product[^"]*"/i)
-              || html.match(/<img[^>]*class="[^"]*product[^"]*"[^>]*src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*/i)
-              || html.match(/<img[^>]+src="(https?:\/\/[^"]*tim\.pl[^"]*(?:product|catalog|media)[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*/i)
-              || html.match(/<img[^>]+src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*alt="[^"]*"[^>]*width="[2-9]\d\d/i)
-            if (imgTag) image = imgTag[1]
           }
 
           product = {
@@ -700,6 +691,10 @@ serve(async (req) => {
             price: ldProduct?.offers?.price ? parseFloat(ldProduct.offers.price) : null,
             image,
             url, manufacturer, ref_num, ean, series, description,
+            specs,
+            mpn: ldProduct?.mpn || '',
+            color: ldProduct?.color || '',
+            material: ldProduct?.material || '',
             rating: ldProduct?.aggregateRating?.ratingValue || null,
             reviewCount: ldProduct?.aggregateRating?.reviewCount || null,
             breadcrumb,

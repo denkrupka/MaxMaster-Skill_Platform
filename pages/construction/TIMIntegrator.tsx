@@ -43,6 +43,10 @@ interface TIMProductDetail {
   ean?: string;
   series?: string;
   description?: string;
+  specs?: Array<{ name: string; value: string }>;
+  mpn?: string;
+  color?: string;
+  material?: string;
   rating?: number | null;
   reviewCount?: number | null;
   breadcrumb?: string;
@@ -256,9 +260,28 @@ const ProductDetail: React.FC<{
 
         {/* Description */}
         {detail.description && (
-          <div className="px-5 pb-4">
+          <div className="px-5 pb-3">
             <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
             <p className="text-xs text-slate-500 leading-relaxed">{detail.description}</p>
+          </div>
+        )}
+
+        {/* Technical specs */}
+        {detail.specs && detail.specs.length > 0 && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-2">Dane techniczne</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  {detail.specs.map((s, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
+                      <td className="px-3 py-1.5 text-slate-500 w-1/2 border-r border-slate-100">{s.name}</td>
+                      <td className="px-3 py-1.5 text-slate-700 font-medium">{s.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
