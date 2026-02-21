@@ -5,13 +5,13 @@ import {
   DollarSign, User, Building2, MoreVertical, ArrowLeft, Clock,
   Mail, Link as LinkIcon, RefreshCw, ChevronDown, ChevronRight,
   Save, X, GripVertical, Percent, AlertCircle, FileSpreadsheet,
-  FolderPlus, Package, Star, UserPlus
+  FolderPlus, Package, Star, UserPlus, Briefcase, MapPin
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { fetchCompanyByNip, validateNip, normalizeNip } from '../../lib/gusApi';
 import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmAutocomplete';
-import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, Estimate, EstimateStage, EstimateTask, EstimateResource, KosztorysRequestSource } from '../../types';
+import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, Estimate, EstimateStage, EstimateTask, EstimateResource, KosztorysRequestSource, KosztorysObjectType, KosztorysInstallationType, User as UserType } from '../../types';
 import { OFFER_STATUS_LABELS, OFFER_STATUS_COLORS } from '../../constants';
 
 const OFFER_SOURCE_LABELS: Record<KosztorysRequestSource, string> = {
@@ -20,6 +20,12 @@ const OFFER_SOURCE_LABELS: Record<KosztorysRequestSource, string> = {
   meeting: 'Spotkanie',
   tender: 'Przetarg',
   other: 'Inne'
+};
+
+const OBJECT_TYPE_LABELS: Record<KosztorysObjectType, string> = {
+  industrial: 'Przemysłowe',
+  residential: 'Mieszkaniowe',
+  office: 'Biurowe'
 };
 
 interface OfferExistingClient {
@@ -177,7 +183,20 @@ export const OffersPage: React.FC = () => {
   const [offerClientData, setOfferClientData] = useState({
     client_name: '', nip: '', company_street: '', company_street_number: '',
     company_city: '', company_postal_code: '', company_country: 'Polska',
-    internal_notes: '', request_source: 'email' as KosztorysRequestSource
+    internal_notes: '', request_source: 'email' as KosztorysRequestSource,
+    // Object fields
+    investment_name: '', object_code: '',
+    object_type: 'residential' as KosztorysObjectType,
+    object_type_id: '', object_category_id: '',
+    installation_types: 'IE' as KosztorysInstallationType,
+    object_street: '', object_street_number: '',
+    object_city: '', object_postal_code: '', object_country: 'Polska',
+    // Materials
+    main_material_side: '', minor_material_side: '',
+    // Assignment
+    assigned_user_id: '', planned_response_date: '',
+    // Notes
+    notes: ''
   });
   const [offerGusLoading, setOfferGusLoading] = useState(false);
   const [offerGusError, setOfferGusError] = useState<string | null>(null);
@@ -195,6 +214,17 @@ export const OffersPage: React.FC = () => {
   const [offerShowAddContactForm, setOfferShowAddContactForm] = useState(false);
   const [offerSelectedContactId, setOfferSelectedContactId] = useState('');
   const [offerClientSelected, setOfferClientSelected] = useState(false);
+
+  // Object/Materials/Assignment state (kosztorys-style)
+  const [offerUsers, setOfferUsers] = useState<UserType[]>([]);
+  const [offerWorkTypes, setOfferWorkTypes] = useState<{ id: string; code: string; name: string }[]>([]);
+  const [offerSelectedWorkTypes, setOfferSelectedWorkTypes] = useState<string[]>([]);
+  const [offerShowWorkTypesDropdown, setOfferShowWorkTypesDropdown] = useState(false);
+  const [offerObjectTypes, setOfferObjectTypes] = useState<any[]>([]);
+  const [offerObjectCategories, setOfferObjectCategories] = useState<any[]>([]);
+  const [offerObjectAddressSuggestions, setOfferObjectAddressSuggestions] = useState<OSMAddress[]>([]);
+  const [offerShowObjectAddressSuggestions, setOfferShowObjectAddressSuggestions] = useState(false);
+  const [offerEditingObjectCode, setOfferEditingObjectCode] = useState(false);
 
   // ============================================
   // DATA LOADING
@@ -313,8 +343,85 @@ export const OffersPage: React.FC = () => {
   };
 
   useEffect(() => {
-    if (currentUser) loadOfferExistingClients();
+    if (currentUser) {
+      loadOfferExistingClients();
+      loadOfferUsers();
+      loadOfferWorkTypes();
+      loadOfferObjectTypes();
+      loadOfferObjectCategories();
+    }
   }, [currentUser]);
+
+  const loadOfferUsers = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('id, first_name, last_name, email, role')
+        .eq('company_id', currentUser.company_id)
+        .in('role', ['company_admin', 'hr', 'coordinator', 'employee'])
+        .order('first_name');
+      if (data) setOfferUsers(data);
+    } catch (err) {
+      console.error('Error loading users:', err);
+    }
+  };
+
+  const loadOfferWorkTypes = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('kosztorys_work_types')
+        .select('id, code, name')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('code');
+      if (data) {
+        setOfferWorkTypes(data);
+      } else {
+        setOfferWorkTypes([
+          { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+          { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
+        ]);
+      }
+    } catch (err) {
+      console.error('Error loading work types:', err);
+      setOfferWorkTypes([
+        { id: 'ie', code: 'IE', name: 'IE - Elektryka' },
+        { id: 'it', code: 'IT', name: 'IT - Teletechnika' }
+      ]);
+    }
+  };
+
+  const loadOfferObjectTypes = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('kosztorys_object_types')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('name');
+      if (data) setOfferObjectTypes(data);
+    } catch (err) {
+      console.error('Error loading object types:', err);
+    }
+  };
+
+  const loadOfferObjectCategories = async () => {
+    if (!currentUser) return;
+    try {
+      const { data } = await supabase
+        .from('kosztorys_object_categories')
+        .select('*, object_type:kosztorys_object_types(*)')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_active', true)
+        .order('name');
+      if (data) setOfferObjectCategories(data);
+    } catch (err) {
+      console.error('Error loading object categories:', err);
+    }
+  };
 
   // Filter clients based on search query
   useEffect(() => {
@@ -359,6 +466,57 @@ export const OffersPage: React.FC = () => {
     }));
     setOfferShowCompanyAddressSuggestions(false);
   };
+
+  // Object address autocomplete
+  const debouncedOfferObjectAddressSearch = useCallback(createDebouncedSearch(500), []);
+
+  const handleOfferObjectStreetChange = (value: string) => {
+    setOfferClientData(prev => ({ ...prev, object_street: value }));
+    if (value.length >= 3) {
+      const sq = offerClientData.object_city ? `${value}, ${offerClientData.object_city}` : value;
+      debouncedOfferObjectAddressSearch(sq, (results: OSMAddress[]) => {
+        setOfferObjectAddressSuggestions(results);
+        setOfferShowObjectAddressSuggestions(results.length > 0);
+      });
+    } else {
+      setOfferShowObjectAddressSuggestions(false);
+    }
+  };
+
+  const selectOfferObjectAddress = (addr: OSMAddress) => {
+    setOfferClientData(prev => ({
+      ...prev,
+      object_street: addr.street, object_street_number: addr.streetNumber,
+      object_city: addr.city, object_postal_code: addr.postalCode,
+      object_country: addr.country || 'Polska'
+    }));
+    setOfferShowObjectAddressSuggestions(false);
+  };
+
+  // Auto-generate object code
+  const generateOfferObjectCode = (city: string, investmentName: string): string => {
+    if (!investmentName) return '';
+    const cityPart = city ? city.trim().toUpperCase().slice(0, 3).padEnd(3, 'X') : 'XXX';
+    const words = investmentName.trim().split(/\s+/).filter(w => w.length > 0);
+    let namePart = '';
+    if (words.length >= 2) {
+      namePart = (words[0].slice(0, 2) + words[1][0]).toUpperCase();
+    } else if (words.length === 1) {
+      namePart = words[0].slice(0, 3).toUpperCase();
+    }
+    const year = String(new Date().getFullYear()).slice(-2);
+    return `${cityPart}\\${namePart}\\${year}`;
+  };
+
+  // Auto-generate object code when investment name or city changes
+  useEffect(() => {
+    if (offerClientData.investment_name && !offerEditingObjectCode) {
+      setOfferClientData(prev => ({
+        ...prev,
+        object_code: generateOfferObjectCode(prev.object_city, prev.investment_name)
+      }));
+    }
+  }, [offerClientData.investment_name, offerClientData.object_city, offerEditingObjectCode]);
 
   const selectOfferExistingClient = (client: OfferExistingClient) => {
     let nip = client.nip || '';
@@ -441,7 +599,16 @@ export const OffersPage: React.FC = () => {
     setOfferClientData({
       client_name: '', nip: '', company_street: '', company_street_number: '',
       company_city: '', company_postal_code: '', company_country: 'Polska',
-      internal_notes: '', request_source: 'email' as KosztorysRequestSource
+      internal_notes: '', request_source: 'email' as KosztorysRequestSource,
+      investment_name: '', object_code: '',
+      object_type: 'residential' as KosztorysObjectType,
+      object_type_id: '', object_category_id: '',
+      installation_types: 'IE' as KosztorysInstallationType,
+      object_street: '', object_street_number: '',
+      object_city: '', object_postal_code: '', object_country: 'Polska',
+      main_material_side: '', minor_material_side: '',
+      assigned_user_id: '', planned_response_date: '',
+      notes: ''
     });
     setOfferGusError(null); setOfferGusSuccess(null);
     setOfferClientSearchQuery(''); setOfferShowClientDropdown(false);
@@ -451,6 +618,11 @@ export const OffersPage: React.FC = () => {
     setOfferShowAddContactForm(false);
     setOfferSelectedContactId('');
     setOfferClientSelected(false);
+    setOfferSelectedWorkTypes([]);
+    setOfferShowWorkTypesDropdown(false);
+    setOfferObjectAddressSuggestions([]);
+    setOfferShowObjectAddressSuggestions(false);
+    setOfferEditingObjectCode(false);
   };
 
   // ============================================
@@ -1694,6 +1866,275 @@ export const OffersPage: React.FC = () => {
             {offerContacts[0].phone && <span className="text-blue-600 ml-2">{offerContacts[0].phone}</span>}
           </div>
         )}
+      </div>
+
+      {/* 3. Obiekt — 1:1 from kosztorys */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-slate-400" />
+          Obiekt
+        </h3>
+        <div className="grid grid-cols-6 gap-4">
+          <div className="col-span-3">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa obiektu *</label>
+            <input
+              type="text"
+              value={offerClientData.investment_name}
+              onChange={e => setOfferClientData(prev => ({ ...prev, investment_name: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="np. Osiedle Słoneczne - Etap II"
+            />
+          </div>
+          <div className="col-span-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod obiektu</label>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={offerClientData.object_code}
+                onChange={e => setOfferClientData(prev => ({ ...prev, object_code: e.target.value }))}
+                disabled={!offerEditingObjectCode}
+                className="w-full px-2 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 font-mono"
+                placeholder="WC26"
+              />
+              <button
+                type="button"
+                onClick={() => setOfferEditingObjectCode(!offerEditingObjectCode)}
+                className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg flex-shrink-0"
+                title={offerEditingObjectCode ? 'Auto-generuj' : 'Edytuj ręcznie'}
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          <div className="col-span-2 relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj prac *</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOfferShowWorkTypesDropdown(!offerShowWorkTypesDropdown)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
+              >
+                <span className={offerSelectedWorkTypes.length === 0 ? 'text-slate-400' : 'text-slate-900'}>
+                  {offerSelectedWorkTypes.length === 0
+                    ? 'Wybierz rodzaj prac...'
+                    : offerWorkTypes
+                        .filter(wt => offerSelectedWorkTypes.includes(wt.id))
+                        .map(wt => wt.code)
+                        .join(', ')}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${offerShowWorkTypesDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {offerShowWorkTypesDropdown && (
+                <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                  {offerWorkTypes.map(wt => (
+                    <label
+                      key={wt.id}
+                      className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={offerSelectedWorkTypes.includes(wt.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setOfferSelectedWorkTypes(prev => [...prev, wt.id]);
+                          } else {
+                            setOfferSelectedWorkTypes(prev => prev.filter(id => id !== wt.id));
+                          }
+                        }}
+                        className="mr-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-slate-700">{wt.name}</span>
+                    </label>
+                  ))}
+                  {offerWorkTypes.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-slate-500">Brak typów prac</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="col-span-3">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
+            <select
+              value={offerClientData.object_type}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+              {offerObjectTypes.filter((t: any) => !['industrial', 'residential', 'office'].includes(t.code)).map((t: any) => (
+                <option key={t.id} value={t.code}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-3">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
+            <select
+              value={offerClientData.object_category_id}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_category_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Wybierz (opcjonalnie) --</option>
+              {offerObjectCategories.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Object address */}
+        <div className="grid grid-cols-4 gap-4">
+          <div className="col-span-2 relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Ulica</label>
+            <input
+              type="text"
+              value={offerClientData.object_street}
+              onChange={e => handleOfferObjectStreetChange(e.target.value)}
+              onFocus={() => offerObjectAddressSuggestions.length > 0 && setOfferShowObjectAddressSuggestions(true)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="ul. Budowlana"
+            />
+            {offerShowObjectAddressSuggestions && offerObjectAddressSuggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {offerObjectAddressSuggestions.map((addr, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => selectOfferObjectAddress(addr)}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                  >
+                    <div className="font-medium">{addr.street} {addr.streetNumber}</div>
+                    <div className="text-slate-500 text-xs">{addr.postalCode} {addr.city}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Numer</label>
+            <input
+              type="text"
+              value={offerClientData.object_street_number}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_street_number: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="1"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kod pocztowy</label>
+            <input
+              type="text"
+              value={offerClientData.object_postal_code}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_postal_code: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="00-000"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Miasto</label>
+            <input
+              type="text"
+              value={offerClientData.object_city}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_city: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Warszawa"
+            />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kraj</label>
+            <input
+              type="text"
+              value={offerClientData.object_country}
+              onChange={e => setOfferClientData(prev => ({ ...prev, object_country: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Polska"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Materiały — 1:1 from kosztorys */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-slate-400" />
+          Materiały
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Główny</label>
+            <select
+              value={offerClientData.main_material_side}
+              onChange={e => setOfferClientData(prev => ({ ...prev, main_material_side: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Wybierz --</option>
+              <option value="investor">Po stronie Inwestora</option>
+              <option value="client">Po stronie {offerClientData.client_name || 'Klienta'}</option>
+              <option value="company">Po stronie Firmy</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Materiał Drobny</label>
+            <select
+              value={offerClientData.minor_material_side}
+              onChange={e => setOfferClientData(prev => ({ ...prev, minor_material_side: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Wybierz --</option>
+              <option value="investor">Po stronie Inwestora</option>
+              <option value="client">Po stronie {offerClientData.client_name || 'Klienta'}</option>
+              <option value="company">Po stronie Firmy</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Odpowiedzialny — 1:1 from kosztorys */}
+      <div className="space-y-4">
+        <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+          <Briefcase className="w-5 h-5 text-slate-400" />
+          Odpowiedzialny
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Odpowiedzialny</label>
+            <select
+              value={offerClientData.assigned_user_id}
+              onChange={e => setOfferClientData(prev => ({ ...prev, assigned_user_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">-- Wybierz --</option>
+              {offerUsers.map(user => (
+                <option key={user.id} value={user.id}>
+                  {user.first_name} {user.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Planowana data odpowiedzi</label>
+            <input
+              type="date"
+              value={offerClientData.planned_response_date}
+              onChange={e => setOfferClientData(prev => ({ ...prev, planned_response_date: e.target.value }))}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              min={new Date().toISOString().split('T')[0]}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Uwagi od klienta — 1:1 from kosztorys */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Uwagi od klienta</label>
+        <textarea
+          value={offerClientData.notes}
+          onChange={e => setOfferClientData(prev => ({ ...prev, notes: e.target.value }))}
+          rows={3}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Dodatkowe informacje od klienta..."
+        />
       </div>
     </div>
   );
