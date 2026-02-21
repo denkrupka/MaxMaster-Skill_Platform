@@ -6478,23 +6478,13 @@ export const KosztorysEditorPage: React.FC = () => {
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Indeks</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="text"
-                                value={resource.originIndex.index}
-                                onChange={e => handleUpdateSelectedItem({ originIndex: { ...resource.originIndex, index: e.target.value } })}
-                                placeholder="np. 999"
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
-                              />
-                              <select
-                                value={resource.originIndex.type}
-                                onChange={e => handleUpdateSelectedItem({ originIndex: { ...resource.originIndex, type: e.target.value } })}
-                                className="px-2 py-2 border border-gray-300 rounded-lg text-sm"
-                              >
-                                <option value="custom">Własny</option>
-                                <option value="ETO">ETO</option>
-                              </select>
-                            </div>
+                            <input
+                              type="text"
+                              value={resource.originIndex.index}
+                              onChange={e => handleUpdateSelectedItem({ originIndex: { ...resource.originIndex, index: e.target.value } })}
+                              placeholder="np. 999"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                            />
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Nazwa</label>
