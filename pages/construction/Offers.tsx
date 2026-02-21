@@ -5,7 +5,7 @@ import {
   DollarSign, User, Building2, MoreVertical, ArrowLeft, Clock,
   Mail, Link as LinkIcon, RefreshCw, ChevronDown, ChevronRight,
   Save, X, GripVertical, Percent, AlertCircle, FileSpreadsheet,
-  FolderPlus, Package
+  FolderPlus, Package, Star, UserPlus
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -33,6 +33,41 @@ interface OfferExistingClient {
   company_country: string | null;
   source: 'contractor' | 'request_history';
 }
+
+interface ContactFormData {
+  id?: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  position: string;
+  is_primary: boolean;
+}
+
+const initialContactData: ContactFormData = {
+  first_name: '',
+  last_name: '',
+  phone: '',
+  email: '',
+  position: '',
+  is_primary: true
+};
+
+const formatPhoneNumber = (value: string): string => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 0) return '';
+  if (digits.startsWith('48') && digits.length > 2) {
+    const rest = digits.substring(2);
+    return `+48 ${rest.substring(0, 3)}${rest.length > 3 ? ' ' + rest.substring(3, 6) : ''}${rest.length > 6 ? ' ' + rest.substring(6, 9) : ''}`.trim();
+  }
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.substring(0, 3)} ${digits.substring(3)}`;
+  return `${digits.substring(0, 3)} ${digits.substring(3, 6)} ${digits.substring(6, 9)}`;
+};
+
+const isValidEmail = (email: string): boolean => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
 
 // ============================================
 // TYPES
@@ -153,6 +188,13 @@ export const OffersPage: React.FC = () => {
   const [offerFilteredClients, setOfferFilteredClients] = useState<OfferExistingClient[]>([]);
   const [offerCompanyAddressSuggestions, setOfferCompanyAddressSuggestions] = useState<OSMAddress[]>([]);
   const [offerShowCompanyAddressSuggestions, setOfferShowCompanyAddressSuggestions] = useState(false);
+
+  // Contact/representatives state (kosztorys-style)
+  const [offerContacts, setOfferContacts] = useState<ContactFormData[]>([{ ...initialContactData }]);
+  const [offerClientContacts, setOfferClientContacts] = useState<any[]>([]);
+  const [offerShowAddContactForm, setOfferShowAddContactForm] = useState(false);
+  const [offerSelectedContactId, setOfferSelectedContactId] = useState('');
+  const [offerClientSelected, setOfferClientSelected] = useState(false);
 
   // ============================================
   // DATA LOADING
@@ -332,6 +374,17 @@ export const OffersPage: React.FC = () => {
     }));
     setOfferClientSearchQuery('');
     setOfferShowClientDropdown(false);
+    // Load contacts for this client (like kosztorys does)
+    if (client.contractor_id) {
+      offerLoadClientContactsById(client.contractor_id);
+    } else if (nip) {
+      offerFindAndLoadContacts(nip);
+    } else {
+      offerFindAndLoadContacts(undefined, client.client_name);
+    }
+    setOfferSelectedContactId('');
+    setOfferShowAddContactForm(false);
+    setOfferClientSelected(true);
   };
 
   const handleOfferFetchGus = async () => {
@@ -339,27 +392,26 @@ export const OffersPage: React.FC = () => {
     if (!validateNip(offerClientData.nip)) { setOfferGusError('Nieprawidłowy format NIP'); return; }
     setOfferGusLoading(true); setOfferGusError(null); setOfferGusSuccess(null);
     try {
-      // Check local contractors first
-      const rawNip = offerClientData.nip.replace(/\D/g, '');
-      const { data: portalClients } = await supabase
-        .from('contractors_clients')
-        .select('id, name, nip, address_street, address_city, address_postal_code, address_country')
-        .eq('company_id', currentUser!.company_id)
-        .eq('is_archived', false);
-      const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
-      if (match) {
+      // Step 1: Check local contractor database first
+      const localContractor = await offerLookupContractorByNip(offerClientData.nip);
+      if (localContractor) {
         setOfferClientData(prev => ({
-          ...prev, client_name: match.name,
-          company_street: match.address_street || prev.company_street,
-          company_city: match.address_city || prev.company_city,
-          company_postal_code: match.address_postal_code || prev.company_postal_code,
-          company_country: match.address_country === 'PL' ? 'Polska' : (match.address_country || 'Polska')
+          ...prev,
+          client_name: localContractor.name,
+          company_street: localContractor.street || prev.company_street,
+          company_street_number: localContractor.streetNumber || prev.company_street_number,
+          company_city: localContractor.city || prev.company_city,
+          company_postal_code: localContractor.postalCode || prev.company_postal_code,
+          company_country: localContractor.country || 'Polska'
         }));
+        await offerLoadClientContactsById(localContractor.contractor_id);
         setOfferGusSuccess('Klient znaleziony w bazie kontrahentów');
+        setOfferClientSelected(true);
         setOfferGusLoading(false);
         return;
       }
-      // Fetch from GUS API
+
+      // Step 2: Not found locally - fetch from GUS API
       const result = await fetchCompanyByNip(offerClientData.nip);
       if (result.success && result.data) {
         const d = result.data;
@@ -369,7 +421,12 @@ export const OffersPage: React.FC = () => {
           company_city: d.city || prev.company_city, company_postal_code: d.postalCode || prev.company_postal_code,
           company_country: d.country || 'Polska'
         }));
-        setOfferGusSuccess('Dane pobrane z GUS');
+        // Load contacts by NIP
+        offerFindAndLoadContacts(offerClientData.nip);
+      } else if (result.error === 'ALREADY_REGISTERED') {
+        setOfferGusSuccess('Klient jest już zarejestrowany w systemie. Wybierz go z listy klientów.');
+        offerFindAndLoadContacts(offerClientData.nip);
+        setOfferClientSelected(true);
       } else {
         setOfferGusError(result.error || 'Nie udało się pobrać danych');
       }
@@ -389,6 +446,176 @@ export const OffersPage: React.FC = () => {
     setOfferGusError(null); setOfferGusSuccess(null);
     setOfferClientSearchQuery(''); setOfferShowClientDropdown(false);
     setOfferShowCompanyAddressSuggestions(false);
+    setOfferContacts([{ ...initialContactData }]);
+    setOfferClientContacts([]);
+    setOfferShowAddContactForm(false);
+    setOfferSelectedContactId('');
+    setOfferClientSelected(false);
+  };
+
+  // ============================================
+  // CONTACT/REPRESENTATIVES FUNCTIONS (kosztorys-style)
+  // ============================================
+  const offerLoadClientContactsById = async (contractorId: string) => {
+    try {
+      const { data } = await supabase
+        .from('contractor_client_contacts')
+        .select('*')
+        .eq('client_id', contractorId)
+        .order('last_name');
+      const contactsList = data || [];
+      setOfferClientContacts(contactsList);
+
+      // Auto-select main contact if available
+      const mainContact = contactsList.find((c: any) => c.is_main_contact === true);
+      if (mainContact) {
+        setOfferSelectedContactId(mainContact.id);
+        setOfferContacts([{
+          first_name: mainContact.first_name || '',
+          last_name: mainContact.last_name || '',
+          phone: mainContact.phone || '',
+          email: mainContact.email || '',
+          position: mainContact.position || '',
+          is_primary: true
+        }]);
+        setOfferShowAddContactForm(false);
+      }
+    } catch (err) {
+      console.error('Error loading client contacts:', err);
+      setOfferClientContacts([]);
+    }
+  };
+
+  const offerFindAndLoadContacts = async (nip?: string, name?: string) => {
+    if (!currentUser) return;
+    try {
+      // Try by NIP first
+      if (nip) {
+        const rawNip = nip.replace(/\D/g, '');
+        const { data: portalClients } = await supabase
+          .from('contractors_clients')
+          .select('id, nip')
+          .eq('company_id', currentUser.company_id)
+          .eq('is_archived', false);
+
+        const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+        if (match) {
+          await offerLoadClientContactsById(match.id);
+          return;
+        }
+      }
+
+      // Try by name
+      if (name) {
+        const { data } = await supabase
+          .from('contractors_clients')
+          .select('id')
+          .eq('company_id', currentUser.company_id)
+          .eq('is_archived', false)
+          .ilike('name', `%${name}%`)
+          .limit(1);
+
+        if (data && data.length > 0) {
+          await offerLoadClientContactsById(data[0].id);
+          return;
+        }
+
+        // Strategy 2: match by first significant word
+        const firstWord = name.split(/[\s.,]+/).find(w => w.length > 2);
+        if (firstWord && firstWord.toLowerCase() !== name.toLowerCase()) {
+          const { data: data2 } = await supabase
+            .from('contractors_clients')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .eq('is_archived', false)
+            .ilike('name', `%${firstWord}%`)
+            .limit(1);
+
+          if (data2 && data2.length > 0) {
+            await offerLoadClientContactsById(data2[0].id);
+            return;
+          }
+        }
+      }
+
+      setOfferClientContacts([]);
+    } catch (err) {
+      console.error('Error finding contractor:', err);
+      setOfferClientContacts([]);
+    }
+  };
+
+  const offerLookupContractorByNip = async (nip: string): Promise<{ contractor_id: string; name: string; street: string; streetNumber: string; city: string; postalCode: string; country: string } | null> => {
+    if (!currentUser) return null;
+    try {
+      const rawNip = nip.replace(/\D/g, '');
+      const { data: portalClients } = await supabase
+        .from('contractors_clients')
+        .select('id, name, nip, address_street, address_city, address_postal_code, address_country')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_archived', false);
+
+      const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+      if (!match) return null;
+
+      return {
+        contractor_id: match.id,
+        name: match.name,
+        street: match.address_street || '',
+        streetNumber: '',
+        city: match.address_city || '',
+        postalCode: match.address_postal_code || '',
+        country: match.address_country === 'PL' ? 'Polska' : (match.address_country || 'Polska')
+      };
+    } catch (err) {
+      console.error('Error looking up contractor by NIP:', err);
+      return null;
+    }
+  };
+
+  const offerSelectExistingContact = (contactId: string) => {
+    setOfferSelectedContactId(contactId);
+    const contact = offerClientContacts.find(c => c.id === contactId);
+    if (contact) {
+      setOfferContacts([{
+        first_name: contact.first_name || '',
+        last_name: contact.last_name || '',
+        phone: contact.phone || '',
+        email: contact.email || '',
+        position: contact.position || '',
+        is_primary: true
+      }]);
+      setOfferShowAddContactForm(false);
+    }
+  };
+
+  const offerAddContact = () => {
+    setOfferContacts(prev => [...prev, { ...initialContactData, is_primary: false }]);
+  };
+
+  const offerRemoveContact = (index: number) => {
+    if (offerContacts.length <= 1) return;
+    setOfferContacts(prev => {
+      const newContacts = prev.filter((_, i) => i !== index);
+      if (prev[index].is_primary && newContacts.length > 0) {
+        newContacts[0].is_primary = true;
+      }
+      return newContacts;
+    });
+  };
+
+  const offerUpdateContact = (index: number, field: keyof ContactFormData, value: string | boolean) => {
+    setOfferContacts(prev => {
+      const newContacts = [...prev];
+      if (field === 'is_primary' && value === true) {
+        newContacts.forEach((c, i) => {
+          c.is_primary = i === index;
+        });
+      } else {
+        (newContacts[index] as any)[field] = value;
+      }
+      return newContacts;
+    });
   };
 
   // Auto-select offer from URL param (e.g. #/construction/offers?offerId=xxx)
@@ -1306,6 +1533,167 @@ export const OffersPage: React.FC = () => {
           onChange={e => setOfferClientData(prev => ({ ...prev, internal_notes: e.target.value }))}
           rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
           placeholder="Notatki widoczne tylko dla zespołu..." />
+      </div>
+
+      {/* Przedstawiciele firmy — 1:1 copy from kosztorys */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+            <User className="w-5 h-5 text-slate-400" />
+            Przedstawiciele firmy
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              if (!offerShowAddContactForm) {
+                if (offerContacts.length === 0) {
+                  offerAddContact();
+                }
+              }
+              setOfferShowAddContactForm(!offerShowAddContactForm);
+            }}
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg"
+          >
+            <UserPlus className="w-4 h-4" />
+            Dodaj
+          </button>
+        </div>
+
+        {/* Dropdown to select existing contact */}
+        {offerClientContacts.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Wybierz istniejącego przedstawiciela</label>
+            <select
+              value={offerSelectedContactId}
+              onChange={e => offerSelectExistingContact(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+            >
+              <option value="">— Wybierz z listy —</option>
+              {offerClientContacts.map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.is_main_contact ? '★ ' : ''}{c.first_name} {c.last_name}{c.position ? ` — ${c.position}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* No representatives info */}
+        {offerClientSelected && offerClientContacts.length === 0 && !offerShowAddContactForm && (
+          <p className="text-sm text-slate-500 italic">Brak przedstawicieli w bazie dla tego klienta. Kliknij "Dodaj" aby dodać.</p>
+        )}
+
+        {/* Manual add contact form */}
+        {offerShowAddContactForm && (
+          <div className="space-y-4">
+            {offerContacts.map((contact, index) => (
+              <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={contact.is_primary}
+                        onChange={() => offerUpdateContact(index, 'is_primary', true)}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                      <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                        {contact.is_primary && <Star className="w-4 h-4 text-amber-500" />}
+                        Główny kontakt
+                      </span>
+                    </label>
+                  </div>
+                  {offerContacts.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => offerRemoveContact(index)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                    <input
+                      type="text"
+                      value={contact.first_name}
+                      onChange={e => offerUpdateContact(index, 'first_name', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      placeholder="Jan"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                    <input
+                      type="text"
+                      value={contact.last_name}
+                      onChange={e => offerUpdateContact(index, 'last_name', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      placeholder="Kowalski"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                    <input
+                      type="tel"
+                      value={contact.phone}
+                      onChange={e => offerUpdateContact(index, 'phone', formatPhoneNumber(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      placeholder="+48 XXX XXX XXX"
+                      maxLength={16}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                    <input
+                      type="text"
+                      value={contact.position}
+                      onChange={e => offerUpdateContact(index, 'position', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      placeholder="Kierownik projektu"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                    <input
+                      type="email"
+                      value={contact.email}
+                      onChange={e => offerUpdateContact(index, 'email', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-lg text-sm ${
+                        contact.email && !isValidEmail(contact.email)
+                          ? 'border-red-300 focus:ring-red-500'
+                          : 'border-slate-200 focus:ring-blue-500'
+                      }`}
+                      placeholder="email@firma.pl"
+                    />
+                    {contact.email && !isValidEmail(contact.email) && (
+                      <p className="text-xs text-red-500 mt-1">Nieprawidłowy format e-mail</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => offerAddContact()}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Dodaj kolejny kontakt
+            </button>
+          </div>
+        )}
+
+        {/* Show selected contact summary if selected from dropdown and form is hidden */}
+        {!offerShowAddContactForm && offerSelectedContactId && offerContacts.length > 0 && offerContacts[0].first_name && (
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm">
+            <span className="font-medium text-blue-800">{offerContacts[0].first_name} {offerContacts[0].last_name}</span>
+            {offerContacts[0].position && <span className="text-blue-600 ml-2">({offerContacts[0].position})</span>}
+            {offerContacts[0].phone && <span className="text-blue-600 ml-2">{offerContacts[0].phone}</span>}
+          </div>
+        )}
       </div>
     </div>
   );
