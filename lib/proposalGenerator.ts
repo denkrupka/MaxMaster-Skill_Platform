@@ -30,18 +30,25 @@ export interface ProposalData {
  */
 export async function loadProposalData(estimateId: string): Promise<ProposalData | null> {
   try {
-    // Load estimate with request
+    // Load estimate
     const { data: estimate, error } = await supabase
       .from('kosztorys_estimates')
-      .select(`
-        *,
-        request:kosztorys_requests(*),
-        price_list:kosztorys_price_lists(*)
-      `)
+      .select('*')
       .eq('id', estimateId)
       .single();
 
     if (error || !estimate) return null;
+
+    // Load request separately
+    let request = null;
+    if (estimate.request_id) {
+      const { data: reqData } = await supabase
+        .from('kosztorys_requests')
+        .select('*')
+        .eq('id', estimate.request_id)
+        .single();
+      request = reqData;
+    }
 
     // Load items
     const { data: items } = await supabase
@@ -68,7 +75,8 @@ export async function loadProposalData(estimateId: string): Promise<ProposalData
       company = companyData;
     }
 
-    const subtotal = (estimate.grand_total || 0);
+    // Use correct column names: subtotal_net, total_works, total_materials, total_equipment, total_gross
+    const subtotal = estimate.subtotal_net || estimate.total_gross || 0;
     const marginPercent = estimate.margin_percent || 0;
     const discountPercent = estimate.discount_percent || 0;
     const marginAmount = subtotal * marginPercent / 100;
@@ -77,21 +85,21 @@ export async function loadProposalData(estimateId: string): Promise<ProposalData
     const finalTotal = afterMargin - discountAmount;
 
     return {
-      estimate,
-      request: estimate.request,
+      estimate: { ...estimate, request },
+      request,
       items: items || [],
       equipment: equipment || [],
       totals: {
-        workTotal: estimate.work_total || 0,
-        materialTotal: estimate.material_total || 0,
-        equipmentTotal: estimate.equipment_total || 0,
-        laborHoursTotal: estimate.labor_hours_total || 0,
+        workTotal: estimate.total_works || 0,
+        materialTotal: estimate.total_materials || 0,
+        equipmentTotal: estimate.total_equipment || 0,
+        laborHoursTotal: 0,
         subtotal,
         marginPercent,
         marginAmount,
         discountPercent,
         discountAmount,
-        finalTotal: estimate.final_total || finalTotal,
+        finalTotal: estimate.total_gross || finalTotal,
       },
       company,
     };
