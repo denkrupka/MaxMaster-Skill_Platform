@@ -24,6 +24,10 @@ interface TIMProduct {
   manufacturer?: string | { name: string };
   default_image?: string;
   _id?: string;
+  stock?: number | null;
+  unit?: string;
+  stockColor?: string;
+  shippingText?: string;
 }
 
 interface TIMProductDetail {
@@ -302,6 +306,13 @@ const ProductCardGrid: React.FC<{ p: TIMProduct; onClick: () => void }> = ({ p, 
           ) : (
             <span className="text-[10px] text-slate-300">—</span>
           )}
+          {p.stock != null && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+              p.stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+            }`}>
+              {p.stock > 0 ? `${p.stock} ${p.unit || 'szt'}` : 'Brak'}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -330,6 +341,15 @@ const ProductCardList: React.FC<{ p: TIMProduct; onClick: () => void }> = ({ p, 
         <div className="text-xs font-medium text-slate-800 truncate">{p.name || '—'}</div>
         <div className="text-[10px] text-slate-400 font-mono">{p.sku || p._id}{mfr ? ` · ${mfr}` : ''}</div>
       </div>
+      {p.stock != null && (
+        <div className="flex-shrink-0">
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+            p.stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+          }`}>
+            {p.stock > 0 ? `${p.stock} ${p.unit || 'szt'}` : 'Brak'}
+          </span>
+        </div>
+      )}
       <div className="flex-shrink-0 text-right">
         {price != null ? (
           <div>

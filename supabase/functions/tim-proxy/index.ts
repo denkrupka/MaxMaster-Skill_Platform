@@ -469,7 +469,8 @@ serve(async (req) => {
         const html = await fetchPage('/', jar)
         const links = extractLinks(html)
 
-        const skip = new Set(['centrum-pomocy', 'kategorie', 'producenci', 'promocje', 'strefa-nowosci', 'strefa-porad', 'centrum-uslug', 'kontakt', 'najnowsze-produkty', 'strefa-dla-przemyslu', 'outlet', 'koszyk-rwd', 'warunki-i-koszty-dostawy', 'regulamin-opinii', 'mapa-serwisu', 'zostan-sprzedawca'])
+        const skip = new Set(['centrum-pomocy', 'kategorie', 'producenci', 'promocje', 'strefa-nowosci', 'strefa-porad', 'centrum-uslug', 'kontakt', 'najnowsze-produkty', 'strefa-dla-przemyslu', 'outlet', 'koszyk-rwd', 'warunki-i-koszty-dostawy', 'regulamin-opinii', 'mapa-serwisu', 'zostan-sprzedawca', 'mapa_serwisu', 'zostan_sprzedawca', 'mapa-serwisu.html', 'zostan-sprzedawca.html'])
+        const skipNames = new Set(['Mapa serwisu', 'Zostań sprzedawcą', 'Warunki i koszty dostawy', 'Regulamin opinii', 'Centrum pomocy', 'Kontakt', 'Koszyk'])
 
         const mainCats: Array<{ name: string; slug: string }> = []
         const subMap: Record<string, Array<{ name: string; slug: string }>> = {}
@@ -480,7 +481,7 @@ serve(async (req) => {
           if (href.includes('.') || href.includes('?') || href.startsWith('/_')) continue
           const parts = href.split('/').filter(Boolean)
 
-          if (parts.length === 1 && !skip.has(parts[0]) && !mainCats.find(c => c.slug === href)) {
+          if (parts.length === 1 && !skip.has(parts[0]) && !skipNames.has(text) && !mainCats.find(c => c.slug === href)) {
             mainCats.push({ name: text, slug: href })
           } else if (parts.length === 2) {
             const p = '/' + parts[0]
@@ -494,7 +495,7 @@ serve(async (req) => {
         }
 
         const tree = mainCats
-          .filter(c => !skip.has(c.slug.replace('/', '')))
+          .filter(c => !skip.has(c.slug.replace('/', '')) && !skipNames.has(c.name))
           .map(c => ({
             ...c,
             subcategories: (subMap[c.slug] || []).map(s => ({
@@ -540,6 +541,22 @@ serve(async (req) => {
               }
             })
             break
+          }
+        }
+
+        // HTML fallback: extract product links when JSON-LD is missing
+        if (products.length === 0) {
+          const seen = new Set<string>()
+          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          let lm: RegExpExecArray | null
+          while ((lm = linkRe.exec(html)) !== null) {
+            const href = lm[1]
+            const psku = extractSku(href)
+            if (!psku || seen.has(psku)) continue
+            seen.add(psku)
+            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
+            if (text.length < 3 || text.length > 200) continue
+            products.push({ name: text, sku: psku, url: BASE + href, image: '', price: null })
           }
         }
 
@@ -619,11 +636,26 @@ serve(async (req) => {
             manufacturer = ldProduct.manufacturer.name
           }
 
-          // Description from JSON-LD or meta
+          // Description: JSON-LD → NUXT → meta → HTML div
           description = ldProduct?.description || ''
+          if (!description && nuxtMatch) {
+            const descMatch = nuxtMatch[1].match(/"description"[^"]*?"([^"]{20,})"/)
+            if (descMatch) description = descMatch[1]
+          }
           if (!description) {
             const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)
+              || html.match(/<meta\s+content="([^"]*)"\s+name="description"/)
             if (metaDesc) description = metaDesc[1]
+          }
+          // Try to get full description from HTML content
+          if (!description || description.length < 50) {
+            const descDiv = html.match(/<div[^>]*class="[^"]*product[_-]?description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+              || html.match(/<div[^>]*id="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+              || html.match(/<div[^>]*data-role="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+            if (descDiv) {
+              const fullDesc = descDiv[1].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
+              if (fullDesc.length > (description?.length || 0)) description = fullDesc
+            }
           }
 
           // Breadcrumb from JSON-LD
@@ -641,11 +673,25 @@ serve(async (req) => {
             if (h1Match) name = h1Match[1].replace(/<[^>]*>/g, '').trim()
           }
 
-          // Image: JSON-LD → og:image → first big <img>
+          // Image: JSON-LD → og:image → NUXT data → product <img> tags
           let image = ldProduct?.image ? (Array.isArray(ldProduct.image) ? ldProduct.image[0] : ldProduct.image) : ''
           if (!image) {
-            const ogImg = html.match(/<meta\s+property="og:image"\s+content="([^"]*)"/)
+            const ogImg = html.match(/<meta\s+[^>]*property="og:image"[^>]*content="([^"]*)"/)
+              || html.match(/<meta\s+content="([^"]*)"[^>]*property="og:image"/)
             if (ogImg) image = ogImg[1]
+          }
+          if (!image && nuxtMatch) {
+            const imgMatch = nuxtMatch[1].match(/"image_url"\s*[,:]\s*"(https?:\/\/[^"]+)"/)
+              || nuxtMatch[1].match(/"default_image"\s*[,:]\s*"(https?:\/\/[^"]+)"/)
+              || nuxtMatch[1].match(/"image"\s*[,:]\s*"(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"/)
+            if (imgMatch) image = imgMatch[1]
+          }
+          if (!image) {
+            const imgTag = html.match(/<img[^>]+src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*class="[^"]*product[^"]*"/i)
+              || html.match(/<img[^>]*class="[^"]*product[^"]*"[^>]*src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*/i)
+              || html.match(/<img[^>]+src="(https?:\/\/[^"]*tim\.pl[^"]*(?:product|catalog|media)[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*/i)
+              || html.match(/<img[^>]+src="(https?:\/\/[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*alt="[^"]*"[^>]*width="[2-9]\d\d/i)
+            if (imgTag) image = imgTag[1]
           }
 
           product = {
@@ -715,6 +761,53 @@ serve(async (req) => {
           }
         }
 
+        // HTML fallback: extract product links when JSON-LD is missing
+        if (products.length === 0) {
+          const seen = new Set<string>()
+          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          let lm: RegExpExecArray | null
+          while ((lm = linkRe.exec(html)) !== null) {
+            const href = lm[1]
+            const sku = extractSku(href)
+            if (!sku || seen.has(sku)) continue
+            seen.add(sku)
+            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
+            if (text.length < 3 || text.length > 200) continue
+            products.push({ name: text, sku, url: BASE + href, image: '', price: null })
+          }
+          // Also try data-product-name or title attributes
+          if (products.length === 0) {
+            const titleRe = /<a\s[^>]*href="([^"]*\/p\/[^"]*)"[^>]*title="([^"]+)"[^>]*>/gi
+            while ((lm = titleRe.exec(html)) !== null) {
+              const href = lm[1]
+              const sku = extractSku(href)
+              if (!sku || seen.has(sku)) continue
+              seen.add(sku)
+              products.push({ name: lm[2].trim(), sku, url: href.startsWith('http') ? href : BASE + href, image: '', price: null })
+            }
+          }
+        }
+
+        // Extract images from HTML for products that don't have one
+        if (products.some((p: any) => !p.image)) {
+          const imgRe = /<img[^>]+src="(https?:\/\/[^"]+)"[^>]*alt="([^"]*)"[^>]*>/gi
+          const imgMap = new Map<string, string>()
+          let im: RegExpExecArray | null
+          while ((im = imgRe.exec(html)) !== null) {
+            const src = im[1]
+            const alt = im[2].trim()
+            if (alt && src.match(/\.(jpg|jpeg|png|webp)/i)) {
+              imgMap.set(alt.toLowerCase(), src)
+            }
+          }
+          for (const p of products) {
+            if (!p.image && p.name) {
+              const found = imgMap.get(p.name.toLowerCase())
+              if (found) p.image = found
+            }
+          }
+        }
+
         // Personal prices
         let source = 'public'
         const skuList = products.map((p: any) => p.sku).filter(Boolean)
@@ -724,7 +817,14 @@ serve(async (req) => {
             source = 'personal'
             for (const p of products) {
               const price = pp.get(p.sku)
-              if (price) { p.publicPrice = p.price; p.price = price.netValue }
+              if (price) {
+                p.publicPrice = p.price
+                p.price = price.netValue
+                p.stock = price.stock
+                p.unit = price.unit
+                p.stockColor = price.stockColor
+                p.shippingText = price.shippingText
+              }
             }
           }
         }
