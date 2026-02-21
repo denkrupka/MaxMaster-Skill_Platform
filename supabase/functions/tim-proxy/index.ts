@@ -749,24 +749,57 @@ serve(async (req) => {
         }
 
         // Use TIM REST API for search (client-side rendered page has no products in HTML)
+        // TIM may return 503 due to WAF/rate-limiting from datacenter IPs — retry with delay
         const searchParams = new URLSearchParams({
           q: q.trim(),
           p: String(page),
           limit: String(limit),
         })
         const searchUrl = `${BASE}/rwd/search/?${searchParams}`
-        const hdrs = { ...makeHeaders(jar), 'Accept': 'application/json' }
-        const res = await fetch(searchUrl, { headers: hdrs, redirect: 'follow' })
-        if (Object.keys(jar).length) parseCookiesFromHeaders(res.headers, jar)
 
-        const responseText = await res.text()
-        let searchData: any
-        try {
-          searchData = JSON.parse(responseText)
-        } catch {
-          console.error('tim-proxy search: TIM returned non-JSON, status', res.status, 'body (first 500):', responseText.substring(0, 500))
-          // Return empty results rather than crashing
-          return json({ products: [], query: q, total: 0, source: 'public', debug: `TIM returned status ${res.status}, non-JSON response` })
+        let searchData: any = null
+        const maxRetries = 3
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          if (attempt > 0) {
+            await new Promise(r => setTimeout(r, 800 * attempt)) // 800ms, 1600ms delay
+          }
+          const hdrs: Record<string, string> = {
+            ...makeHeaders(jar),
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+          }
+          try {
+            const res = await fetch(searchUrl, { headers: hdrs, redirect: 'follow' })
+            if (Object.keys(jar).length) parseCookiesFromHeaders(res.headers, jar)
+
+            if (res.status === 503 || res.status === 429) {
+              console.error(`tim-proxy search: TIM returned ${res.status}, attempt ${attempt + 1}/${maxRetries}`)
+              continue // retry
+            }
+
+            const responseText = await res.text()
+            try {
+              searchData = JSON.parse(responseText)
+              break // success
+            } catch {
+              console.error('tim-proxy search: non-JSON response, status', res.status, 'attempt', attempt + 1)
+              if (attempt === maxRetries - 1) {
+                return json({ products: [], query: q, total: 0, source: 'public', debug: `TIM returned status ${res.status} after ${maxRetries} attempts` })
+              }
+            }
+          } catch (fetchErr) {
+            console.error('tim-proxy search: fetch error, attempt', attempt + 1, (fetchErr as Error).message)
+            if (attempt === maxRetries - 1) {
+              return json({ products: [], query: q, total: 0, source: 'public', debug: `Fetch failed: ${(fetchErr as Error).message}` })
+            }
+          }
+        }
+
+        if (!searchData) {
+          return json({ products: [], query: q, total: 0, source: 'public', debug: 'All retry attempts failed' })
         }
         const rawProducts = searchData?.product || []
         const totalProducts = searchData?.total || 0
