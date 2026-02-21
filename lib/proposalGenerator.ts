@@ -61,8 +61,7 @@ export async function loadProposalData(estimateId: string): Promise<ProposalData
     const { data: equipment } = await supabase
       .from('kosztorys_estimate_equipment')
       .select('*')
-      .eq('estimate_id', estimateId)
-      .order('position_number');
+      .eq('estimate_id', estimateId);
 
     // Load company info for header
     let company = null;

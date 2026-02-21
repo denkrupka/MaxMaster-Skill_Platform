@@ -58,8 +58,7 @@ export async function loadEstimateForExport(estimateId: string): Promise<ExportE
     const { data: equipment } = await supabase
       .from('kosztorys_estimate_equipment')
       .select('*')
-      .eq('estimate_id', estimateId)
-      .order('position_number');
+      .eq('estimate_id', estimateId);
 
     return {
       estimate: { ...estimate, request },
