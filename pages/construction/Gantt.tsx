@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ArrowLeft, ChevronRight, ChevronDown, Calendar, Clock, Users,
   Plus, Settings, Download, Loader2, ZoomIn, ZoomOut, Filter,
   ChevronLeft, Link as LinkIcon, Milestone, Search, X, Save,
-  Pencil, Trash2, Flag
+  Pencil, Trash2, Flag, Play, AlertCircle, Check, FileText,
+  Briefcase, ListTree, ClipboardList
 } from 'lucide-react';
 // useSearchParams removed — HashRouter requires manual hash parsing
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Project, GanttTask, GanttDependency, GanttDependencyType } from '../../types';
+import { Project, GanttTask, GanttDependency, GanttDependencyType, Offer, KosztorysEstimate } from '../../types';
 import { GANTT_DEPENDENCY_LABELS, GANTT_DEPENDENCY_SHORT_LABELS } from '../../constants';
 
 type ZoomLevel = 'day' | 'week' | 'month';
@@ -18,6 +19,156 @@ interface GanttTaskWithChildren extends GanttTask {
   isExpanded?: boolean;
   level?: number;
 }
+
+// Harmonogram creation wizard types
+type WizardStep = 'project' | 'time' | 'tasks' | 'resources';
+type TaskImportMode = 'empty' | 'general' | 'detailed';
+type ResourcePriority = 'slowest' | 'labor' | 'equipment';
+
+interface WizardFormData {
+  // Step 1: Project selection
+  project_id: string;
+  estimate_id: string;
+  offer_id: string;
+  // Step 2: Time & calendar
+  start_date: string;
+  deadline: string;
+  working_days: boolean[];
+  day_start: string;
+  work_hours: number;
+  // Step 3: Task import mode
+  task_mode: TaskImportMode;
+  // Step 4: Resources
+  resource_priority: ResourcePriority;
+}
+
+const WIZARD_STEPS: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
+  { key: 'project', label: 'Wybierz projekt', icon: <Briefcase className="w-4 h-4" /> },
+  { key: 'time', label: 'Czas i kalendarz', icon: <Calendar className="w-4 h-4" /> },
+  { key: 'tasks', label: 'Zadania', icon: <ListTree className="w-4 h-4" /> },
+  { key: 'resources', label: 'Zasoby', icon: <Users className="w-4 h-4" /> },
+];
+
+const DAY_LABELS = ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd'];
+
+const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const h = i.toString().padStart(2, '0');
+  return `${h}:00`;
+});
+
+const DEFAULT_WIZARD_FORM: WizardFormData = {
+  project_id: '',
+  estimate_id: '',
+  offer_id: '',
+  start_date: new Date().toISOString().split('T')[0],
+  deadline: '',
+  working_days: [true, true, true, true, true, false, false],
+  day_start: '07:00',
+  work_hours: 8,
+  task_mode: 'detailed',
+  resource_priority: 'slowest',
+};
+
+// Searchable select dropdown component
+const SearchableSelect: React.FC<{
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (id: string) => void;
+  options: { id: string; label: string; sublabel?: string }[];
+  loading?: boolean;
+  icon?: React.ReactNode;
+}> = ({ label, placeholder, value, onChange, options, loading, icon }) => {
+  const [open, setOpen] = useState(false);
+  const [searchVal, setSearchVal] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const filtered = options.filter(o =>
+    o.label.toLowerCase().includes(searchVal.toLowerCase()) ||
+    (o.sublabel && o.sublabel.toLowerCase().includes(searchVal.toLowerCase()))
+  );
+
+  const selectedOption = options.find(o => o.id === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <label className="block text-sm font-medium text-slate-600 mb-1.5">{label}</label>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center gap-2 px-3 py-2.5 border rounded-xl text-left transition-all ${
+          open ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-slate-300'
+        } ${value ? 'text-slate-900' : 'text-slate-400'}`}
+      >
+        {icon && <span className="text-slate-400">{icon}</span>}
+        <span className="flex-1 truncate">
+          {selectedOption ? selectedOption.label : placeholder}
+        </span>
+        {value && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onChange(''); }}
+            className="p-0.5 hover:bg-slate-100 rounded"
+          >
+            <X className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+        )}
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchVal}
+                onChange={e => setSearchVal(e.target.value)}
+                placeholder="Szukaj..."
+                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-4 text-center text-sm text-slate-400">Brak wyników</div>
+            ) : (
+              filtered.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => { onChange(opt.id); setOpen(false); setSearchVal(''); }}
+                  className={`w-full text-left px-3 py-2.5 hover:bg-emerald-50 transition-colors flex items-center gap-2 ${
+                    value === opt.id ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700'
+                  }`}
+                >
+                  {value === opt.id && <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+                  <div className={value === opt.id ? '' : 'pl-6'}>
+                    <div className="text-sm font-medium">{opt.label}</div>
+                    {opt.sublabel && <div className="text-xs text-slate-400">{opt.sublabel}</div>}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const GanttPage: React.FC = () => {
   const { state } = useAppContext();
@@ -41,6 +192,16 @@ export const GanttPage: React.FC = () => {
   const [showProjectEditModal, setShowProjectEditModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectForm, setProjectForm] = useState({ name: '', status: 'active', start_date: '', end_date: '' });
+
+  // Wizard modal state
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WizardStep>('project');
+  const [wizardForm, setWizardForm] = useState<WizardFormData>({ ...DEFAULT_WIZARD_FORM });
+  const [wizardSaving, setWizardSaving] = useState(false);
+  const [allEstimates, setAllEstimates] = useState<any[]>([]);
+  const [allOffers, setAllOffers] = useState<any[]>([]);
+  const [estimateStages, setEstimateStages] = useState<any[]>([]);
+  const [estimateItems, setEstimateItems] = useState<any[]>([]);
 
   // Task form
   const [taskForm, setTaskForm] = useState({
@@ -97,6 +258,367 @@ export const GanttPage: React.FC = () => {
       console.error('Error loading projects:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ===== WIZARD: Load estimates & offers =====
+  const loadWizardData = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      const [estRes, offRes] = await Promise.all([
+        supabase
+          .from('kosztorys_estimates')
+          .select('*, request:kosztorys_requests(*)')
+          .eq('company_id', currentUser.company_id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('offers')
+          .select('*, project:projects(*)')
+          .eq('company_id', currentUser.company_id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+      ]);
+      if (estRes.data) setAllEstimates(estRes.data);
+      if (offRes.data) setAllOffers(offRes.data);
+    } catch (err) {
+      console.error('Error loading wizard data:', err);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (showWizard && currentUser) loadWizardData();
+  }, [showWizard, currentUser]);
+
+  // Load estimate stages/items when project is selected
+  const loadEstimateData = useCallback(async (projectId: string) => {
+    if (!projectId) { setEstimateStages([]); setEstimateItems([]); return; }
+    try {
+      const [stagesRes, tasksRes] = await Promise.all([
+        supabase
+          .from('estimate_stages')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('sort_order'),
+        supabase
+          .from('estimate_tasks')
+          .select('*, resources:estimate_resources(*)')
+          .eq('project_id', projectId)
+          .order('sort_order')
+      ]);
+      if (stagesRes.data) setEstimateStages(stagesRes.data);
+      if (tasksRes.data) setEstimateItems(tasksRes.data);
+    } catch (err) {
+      console.error('Error loading estimate data:', err);
+    }
+  }, []);
+
+  // Auto-fill logic: when selecting any field, fill related fields
+  const handleWizardProjectChange = useCallback((projectId: string) => {
+    setWizardForm(prev => {
+      const update = { ...prev, project_id: projectId };
+      if (projectId) {
+        // Find related offer
+        const relatedOffer = allOffers.find(o => o.project_id === projectId);
+        if (relatedOffer && !prev.offer_id) update.offer_id = relatedOffer.id;
+        // Set start date from project
+        const proj = projects.find(p => p.id === projectId);
+        if (proj?.start_date) update.start_date = proj.start_date.split('T')[0];
+        if (proj?.end_date) update.deadline = proj.end_date.split('T')[0];
+        loadEstimateData(projectId);
+      }
+      return update;
+    });
+  }, [allOffers, projects, loadEstimateData]);
+
+  const handleWizardEstimateChange = useCallback((estimateId: string) => {
+    setWizardForm(prev => {
+      const update = { ...prev, estimate_id: estimateId };
+      if (estimateId) {
+        const est = allEstimates.find(e => e.id === estimateId);
+        if (est?.request) {
+          // Try to find project by investment name
+          const relatedProject = projects.find(p =>
+            p.name.toLowerCase() === est.request.investment_name?.toLowerCase()
+          );
+          if (relatedProject && !prev.project_id) {
+            update.project_id = relatedProject.id;
+            loadEstimateData(relatedProject.id);
+          }
+        }
+      }
+      return update;
+    });
+  }, [allEstimates, projects, loadEstimateData]);
+
+  const handleWizardOfferChange = useCallback((offerId: string) => {
+    setWizardForm(prev => {
+      const update = { ...prev, offer_id: offerId };
+      if (offerId) {
+        const offer = allOffers.find(o => o.id === offerId);
+        if (offer?.project_id && !prev.project_id) {
+          update.project_id = offer.project_id;
+          loadEstimateData(offer.project_id);
+          const proj = projects.find(p => p.id === offer.project_id);
+          if (proj?.start_date) update.start_date = proj.start_date.split('T')[0];
+          if (proj?.end_date) update.deadline = proj.end_date.split('T')[0];
+        }
+      }
+      return update;
+    });
+  }, [allOffers, projects, loadEstimateData]);
+
+  const openWizard = () => {
+    setWizardForm({ ...DEFAULT_WIZARD_FORM });
+    setWizardStep('project');
+    setEstimateStages([]);
+    setEstimateItems([]);
+    setShowWizard(true);
+  };
+
+  const wizardStepIndex = WIZARD_STEPS.findIndex(s => s.key === wizardStep);
+
+  const canGoNext = (): boolean => {
+    switch (wizardStep) {
+      case 'project': return !!wizardForm.project_id;
+      case 'time': return !!wizardForm.start_date && wizardForm.working_days.some(d => d);
+      case 'tasks': return true;
+      case 'resources': return true;
+      default: return false;
+    }
+  };
+
+  const goNextStep = () => {
+    const idx = wizardStepIndex;
+    if (idx < WIZARD_STEPS.length - 1) setWizardStep(WIZARD_STEPS[idx + 1].key);
+  };
+
+  const goPrevStep = () => {
+    const idx = wizardStepIndex;
+    if (idx > 0) setWizardStep(WIZARD_STEPS[idx - 1].key);
+  };
+
+  const getEndTime = () => {
+    const startH = parseInt(wizardForm.day_start.split(':')[0]);
+    const endH = startH + wizardForm.work_hours;
+    return `${endH.toString().padStart(2, '0')}:00`;
+  };
+
+  // ===== CREATE HARMONOGRAM =====
+  const handleCreateHarmonogram = async () => {
+    if (!currentUser || !wizardForm.project_id) return;
+    setWizardSaving(true);
+    try {
+      const projectId = wizardForm.project_id;
+
+      // Update project dates if set
+      const projectUpdates: any = {};
+      if (wizardForm.start_date) projectUpdates.start_date = wizardForm.start_date;
+      if (wizardForm.deadline) projectUpdates.end_date = wizardForm.deadline;
+      if (Object.keys(projectUpdates).length > 0) {
+        await supabase.from('projects').update(projectUpdates).eq('id', projectId);
+      }
+
+      // Save working days mask
+      const mask = wizardForm.working_days.reduce((acc, v, i) => acc | (v ? (1 << i) : 0), 0);
+      await supabase.from('project_working_days').upsert({
+        project_id: projectId,
+        working_days_mask: mask
+      }, { onConflict: 'project_id' });
+
+      // Clean existing gantt tasks if any
+      await supabase.from('gantt_dependencies').delete().eq('project_id', projectId);
+      await supabase.from('gantt_tasks').delete().eq('project_id', projectId);
+
+      if (wizardForm.task_mode === 'empty') {
+        // Just create empty harmonogram — no tasks
+      } else if (wizardForm.task_mode === 'general') {
+        // Import by stages (Działy) — each stage becomes a top-level task
+        if (estimateStages.length > 0) {
+          const startDate = new Date(wizardForm.start_date);
+          let currentDate = new Date(startDate);
+
+          const getNextWorkingDay = (date: Date): Date => {
+            const d = new Date(date);
+            // Day of week: 0=Sun, 1=Mon ... 6=Sat → map to our array where 0=Mon
+            while (true) {
+              const dow = d.getDay();
+              const arrIdx = dow === 0 ? 6 : dow - 1;
+              if (wizardForm.working_days[arrIdx]) return d;
+              d.setDate(d.getDate() + 1);
+            }
+          };
+
+          const addWorkingDays = (start: Date, days: number): Date => {
+            let d = new Date(start);
+            let added = 0;
+            while (added < days) {
+              d.setDate(d.getDate() + 1);
+              const dow = d.getDay();
+              const arrIdx = dow === 0 ? 6 : dow - 1;
+              if (wizardForm.working_days[arrIdx]) added++;
+            }
+            return d;
+          };
+
+          for (let i = 0; i < estimateStages.length; i++) {
+            const stage = estimateStages[i];
+            const stageTasks = estimateItems.filter((t: any) => t.stage_id === stage.id && !t.parent_id);
+            const duration = Math.max(stageTasks.length * 2, 5);
+            const stageStart = getNextWorkingDay(currentDate);
+            const stageEnd = addWorkingDays(stageStart, duration);
+
+            await supabase.from('gantt_tasks').insert({
+              project_id: projectId,
+              title: stage.name,
+              start_date: stageStart.toISOString().split('T')[0],
+              end_date: stageEnd.toISOString().split('T')[0],
+              duration,
+              progress: 0,
+              is_milestone: false,
+              sort_order: i,
+              source: 'manual',
+              color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'][i % 6]
+            });
+
+            currentDate = new Date(stageEnd);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        }
+      } else if (wizardForm.task_mode === 'detailed') {
+        // Import by tasks (Pozycje) — stages as parents, tasks as children
+        if (estimateStages.length > 0 || estimateItems.length > 0) {
+          const startDate = new Date(wizardForm.start_date);
+          let currentDate = new Date(startDate);
+          let sortOrder = 0;
+
+          const getNextWorkingDay = (date: Date): Date => {
+            const d = new Date(date);
+            while (true) {
+              const dow = d.getDay();
+              const arrIdx = dow === 0 ? 6 : dow - 1;
+              if (wizardForm.working_days[arrIdx]) return d;
+              d.setDate(d.getDate() + 1);
+            }
+          };
+
+          const addWorkingDays = (start: Date, days: number): Date => {
+            let d = new Date(start);
+            let added = 0;
+            while (added < days) {
+              d.setDate(d.getDate() + 1);
+              const dow = d.getDay();
+              const arrIdx = dow === 0 ? 6 : dow - 1;
+              if (wizardForm.working_days[arrIdx]) added++;
+            }
+            return d;
+          };
+
+          for (let si = 0; si < estimateStages.length; si++) {
+            const stage = estimateStages[si];
+            const stageTasks = estimateItems.filter((t: any) => t.stage_id === stage.id && !t.parent_id);
+
+            // Calculate stage date range
+            const stageStart = getNextWorkingDay(new Date(currentDate));
+            let stageEnd = new Date(stageStart);
+
+            // Insert parent task for stage
+            const { data: parentData } = await supabase.from('gantt_tasks').insert({
+              project_id: projectId,
+              title: stage.name,
+              start_date: stageStart.toISOString().split('T')[0],
+              end_date: stageStart.toISOString().split('T')[0],
+              duration: 0,
+              progress: 0,
+              is_milestone: false,
+              sort_order: sortOrder++,
+              source: 'manual',
+              color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'][si % 6]
+            }).select('id').single();
+
+            const parentId = parentData?.id;
+
+            // Insert child tasks
+            let childDate = new Date(stageStart);
+            for (let ti = 0; ti < stageTasks.length; ti++) {
+              const task = stageTasks[ti];
+              const taskDuration = Math.max(task.duration || 1, 1);
+              const taskStart = getNextWorkingDay(childDate);
+              const taskEnd = addWorkingDays(taskStart, taskDuration);
+
+              await supabase.from('gantt_tasks').insert({
+                project_id: projectId,
+                title: task.name,
+                parent_id: parentId,
+                estimate_task_id: task.id,
+                start_date: taskStart.toISOString().split('T')[0],
+                end_date: taskEnd.toISOString().split('T')[0],
+                duration: taskDuration,
+                progress: 0,
+                is_milestone: false,
+                sort_order: sortOrder++,
+                source: 'estimate',
+                source_id: task.id,
+                color: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899'][si % 6]
+              });
+
+              if (taskEnd > stageEnd) stageEnd = taskEnd;
+              childDate = new Date(taskEnd);
+              childDate.setDate(childDate.getDate() + 1);
+            }
+
+            // Update parent stage dates
+            if (parentId && stageTasks.length > 0) {
+              await supabase.from('gantt_tasks').update({
+                end_date: stageEnd.toISOString().split('T')[0],
+                duration: Math.ceil((stageEnd.getTime() - stageStart.getTime()) / (1000 * 60 * 60 * 24))
+              }).eq('id', parentId);
+            }
+
+            currentDate = new Date(stageEnd);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+
+          // Also import tasks that don't belong to any stage
+          const orphanTasks = estimateItems.filter((t: any) =>
+            !estimateStages.some((s: any) => s.id === t.stage_id) && !t.parent_id
+          );
+          for (let ti = 0; ti < orphanTasks.length; ti++) {
+            const task = orphanTasks[ti];
+            const taskDuration = Math.max(task.duration || 1, 1);
+            const taskStart = getNextWorkingDay(currentDate);
+            const taskEnd = addWorkingDays(taskStart, taskDuration);
+
+            await supabase.from('gantt_tasks').insert({
+              project_id: projectId,
+              title: task.name,
+              estimate_task_id: task.id,
+              start_date: taskStart.toISOString().split('T')[0],
+              end_date: taskEnd.toISOString().split('T')[0],
+              duration: taskDuration,
+              progress: 0,
+              is_milestone: false,
+              sort_order: sortOrder++,
+              source: 'estimate',
+              source_id: task.id
+            });
+
+            currentDate = new Date(taskEnd);
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        }
+      }
+
+      // Navigate to the project's gantt
+      const proj = projects.find(p => p.id === projectId);
+      if (proj) {
+        setSelectedProject(proj);
+        await loadProjects();
+      }
+      setShowWizard(false);
+    } catch (err) {
+      console.error('Error creating harmonogram:', err);
+    } finally {
+      setWizardSaving(false);
     }
   };
 
@@ -388,6 +910,13 @@ export const GanttPage: React.FC = () => {
               className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+          <button
+            onClick={openWizard}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors font-medium shadow-sm"
+          >
+            <Plus className="w-5 h-5" />
+            Utwórz Harmonogram
+          </button>
         </div>
 
         {loading ? (
@@ -474,6 +1003,451 @@ export const GanttPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ========== WIZARD MODAL ========== */}
+        {showWizard && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowWizard(false)}>
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="p-6 pb-4 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                  <Settings className="w-6 h-6 text-emerald-600" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-bold text-slate-900">Konfiguracja harmonogramu</h2>
+                  <p className="text-sm text-slate-400 mt-0.5">Dostosuj parametry czasu i zasobów</p>
+                </div>
+                <button onClick={() => setShowWizard(false)} className="p-2 hover:bg-slate-100 rounded-lg -mt-1 -mr-1">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="px-6 flex gap-0 border-b border-slate-200">
+                {WIZARD_STEPS.map((step, idx) => {
+                  const isActive = step.key === wizardStep;
+                  const isPast = idx < wizardStepIndex;
+                  const isFuture = idx > wizardStepIndex;
+                  return (
+                    <button
+                      key={step.key}
+                      onClick={() => { if (isPast) setWizardStep(step.key); }}
+                      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-all ${
+                        isActive
+                          ? 'border-emerald-500 text-emerald-600'
+                          : isPast
+                          ? 'border-transparent text-slate-500 hover:text-slate-700 cursor-pointer'
+                          : 'border-transparent text-slate-300 cursor-default'
+                      }`}
+                      disabled={isFuture}
+                    >
+                      {step.icon}
+                      {step.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {/* Step 1: Project selection */}
+                {wizardStep === 'project' && (
+                  <div className="space-y-5">
+                    <SearchableSelect
+                      label="Wybierz projekt"
+                      placeholder="Szukaj po nazwie, adresie, kliencie..."
+                      value={wizardForm.project_id}
+                      onChange={handleWizardProjectChange}
+                      icon={<Briefcase className="w-4 h-4" />}
+                      options={projects.map(p => ({
+                        id: p.id,
+                        label: p.name,
+                        sublabel: [
+                          p.status === 'active' ? 'Aktywny' : p.status === 'completed' ? 'Zakończony' : p.status,
+                          p.customer?.name
+                        ].filter(Boolean).join(' • ')
+                      }))}
+                    />
+                    <SearchableSelect
+                      label="Wybierz kosztorys"
+                      placeholder="Szukaj kosztorysu..."
+                      value={wizardForm.estimate_id}
+                      onChange={handleWizardEstimateChange}
+                      icon={<FileText className="w-4 h-4" />}
+                      options={allEstimates.map(e => ({
+                        id: e.id,
+                        label: e.estimate_number || `Kosztorys #${e.id.substring(0, 8)}`,
+                        sublabel: [
+                          e.request?.investment_name,
+                          e.request?.client_name,
+                          e.status === 'approved' ? 'Zatwierdzony' : e.status === 'draft' ? 'Szkic' : e.status
+                        ].filter(Boolean).join(' • ')
+                      }))}
+                    />
+                    <SearchableSelect
+                      label="Wybierz ofertę"
+                      placeholder="Szukaj oferty..."
+                      value={wizardForm.offer_id}
+                      onChange={handleWizardOfferChange}
+                      icon={<ClipboardList className="w-4 h-4" />}
+                      options={allOffers.map(o => ({
+                        id: o.id,
+                        label: o.name || o.number || `Oferta #${o.id.substring(0, 8)}`,
+                        sublabel: [
+                          o.project?.name,
+                          o.status === 'accepted' ? 'Zaakceptowana' : o.status === 'sent' ? 'Wysłana' : o.status === 'draft' ? 'Szkic' : o.status,
+                          o.final_amount ? `${Number(o.final_amount).toLocaleString('pl-PL')} PLN` : ''
+                        ].filter(Boolean).join(' • ')
+                      }))}
+                    />
+                    {!wizardForm.project_id && (
+                      <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        Wybierz co najmniej jeden projekt, aby kontynuować.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 2: Time & Calendar */}
+                {wizardStep === 'time' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-slate-500 mb-1.5">Start projektu</label>
+                        <div className="relative flex items-center gap-2">
+                          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                            <Play className="w-4 h-4 text-emerald-600" />
+                          </div>
+                          <input
+                            type="date"
+                            value={wizardForm.start_date}
+                            onChange={e => setWizardForm({ ...wizardForm, start_date: e.target.value })}
+                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-slate-500 mb-1.5">Deadline</label>
+                        <div className="relative flex items-center gap-2">
+                          <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
+                            <Calendar className="w-4 h-4 text-red-500" />
+                          </div>
+                          <input
+                            type="date"
+                            value={wizardForm.deadline}
+                            onChange={e => setWizardForm({ ...wizardForm, deadline: e.target.value })}
+                            placeholder="yyyy-mm-dd"
+                            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm text-slate-500 mb-2">Dni robocze</label>
+                      <div className="flex gap-2">
+                        {DAY_LABELS.map((day, i) => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              const newDays = [...wizardForm.working_days];
+                              newDays[i] = !newDays[i];
+                              setWizardForm({ ...wizardForm, working_days: newDays });
+                            }}
+                            className={`w-10 h-10 rounded-full text-sm font-medium transition-all ${
+                              wizardForm.working_days[i]
+                                ? 'bg-emerald-500 text-white shadow-sm'
+                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl p-5">
+                      <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Harmonogram dnia</h4>
+                      <div className="grid grid-cols-3 gap-4 items-end">
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1.5">Start</label>
+                          <select
+                            value={wizardForm.day_start}
+                            onChange={e => setWizardForm({ ...wizardForm, day_start: e.target.value })}
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                          >
+                            {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1.5">Czas pracy</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              max={16}
+                              value={wizardForm.work_hours}
+                              onChange={e => setWizardForm({ ...wizardForm, work_hours: parseInt(e.target.value) || 8 })}
+                              className="flex-1 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400"
+                            />
+                            <span className="text-sm text-slate-400 font-medium">h</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm text-slate-500 mb-1.5">Koniec</label>
+                          <div className="flex items-center gap-2 px-3 py-2.5 text-slate-600">
+                            <span className="text-slate-400">&rarr;</span>
+                            <span className="font-medium">{getEndTime()}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Tasks (Zadania) */}
+                {wizardStep === 'tasks' && (
+                  <div className="space-y-3">
+                    <label className="block text-sm text-slate-500 mb-2">Tryb importu</label>
+
+                    {/* Empty harmonogram */}
+                    <label
+                      className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                        wizardForm.task_mode === 'empty'
+                          ? 'border-emerald-400 bg-emerald-50/50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="task_mode"
+                        value="empty"
+                        checked={wizardForm.task_mode === 'empty'}
+                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'empty' })}
+                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      <div>
+                        <div className="font-medium text-slate-800">Utwórz pusty harmonogram</div>
+                        <div className="text-sm text-slate-400 mt-0.5">Zacznij od zera — dodasz zadania ręcznie.</div>
+                      </div>
+                    </label>
+
+                    {/* General (Działy) */}
+                    <label
+                      className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
+                        estimateStages.length === 0
+                          ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
+                          : wizardForm.task_mode === 'general'
+                          ? 'border-emerald-400 bg-emerald-50/50 cursor-pointer'
+                          : 'border-slate-200 hover:border-slate-300 cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="task_mode"
+                        value="general"
+                        checked={wizardForm.task_mode === 'general'}
+                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'general' })}
+                        disabled={estimateStages.length === 0}
+                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-800">Ogólny (Działy)</span>
+                          {estimateStages.length === 0 && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-slate-400 mt-0.5">
+                          {estimateStages.length === 0
+                            ? 'Ten kosztorys nie posiada sekcji.'
+                            : `Importuje ${estimateStages.length} ${estimateStages.length === 1 ? 'dział' : 'działów'} jako zadania główne.`}
+                        </div>
+                      </div>
+                    </label>
+
+                    {/* Detailed (Pozycje) */}
+                    <label
+                      className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all ${
+                        estimateItems.length === 0
+                          ? 'border-slate-100 bg-slate-50 cursor-not-allowed opacity-60'
+                          : wizardForm.task_mode === 'detailed'
+                          ? 'border-emerald-400 bg-emerald-50/50 cursor-pointer'
+                          : 'border-slate-200 hover:border-slate-300 cursor-pointer'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="task_mode"
+                        value="detailed"
+                        checked={wizardForm.task_mode === 'detailed'}
+                        onChange={() => setWizardForm({ ...wizardForm, task_mode: 'detailed' })}
+                        disabled={estimateItems.length === 0}
+                        className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-800">Szczegółowy (Pozycje)</span>
+                          {estimateItems.length === 0 && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-slate-200 text-slate-500 rounded-full">Niedostępne</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-slate-400 mt-0.5">
+                          {estimateItems.length === 0
+                            ? 'Ten kosztorys nie posiada pozycji.'
+                            : `Przenosi każdą pozycję jako osobne zadanie (${estimateItems.filter((t: any) => !t.parent_id).length} pozycji).`}
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+
+                {/* Step 4: Resources */}
+                {wizardStep === 'resources' && (
+                  <div className="space-y-4">
+                    <div className="bg-slate-50 rounded-xl p-5">
+                      <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                        Jak wyliczać czas trwania zadań?
+                      </h4>
+                      <div className="space-y-3">
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                            wizardForm.resource_priority === 'slowest' ? 'bg-white shadow-sm ring-1 ring-emerald-200' : 'hover:bg-white/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="resource_priority"
+                            value="slowest"
+                            checked={wizardForm.resource_priority === 'slowest'}
+                            onChange={() => setWizardForm({ ...wizardForm, resource_priority: 'slowest' })}
+                            className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-800">Decyduje najwolniejszy zasób</span>
+                              <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Zalecane</span>
+                            </div>
+                            <div className="text-sm text-slate-400 mt-0.5">
+                              Decyduje ten zasób, który pracuje dłużej (ludzie lub sprzęt).
+                            </div>
+                          </div>
+                        </label>
+
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                            wizardForm.resource_priority === 'labor' ? 'bg-white shadow-sm ring-1 ring-emerald-200' : 'hover:bg-white/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="resource_priority"
+                            value="labor"
+                            checked={wizardForm.resource_priority === 'labor'}
+                            onChange={() => setWizardForm({ ...wizardForm, resource_priority: 'labor' })}
+                            className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                          />
+                          <div>
+                            <span className="font-medium text-slate-800">Priorytetyzuj robociznę</span>
+                            <div className="text-sm text-slate-400 mt-0.5">
+                              Czas pracy maszyn jest ignorowany (np. koparka czeka na ludzi).
+                            </div>
+                          </div>
+                        </label>
+
+                        <label
+                          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                            wizardForm.resource_priority === 'equipment' ? 'bg-white shadow-sm ring-1 ring-emerald-200' : 'hover:bg-white/50'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="resource_priority"
+                            value="equipment"
+                            checked={wizardForm.resource_priority === 'equipment'}
+                            onChange={() => setWizardForm({ ...wizardForm, resource_priority: 'equipment' })}
+                            className="mt-0.5 w-4 h-4 text-emerald-500 focus:ring-emerald-400"
+                          />
+                          <div>
+                            <span className="font-medium text-slate-800">Priorytetyzuj sprzęt</span>
+                            <div className="text-sm text-slate-400 mt-0.5">
+                              Decyduje czas pracy głównej maszyny (np. dźwigu).
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {estimateItems.length === 0 && wizardForm.task_mode !== 'empty' && (
+                      <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                        <Settings className="w-10 h-10 mb-3 text-slate-300" />
+                        <p className="text-sm">Nie znaleziono szczegółowych zasobów w tym kosztorysie.</p>
+                        <p className="text-sm">Zastosujemy domyślne ustawienia ogólne.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between">
+                <div className="text-xs text-slate-400">
+                  {wizardSaving && (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Zajmie to mniej niż minutę.
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {wizardStepIndex > 0 ? (
+                    <button
+                      onClick={goPrevStep}
+                      className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      Wstecz
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowWizard(false)}
+                      className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      Anuluj
+                    </button>
+                  )}
+                  {wizardStepIndex < WIZARD_STEPS.length - 1 ? (
+                    <button
+                      onClick={goNextStep}
+                      disabled={!canGoNext()}
+                      className="flex items-center gap-2 px-5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      Dalej
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCreateHarmonogram}
+                      disabled={wizardSaving}
+                      className="flex items-center gap-2 px-5 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 transition-colors font-medium"
+                    >
+                      {wizardSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Check className="w-4 h-4" />
+                      )}
+                      Utwórz Harmonogram
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
