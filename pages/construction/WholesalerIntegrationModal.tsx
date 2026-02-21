@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Loader2, Check, AlertCircle, Store, Zap, LogIn, LogOut, ChevronRight } from 'lucide-react';
+import { X, Loader2, Check, AlertCircle, Store, Zap, LogIn, LogOut, ChevronRight, Smartphone, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WholesalerIntegration } from '../../types';
 
@@ -14,10 +14,20 @@ const BRANZE = [
 const WHOLESALERS: Record<string, { id: string; name: string; logo?: string; color: string; description: string }[]> = {
   elektryczne: [
     { id: 'tim', name: 'TIM S.A.', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
+    { id: 'oninen', name: 'Onninen', color: '#FF6B00', description: 'Hurtownia elektryczna i przemysłowa Onninen.pl - szeroki asortyment materiałów instalacyjnych' },
   ],
   sanitarne: [],
   klimatyzacyjne: [],
 };
+
+// Map wholesaler ID to edge function name
+function getProxyName(wholesalerId: string): string {
+  switch (wholesalerId) {
+    case 'tim': return 'tim-proxy';
+    case 'oninen': return 'oninen-proxy';
+    default: return 'tim-proxy';
+  }
+}
 
 interface Props {
   isOpen: boolean;
@@ -43,17 +53,32 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
   const [authSuccess, setAuthSuccess] = useState('');
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
+  // 2FA state
+  const [needs2fa, setNeeds2fa] = useState(false);
+  const [tempId, setTempId] = useState('');
+  const [code2fa, setCode2fa] = useState('');
+  const [twoFaMessage, setTwoFaMessage] = useState('');
+  const [resending2fa, setResending2fa] = useState(false);
+
   if (!isOpen) return null;
 
   const getIntegration = (wholesalerId: string) =>
     integrations.find(i => i.wholesaler_id === wholesalerId && i.is_active);
 
-  const handleConnect = async (wholesalerId: string, wholesalerName: string) => {
-    setAuthModal({ wholesalerId, wholesalerName });
+  const resetAuthState = () => {
     setUsername('');
     setPassword('');
     setAuthError('');
     setAuthSuccess('');
+    setNeeds2fa(false);
+    setTempId('');
+    setCode2fa('');
+    setTwoFaMessage('');
+  };
+
+  const handleConnect = async (wholesalerId: string, wholesalerName: string) => {
+    setAuthModal({ wholesalerId, wholesalerName });
+    resetAuthState();
   };
 
   const handleDisconnect = async (wholesalerId: string) => {
@@ -61,8 +86,8 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
     try {
       const integration = integrations.find(i => i.wholesaler_id === wholesalerId);
       if (integration) {
-        // Logout via edge function (also deletes from DB)
-        await supabase.functions.invoke('tim-proxy', {
+        const proxyName = getProxyName(wholesalerId);
+        await supabase.functions.invoke(proxyName, {
           body: { action: 'logout', integrationId: integration.id },
         });
       }
@@ -82,9 +107,9 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
 
     try {
       const existing = integrations.find(i => i.wholesaler_id === authModal.wholesalerId);
+      const proxyName = getProxyName(authModal.wholesalerId);
 
-      // Authenticate via edge function (also saves credentials to DB)
-      const { data, error } = await supabase.functions.invoke('tim-proxy', {
+      const { data, error } = await supabase.functions.invoke(proxyName, {
         body: {
           action: 'login',
           username,
@@ -103,6 +128,15 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
         return;
       }
 
+      // Handle 2FA requirement
+      if (data?.needs2fa) {
+        setNeeds2fa(true);
+        setTempId(data.tempId);
+        setTwoFaMessage(data.message || 'Kod SMS został wysłany');
+        setAuthLoading(false);
+        return;
+      }
+
       if (!data?.success) {
         setAuthError(data?.error || 'Błąd logowania. Sprawdź dane dostępowe.');
         setAuthLoading(false);
@@ -112,14 +146,87 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
       setAuthSuccess(`Połączono z ${authModal.wholesalerName} jako ${data.username || username}`);
       onIntegrationChange();
 
-      // Close auth modal after short delay
       setTimeout(() => {
         setAuthModal(null);
+        resetAuthState();
       }, 1500);
     } catch (err: any) {
       setAuthError(err.message || 'Błąd połączenia');
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  const handle2faSubmit = async () => {
+    if (!authModal || !code2fa || !tempId) return;
+    setAuthLoading(true);
+    setAuthError('');
+
+    try {
+      const existing = integrations.find(i => i.wholesaler_id === authModal.wholesalerId);
+      const proxyName = getProxyName(authModal.wholesalerId);
+
+      const { data, error } = await supabase.functions.invoke(proxyName, {
+        body: {
+          action: 'login2fa',
+          tempId,
+          code2fa,
+          companyId,
+          wholesalerId: authModal.wholesalerId,
+          wholesalerName: authModal.wholesalerName,
+          branza: selectedBranza,
+          existingIntegrationId: existing?.id,
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message || 'Błąd weryfikacji kodu');
+        setAuthLoading(false);
+        return;
+      }
+
+      // Still needs 2FA (wrong code)
+      if (data?.needs2fa) {
+        setAuthError(data.message || 'Nieprawidłowy kod. Spróbuj ponownie.');
+        setCode2fa('');
+        setAuthLoading(false);
+        return;
+      }
+
+      if (!data?.success) {
+        setAuthError(data?.error || 'Błąd weryfikacji. Spróbuj ponownie.');
+        setAuthLoading(false);
+        return;
+      }
+
+      setAuthSuccess(`Połączono z ${authModal.wholesalerName} jako ${data.username || username}`);
+      onIntegrationChange();
+
+      setTimeout(() => {
+        setAuthModal(null);
+        resetAuthState();
+      }, 1500);
+    } catch (err: any) {
+      setAuthError(err.message || 'Błąd weryfikacji');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResend2fa = async () => {
+    if (!authModal || !tempId) return;
+    setResending2fa(true);
+
+    try {
+      const proxyName = getProxyName(authModal.wholesalerId);
+      const { data } = await supabase.functions.invoke(proxyName, {
+        body: { action: 'resend2fa', tempId },
+      });
+      setTwoFaMessage(data?.message || 'Kod SMS wysłany ponownie');
+    } catch (err: any) {
+      setAuthError(err.message || 'Nie udało się wysłać kodu ponownie');
+    } finally {
+      setResending2fa(false);
     }
   };
 
@@ -255,15 +362,21 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
       {/* Auth sub-modal */}
       {authModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          <div className="fixed inset-0 bg-black bg-opacity-30" onClick={() => !authLoading && setAuthModal(null)} />
+          <div className="fixed inset-0 bg-black bg-opacity-30" onClick={() => !authLoading && (setAuthModal(null), resetAuthState())} />
           <div className="relative bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
-                <LogIn className="w-4 h-4 text-blue-600" />
-                <h4 className="font-semibold text-slate-900">Logowanie — {authModal.wholesalerName}</h4>
+                {needs2fa ? (
+                  <Smartphone className="w-4 h-4 text-orange-600" />
+                ) : (
+                  <LogIn className="w-4 h-4 text-blue-600" />
+                )}
+                <h4 className="font-semibold text-slate-900">
+                  {needs2fa ? 'Weryfikacja SMS' : 'Logowanie'} — {authModal.wholesalerName}
+                </h4>
               </div>
               <button
-                onClick={() => !authLoading && setAuthModal(null)}
+                onClick={() => { if (!authLoading) { setAuthModal(null); resetAuthState(); } }}
                 className="text-slate-400 hover:text-slate-500"
               >
                 <X className="w-4 h-4" />
@@ -271,34 +384,70 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
             </div>
 
             <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-500">
-                Podaj dane logowania do konta w {authModal.wholesalerName}. Dane zostaną bezpiecznie zapisane.
-              </p>
+              {!needs2fa ? (
+                /* Standard login form */
+                <>
+                  <p className="text-xs text-slate-500">
+                    Podaj dane logowania do konta w {authModal.wholesalerName}. Dane zostaną bezpiecznie zapisane.
+                  </p>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Login / Email</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="twoj@email.pl"
-                  disabled={authLoading}
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Login / Email</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="twoj@email.pl"
+                      disabled={authLoading}
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hasło</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder="********"
-                  disabled={authLoading}
-                  onKeyDown={e => e.key === 'Enter' && handleAuth()}
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Hasło</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      placeholder="********"
+                      disabled={authLoading}
+                      onKeyDown={e => e.key === 'Enter' && handleAuth()}
+                    />
+                  </div>
+                </>
+              ) : (
+                /* 2FA SMS code form */
+                <>
+                  <div className="flex items-start gap-2 text-sm text-orange-700 bg-orange-50 p-3 rounded-lg">
+                    <Smartphone className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{twoFaMessage}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Kod SMS</label>
+                    <input
+                      type="text"
+                      value={code2fa}
+                      onChange={e => setCode2fa(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-center tracking-widest font-mono text-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none"
+                      placeholder="------"
+                      disabled={authLoading}
+                      onKeyDown={e => e.key === 'Enter' && handle2faSubmit()}
+                      autoFocus
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleResend2fa}
+                    disabled={resending2fa || authLoading}
+                    className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${resending2fa ? 'animate-spin' : ''}`} />
+                    Wyślij kod ponownie
+                  </button>
+                </>
+              )}
 
               {authError && (
                 <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg">
@@ -314,23 +463,43 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                 </div>
               )}
 
-              <button
-                onClick={handleAuth}
-                disabled={authLoading || !username || !password}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {authLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Logowanie...
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    Zaloguj się
-                  </>
-                )}
-              </button>
+              {!needs2fa ? (
+                <button
+                  onClick={handleAuth}
+                  disabled={authLoading || !username || !password}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {authLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Logowanie...
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      Zaloguj się
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handle2faSubmit}
+                  disabled={authLoading || !code2fa}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {authLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Weryfikacja...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Potwierdź kod
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

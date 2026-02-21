@@ -24,6 +24,7 @@ import type {
 } from '../../types';
 import { WholesalerIntegrationModal } from './WholesalerIntegrationModal';
 import { TIMIntegrator } from './TIMIntegrator';
+import { OninenIntegrator } from './OninenIntegrator';
 
 // ============ Типы для вкладок ============
 type TabType = 'work_types' | 'materials' | 'equipment' | 'slownik';
@@ -3396,6 +3397,9 @@ export const DictionariesPage: React.FC = () => {
                   {materialsSubTab === 'tim' && (
                     <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
                   )}
+                  {materialsSubTab === 'oninen' && (
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
+                  )}
                 </div>
               )}
 
@@ -3439,6 +3443,9 @@ export const DictionariesPage: React.FC = () => {
                   {equipmentSubTab === 'own' && renderEquipmentTab()}
                   {equipmentSubTab === 'tim' && (
                     <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                  )}
+                  {equipmentSubTab === 'oninen' && (
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
                   )}
                 </div>
               )}
@@ -3513,6 +3520,9 @@ export const DictionariesPage: React.FC = () => {
                   )}
                   {slownikMainSubTab === 'tim' && (
                     <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                  )}
+                  {slownikMainSubTab === 'oninen' && (
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
                   )}
                 </div>
               )}
