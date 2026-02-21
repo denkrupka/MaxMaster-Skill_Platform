@@ -9,8 +9,30 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, Estimate, EstimateStage, EstimateTask, EstimateResource } from '../../types';
+import { fetchCompanyByNip, validateNip, normalizeNip } from '../../lib/gusApi';
+import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmAutocomplete';
+import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, Estimate, EstimateStage, EstimateTask, EstimateResource, KosztorysRequestSource } from '../../types';
 import { OFFER_STATUS_LABELS, OFFER_STATUS_COLORS } from '../../constants';
+
+const OFFER_SOURCE_LABELS: Record<KosztorysRequestSource, string> = {
+  email: 'E-mail',
+  phone: 'Telefon',
+  meeting: 'Spotkanie',
+  tender: 'Przetarg',
+  other: 'Inne'
+};
+
+interface OfferExistingClient {
+  contractor_id?: string;
+  client_name: string;
+  nip: string | null;
+  company_street: string | null;
+  company_street_number: string | null;
+  company_city: string | null;
+  company_postal_code: string | null;
+  company_country: string | null;
+  source: 'contractor' | 'request_history';
+}
 
 // ============================================
 // TYPES
@@ -116,6 +138,22 @@ export const OffersPage: React.FC = () => {
 
   const autoSelectDone = useRef(false);
 
+  // Client form state (kosztorys-style)
+  const [offerClientData, setOfferClientData] = useState({
+    client_name: '', nip: '', company_street: '', company_street_number: '',
+    company_city: '', company_postal_code: '', company_country: 'Polska',
+    internal_notes: '', request_source: 'email' as KosztorysRequestSource
+  });
+  const [offerGusLoading, setOfferGusLoading] = useState(false);
+  const [offerGusError, setOfferGusError] = useState<string | null>(null);
+  const [offerGusSuccess, setOfferGusSuccess] = useState<string | null>(null);
+  const [offerExistingClients, setOfferExistingClients] = useState<OfferExistingClient[]>([]);
+  const [offerClientSearchQuery, setOfferClientSearchQuery] = useState('');
+  const [offerShowClientDropdown, setOfferShowClientDropdown] = useState(false);
+  const [offerFilteredClients, setOfferFilteredClients] = useState<OfferExistingClient[]>([]);
+  const [offerCompanyAddressSuggestions, setOfferCompanyAddressSuggestions] = useState<OSMAddress[]>([]);
+  const [offerShowCompanyAddressSuggestions, setOfferShowCompanyAddressSuggestions] = useState(false);
+
   // ============================================
   // DATA LOADING
   // ============================================
@@ -161,6 +199,196 @@ export const OffersPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ============================================
+  // CLIENT FORM HELPERS (kosztorys-style)
+  // ============================================
+  const loadOfferExistingClients = async () => {
+    if (!currentUser) return;
+    try {
+      const { data: portalClients } = await supabase
+        .from('contractors_clients')
+        .select('id, name, nip, address_street, address_city, address_postal_code, address_country, contractor_type')
+        .eq('company_id', currentUser.company_id)
+        .eq('is_archived', false)
+        .order('name');
+
+      const { data: requestsData } = await supabase
+        .from('kosztorys_requests')
+        .select('client_name, nip, company_street, company_street_number, company_city, company_postal_code, company_country')
+        .eq('company_id', currentUser.company_id)
+        .order('client_name');
+
+      const allClients: OfferExistingClient[] = [];
+      const portalByNip = new Map<string, number>();
+      const portalByName = new Map<string, number>();
+
+      if (portalClients) {
+        portalClients.forEach(c => {
+          const idx = allClients.length;
+          allClients.push({
+            contractor_id: c.id, client_name: c.name, nip: c.nip,
+            company_street: c.address_street, company_street_number: null,
+            company_city: c.address_city, company_postal_code: c.address_postal_code,
+            company_country: c.address_country === 'PL' ? 'Polska' : (c.address_country || 'Polska'),
+            source: 'contractor'
+          });
+          if (c.nip) portalByNip.set(c.nip.replace(/\D/g, ''), idx);
+          portalByName.set(c.name.toLowerCase(), idx);
+        });
+      }
+
+      if (requestsData) {
+        requestsData.forEach(r => {
+          if (portalByName.has(r.client_name.toLowerCase())) {
+            const idx = portalByName.get(r.client_name.toLowerCase())!;
+            if (!allClients[idx].company_street && r.company_street) {
+              allClients[idx].company_street = r.company_street;
+              allClients[idx].company_street_number = r.company_street_number;
+              allClients[idx].company_city = r.company_city;
+              allClients[idx].company_postal_code = r.company_postal_code;
+            }
+            return;
+          }
+          if (r.nip) {
+            const rawNip = r.nip.replace(/\D/g, '');
+            if (portalByNip.has(rawNip)) return;
+          }
+          allClients.push({
+            client_name: r.client_name, nip: r.nip,
+            company_street: r.company_street, company_street_number: r.company_street_number,
+            company_city: r.company_city, company_postal_code: r.company_postal_code,
+            company_country: r.company_country || 'Polska', source: 'request_history'
+          });
+        });
+      }
+
+      setOfferExistingClients(allClients);
+    } catch (err) {
+      console.error('Error loading existing clients for offers:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) loadOfferExistingClients();
+  }, [currentUser]);
+
+  // Filter clients based on search query
+  useEffect(() => {
+    if (offerClientSearchQuery.trim().length >= 2) {
+      const query = offerClientSearchQuery.toLowerCase();
+      const filtered = offerExistingClients.filter(c =>
+        c.client_name.toLowerCase().includes(query) || (c.nip && c.nip.includes(query))
+      );
+      filtered.sort((a, b) => {
+        if (a.source !== b.source) return a.source === 'contractor' ? -1 : 1;
+        return a.client_name.localeCompare(b.client_name);
+      });
+      setOfferFilteredClients(filtered);
+      setOfferShowClientDropdown(filtered.length > 0 || offerClientSearchQuery.trim().length >= 2);
+    } else {
+      setOfferFilteredClients([]);
+      setOfferShowClientDropdown(false);
+    }
+  }, [offerClientSearchQuery, offerExistingClients]);
+
+  const debouncedOfferAddressSearch = useCallback(createDebouncedSearch(500), []);
+
+  const handleOfferCompanyStreetChange = (value: string) => {
+    setOfferClientData(prev => ({ ...prev, company_street: value }));
+    if (value.length >= 3) {
+      const sq = offerClientData.company_city ? `${value}, ${offerClientData.company_city}` : value;
+      debouncedOfferAddressSearch(sq, (results: OSMAddress[]) => {
+        setOfferCompanyAddressSuggestions(results);
+        setOfferShowCompanyAddressSuggestions(results.length > 0);
+      });
+    } else {
+      setOfferShowCompanyAddressSuggestions(false);
+    }
+  };
+
+  const selectOfferCompanyAddress = (addr: OSMAddress) => {
+    setOfferClientData(prev => ({
+      ...prev,
+      company_street: addr.street, company_street_number: addr.streetNumber,
+      company_city: addr.city, company_postal_code: addr.postalCode,
+      company_country: addr.country || 'Polska'
+    }));
+    setOfferShowCompanyAddressSuggestions(false);
+  };
+
+  const selectOfferExistingClient = (client: OfferExistingClient) => {
+    let nip = client.nip || '';
+    if (!nip && client.contractor_id) {
+      const entry = offerExistingClients.find(c => c.contractor_id === client.contractor_id && c.nip);
+      if (entry) nip = entry.nip || '';
+    }
+    setOfferClientData(prev => ({
+      ...prev, client_name: client.client_name, nip,
+      company_street: client.company_street || '', company_street_number: client.company_street_number || '',
+      company_city: client.company_city || '', company_postal_code: client.company_postal_code || '',
+      company_country: client.company_country || 'Polska'
+    }));
+    setOfferClientSearchQuery('');
+    setOfferShowClientDropdown(false);
+  };
+
+  const handleOfferFetchGus = async () => {
+    if (!offerClientData.nip) { setOfferGusError('Wprowadź NIP'); return; }
+    if (!validateNip(offerClientData.nip)) { setOfferGusError('Nieprawidłowy format NIP'); return; }
+    setOfferGusLoading(true); setOfferGusError(null); setOfferGusSuccess(null);
+    try {
+      // Check local contractors first
+      const rawNip = offerClientData.nip.replace(/\D/g, '');
+      const { data: portalClients } = await supabase
+        .from('contractors_clients')
+        .select('id, name, nip, address_street, address_city, address_postal_code, address_country')
+        .eq('company_id', currentUser!.company_id)
+        .eq('is_archived', false);
+      const match = portalClients?.find(c => c.nip && c.nip.replace(/\D/g, '') === rawNip);
+      if (match) {
+        setOfferClientData(prev => ({
+          ...prev, client_name: match.name,
+          company_street: match.address_street || prev.company_street,
+          company_city: match.address_city || prev.company_city,
+          company_postal_code: match.address_postal_code || prev.company_postal_code,
+          company_country: match.address_country === 'PL' ? 'Polska' : (match.address_country || 'Polska')
+        }));
+        setOfferGusSuccess('Klient znaleziony w bazie kontrahentów');
+        setOfferGusLoading(false);
+        return;
+      }
+      // Fetch from GUS API
+      const result = await fetchCompanyByNip(offerClientData.nip);
+      if (result.success && result.data) {
+        const d = result.data;
+        setOfferClientData(prev => ({
+          ...prev, client_name: d.name || prev.client_name,
+          company_street: d.street || prev.company_street, company_street_number: d.streetNumber || prev.company_street_number,
+          company_city: d.city || prev.company_city, company_postal_code: d.postalCode || prev.company_postal_code,
+          company_country: d.country || 'Polska'
+        }));
+        setOfferGusSuccess('Dane pobrane z GUS');
+      } else {
+        setOfferGusError(result.error || 'Nie udało się pobrać danych');
+      }
+    } catch (err: any) {
+      setOfferGusError(err.message || 'Błąd połączenia');
+    } finally {
+      setOfferGusLoading(false);
+    }
+  };
+
+  const resetOfferClientData = () => {
+    setOfferClientData({
+      client_name: '', nip: '', company_street: '', company_street_number: '',
+      company_city: '', company_postal_code: '', company_country: 'Polska',
+      internal_notes: '', request_source: 'email' as KosztorysRequestSource
+    });
+    setOfferGusError(null); setOfferGusSuccess(null);
+    setOfferClientSearchQuery(''); setOfferShowClientDropdown(false);
+    setOfferShowCompanyAddressSuggestions(false);
   };
 
   // Auto-select offer from URL param (e.g. #/construction/offers?offerId=xxx)
@@ -501,6 +729,22 @@ export const OffersPage: React.FC = () => {
       valid_until: offer.valid_until ? offer.valid_until.split('T')[0] : '',
       notes: offer.notes || ''
     });
+    // Pre-populate client data from the offer's client
+    const client = (offer as any).client;
+    if (client) {
+      setOfferClientData(prev => ({
+        ...prev,
+        client_name: client.name || '',
+        nip: client.nip || '',
+        company_street: client.address_street || '',
+        company_street_number: client.address_street_number || '',
+        company_city: client.address_city || '',
+        company_postal_code: client.address_postal_code || '',
+        internal_notes: offer.notes || ''
+      }));
+    } else {
+      resetOfferClientData();
+    }
     setShowEditModal(true);
   };
 
@@ -862,6 +1106,7 @@ export const OffersPage: React.FC = () => {
     });
     setSections([]);
     setSelectedEstimateId('');
+    resetOfferClientData();
   };
 
   // ============================================
@@ -900,6 +1145,170 @@ export const OffersPage: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  // ============================================
+  // RENDER: CLIENT FORM (kosztorys-style, reusable)
+  // ============================================
+  const renderClientFormSection = () => (
+    <div className="space-y-4">
+      <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+        <Building2 className="w-5 h-5 text-slate-400" />
+        Dane klienta
+      </h3>
+
+      {/* NIP with GUS button */}
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-slate-700 mb-1">NIP</label>
+          <input
+            type="text"
+            value={offerClientData.nip}
+            onChange={e => {
+              setOfferClientData(prev => ({ ...prev, nip: e.target.value }));
+              setOfferGusError(null);
+              setOfferGusSuccess(null);
+            }}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="XXX-XXX-XX-XX"
+          />
+        </div>
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={handleOfferFetchGus}
+            disabled={offerGusLoading || !offerClientData.nip}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {offerGusLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            Pobierz z GUS
+          </button>
+        </div>
+      </div>
+      {offerGusError && <p className="text-sm text-red-600">{offerGusError}</p>}
+      {offerGusSuccess && <p className="text-sm text-green-600">{offerGusSuccess}</p>}
+
+      {/* Company name with autocomplete */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2 relative">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
+          <input
+            type="text"
+            value={offerClientData.client_name}
+            onChange={e => {
+              setOfferClientData(prev => ({ ...prev, client_name: e.target.value }));
+              setOfferClientSearchQuery(e.target.value);
+            }}
+            onFocus={() => {
+              if (offerClientData.client_name.length >= 2) setOfferClientSearchQuery(offerClientData.client_name);
+            }}
+            onBlur={() => { setTimeout(() => setOfferShowClientDropdown(false), 200); }}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="Wyszukaj istniejącego lub wpisz nową nazwę..."
+          />
+          {offerShowClientDropdown && (
+            <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {offerFilteredClients.length > 0 ? (
+                <>
+                  {offerFilteredClients.some(c => c.source === 'contractor') && (
+                    <div className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border-b">Kontrahenci z bazy</div>
+                  )}
+                  {offerFilteredClients.filter(c => c.source === 'contractor').map((client, i) => (
+                    <button key={`c-${i}`} type="button" onClick={() => selectOfferExistingClient(client)}
+                      className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0">
+                      <div className="font-medium text-slate-900">{client.client_name}</div>
+                      <div className="text-xs text-slate-500 flex gap-2">
+                        {client.nip && <span>NIP: {client.nip}</span>}
+                        {client.company_city && <span>{client.company_city}</span>}
+                      </div>
+                    </button>
+                  ))}
+                  {offerFilteredClients.some(c => c.source === 'request_history') && (
+                    <div className="px-3 py-2 text-xs font-semibold text-slate-400 bg-slate-50 border-b border-t">Z historii zapytań</div>
+                  )}
+                  {offerFilteredClients.filter(c => c.source === 'request_history').map((client, i) => (
+                    <button key={`h-${i}`} type="button" onClick={() => selectOfferExistingClient(client)}
+                      className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0 opacity-75">
+                      <div className="font-medium text-slate-900">{client.client_name}</div>
+                      <div className="text-xs text-slate-500 flex gap-2">
+                        {client.nip && <span>NIP: {client.nip}</span>}
+                        {client.company_city && <span>{client.company_city}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </>
+              ) : offerClientSearchQuery.length >= 2 && (
+                <div className="px-3 py-3 text-sm text-slate-500 text-center">
+                  Nie znaleziono klienta. Możesz dodać nowego lub wyszukać w GUS.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Company address */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="col-span-2 relative">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Ulica</label>
+          <input
+            type="text"
+            value={offerClientData.company_street}
+            onChange={e => handleOfferCompanyStreetChange(e.target.value)}
+            onFocus={() => offerCompanyAddressSuggestions.length > 0 && setOfferShowCompanyAddressSuggestions(true)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+            placeholder="ul. Przykładowa"
+          />
+          {offerShowCompanyAddressSuggestions && offerCompanyAddressSuggestions.length > 0 && (
+            <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+              {offerCompanyAddressSuggestions.map((addr, i) => (
+                <button key={i} type="button" onClick={() => selectOfferCompanyAddress(addr)}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                  <div className="font-medium">{addr.street} {addr.streetNumber}</div>
+                  <div className="text-slate-500 text-xs">{addr.postalCode} {addr.city}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Numer</label>
+          <input type="text" value={offerClientData.company_street_number}
+            onChange={e => setOfferClientData(prev => ({ ...prev, company_street_number: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="12A" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Kod pocztowy</label>
+          <input type="text" value={offerClientData.company_postal_code}
+            onChange={e => setOfferClientData(prev => ({ ...prev, company_postal_code: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="00-000" />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Miasto</label>
+          <input type="text" value={offerClientData.company_city}
+            onChange={e => setOfferClientData(prev => ({ ...prev, company_city: e.target.value }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Warszawa" />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1">Źródło zapytania</label>
+          <select value={offerClientData.request_source}
+            onChange={e => setOfferClientData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500">
+            {Object.entries(OFFER_SOURCE_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Notatka wewnętrzna</label>
+        <textarea value={offerClientData.internal_notes}
+          onChange={e => setOfferClientData(prev => ({ ...prev, internal_notes: e.target.value }))}
+          rows={2} className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+          placeholder="Notatki widoczne tylko dla zespołu..." />
+      </div>
+    </div>
+  );
 
   // ============================================
   // RENDER: CREATE MODAL
@@ -957,26 +1366,8 @@ export const OffersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 2. Client */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-slate-400" />
-              Klient
-            </h3>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Wybierz klienta</label>
-              <select
-                value={offerData.client_id}
-                onChange={e => setOfferData({ ...offerData, client_id: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- Wybierz klienta --</option>
-                {contractors.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* 2. Client (kosztorys-style) */}
+          {renderClientFormSection()}
 
           {/* 3. Import from estimate */}
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -2026,44 +2417,8 @@ export const OffersPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. Client */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-slate-400" />
-                  Klient
-                </h3>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Wybierz klienta</label>
-                  <select
-                    value={editForm.client_id}
-                    onChange={e => setEditForm({ ...editForm, client_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">-- Wybierz klienta --</option>
-                    {contractors.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* 3. Notes */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-slate-400" />
-                  Notatki
-                </h3>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Notatki</label>
-                  <textarea
-                    value={editForm.notes}
-                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="Dodatkowe informacje..."
-                  />
-                </div>
-              </div>
+              {/* 2. Client (kosztorys-style) */}
+              {renderClientFormSection()}
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
               <button
