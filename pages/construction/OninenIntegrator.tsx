@@ -57,6 +57,7 @@ interface OninenProductDetail {
 interface Props {
   integrationId?: string;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string }) => void;
 }
 
 // ═══ Helper: invoke oninen-proxy edge function ═══
@@ -145,7 +146,8 @@ const ProductDetail: React.FC<{
   integrationId?: string;
   onClose: () => void;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-}> = ({ product, integrationId, onClose, onSelectProduct }) => {
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string }) => void;
+}> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog }) => {
   const [detail, setDetail] = useState<OninenProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +291,31 @@ const ProductDetail: React.FC<{
                 Otwórz na Onninen.pl
               </a>
             )}
+
+            {onAddToOwnCatalog && (
+              <button
+                onClick={() => {
+                  onAddToOwnCatalog({
+                    name: detail.name,
+                    sku: detail.sku,
+                    ean: detail.ean,
+                    price: detail.priceEnd ?? null,
+                    catalogPrice: detail.priceCatalog ?? null,
+                    image: detail.image,
+                    manufacturer: detail.brand || undefined,
+                    unit: detail.unit,
+                    description: detail.description,
+                    url: detail.url,
+                    wholesaler: 'oninen',
+                  });
+                  onClose();
+                }}
+                className="w-full py-2.5 mt-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <Package className="w-4 h-4" />
+                Dodaj do katalogu Własnego
+              </button>
+            )}
           </div>
         </div>
 
@@ -431,7 +458,7 @@ const ProductCardList: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ 
 };
 
 // ═══ MAIN COMPONENT ═══
-export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct }) => {
+export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct, onAddToOwnCatalog }) => {
   const [categories, setCategories] = useState<OninenCategory[]>([]);
   const [catLoading, setCatLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState<OninenCategory | null>(null);
@@ -692,6 +719,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
           integrationId={integrationId}
           onClose={() => setDetailProduct(null)}
           onSelectProduct={onSelectProduct}
+          onAddToOwnCatalog={onAddToOwnCatalog}
         />
       )}
     </div>

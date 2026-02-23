@@ -3,7 +3,8 @@ import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
   Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen,
   Settings, AlertCircle, ChevronRight, ClipboardList, GripVertical,
-  Layers, FolderOpen, Store
+  Layers, FolderOpen, Store, Grid3X3, List, ExternalLink, ChevronLeft,
+  Image as ImageIcon, Upload, Eye, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -36,17 +37,19 @@ const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }>
   { id: 'slownik', label: 'Słownik', icon: BookOpen },
 ];
 
-// ============ Единицы измерения ============
-const UNITS = [
-  { value: 'szt', label: 'szt. (штуки)' },
-  { value: 'm', label: 'm (метры)' },
-  { value: 'm2', label: 'm² (кв.м)' },
-  { value: 'm3', label: 'm³ (куб.м)' },
-  { value: 'kg', label: 'kg (кг)' },
-  { value: 'kpl', label: 'kpl. (комплект)' },
-  { value: 'godz', label: 'godz. (часы)' },
-  { value: 'mb', label: 'mb (п.м)' },
-  { value: 'op', label: 'op. (упаковка)' },
+// ============ Единицы измерения (дефолтные, на польском) ============
+const DEFAULT_UNITS = [
+  { value: 'szt.', label: 'szt. (sztuki)' },
+  { value: 'm', label: 'm (metry)' },
+  { value: 'm²', label: 'm² (metry kwadratowe)' },
+  { value: 'm³', label: 'm³ (metry sześcienne)' },
+  { value: 'kg', label: 'kg (kilogramy)' },
+  { value: 'kpl.', label: 'kpl. (komplet)' },
+  { value: 'godz.', label: 'godz. (godziny)' },
+  { value: 'mb', label: 'mb (metry bieżące)' },
+  { value: 'op.', label: 'op. (opakowanie)' },
+  { value: 'l', label: 'l (litry)' },
+  { value: 't', label: 't (tony)' },
 ];
 
 // ============ Категории работ ============
@@ -61,17 +64,7 @@ const WORK_CATEGORIES = [
   { value: 'INNE', label: 'Прочее' },
 ];
 
-// ============ Категории материалов ============
-const MATERIAL_CATEGORIES = [
-  { value: 'kable', label: 'Кабели' },
-  { value: 'osprzet', label: 'Электрофурнитура' },
-  { value: 'rozdzielnice', label: 'Щиты' },
-  { value: 'systemy', label: 'Крепления' },
-  { value: 'ochrona', label: 'Защита' },
-  { value: 'oswietlenie', label: 'Освещение' },
-  { value: 'teletechnika', label: 'Слаботочка' },
-  { value: 'inne', label: 'Прочее' },
-];
+// ============ Категории материалов — теперь динамические (user-created) ============
 
 // ============ Типы формуляров ============
 const FORM_TYPES: { value: KosztorysFormType; label: string }[] = [
@@ -145,6 +138,27 @@ export const DictionariesPage: React.FC = () => {
   const [materialDialog, setMaterialDialog] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Partial<KosztorysMaterial> | null>(null);
   const [materialSearch, setMaterialSearch] = useState('');
+
+  // ============ Расширенные состояния для каталога Własny ============
+  const [customCategories, setCustomCategories] = useState<{ id: string; name: string; sort_order: number }[]>([]);
+  const [customManufacturers, setCustomManufacturers] = useState<{ id: string; name: string }[]>([]);
+  const [customUnits, setCustomUnits] = useState<{ id: string; value: string; label: string }[]>([]);
+  const [materialViewMode, setMaterialViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedMaterialCategory, setSelectedMaterialCategory] = useState<string | null>(null);
+  const [detailMaterial, setDetailMaterial] = useState<KosztorysMaterial | null>(null);
+  const [autoGenerateCode, setAutoGenerateCode] = useState(true);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newManufacturerName, setNewManufacturerName] = useState('');
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showAddManufacturer, setShowAddManufacturer] = useState(false);
+  const [newUnitValue, setNewUnitValue] = useState('');
+  const [newUnitLabel, setNewUnitLabel] = useState('');
+  const [showAddUnit, setShowAddUnit] = useState(false);
+  const [materialImages, setMaterialImages] = useState<string[]>([]);
+  const [wholesalerPrices, setWholesalerPrices] = useState<Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [addToCatalogModal, setAddToCatalogModal] = useState<{ product: any; wholesaler: string } | null>(null);
+  const [priceSyncMode, setPriceSyncMode] = useState<'fixed' | 'synced'>('fixed');
 
   // ============ Оборудование ============
   const [equipment, setEquipment] = useState<KosztorysEquipment[]>([]);
@@ -221,6 +235,191 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
+  const loadCustomCategories = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_custom_categories')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('sort_order', { ascending: true });
+      if (!error) setCustomCategories(data || []);
+    } catch (err) {
+      console.error('Error loading custom categories:', err);
+    }
+  };
+
+  const loadCustomManufacturers = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_custom_manufacturers')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('name', { ascending: true });
+      if (!error) setCustomManufacturers(data || []);
+    } catch (err) {
+      console.error('Error loading custom manufacturers:', err);
+    }
+  };
+
+  const loadCustomUnits = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_custom_units')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('sort_order', { ascending: true });
+      if (!error && data && data.length > 0) {
+        setCustomUnits(data);
+      } else {
+        // Initialize with default Polish units
+        setCustomUnits(DEFAULT_UNITS.map((u, i) => ({ id: `default-${i}`, value: u.value, label: u.label })));
+      }
+    } catch (err) {
+      console.error('Error loading custom units:', err);
+      setCustomUnits(DEFAULT_UNITS.map((u, i) => ({ id: `default-${i}`, value: u.value, label: u.label })));
+    }
+  };
+
+  const handleAddCustomCategory = async () => {
+    if (!newCategoryName.trim() || !currentUser?.company_id) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_custom_categories')
+        .insert({ company_id: currentUser.company_id, name: newCategoryName.trim(), sort_order: customCategories.length });
+      if (error) throw error;
+      setNewCategoryName('');
+      setShowAddCategory(false);
+      await loadCustomCategories();
+      showNotification('Kategoria dodana', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteCustomCategory = async (id: string) => {
+    try {
+      const { error } = await supabase.from('kosztorys_custom_categories').delete().eq('id', id);
+      if (error) throw error;
+      await loadCustomCategories();
+      showNotification('Kategoria usunięta', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleAddCustomManufacturer = async () => {
+    if (!newManufacturerName.trim() || !currentUser?.company_id) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_custom_manufacturers')
+        .insert({ company_id: currentUser.company_id, name: newManufacturerName.trim() });
+      if (error) throw error;
+      setNewManufacturerName('');
+      setShowAddManufacturer(false);
+      await loadCustomManufacturers();
+      showNotification('Producent dodany', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteCustomManufacturer = async (id: string) => {
+    try {
+      const { error } = await supabase.from('kosztorys_custom_manufacturers').delete().eq('id', id);
+      if (error) throw error;
+      await loadCustomManufacturers();
+      showNotification('Producent usunięty', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleAddCustomUnit = async () => {
+    if (!newUnitValue.trim() || !newUnitLabel.trim() || !currentUser?.company_id) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_custom_units')
+        .insert({ company_id: currentUser.company_id, value: newUnitValue.trim(), label: newUnitLabel.trim(), sort_order: customUnits.length });
+      if (error) throw error;
+      setNewUnitValue('');
+      setNewUnitLabel('');
+      setShowAddUnit(false);
+      await loadCustomUnits();
+      showNotification('Jednostka dodana', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteCustomUnit = async (id: string) => {
+    if (id.startsWith('default-')) return;
+    try {
+      const { error } = await supabase.from('kosztorys_custom_units').delete().eq('id', id);
+      if (error) throw error;
+      await loadCustomUnits();
+      showNotification('Jednostka usunięta', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const generateMaterialCode = () => {
+    const prefix = 'MAT';
+    const num = String(materials.length + 1).padStart(5, '0');
+    return `${prefix}-${num}`;
+  };
+
+  // ============ Добавление продукта из гуртовни в каталог Власный ============
+  const handleAddToOwnCatalog = (product: any) => {
+    setAddToCatalogModal({ product, wholesaler: product.wholesaler });
+    setPriceSyncMode('fixed');
+  };
+
+  const handleConfirmAddToOwnCatalog = async () => {
+    if (!addToCatalogModal || !currentUser) return;
+    setSaving(true);
+    const p = addToCatalogModal.product;
+    const code = generateMaterialCode();
+
+    try {
+      const materialData: any = {
+        code,
+        name: p.name,
+        category: null,
+        unit: p.unit || 'szt.',
+        description: p.description || null,
+        manufacturer: p.manufacturer || null,
+        default_price: p.price || 0,
+        is_active: true,
+        company_id: currentUser.company_id,
+        ean: p.ean || null,
+        sku: p.sku || null,
+        catalog_price: p.catalogPrice || null,
+        purchase_price: p.price || 0,
+        images: p.image ? JSON.stringify([p.image]) : '[]',
+        source_wholesaler: addToCatalogModal.wholesaler,
+        source_wholesaler_url: p.url || null,
+        price_sync_mode: priceSyncMode,
+      };
+
+      const { error } = await supabase
+        .from('kosztorys_materials')
+        .insert(materialData);
+
+      if (error) throw error;
+      showNotification('Materiał dodany do katalogu Własnego', 'success');
+      setAddToCatalogModal(null);
+      await loadMaterials();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas dodawania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -234,6 +433,9 @@ export const DictionariesPage: React.FC = () => {
         loadFormTemplates(),
         loadWallTypes(),
         loadIntegrations(),
+        loadCustomCategories(),
+        loadCustomManufacturers(),
+        loadCustomUnits(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -526,38 +728,41 @@ export const DictionariesPage: React.FC = () => {
     if (!editingMaterial || !currentUser) return;
     setSaving(true);
 
+    const code = autoGenerateCode && !editingMaterial.id ? generateMaterialCode() : editingMaterial.code;
+
     try {
+      const materialData: any = {
+        code,
+        name: editingMaterial.name,
+        category: editingMaterial.category,
+        unit: editingMaterial.unit,
+        description: editingMaterial.description,
+        manufacturer: editingMaterial.manufacturer,
+        default_price: (editingMaterial as any).purchase_price || editingMaterial.default_price || 0,
+        is_active: editingMaterial.is_active,
+        ean: (editingMaterial as any).ean || null,
+        sku: (editingMaterial as any).sku || null,
+        catalog_price: (editingMaterial as any).catalog_price || null,
+        purchase_price: (editingMaterial as any).purchase_price || (editingMaterial as any).default_price || 0,
+        images: materialImages.length > 0 ? JSON.stringify(materialImages) : '[]',
+        source_wholesaler: (editingMaterial as any).source_wholesaler || null,
+        source_wholesaler_url: (editingMaterial as any).source_wholesaler_url || null,
+        price_sync_mode: (editingMaterial as any).price_sync_mode || 'fixed',
+      };
+
       if (editingMaterial.id) {
         const { error } = await supabase
           .from('kosztorys_materials')
-          .update({
-            code: editingMaterial.code,
-            name: editingMaterial.name,
-            category: editingMaterial.category,
-            unit: editingMaterial.unit,
-            description: editingMaterial.description,
-            manufacturer: editingMaterial.manufacturer,
-            default_price: editingMaterial.default_price,
-            is_active: editingMaterial.is_active,
-          })
+          .update(materialData)
           .eq('id', editingMaterial.id);
 
         if (error) throw error;
         showNotification('Materiał zaktualizowany', 'success');
       } else {
+        materialData.company_id = currentUser.company_id;
         const { error } = await supabase
           .from('kosztorys_materials')
-          .insert({
-            code: editingMaterial.code,
-            name: editingMaterial.name,
-            category: editingMaterial.category,
-            unit: editingMaterial.unit,
-            description: editingMaterial.description,
-            manufacturer: editingMaterial.manufacturer,
-            default_price: editingMaterial.default_price || 0,
-            is_active: editingMaterial.is_active ?? true,
-            company_id: currentUser.company_id,
-          });
+          .insert(materialData);
 
         if (error) throw error;
         showNotification('Materiał dodany', 'success');
@@ -565,6 +770,8 @@ export const DictionariesPage: React.FC = () => {
 
       setMaterialDialog(false);
       setEditingMaterial(null);
+      setMaterialImages([]);
+      setAutoGenerateCode(true);
       await loadMaterials();
     } catch (error: any) {
       showNotification(error.message || 'Błąd podczas zapisywania', 'error');
@@ -841,10 +1048,17 @@ export const DictionariesPage: React.FC = () => {
     ), [workTypes, workTypeSearch]);
 
   const filteredMaterials = useMemo(() =>
-    materials.filter(m =>
-      m.code?.toLowerCase().includes(materialSearch.toLowerCase()) ||
-      m.name?.toLowerCase().includes(materialSearch.toLowerCase())
-    ), [materials, materialSearch]);
+    materials.filter(m => {
+      const matchesSearch = !materialSearch ||
+        m.code?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        m.name?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        (m as any).ean?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        (m as any).sku?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        m.manufacturer?.toLowerCase().includes(materialSearch.toLowerCase());
+      const matchesCategory = !selectedMaterialCategory ||
+        (selectedMaterialCategory === '__none__' ? !m.category : m.category === selectedMaterialCategory);
+      return matchesSearch && matchesCategory;
+    }), [materials, materialSearch, selectedMaterialCategory]);
 
   const filteredEquipment = useMemo(() =>
     equipment.filter(e =>
@@ -2328,7 +2542,7 @@ export const DictionariesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Wybierz...</option>
-                {UNITS.map(u => (
+                {DEFAULT_UNITS.map(u => (
                   <option key={u.value} value={u.value}>{u.label}</option>
                 ))}
               </select>
@@ -2386,126 +2600,475 @@ export const DictionariesPage: React.FC = () => {
   );
 
   // ============ Render Materials Tab ============
-  const renderMaterialsTab = () => (
+  const renderMaterialsTab = () => {
+    const mat = editingMaterial as any;
+    const isCodeRequired = !autoGenerateCode;
+    const canSaveMaterial = editingMaterial?.name && ((editingMaterial as any).purchase_price > 0 || editingMaterial.default_price) && (autoGenerateCode || editingMaterial.code);
+
+    return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Szukaj..."
-            value={materialSearch}
-            onChange={(e) => setMaterialSearch(e.target.value)}
-            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      {/* ===== Onninen-style layout ===== */}
+      <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 320px)', minHeight: 500 }}>
+        {/* Left sidebar: Categories */}
+        <div className="w-56 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+          <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+            <button
+              onClick={() => setShowAddCategory(true)}
+              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+              title="Dodaj kategorię"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* "All" category */}
+          <div className="py-1">
+            <button
+              onClick={() => setSelectedMaterialCategory(null)}
+              className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                !selectedMaterialCategory
+                  ? 'bg-blue-50 text-blue-700 font-semibold'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+              <span className="truncate">Wszystkie</span>
+              <span className="ml-auto text-[10px] text-slate-400">{materials.length}</span>
+            </button>
+
+            {customCategories.map(cat => {
+              const count = materials.filter(m => m.category === cat.name).length;
+              return (
+                <div key={cat.id} className="group flex items-center">
+                  <button
+                    onClick={() => setSelectedMaterialCategory(cat.name)}
+                    className={`flex-1 text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                      selectedMaterialCategory === cat.name
+                        ? 'bg-blue-50 text-blue-700 font-semibold'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                    <span className="truncate">{cat.name}</span>
+                    <span className="ml-auto text-[10px] text-slate-400">{count}</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteCustomCategory(cat.id)}
+                    className="hidden group-hover:block p-1 text-slate-400 hover:text-red-500 mr-1"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Uncategorized */}
+            {materials.some(m => !m.category) && (
+              <button
+                onClick={() => setSelectedMaterialCategory('__none__')}
+                className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                  selectedMaterialCategory === '__none__'
+                    ? 'bg-blue-50 text-blue-700 font-semibold'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                <span className="truncate">Bez kategorii</span>
+                <span className="ml-auto text-[10px] text-slate-400">{materials.filter(m => !m.category).length}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Add category inline form */}
+          {showAddCategory && (
+            <div className="px-2 py-2 border-t border-slate-200">
+              <input
+                autoFocus
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddCustomCategory()}
+                placeholder="Nazwa kategorii..."
+                className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
+              />
+              <div className="flex gap-1 mt-1">
+                <button onClick={handleAddCustomCategory} className="flex-1 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                <button onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }} className="flex-1 py-1 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+              </div>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => {
-            setEditingMaterial({ is_active: true, default_price: 0 });
-            setMaterialDialog(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          Dodaj materiał
-        </button>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Search bar */}
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
+            <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                value={materialSearch}
+                onChange={e => setMaterialSearch(e.target.value)}
+                placeholder="Szukaj materiałów..."
+                className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
+              />
+              {materialSearch && (
+                <button onClick={() => setMaterialSearch('')} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex gap-1 bg-slate-100 rounded p-0.5">
+              <button
+                onClick={() => setMaterialViewMode('grid')}
+                className={`p-1.5 rounded transition-colors ${materialViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setMaterialViewMode('list')}
+                className={`p-1.5 rounded transition-colors ${materialViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+
+            <span className="text-xs text-slate-400 whitespace-nowrap">{filteredMaterials.length} materiałów</span>
+
+            <button
+              onClick={() => {
+                setEditingMaterial({ is_active: true, default_price: 0 } as any);
+                setAutoGenerateCode(true);
+                setMaterialImages([]);
+                setMaterialDialog(true);
+              }}
+              className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Dodaj materiał
+            </button>
+          </div>
+
+          {/* Content area */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {filteredMaterials.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <Package className="w-12 h-12 text-slate-200 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog materiałów</h3>
+                <p className="text-sm text-slate-400 max-w-sm">
+                  {materialSearch ? `Brak wyników dla «${materialSearch}»` : 'Dodaj materiały ręcznie lub importuj z gurtowni.'}
+                </p>
+              </div>
+            ) : materialViewMode === 'grid' ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {filteredMaterials.map(m => {
+                  const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => setDetailMaterial(m)}
+                      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                    >
+                      <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                        {imgs.length > 0 ? (
+                          <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" />
+                        ) : (
+                          <Package className="w-10 h-10 text-slate-200" />
+                        )}
+                      </div>
+                      <div className="p-2.5">
+                        <div className="text-[10px] text-slate-400 font-mono">{m.code}</div>
+                        <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{m.name}</div>
+                        {m.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{m.manufacturer}</div>}
+                        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                          {((m as any).purchase_price || m.default_price) ? (
+                            <span className="text-sm font-bold text-blue-600">
+                              {((m as any).purchase_price || m.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded ${m.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {m.is_active ? 'Aktywny' : 'Nieaktywny'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredMaterials.map(m => {
+                  const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => setDetailMaterial(m)}
+                      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
+                    >
+                      <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+                        {imgs.length > 0 ? (
+                          <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                        ) : (
+                          <Package className="w-6 h-6 text-slate-200" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-slate-800 truncate">{m.name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{m.code}{m.manufacturer ? ` · ${m.manufacturer}` : ''}</div>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${m.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {m.is_active ? 'Aktywny' : 'Nieaktywny'}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {((m as any).purchase_price || m.default_price) ? (
+                          <span className="text-sm font-bold text-blue-600">{((m as any).purchase_price || m.default_price)?.toFixed(2)} zł</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-300">—</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producent</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-200">
-            {filteredMaterials.map((m) => (
-              <tr key={m.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-medium text-slate-900">{m.code}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{m.name}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
-                    {MATERIAL_CATEGORIES.find(c => c.value === m.category)?.label || m.category}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{m.manufacturer || '-'}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{m.unit}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 text-right">
-                  {m.default_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-1 text-xs rounded-full ${m.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {m.is_active ? 'Aktywny' : 'Nieaktywny'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
+      {/* ===== Product Detail Modal ===== */}
+      {detailMaterial && (() => {
+        const dm = detailMaterial as any;
+        const imgs = (() => { try { return JSON.parse(dm.images || '[]'); } catch { return []; } })();
+        return (
+          <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={() => setDetailMaterial(null)}>
+            <div className="bg-white rounded-xl max-w-3xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setEditingMaterial(m);
+                      setEditingMaterial(dm);
+                      setAutoGenerateCode(false);
+                      setMaterialImages(imgs);
                       setMaterialDialog(true);
                     }}
-                    className="p-1 text-slate-400 hover:text-blue-600"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edytuj
                   </button>
                   <button
-                    onClick={() => setShowDeleteConfirm({ type: 'material', id: m.id })}
-                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                    onClick={() => {
+                      if (confirm('Czy na pewno chcesz usunąć ten materiał?')) {
+                        handleDeleteMaterial(dm.id);
+                        setDetailMaterial(null);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Usuń
                   </button>
-                </td>
-              </tr>
-            ))}
-            {filteredMaterials.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                  Brak materiałów
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </div>
+                <span className="text-xs text-slate-400 font-mono">
+                  {dm.code}{dm.ean ? ` · EAN: ${dm.ean}` : ''}{dm.sku ? ` · SKU: ${dm.sku}` : ''}
+                </span>
+                <button onClick={() => setDetailMaterial(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              </div>
 
-      {/* Material Dialog */}
-      <Modal
-        isOpen={materialDialog}
-        onClose={() => setMaterialDialog(false)}
-        title={editingMaterial?.id ? 'Edytuj materiał' : 'Dodaj materiał'}
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
-              <input
-                type="text"
-                value={editingMaterial?.code || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, code: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-              <select
-                value={editingMaterial?.category || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Wybierz...</option>
-                {MATERIAL_CATEGORIES.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
+              <div className="flex flex-wrap">
+                {/* Image */}
+                <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+                  {imgs.length > 0 ? (
+                    <img src={imgs[0]} alt="" className="max-w-[90%] max-h-52 object-contain" />
+                  ) : (
+                    <Package className="w-14 h-14 text-slate-200" />
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 p-5 min-w-[260px]">
+                  <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{dm.name}</h2>
+                  {dm.manufacturer && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{dm.manufacturer}</span></p>}
+                  {dm.category && <p className="text-xs text-slate-400 mt-0.5">Kategoria: {dm.category}</p>}
+
+                  {/* Price block */}
+                  <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    {(dm.purchase_price || dm.default_price) ? (
+                      <>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena zakupu</div>
+                        <div className="text-xl font-bold text-blue-600">{(dm.purchase_price || dm.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                        {dm.catalog_price != null && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Cena katalogowa: <span>{dm.catalog_price?.toFixed(2)} zł</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-slate-400">Cena niedostępna</div>
+                    )}
+                  </div>
+
+                  {/* Meta badges */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {dm.unit && (
+                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Jedn.: <b>{dm.unit}</b></span>
+                    )}
+                    {dm.source_wholesaler && (
+                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                        Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler}</b>
+                      </span>
+                    )}
+                    {dm.price_sync_mode === 'synced' && (
+                      <span className="px-2 py-0.5 bg-yellow-100 rounded text-[10px] text-yellow-700">Synchronizacja cen</span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded text-[10px] ${dm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {dm.is_active ? 'Aktywny' : 'Nieaktywny'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price & Availability Table from wholesalers */}
+              {(dm.ean || dm.sku) && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny i dostępność w hurtowniach</h4>
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-slate-500 font-medium">Hurtownia</th>
+                          <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
+                          <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
+                          <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loadingPrices ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-4 text-center">
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" />
+                            </td>
+                          </tr>
+                        ) : wholesalerPrices.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
+                              Brak danych z hurtowni. Kliknij aby wyszukać.
+                            </td>
+                          </tr>
+                        ) : (
+                          wholesalerPrices.map((wp, idx) => {
+                            const prices = wholesalerPrices.filter(p => p.purchasePrice != null).map(p => p.purchasePrice!);
+                            const bestPrice = prices.length > 0 ? Math.min(...prices) : null;
+                            const worstPrice = prices.length > 1 ? Math.max(...prices) : null;
+                            const isBest = bestPrice != null && wp.purchasePrice === bestPrice && prices.length > 1;
+                            const isWorst = worstPrice != null && wp.purchasePrice === worstPrice && worstPrice !== bestPrice;
+                            return (
+                              <tr key={idx} className={`${isBest ? 'bg-green-50' : isWorst ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                                <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
+                                <td className="px-3 py-2 text-right text-slate-600">{wp.catalogPrice?.toFixed(2) ?? '—'} zł</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
+                                <td className="px-3 py-2 text-center">
+                                  {wp.stock != null ? (
+                                    <span className={`px-1.5 py-0.5 rounded ${wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                      {wp.stock > 0 ? `${wp.stock} szt.` : 'Brak'}
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {wp.url && (
+                                    <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Description */}
+              {dm.description && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+                  <p className="text-xs text-slate-500 leading-relaxed">{dm.description}</p>
+                </div>
+              )}
+
+              {/* All images */}
+              {imgs.length > 1 && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-2">Zdjęcia</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    {imgs.map((img: string, i: number) => (
+                      <div key={i} className="w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center">
+                        <img src={img} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        );
+      })()}
+
+      {/* ===== Material Dialog (Dodaj / Edytuj materiał) ===== */}
+      <Modal
+        isOpen={materialDialog}
+        onClose={() => { setMaterialDialog(false); setEditingMaterial(null); setMaterialImages([]); }}
+        title={editingMaterial?.id ? 'Edytuj materiał' : 'Dodaj materiał'}
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Aktywny checkbox at top left */}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="mat-active-top"
+              checked={editingMaterial?.is_active ?? true}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300"
+            />
+            <label htmlFor="mat-active-top" className="text-sm font-medium text-slate-700">Aktywny</label>
+          </div>
+
+          {/* Code + auto-generate */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-700">Kod materiału {isCodeRequired ? '*' : ''}</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoGenerateCode}
+                  onChange={(e) => setAutoGenerateCode(e.target.checked)}
+                  className="h-3.5 w-3.5 text-blue-600 rounded border-slate-300"
+                  disabled={!!editingMaterial?.id}
+                />
+                Generuj automatycznie
+              </label>
+            </div>
+            <input
+              type="text"
+              value={autoGenerateCode && !editingMaterial?.id ? '(automatycznie)' : editingMaterial?.code || ''}
+              onChange={(e) => setEditingMaterial({ ...editingMaterial, code: e.target.value })}
+              disabled={autoGenerateCode && !editingMaterial?.id}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
+              placeholder="np. MAT-00001"
+            />
+          </div>
+
+          {/* Nazwa */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
             <input
@@ -2513,43 +3076,138 @@ export const DictionariesPage: React.FC = () => {
               value={editingMaterial?.name || ''}
               onChange={(e) => setEditingMaterial({ ...editingMaterial, name: e.target.value })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Nazwa materiału"
             />
           </div>
+
+          {/* Kategoria dropdown + add */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+            <div className="flex gap-2">
+              <select
+                value={editingMaterial?.category || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz kategorię...</option>
+                {customCategories.map(cat => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAddCategory(true)}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
+                title="Dodaj nową kategorię"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* EAN + SKU */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">EAN</label>
               <input
                 type="text"
-                value={editingMaterial?.manufacturer || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, manufacturer: e.target.value })}
+                value={(editingMaterial as any)?.ean || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, ean: e.target.value } as any)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Kod EAN"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
-              <select
-                value={editingMaterial?.unit || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, unit: e.target.value })}
+              <label className="block text-sm font-medium text-slate-700 mb-1">SKU</label>
+              <input
+                type="text"
+                value={(editingMaterial as any)?.sku || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, sku: e.target.value } as any)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Wybierz...</option>
-                {UNITS.map(u => (
-                  <option key={u.value} value={u.value}>{u.label}</option>
-                ))}
-              </select>
+                placeholder="Kod SKU"
+              />
             </div>
           </div>
+
+          {/* Producent dropdown + add */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Cena domyślna (PLN)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={editingMaterial?.default_price || ''}
-              onChange={(e) => setEditingMaterial({ ...editingMaterial, default_price: parseFloat(e.target.value) })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
+            <div className="flex gap-2">
+              <select
+                value={editingMaterial?.manufacturer || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, manufacturer: e.target.value })}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz producenta...</option>
+                {customManufacturers.map(mfr => (
+                  <option key={mfr.id} value={mfr.name}>{mfr.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAddManufacturer(true)}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
+                title="Dodaj nowego producenta"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
+          {/* Jednostka dropdown + add */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka miary</label>
+            <div className="flex gap-2">
+              <select
+                value={(editingMaterial as any)?.unit || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, unit: e.target.value } as any)}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Wybierz...</option>
+                {customUnits.map(u => (
+                  <option key={u.id} value={u.value}>{u.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAddUnit(true)}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
+                title="Dodaj nową jednostkę"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Prices */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Cena katalogowa (PLN)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={(editingMaterial as any)?.catalog_price || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, catalog_price: parseFloat(e.target.value) || null } as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Opcjonalna"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Cena zakupu (PLN) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={(editingMaterial as any)?.purchase_price || editingMaterial?.default_price || ''}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="Cena zakupu netto"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
             <textarea
@@ -2557,29 +3215,92 @@ export const DictionariesPage: React.FC = () => {
               onChange={(e) => setEditingMaterial({ ...editingMaterial, description: e.target.value })}
               rows={2}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Opcjonalny opis materiału"
             />
           </div>
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="mat-active"
-              checked={editingMaterial?.is_active ?? true}
-              onChange={(e) => setEditingMaterial({ ...editingMaterial, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 rounded border-slate-300"
-            />
-            <label htmlFor="mat-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+
+          {/* Photos */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Zdjęcia materiału</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {materialImages.map((img, idx) => (
+                <div key={idx} className="relative group w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center overflow-hidden">
+                  <img src={img} alt="" className="max-w-full max-h-full object-contain" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    {idx > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newImgs = [...materialImages];
+                          [newImgs[idx - 1], newImgs[idx]] = [newImgs[idx], newImgs[idx - 1]];
+                          setMaterialImages(newImgs);
+                        }}
+                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"
+                      >
+                        <ArrowUp className="w-3 h-3" />
+                      </button>
+                    )}
+                    {idx < materialImages.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newImgs = [...materialImages];
+                          [newImgs[idx], newImgs[idx + 1]] = [newImgs[idx + 1], newImgs[idx]];
+                          setMaterialImages(newImgs);
+                        }}
+                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"
+                      >
+                        <ArrowDown className="w-3 h-3" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setMaterialImages(materialImages.filter((_, i) => i !== idx))}
+                      className="p-1 bg-white rounded text-red-600 hover:bg-red-50"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <label className="w-20 h-20 bg-slate-50 rounded border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <Upload className="w-5 h-5 text-slate-400" />
+                <span className="text-[10px] text-slate-400 mt-1">Dodaj</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    files.forEach(file => {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        if (ev.target?.result) {
+                          setMaterialImages(prev => [...prev, ev.target!.result as string]);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    });
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+            <p className="text-[10px] text-slate-400">Przeciągnij aby zmienić kolejność. Pierwsze zdjęcie = miniaturka.</p>
           </div>
         </div>
+
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
           <button
-            onClick={() => setMaterialDialog(false)}
+            onClick={() => { setMaterialDialog(false); setEditingMaterial(null); setMaterialImages([]); }}
             className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
           >
             Anuluj
           </button>
           <button
             onClick={handleSaveMaterial}
-            disabled={saving || !editingMaterial?.code || !editingMaterial?.name}
+            disabled={saving || !canSaveMaterial}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2587,8 +3308,57 @@ export const DictionariesPage: React.FC = () => {
           </button>
         </div>
       </Modal>
+
+      {/* Add Manufacturer Modal */}
+      <Modal isOpen={showAddManufacturer} onClose={() => { setShowAddManufacturer(false); setNewManufacturerName(''); }} title="Nowy producent" size="sm">
+        <div className="space-y-3">
+          <input
+            autoFocus
+            value={newManufacturerName}
+            onChange={e => setNewManufacturerName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddCustomManufacturer()}
+            placeholder="Nazwa producenta"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+          />
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setShowAddManufacturer(false); setNewManufacturerName(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Anuluj</button>
+            <button onClick={handleAddCustomManufacturer} disabled={!newManufacturerName.trim()} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">Dodaj</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add Unit Modal */}
+      <Modal isOpen={showAddUnit} onClose={() => { setShowAddUnit(false); setNewUnitValue(''); setNewUnitLabel(''); }} title="Nowa jednostka miary" size="sm">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Wartość (skrót)</label>
+            <input
+              autoFocus
+              value={newUnitValue}
+              onChange={e => setNewUnitValue(e.target.value)}
+              placeholder="np. szt., m², kg"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Etykieta</label>
+            <input
+              value={newUnitLabel}
+              onChange={e => setNewUnitLabel(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddCustomUnit()}
+              placeholder="np. szt. (sztuki)"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setShowAddUnit(false); setNewUnitValue(''); setNewUnitLabel(''); }} className="px-3 py-2 border border-slate-300 rounded-lg text-sm hover:bg-slate-50">Anuluj</button>
+            <button onClick={handleAddCustomUnit} disabled={!newUnitValue.trim() || !newUnitLabel.trim()} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">Dodaj</button>
+          </div>
+        </div>
+      </Modal>
     </div>
-  );
+    );
+  };
 
   // ============ Render Equipment Tab ============
   const renderEquipmentTab = () => (
@@ -2734,7 +3504,7 @@ export const DictionariesPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Wybierz...</option>
-                {UNITS.map(u => (
+                {DEFAULT_UNITS.map(u => (
                   <option key={u.value} value={u.value}>{u.label}</option>
                 ))}
               </select>
@@ -3395,10 +4165,10 @@ export const DictionariesPage: React.FC = () => {
                   </div>
                   {materialsSubTab === 'own' && renderMaterialsTab()}
                   {materialsSubTab === 'tim' && (
-                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                   {materialsSubTab === 'oninen' && (
-                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                 </div>
               )}
@@ -3442,10 +4212,10 @@ export const DictionariesPage: React.FC = () => {
                   </div>
                   {equipmentSubTab === 'own' && renderEquipmentTab()}
                   {equipmentSubTab === 'tim' && (
-                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                   {equipmentSubTab === 'oninen' && (
-                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                 </div>
               )}
@@ -3519,10 +4289,10 @@ export const DictionariesPage: React.FC = () => {
                     </>
                   )}
                   {slownikMainSubTab === 'tim' && (
-                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} />
+                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                   {slownikMainSubTab === 'oninen' && (
-                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} />
+                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                 </div>
               )}
@@ -3539,6 +4309,70 @@ export const DictionariesPage: React.FC = () => {
         integrations={integrations}
         onIntegrationChange={loadIntegrations}
       />
+
+      {/* Add to Own Catalog — Price Sync Modal */}
+      {addToCatalogModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setAddToCatalogModal(null)}>
+          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Dodaj do katalogu Własnego</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              <span className="font-medium">{addToCatalogModal.product.name}</span>
+              <br />
+              <span className="text-xs text-slate-400">
+                z {addToCatalogModal.wholesaler === 'tim' ? 'TIM' : 'Onninen'}
+                {addToCatalogModal.product.price != null && ` · ${addToCatalogModal.product.price?.toFixed(2)} zł`}
+              </span>
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                <input
+                  type="radio"
+                  name="syncMode"
+                  checked={priceSyncMode === 'fixed'}
+                  onChange={() => setPriceSyncMode('fixed')}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <div className="text-sm font-medium text-slate-800">Zafixować cenę</div>
+                  <div className="text-xs text-slate-500">Cena w katalogu Własnym pozostanie taka, jaka jest teraz. Nie zmieni się przy aktualizacji cen w hurtowni.</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                <input
+                  type="radio"
+                  name="syncMode"
+                  checked={priceSyncMode === 'synced'}
+                  onChange={() => setPriceSyncMode('synced')}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <div className="text-sm font-medium text-slate-800">Synchronizować z hurtownią</div>
+                  <div className="text-xs text-slate-500">Jeśli cena w hurtowni się zmieni — cena w katalogu Własnym również się zaktualizuje automatycznie.</div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setAddToCatalogModal(null)}
+                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleConfirmAddToOwnCatalog}
+                disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Dodaj do katalogu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Notification */}
       {notification && (

@@ -1855,7 +1855,16 @@ export interface KosztorysMaterial {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  unit?: UnitMeasure;
+  unit?: UnitMeasure | string;
+  default_price?: number;
+  ean?: string;
+  sku?: string;
+  catalog_price?: number;
+  purchase_price?: number;
+  images?: string;
+  source_wholesaler?: string;
+  source_wholesaler_url?: string;
+  price_sync_mode?: 'fixed' | 'synced';
 }
 
 // Справочник техники
