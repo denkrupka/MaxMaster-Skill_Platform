@@ -118,15 +118,26 @@ function extractMaxPage(html: string): number {
   return maxPage
 }
 
+// Extract NUXT_DATA content using indexOf (regex with [\s\S]*? fails on large HTML in Deno)
+function extractNuxtRaw(html: string): string {
+  const marker = 'id="__NUXT_DATA__"'
+  const idx = html.indexOf(marker)
+  if (idx === -1) return ''
+  const contentStart = html.indexOf('>', idx) + 1
+  if (contentStart === 0) return ''
+  const contentEnd = html.indexOf('</script>', contentStart)
+  if (contentEnd === -1) return ''
+  return html.substring(contentStart, contentEnd)
+}
+
 // Build a SKU→image map from NUXT_DATA (images contain SKU in filename like 0001_00018_14271)
+// Falls back to scanning the entire HTML if NUXT_DATA is not found
 function extractNuxtImageMap(html: string): Map<string, string> {
   const map = new Map<string, string>()
-  const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-  if (!nuxtMatch) return map
-  const raw = nuxtMatch[1]
+  const source = extractNuxtRaw(html) || html
   const imgRe = /"(https:\/\/www\.tim\.pl\/media\/catalog\/product\/[^"]+)"/g
   let m: RegExpExecArray | null
-  while ((m = imgRe.exec(raw)) !== null) {
+  while ((m = imgRe.exec(source)) !== null) {
     // Extract SKU from image filename: 0001_00018_14271 → 0001-00018-14271
     const skuMatch = m[1].match(/(\d{4})_(\d{5})_(\d{5})/)
     if (skuMatch) {
@@ -139,9 +150,8 @@ function extractNuxtImageMap(html: string): Map<string, string> {
 
 // Extract products from __NUXT_DATA__ (used when JSON-LD ItemList is missing)
 function extractNuxtSearchProducts(html: string): { products: any[]; totalProducts: number } {
-  const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-  if (!nuxtMatch) return { products: [], totalProducts: 0 }
-  const raw = nuxtMatch[1]
+  const raw = extractNuxtRaw(html)
+  if (!raw) return { products: [], totalProducts: 0 }
 
   const products: any[] = []
   const seen = new Set<string>()
@@ -660,9 +670,19 @@ serve(async (req) => {
           }
         }
 
-        // Enrich missing images from NUXT_DATA (SKU embedded in image filenames)
+        // Enrich missing images from NUXT_DATA + <img> tags (SKU embedded in image filenames)
         if (products.some((p: any) => !p.image)) {
           const imageMap = extractNuxtImageMap(html)
+          // Also scan <img> tags directly
+          const imgTagRe2 = /<img\s[^>]*(?:src|data-src)="(https?:\/\/[^"]*\/media\/catalog\/product\/[^"]+)"[^>]*>/gi
+          let itm: RegExpExecArray | null
+          while ((itm = imgTagRe2.exec(html)) !== null) {
+            const skuM = itm[1].match(/(\d{4})_(\d{5})_(\d{5})/)
+            if (skuM) {
+              const sku = `${skuM[1]}-${skuM[2]}-${skuM[3]}`
+              if (!imageMap.has(sku)) imageMap.set(sku, itm[1])
+            }
+          }
           for (const p of products) {
             if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
           }
@@ -701,11 +721,11 @@ serve(async (req) => {
             if (ld['@type'] === 'Product') { ldProduct = ld; break }
           }
 
-          // NUXT data extraction via regex
+          // NUXT data extraction via indexOf (regex [\s\S]*? fails on large HTML)
           let manufacturer = '', ref_num = '', ean = '', series = '', description = ''
-          const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-          if (nuxtMatch) {
-            const raw = nuxtMatch[1]
+          const nuxtRaw = extractNuxtRaw(html)
+          if (nuxtRaw) {
+            const raw = nuxtRaw
             const ex = (pat: RegExp) => { const m = raw.match(pat); return m ? m[1] : '' }
             manufacturer = ex(/"manufacturer_name"[^"]*?"([^"]{2,60})"/) || ex(/"manufacturer"[^}]*?"name"[^"]*?"([^"]{2,60})"/)
             ref_num = ex(/"ref_num"[^"]*?"([^"]+)"/)
@@ -873,7 +893,7 @@ serve(async (req) => {
         // Method 3: NUXT_DATA Offer regex (has prices + names)
         const nuxtResult = extractNuxtSearchProducts(html)
 
-        // Pick the method that found the most products
+        // Pick the method that found the most products as the base list
         if (jsonLdProducts.length >= htmlProducts.length && jsonLdProducts.length >= nuxtResult.products.length) {
           products = jsonLdProducts
         } else if (htmlProducts.length >= nuxtResult.products.length) {
@@ -883,11 +903,46 @@ serve(async (req) => {
         }
         totalProducts = products.length
 
-        // Always enrich images from NUXT_DATA image map (SKU in filenames)
+        // Build a merged image+price map from ALL sources (JSON-LD, NUXT, HTML img tags)
+        // This ensures images are available even when HTML links method (no images) wins
         const imageMap = extractNuxtImageMap(html)
+        const priceMap = new Map<string, { price: number; image: string; rating: any }>()
+        for (const p of jsonLdProducts) {
+          if (p.sku) {
+            if (p.image && !imageMap.has(p.sku)) imageMap.set(p.sku, p.image)
+            if (p.price) priceMap.set(p.sku, { price: p.price, image: p.image, rating: p.rating })
+          }
+        }
+        for (const p of nuxtResult.products) {
+          if (p.sku) {
+            if (p.image && !imageMap.has(p.sku)) imageMap.set(p.sku, p.image)
+            if (p.price && !priceMap.has(p.sku)) priceMap.set(p.sku, { price: p.price, image: p.image, rating: p.rating })
+          }
+        }
+
+        // Also extract images from <img> tags directly (handles cases where NUXT_DATA doesn't have images)
+        const imgTagRe = /<img\s[^>]*(?:src|data-src)="(https?:\/\/[^"]*\/media\/catalog\/product\/[^"]+)"[^>]*>/gi
+        let imgTagMatch: RegExpExecArray | null
+        while ((imgTagMatch = imgTagRe.exec(html)) !== null) {
+          const url = imgTagMatch[1]
+          const skuM = url.match(/(\d{4})_(\d{5})_(\d{5})/)
+          if (skuM) {
+            const sku = `${skuM[1]}-${skuM[2]}-${skuM[3]}`
+            if (!imageMap.has(sku)) imageMap.set(sku, url)
+          }
+        }
+
+        // Enrich products with images and prices from merged maps
         for (const p of products) {
           if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
+          if (!p.price && priceMap.has(p.sku)) {
+            const data = priceMap.get(p.sku)!
+            p.price = data.price
+            p.publicPrice = data.price
+          }
         }
+
+        console.log(`tim-proxy search: q="${q}", methods: html=${htmlProducts.length}, jsonLd=${jsonLdProducts.length}, nuxt=${nuxtResult.products.length}, imageMap=${imageMap.size}, final=${products.length}, withImages=${products.filter((p:any) => p.image).length}`)
 
         const totalPages = extractMaxPage(html)
 
