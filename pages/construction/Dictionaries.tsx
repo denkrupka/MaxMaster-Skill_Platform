@@ -2825,8 +2825,8 @@ export const DictionariesPage: React.FC = () => {
                           <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{totalCount}</span>
                         </button>
 
-                        {/* Edit + Add sub buttons (on hover) */}
-                        <div className="hidden group-hover:flex items-center gap-0.5 pr-1 flex-shrink-0">
+                        {/* Edit + Add sub buttons */}
+                        <div className="flex items-center gap-0.5 pr-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2842,6 +2842,7 @@ export const DictionariesPage: React.FC = () => {
                             onClick={(e) => {
                               e.stopPropagation();
                               setAddSubcategoryParentId(cat.id);
+                              setShowAddCategory(false);
                               setNewCategoryName('');
                               setExpandedCategories(prev => new Set([...prev, cat.id]));
                             }}
