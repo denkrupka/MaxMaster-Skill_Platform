@@ -516,13 +516,13 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
         setSearchTotal(r.total || 0);
         setSearchLoading(false);
       })
-      .catch(() => { setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
+      .catch(err => { console.error('[Onninen search error]', err); setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
   }, [integrationId]);
 
   const onSearchChange = (v: string) => {
     setSearch(v);
     if (searchRef.current) clearTimeout(searchRef.current);
-    if (v.length >= 2 && selectedCat) {
+    if (v.length >= 2) {
       setSearchLoading(true);
       searchRef.current = setTimeout(() => doSearch(v), 400);
     } else {
@@ -579,15 +579,14 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Search bar */}
         <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
-          <div className={`flex-1 max-w-md flex items-center rounded-lg px-3 border ${selectedCat ? 'bg-slate-100 border-slate-200' : 'bg-slate-50 border-slate-100'}`}>
-            <Search className={`w-4 h-4 ${selectedCat ? 'text-slate-400' : 'text-slate-300'}`} />
+          <div className="flex-1 max-w-md flex items-center rounded-lg px-3 border bg-slate-100 border-slate-200">
+            <Search className="w-4 h-4 text-slate-400" />
             <input
               value={search}
               onChange={e => onSearchChange(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && selectedCat && doSearch(search)}
-              disabled={!selectedCat}
-              placeholder={selectedCat ? `Szukaj w Onninen: ${selectedCat.name}...` : 'Wybierz kategorię, aby wyszukać...'}
-              className={`flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 ${selectedCat ? 'text-slate-700' : 'text-slate-300 cursor-not-allowed'}`}
+              onKeyDown={e => e.key === 'Enter' && doSearch(search)}
+              placeholder="Szukaj w Onninen..."
+              className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 text-slate-700"
             />
             {searchLoading && (
               <Loader2 className="w-4 h-4 animate-spin text-blue-500 mr-1" />
