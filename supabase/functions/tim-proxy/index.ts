@@ -118,6 +118,25 @@ function extractMaxPage(html: string): number {
   return maxPage
 }
 
+// Build a SKU→image map from NUXT_DATA (images contain SKU in filename like 0001_00018_14271)
+function extractNuxtImageMap(html: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+  if (!nuxtMatch) return map
+  const raw = nuxtMatch[1]
+  const imgRe = /"(https:\/\/www\.tim\.pl\/media\/catalog\/product\/[^"]+)"/g
+  let m: RegExpExecArray | null
+  while ((m = imgRe.exec(raw)) !== null) {
+    // Extract SKU from image filename: 0001_00018_14271 → 0001-00018-14271
+    const skuMatch = m[1].match(/(\d{4})_(\d{5})_(\d{5})/)
+    if (skuMatch) {
+      const sku = `${skuMatch[1]}-${skuMatch[2]}-${skuMatch[3]}`
+      if (!map.has(sku)) map.set(sku, m[1])
+    }
+  }
+  return map
+}
+
 // Extract products from __NUXT_DATA__ (used when JSON-LD ItemList is missing)
 function extractNuxtSearchProducts(html: string): { products: any[]; totalProducts: number } {
   const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
@@ -126,6 +145,7 @@ function extractNuxtSearchProducts(html: string): { products: any[]; totalProduc
 
   const products: any[] = []
   const seen = new Set<string>()
+  const imageMap = extractNuxtImageMap(html)
 
   // NUXT serialization embeds JSON-LD Product entries in a flat array format:
   //   "ProductName", {"@type":N,...}, "Product", [imgIdx], "imageUrl",
@@ -144,13 +164,12 @@ function extractNuxtSearchProducts(html: string): { products: any[]; totalProduc
     // Pattern: "NAME",{"@type":... before "Product",[...],"IMAGE_URL",{...},"Offer"
     const before = raw.substring(Math.max(0, m.index - 600), m.index)
 
-    // Find the image URL (right before the Offer block)
-    const imgMatch = before.match(/"(https:\/\/www\.tim\.pl\/media\/[^"]+)"[^"]*$/)
-    const image = imgMatch ? imgMatch[1] : ''
-
     // Find the product name (before the {"@type":...},"Product" block)
     const nameMatch = before.match(/"([^"]{10,200})",\{"@type":\d+,"name":\d+/)
     const name = nameMatch ? nameMatch[1] : ''
+
+    // Get image by SKU from the image map
+    const image = imageMap.get(sku) || ''
 
     products.push({ name, sku, url, image, price, publicPrice: price, rating: null })
   }
@@ -641,6 +660,14 @@ serve(async (req) => {
           }
         }
 
+        // Enrich missing images from NUXT_DATA (SKU embedded in image filenames)
+        if (products.some((p: any) => !p.image)) {
+          const imageMap = extractNuxtImageMap(html)
+          for (const p of products) {
+            if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
+          }
+        }
+
         const totalPages = extractMaxPage(html)
 
         return json({ products, page, totalPages, totalProducts: products.length, source })
@@ -867,6 +894,14 @@ serve(async (req) => {
                 p.shippingText = pp.shippingText
               }
             }
+          }
+        }
+
+        // Enrich missing images from NUXT_DATA (SKU embedded in image filenames)
+        if (products.some((p: any) => !p.image)) {
+          const imageMap = extractNuxtImageMap(html)
+          for (const p of products) {
+            if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
           }
         }
 
