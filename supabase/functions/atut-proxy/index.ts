@@ -65,6 +65,13 @@ function extractImagesFromBlock(block: string): string[] {
   return imgs
 }
 
+// ═══ HTML CLEANER (strip <style>/<script> to prevent regex matching CSS rules) ═══
+function cleanHTML(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+}
+
 // ═══ BREADCRUMB ═══
 function parseBreadcrumb(html: string): Array<{ slug: string; name: string }> {
   const bc: Array<{ slug: string; name: string }> = []
@@ -85,6 +92,8 @@ function parseBreadcrumb(html: string): Array<{ slug: string; name: string }> {
 
 // ═══ LIST PAGE ═══
 function parseListPage(html: string, requestedSlug: string) {
+  html = cleanHTML(html)
+
   // Title from <h1>
   const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
   const title = h1Match ? h1Match[1].replace(/<[^>]*>/g, '').trim() : ''
@@ -102,22 +111,58 @@ function parseListPage(html: string, requestedSlug: string) {
   const skipPaths = ['dlaczego', 'pytania', 'warunki', 'pobrania', 'aplikacja', 'firma', 'kontakt', 'serwis/', 'blog', 'sprzedaz', 'bobcat', 'koszyk', 'wyniki']
 
   // Strategy 1: Product cards with prices ("zł")
+  // Uses position-based block scanning to handle nested <a> tags
+  // (site has <a class="awsm-b-job-item"><h2><a>Title</a></h2>...prices...</a>)
   const products: any[] = []
   const pSeen = new Set<string>()
 
-  // Find all <a> blocks linking to /wynajem/ that contain "zł"
-  const linkRe = /<a\s[^>]*href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
-  let lm
-  while ((lm = linkRe.exec(html)) !== null) {
-    const fullText = lm[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-    if (!fullText.includes('zł')) continue
+  // Collect all <a href="/wynajem/..."> opening tag positions
+  const openTagRe = /<a\s[^>]*href="([^"]*\/wynajem\/[^"]*)"[^>]*>/gi
+  const linkOpenings: Array<{ pathname: string; idx: number; endIdx: number }> = []
+  let otm
+  while ((otm = openTagRe.exec(html)) !== null) {
     let pathname: string
-    try { pathname = new URL(lm[1]).pathname } catch { continue }
-    if (pSeen.has(pathname)) continue
-    pSeen.add(pathname)
+    try { pathname = new URL(otm[1]).pathname } catch {
+      if (otm[1].startsWith('/')) pathname = otm[1]
+      else continue
+    }
+    linkOpenings.push({ pathname, idx: otm.index, endIdx: otm.index + otm[0].length })
+  }
 
-    const lines = fullText.split(/\s{2,}/).map((l: string) => l.trim()).filter(Boolean)
-    const name = lines[0] || ''
+  for (let i = 0; i < linkOpenings.length; i++) {
+    const cur = linkOpenings[i]
+    if (pSeen.has(cur.pathname)) continue
+    if (cur.pathname === requestedSlug) continue
+    if (skipPaths.some(s => cur.pathname.includes(s))) continue
+
+    // Block boundary: next link with DIFFERENT pathname, or +3000 chars
+    let blockEnd = cur.idx + 3000
+    for (let j = i + 1; j < linkOpenings.length; j++) {
+      if (linkOpenings[j].pathname !== cur.pathname) {
+        blockEnd = linkOpenings[j].idx
+        break
+      }
+    }
+
+    const block = html.substring(cur.endIdx, blockEnd)
+    const fullText = block.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    if (!fullText.includes('zł')) continue
+
+    // Extract name: try common product title patterns
+    let name = ''
+    // 1. Heading tags
+    const h2m = block.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i)
+    if (h2m) name = h2m[1].replace(/<[^>]*>/g, '').trim()
+    // 2. Dedicated title div (products_rent__item__title, awsm-b-job-post-title, etc.)
+    if (!name) {
+      const titleM = block.match(/(?:__title|item-title|post-title)[^>]*>([\s\S]*?)<\/(?:div|span|h\d)>/i)
+      if (titleM) name = titleM[1].replace(/<[^>]*>/g, '').trim()
+    }
+    // 3. Inner <a> linking to /wynajem/ (not generic <a> which could match footer links)
+    if (!name) {
+      const innerA = block.match(/<a\s[^>]*href="[^"]*\/wynajem\/[^"]*"[^>]*>([^<]{3,})<\/a>/i)
+      if (innerA) name = innerA[1].trim()
+    }
     if (!name || name.length < 3 || name.length > 120) continue
 
     let priceNetto: number | null = null
@@ -131,14 +176,15 @@ function parseListPage(html: string, requestedSlug: string) {
     const specs: string[] = []
     const strongRe = /<(?:strong|b)[^>]*>([^<]+)<\/(?:strong|b)>/gi
     let sm
-    while ((sm = strongRe.exec(lm[2])) !== null) {
+    while ((sm = strongRe.exec(block)) !== null) {
       const v = sm[1].trim()
       if (v && !v.includes('zł') && v !== 'zobacz' && v.length < 50) specs.push(v)
     }
 
-    const imgs = extractImagesFromBlock(lm[2])
+    const imgs = extractImagesFromBlock(block)
+    pSeen.add(cur.pathname)
     products.push({
-      slug: pathname, name, image: imgs[0] || '',
+      slug: cur.pathname, name, image: imgs[0] || '',
       priceNetto, priceBrutto, priceUnit: 'DOBA', specs,
       price: priceNetto ? priceNetto.toFixed(2).replace('.', ',') + ' zł netto' : '',
     })
@@ -219,6 +265,7 @@ function parseListPage(html: string, requestedSlug: string) {
 
 // ═══ PRODUCT PAGE ═══
 function parseProductPage(html: string) {
+  html = cleanHTML(html)
   const p: Record<string, any> = {}
 
   // Title
@@ -309,21 +356,41 @@ function parseProductPage(html: string) {
     }
   }
 
-  // Description (skip <style> tags, only match in <p>/<div>/<span>)
+  // Description — grab all paragraphs between "OPIS PRODUKTU" and next section
   p.description = ''
-  // Method 1: <p class="product_rent__text">
-  const descM = html.match(/<(?:p|div|span)[^>]*class="[^"]*product_rent__text[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div|span)>/i)
-  if (descM) {
-    const txt = descM[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-    if (txt.length > 5 && !txt.includes('{') && !txt.includes('background-image')) {
-      p.description = txt
+  // Method 1: find OPIS PRODUKTU section and grab all <p> content until PODOBNY SPRZET or next major header
+  const opisMatch = html.match(/OPIS\s+PRODUKTU[\s\S]{0,100}?<\/(?:h\d|div|span)>([\s\S]*?)(?=PODOBNY\s+SPRZ|class="[^"]*rent_like|class="[^"]*product_rent__header|$)/i)
+  if (opisMatch) {
+    // Extract text from all <p> tags in the section
+    const section = opisMatch[1]
+    const paragraphs: string[] = []
+    const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi
+    let pMatch
+    while ((pMatch = pRe.exec(section)) !== null) {
+      const txt = pMatch[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+      if (txt.length > 3 && !txt.includes('{') && !txt.includes('background-image')) {
+        paragraphs.push(txt)
+      }
+    }
+    if (paragraphs.length > 0) {
+      p.description = paragraphs.join('\n\n')
     }
   }
-  // Method 2: text after OPIS PRODUKTU header
+  // Method 2 fallback: <p class="product_rent__text">
+  if (!p.description) {
+    const descM = html.match(/<(?:p|div|span)[^>]*class="[^"]*product_rent__text[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div|span)>/i)
+    if (descM) {
+      const txt = descM[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      if (txt.length > 5 && !txt.includes('{') && !txt.includes('background-image')) {
+        p.description = txt
+      }
+    }
+  }
+  // Method 3 fallback: single tag after opis header
   if (!p.description) {
     const opisIdx = html.search(/product_rent__header[^>]*>[^]*?[Oo]pis/i)
     if (opisIdx > -1) {
-      const after = html.substring(opisIdx, opisIdx + 2000)
+      const after = html.substring(opisIdx, opisIdx + 3000)
       const nextTag = after.match(/<(?:p|div|span)[^>]*>([^<]{10,})<\/(?:p|div|span)>/i)
       if (nextTag) {
         const txt = nextTag[1].trim()
@@ -444,7 +511,7 @@ serve(async (req) => {
         const { q } = body
         if (!q) return errorResponse('Missing q')
         // Atut doesn't have a dedicated search API, use site search URL
-        const html = await fetchHTML(`/wyniki-wyszukiwania?search=${encodeURIComponent(q)}`)
+        const html = await fetchHTML(`/wyniki-wyszukiwania/?szukaj=${encodeURIComponent(q)}`)
         const list = parseListPage(html, '/wyniki-wyszukiwania')
         return json({ products: list.items, query: q, total: list.items.length })
       }

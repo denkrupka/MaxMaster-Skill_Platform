@@ -4349,7 +4349,7 @@ export const DictionariesPage: React.FC = () => {
                         </div>
                         {de.catalog_price != null && (
                           <div className="mt-1 text-xs text-slate-400">
-                            Cena brutto: <span className="line-through">{de.catalog_price?.toFixed(2)} zł</span>
+                            Cena brutto: {de.catalog_price?.toFixed(2)} zł
                           </div>
                         )}
                       </>
@@ -4379,43 +4379,6 @@ export const DictionariesPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Rental price comparison table */}
-              {de.source_wholesaler && (
-                <div className="px-5 pb-4">
-                  <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny w wypożyczalniach</h4>
-                  <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-slate-500 font-medium">Wypożyczalnia</th>
-                          <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena netto</th>
-                          <th className="px-3 py-2 text-center text-slate-500 font-medium">J.M.</th>
-                          <th className="px-3 py-2 w-10"></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="bg-white">
-                          <td className="px-3 py-2 font-medium text-slate-700">
-                            {de.source_wholesaler === 'atut-rental' ? 'Atut Rental' : de.source_wholesaler === 'ramirent' ? 'Ramirent' : de.source_wholesaler}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium text-slate-800">
-                            {(de.purchase_price || de.default_price)?.toFixed(2) ?? '—'} zł
-                          </td>
-                          <td className="px-3 py-2 text-center text-slate-600">{de.unit || '—'}</td>
-                          <td className="px-3 py-2">
-                            {de.source_wholesaler_url && (
-                              <a href={de.source_wholesaler_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            )}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
 
               {/* Description */}
               {de.description && (

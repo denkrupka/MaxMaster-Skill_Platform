@@ -29,7 +29,7 @@ const RENTALS: Record<string, {
     {
       id: 'ramirent',
       name: 'Ramirent',
-      logo: 'https://cdn.brandfetch.io/idUJxVNjA_/w/400/h/179/theme/dark/logo.png?c=1bxid64Mup7aczewSAYMX&t=1771557402789',
+      logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3ww1KGpOdFTdurvfOWcU7yUFsKxs8Gxrh8A&s',
       color: '#2563eb',
       description: 'Ramirent.pl — profesjonalny wynajem maszyn i urządzeń budowlanych',
       authRequired: true,
