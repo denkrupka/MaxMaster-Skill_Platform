@@ -222,6 +222,72 @@ export const DictionariesPage: React.FC = () => {
   const [selectedRoomGroup, setSelectedRoomGroup] = useState<KosztorysFormRoomGroupDB | null>(null);
   const [selectedWorkCategory, setSelectedWorkCategory] = useState<KosztorysFormWorkCategoryDB | null>(null);
 
+  // ============ Wholesaler price comparison helper ============
+  async function wholesalerProxy(proxyName: string, action: string, params: Record<string, any>): Promise<any> {
+    const { data, error } = await supabase.functions.invoke(proxyName, {
+      body: { action, ...params },
+    });
+    if (error) throw error;
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    if (parsed?.error) throw new Error(parsed.error);
+    return parsed;
+  }
+
+  // Auto-fetch wholesaler prices when product detail opens
+  useEffect(() => {
+    if (!detailMaterial) { setWholesalerPrices([]); setLoadingPrices(false); return; }
+    const dm = detailMaterial as any;
+    const activeIntegrations = integrations.filter(i => i.is_active);
+    if (activeIntegrations.length === 0) return;
+
+    const searchQuery = dm.ean || dm.sku || dm.name;
+    if (!searchQuery) return;
+
+    setLoadingPrices(true);
+    setWholesalerPrices([]);
+
+    Promise.allSettled(activeIntegrations.map(async (integration) => {
+      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
+      const result = await wholesalerProxy(proxyName, 'search', {
+        integrationId: integration.id,
+        q: searchQuery,
+      });
+      return { integration, products: result.products || [] };
+    })).then(results => {
+      const prices: Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }> = [];
+
+      for (const r of results) {
+        if (r.status !== 'fulfilled') continue;
+        const { integration, products } = r.value;
+        if (!products.length) continue;
+
+        const isTim = integration.wholesaler_id === 'tim';
+        const wholesalerLabel = isTim ? 'TIM' : 'Onninen';
+
+        // Find best matching product: prefer exact EAN/SKU match, else first result
+        let best = products[0];
+        if (dm.ean) {
+          const eanMatch = products.find((p: any) => p.ean === dm.ean);
+          if (eanMatch) best = eanMatch;
+        }
+        if (!best && dm.sku) {
+          const skuMatch = products.find((p: any) => p.sku === dm.sku);
+          if (skuMatch) best = skuMatch;
+        }
+
+        const purchasePrice = isTim ? (best.price ?? null) : (best.priceEnd ?? null);
+        const catalogPrice = isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null);
+        const stock = best.stock ?? null;
+        const url = best.url || undefined;
+
+        prices.push({ wholesaler: wholesalerLabel, catalogPrice, purchasePrice, stock, url });
+      }
+
+      setWholesalerPrices(prices);
+      setLoadingPrices(false);
+    });
+  }, [detailMaterial, integrations]);
+
   // ============ Загрузка данных ============
   useEffect(() => {
     if (currentUser) {
@@ -3172,7 +3238,7 @@ export const DictionariesPage: React.FC = () => {
               </div>
 
               {/* Price & Availability Table from wholesalers */}
-              {(dm.ean || dm.sku) && (
+              {integrations.some(i => i.is_active) && (
                 <div className="px-5 pb-4">
                   <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny i dostępność w hurtowniach</h4>
                   <div className="border border-slate-200 rounded-lg overflow-hidden">
