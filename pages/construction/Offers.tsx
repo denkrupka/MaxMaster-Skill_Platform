@@ -936,6 +936,81 @@ export const OffersPage: React.FC = () => {
       const validUntil = offerData.valid_until ||
         new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      // Find or create contractor from offerClientData
+      let clientId: string | null = offerData.client_id || null;
+
+      if (!clientId && offerClientData.client_name.trim()) {
+        // Try to find existing contractor by NIP
+        const nipNorm = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
+        if (nipNorm) {
+          const { data: existingByNip } = await supabase
+            .from('contractors')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .eq('nip', nipNorm)
+            .is('deleted_at', null)
+            .limit(1);
+          if (existingByNip && existingByNip.length > 0) {
+            clientId = existingByNip[0].id;
+          }
+        }
+
+        // Try to find by name
+        if (!clientId) {
+          const { data: existingByName } = await supabase
+            .from('contractors')
+            .select('id')
+            .eq('company_id', currentUser.company_id)
+            .ilike('name', offerClientData.client_name.trim())
+            .is('deleted_at', null)
+            .limit(1);
+          if (existingByName && existingByName.length > 0) {
+            clientId = existingByName[0].id;
+          }
+        }
+
+        // Create new contractor if not found
+        if (!clientId) {
+          const address = [
+            offerClientData.company_street,
+            offerClientData.company_street_number,
+            offerClientData.company_postal_code,
+            offerClientData.company_city
+          ].filter(Boolean).join(', ') || null;
+
+          const { data: newContractor } = await supabase
+            .from('contractors')
+            .insert({
+              company_id: currentUser.company_id,
+              name: offerClientData.client_name.trim(),
+              nip: nipNorm || null,
+              contractor_entity_type: 'company',
+              contractor_type: 'customer',
+              legal_address: address,
+              actual_address: address,
+              created_by_id: currentUser.id
+            })
+            .select('id')
+            .single();
+          if (newContractor) {
+            clientId = newContractor.id;
+          }
+        }
+      }
+
+      // Build notes with client/object data
+      const notesLines: string[] = [];
+      if (offerData.notes) notesLines.push(offerData.notes);
+      if (offerClientData.investment_name) notesLines.push(`Inwestycja: ${offerClientData.investment_name}`);
+      if (offerClientData.object_code) notesLines.push(`Kod obiektu: ${offerClientData.object_code}`);
+      const objectAddr = [offerClientData.object_street, offerClientData.object_street_number, offerClientData.object_postal_code, offerClientData.object_city].filter(Boolean).join(', ');
+      if (objectAddr) notesLines.push(`Adres obiektu: ${objectAddr}`);
+
+      const internalNotesLines: string[] = [];
+      if (offerData.internal_notes) internalNotesLines.push(offerData.internal_notes);
+      if (offerClientData.internal_notes) internalNotesLines.push(offerClientData.internal_notes);
+      if (offerClientData.notes) internalNotesLines.push(offerClientData.notes);
+
       const { data: newOffer, error } = await supabase
         .from('offers')
         .insert({
@@ -943,12 +1018,12 @@ export const OffersPage: React.FC = () => {
           name: offerData.name.trim(),
           number: offerNumber,
           project_id: offerData.project_id || null,
-          client_id: offerData.client_id || null,
+          client_id: clientId,
           valid_until: validUntil,
           discount_percent: offerData.discount_percent,
           discount_amount: offerData.discount_amount,
-          notes: offerData.notes,
-          internal_notes: offerData.internal_notes,
+          notes: notesLines.join('\n') || null,
+          internal_notes: internalNotesLines.join('\n') || null,
           status: 'draft',
           created_by_id: currentUser.id
         })
@@ -957,61 +1032,88 @@ export const OffersPage: React.FC = () => {
 
       if (error) throw error;
 
-      // Create sections and items
-      for (const section of sections.filter(s => s.id !== 'unsectioned')) {
-        const { data: newSection } = await supabase
-          .from('offer_sections')
-          .insert({
-            offer_id: newOffer.id,
-            name: section.name,
-            description: section.description,
-            sort_order: section.sort_order
-          })
-          .select()
-          .single();
+      // Create sections and items from imported kosztorys data
+      if (sections.length > 0) {
+        for (const section of sections.filter(s => s.id !== 'unsectioned')) {
+          // Ensure every item has a valid name string
+          const safeItems = section.items
+            .map((item, idx) => ({
+              ...item,
+              name: String(item.name || item.description || '').trim() || `Pozycja ${idx + 1}`
+            }))
+            .filter(item => item.name.length > 0);
 
-        if (newSection) {
-          for (const item of section.items) {
-            await supabase
-              .from('offer_items')
+          const sectionName = String(section.name || '').trim() || 'Sekcja';
+
+          try {
+            const { data: newSection } = await supabase
+              .from('offer_sections')
               .insert({
                 offer_id: newOffer.id,
-                section_id: newSection.id,
-                name: item.name,
-                description: item.description,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-                sort_order: item.sort_order,
-                is_optional: item.is_optional,
-                source_resource_id: item.source_resource_id
-              });
+                name: sectionName,
+                description: section.description || null,
+                sort_order: section.sort_order || 0
+              })
+              .select()
+              .single();
+
+            if (newSection && safeItems.length > 0) {
+              await supabase
+                .from('offer_items')
+                .insert(safeItems.map((item, idx) => ({
+                  offer_id: newOffer.id,
+                  section_id: newSection.id,
+                  name: item.name,
+                  description: item.description || null,
+                  quantity: item.quantity || 1,
+                  unit_price: item.unit_price || 0,
+                  sort_order: item.sort_order ?? idx,
+                  is_optional: item.is_optional || false
+                })));
+            }
+          } catch (sectionErr) {
+            console.warn('Error inserting section/items, skipping:', sectionErr);
           }
         }
-      }
 
-      // Unsectioned items
-      const unsectioned = sections.find(s => s.id === 'unsectioned');
-      if (unsectioned) {
-        for (const item of unsectioned.items) {
-          await supabase
-            .from('offer_items')
-            .insert({
-              offer_id: newOffer.id,
-              section_id: null,
-              name: item.name,
-              description: item.description,
-              quantity: item.quantity,
-              unit_price: item.unit_price,
-              sort_order: item.sort_order,
-              is_optional: item.is_optional,
-              source_resource_id: item.source_resource_id
-            });
+        // Unsectioned items
+        const unsectioned = sections.find(s => s.id === 'unsectioned');
+        if (unsectioned && unsectioned.items.length > 0) {
+          const safeItems = unsectioned.items
+            .map((item, idx) => ({
+              ...item,
+              name: String(item.name || item.description || '').trim() || `Pozycja ${idx + 1}`
+            }))
+            .filter(item => item.name.length > 0);
+
+          if (safeItems.length > 0) {
+            try {
+              await supabase
+                .from('offer_items')
+                .insert(safeItems.map((item, idx) => ({
+                  offer_id: newOffer.id,
+                  section_id: null,
+                  name: item.name,
+                  description: item.description || null,
+                  quantity: item.quantity || 1,
+                  unit_price: item.unit_price || 0,
+                  sort_order: item.sort_order ?? idx,
+                  is_optional: item.is_optional || false
+                })));
+            } catch (itemErr) {
+              console.warn('Error inserting unsectioned items, skipping:', itemErr);
+            }
+          }
         }
       }
 
       await loadData();
       setShowCreateModal(false);
       resetOfferForm();
+
+      // Navigate to the newly created offer
+      setSelectedOffer(newOffer);
+      loadOfferDetails(newOffer.id);
     } catch (err) {
       console.error('Error creating offer:', err);
     } finally {
@@ -1042,55 +1144,57 @@ export const OffersPage: React.FC = () => {
       await supabase.from('offer_sections').delete().eq('offer_id', selectedOffer.id);
       await supabase.from('offer_items').delete().eq('offer_id', selectedOffer.id);
 
-      // Re-create sections and items
+      // Re-create sections and items (filter out items with empty names)
       for (const section of sections.filter(s => s.id !== 'unsectioned')) {
+        const validItems = section.items.filter(item => item.name && item.name.trim());
+        if (validItems.length === 0 && !section.name) continue;
+
         const { data: newSection } = await supabase
           .from('offer_sections')
           .insert({
             offer_id: selectedOffer.id,
-            name: section.name,
+            name: section.name || 'Sekcja',
             description: section.description,
             sort_order: section.sort_order
           })
           .select()
           .single();
 
-        if (newSection) {
-          for (const item of section.items) {
-            await supabase
-              .from('offer_items')
-              .insert({
-                offer_id: selectedOffer.id,
-                section_id: newSection.id,
-                name: item.name,
-                description: item.description,
-                quantity: item.quantity,
-                unit_price: item.unit_price,
-                sort_order: item.sort_order,
-                is_optional: item.is_optional,
-                source_resource_id: item.source_resource_id
-              });
-          }
+        if (newSection && validItems.length > 0) {
+          await supabase
+            .from('offer_items')
+            .insert(validItems.map(item => ({
+              offer_id: selectedOffer.id,
+              section_id: newSection.id,
+              name: item.name.trim(),
+              description: item.description || null,
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price || 0,
+              sort_order: item.sort_order,
+              is_optional: item.is_optional || false,
+              source_resource_id: item.source_resource_id || null
+            })));
         }
       }
 
       // Unsectioned items
       const unsectioned = sections.find(s => s.id === 'unsectioned');
       if (unsectioned) {
-        for (const item of unsectioned.items) {
+        const validItems = unsectioned.items.filter(item => item.name && item.name.trim());
+        if (validItems.length > 0) {
           await supabase
             .from('offer_items')
-            .insert({
+            .insert(validItems.map(item => ({
               offer_id: selectedOffer.id,
               section_id: null,
-              name: item.name,
-              description: item.description,
-              quantity: item.quantity,
-              unit_price: item.unit_price,
+              name: item.name.trim(),
+              description: item.description || null,
+              quantity: item.quantity || 1,
+              unit_price: item.unit_price || 0,
               sort_order: item.sort_order,
-              is_optional: item.is_optional,
-              source_resource_id: item.source_resource_id
-            });
+              is_optional: item.is_optional || false,
+              source_resource_id: item.source_resource_id || null
+            })));
         }
       }
 

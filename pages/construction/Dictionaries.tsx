@@ -3345,41 +3345,6 @@ export const DictionariesPage: React.FC = () => {
                   ];
                 })()}
               </select>
-              {/* Edit selected category */}
-              {editingMaterial?.category && customCategories.some(c => c.name === editingMaterial.category) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cat = customCategories.find(c => c.name === editingMaterial.category);
-                    if (cat) {
-                      setEditingCategoryId(cat.id);
-                      setEditingCategoryName(cat.name);
-                    }
-                  }}
-                  className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-600"
-                  title="Edytuj kategorię"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              )}
-              {/* Add subcategory of selected */}
-              {editingMaterial?.category && customCategories.some(c => c.name === editingMaterial.category) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const cat = customCategories.find(c => c.name === editingMaterial.category);
-                    if (cat) {
-                      setAddSubcategoryParentId(cat.id);
-                      setNewCategoryName('');
-                      setExpandedCategories(prev => new Set([...prev, cat.id]));
-                    }
-                  }}
-                  className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-green-600"
-                  title="Dodaj podkategorię"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                </button>
-              )}
               {/* Add new root category */}
               <button
                 type="button"
