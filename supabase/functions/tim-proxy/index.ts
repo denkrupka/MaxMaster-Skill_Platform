@@ -648,21 +648,10 @@ serve(async (req) => {
           // EAN fallback from JSON-LD
           if (!ean && ldProduct?.gtin13) ean = ldProduct.gtin13
 
-          // Description: try product description div first, then meta, then JSON-LD
-          const descDiv = html.match(/<div[^>]*class="[^"]*product-description[^"]*"[^>]*>([\s\S]*?)<\/div>/)
-            || html.match(/<div[^>]*class="[^"]*description[^"]*"[^>]*data-v-[^>]*>([\s\S]*?)<\/div>/)
-            || html.match(/<div[^>]*id="product-description"[^>]*>([\s\S]*?)<\/div>/)
+          // Description from meta (short summary) or JSON-LD
           const metaDesc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/)
             || html.match(/<meta\s+content="([^"]*)"\s+name="description"/)
-          if (descDiv && descDiv[1].trim().length > 20) {
-            description = descDiv[1].trim()
-          } else if (ldProduct?.description && ldProduct.description.length > 20) {
-            description = ldProduct.description
-          } else if (metaDesc && metaDesc[1].length > 20) {
-            description = metaDesc[1]
-          } else {
-            description = ldProduct?.description || metaDesc?.[1] || ''
-          }
+          description = metaDesc ? metaDesc[1] : (ldProduct?.description || '')
 
           // Technical specs from JSON-LD additionalProperty
           let specs: Array<{ name: string; value: string }> = []

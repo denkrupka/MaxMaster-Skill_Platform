@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Search, Loader2, X, ChevronRight,
   FolderOpen, Grid3X3, List, Package, AlertTriangle,
@@ -476,6 +476,13 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
 
+  // Background loading: all products from selected category for local search
+  const [allCatProducts, setAllCatProducts] = useState<OninenProduct[]>([]);
+  const [allCatLoading, setAllCatLoading] = useState(false);
+  const [allCatLoadedCount, setAllCatLoadedCount] = useState(0);
+  const [allCatTotalCount, setAllCatTotalCount] = useState(0);
+  const allCatAbortRef = useRef(false);
+
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load categories
@@ -505,34 +512,75 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
 
-  // Search
-  const doSearch = useCallback((q: string) => {
-    if (!q.trim()) { setSearchResult(null); setSearchLoading(false); return; }
-    setSearchLoading(true);
-    oninenProxy('search', { integrationId, q: q.trim() })
-      .then(r => {
-        setSearchResult(r.products || []);
-        setSearchTotal(r.total || 0);
-        setSearchLoading(false);
-      })
-      .catch(e => { console.error('[oninen-proxy] search error:', e); setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
+  // Background-load all products from selected category for local search
+  const loadAllCategoryProducts = useCallback(async (catSlug: string) => {
+    allCatAbortRef.current = false;
+    setAllCatLoading(true);
+    setAllCatProducts([]);
+    setAllCatLoadedCount(0);
+    setAllCatTotalCount(0);
+
+    let currentPage = 1;
+    let totalPgs = 1;
+    let all: OninenProduct[] = [];
+
+    while (currentPage <= totalPgs && !allCatAbortRef.current) {
+      try {
+        const data = await oninenProxy('products', { integrationId, cat: catSlug, page: currentPage });
+        const newProducts = data.products || [];
+        all = [...all, ...newProducts];
+        setAllCatProducts([...all]);
+        setAllCatLoadedCount(all.length);
+        if (currentPage === 1) {
+          totalPgs = data.totalPages || 1;
+          setAllCatTotalCount(data.totalProducts || 0);
+        }
+        currentPage++;
+      } catch {
+        break;
+      }
+    }
+
+    if (!allCatAbortRef.current) setAllCatLoading(false);
   }, [integrationId]);
+
+  // Local search filtering
+  const localSearchResults = useMemo(() => {
+    if (!search || search.length < 2 || !selectedCat) return null;
+    const q = search.toLowerCase();
+    return allCatProducts.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.brand || '').toLowerCase().includes(q)
+    );
+  }, [search, allCatProducts, selectedCat]);
 
   const onSearchChange = (v: string) => {
     setSearch(v);
-    if (searchRef.current) clearTimeout(searchRef.current);
+    if (!selectedCat) return;
+    if (v.length >= 2 && allCatProducts.length === 0 && !allCatLoading) {
+      loadAllCategoryProducts(selectedCat.slug);
+    }
     if (v.length >= 2) {
-      setSearchLoading(true);
-      searchRef.current = setTimeout(() => doSearch(v), 400);
+      setSearchResult(localSearchResults || []);
+      setSearchTotal(localSearchResults?.length || 0);
     } else {
       setSearchResult(null);
-      setSearchLoading(false);
     }
   };
 
+  // Update search results reactively when allCatProducts changes during background load
+  useEffect(() => {
+    if (search.length >= 2 && selectedCat && localSearchResults !== null) {
+      setSearchResult(localSearchResults);
+      setSearchTotal(localSearchResults.length);
+      setSearchLoading(allCatLoading);
+    }
+  }, [localSearchResults, allCatLoading]);
+
   const display = searchResult !== null ? searchResult : products;
-  const isLoading = searchLoading || prodLoading;
-  const hasContent = selectedCat || searchResult !== null || searchLoading;
+  const isLoading = (searchLoading && allCatLoading) || prodLoading;
+  const hasContent = selectedCat || searchResult !== null;
 
   if (connectionError && categories.length === 0) {
     return (
@@ -567,7 +615,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
                 cat={c}
                 depth={0}
                 selectedSlug={selectedCat?.slug || null}
-                onPick={cat => { setSelectedCat(cat); setPage(1); setSearch(''); setSearchResult(null); }}
+                onPick={cat => { setSelectedCat(cat); setPage(1); setSearch(''); setSearchResult(null); allCatAbortRef.current = true; setAllCatProducts([]); setAllCatLoading(false); setAllCatLoadedCount(0); }}
               />
             ))}
           </div>
@@ -578,15 +626,21 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Search bar */}
         <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
-          <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
-            <Search className="w-4 h-4 text-slate-400" />
+          <div className={`flex-1 max-w-md flex items-center rounded-lg px-3 border ${selectedCat ? 'bg-slate-100 border-slate-200' : 'bg-slate-50 border-slate-100'}`}>
+            <Search className={`w-4 h-4 ${selectedCat ? 'text-slate-400' : 'text-slate-300'}`} />
             <input
               value={search}
               onChange={e => onSearchChange(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && doSearch(search)}
-              placeholder="Szukaj na Onninen.pl..."
-              className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
+              disabled={!selectedCat}
+              placeholder={selectedCat ? `Szukaj w: ${selectedCat.name}...` : 'Wybierz kategorię, aby wyszukać...'}
+              className={`flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 ${selectedCat ? 'text-slate-700' : 'text-slate-300 cursor-not-allowed'}`}
             />
+            {allCatLoading && search.length >= 2 && (
+              <span className="text-[10px] text-blue-500 whitespace-nowrap mr-2 flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                {allCatLoadedCount}/{allCatTotalCount || '...'}
+              </span>
+            )}
             {search && (
               <button onClick={() => { setSearch(''); setSearchResult(null); setSearchTotal(0); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
@@ -621,7 +675,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
               <Package className="w-12 h-12 text-slate-200 mb-4" />
               <h3 className="text-lg font-semibold text-slate-600 mb-2">Katalog materiałów Onninen.pl</h3>
               <p className="text-sm text-slate-400 max-w-sm">
-                Wybierz kategorię z listy po lewej lub wyszukaj produkt.
+                Wybierz kategorię z listy po lewej, aby przeglądać i wyszukiwać produkty.
               </p>
               {categories.length > 0 && (
                 <div className="mt-6 w-full max-w-lg">
@@ -644,7 +698,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
               <span className="text-sm text-slate-500">
-                {searchLoading ? 'Szukam na Onninen.pl...' : 'Ładowanie produktów...'}
+Ładowanie produktów...
               </span>
             </div>
           ) : prodError ? (
@@ -662,7 +716,10 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
                 <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
               )}
               {searchResult !== null && (
-                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania «{search}»: {searchTotal > searchResult.length ? `${searchResult.length} z ${searchTotal}` : searchResult.length} produktów</p>
+                <p className="text-xs text-slate-400 mb-3">
+                  Wynik wyszukiwania «{search}»: {searchResult.length} produktów
+                  {allCatLoading && <span className="ml-1 text-blue-500">(ładowanie...)</span>}
+                </p>
               )}
 
               {viewMode === 'grid' ? (
