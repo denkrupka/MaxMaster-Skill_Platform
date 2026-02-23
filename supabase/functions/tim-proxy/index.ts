@@ -730,9 +730,9 @@ serve(async (req) => {
         return json({ product, source })
       }
 
-      // ═══ SEARCH (via REST API rwd/search/) ═══
+      // ═══ SEARCH (via HTML page fetch, same approach as products) ═══
       case 'search': {
-        const { integrationId, q, page = 1, limit = 24 } = body
+        const { integrationId, q, page = 1 } = body
         if (!q) return errorResponse('Missing q')
 
         let jar: CookieJar = {}
@@ -747,146 +747,73 @@ serve(async (req) => {
           }
         }
 
-        // If no session cookies, pre-fetch TIM homepage to get WAF/session cookies
-        // This is critical: TIM blocks /rwd/search/ requests without valid session cookies
-        if (Object.keys(jar).length === 0) {
-          try {
-            const homeRes = await fetch(BASE + '/', {
-              headers: { 'User-Agent': UA, 'Accept': 'text/html,*/*' },
-              redirect: 'follow',
-            })
-            parseCookiesFromHeaders(homeRes.headers, jar)
-            // Consume body to free connection
-            await homeRes.text()
-          } catch (e) {
-            console.error('tim-proxy search: homepage prefetch failed:', (e as Error).message)
-          }
-        }
+        // Fetch TIM search results page as HTML (same proven approach as products)
+        const searchPath = `/szukaj?q=${encodeURIComponent(q.trim())}${page > 1 ? `&page=${page}` : ''}`
+        const html = await fetchPage(searchPath, jar)
+        const jsonLdList = extractJsonLd(html)
 
-        // Search via /rwd/search/ REST API with retries
-        const searchParams = new URLSearchParams({
-          q: q.trim(),
-          p: String(page),
-          limit: String(limit),
-        })
-
-        let searchData: any = null
-        const maxRetries = 3
-
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-          if (attempt > 0) {
-            await new Promise(r => setTimeout(r, 1000 * attempt))
-          }
-          try {
-            const searchUrl = `${BASE}/rwd/search/?${searchParams}`
-            const hdrs: Record<string, string> = {
-              ...makeHeaders(jar),
-              'Accept': 'application/json, text/javascript, */*; q=0.01',
-              'X-Requested-With': 'XMLHttpRequest',
-              'Sec-Fetch-Dest': 'empty',
-              'Sec-Fetch-Mode': 'cors',
-              'Sec-Fetch-Site': 'same-origin',
-            }
-            const res = await fetch(searchUrl, { headers: hdrs, redirect: 'follow' })
-            parseCookiesFromHeaders(res.headers, jar)
-
-            if (res.status === 503 || res.status === 429) {
-              console.error(`tim-proxy search: TIM ${res.status}, attempt ${attempt + 1}/${maxRetries}`)
-              await res.text() // consume body
-              continue
-            }
-
-            const txt = await res.text()
-            try {
-              searchData = JSON.parse(txt)
-              break
-            } catch {
-              console.error(`tim-proxy search: non-JSON (${res.status}), attempt ${attempt + 1}`)
-              // On last attempt, try Fact-Finder fallback below
-            }
-          } catch (e) {
-            console.error(`tim-proxy search: fetch error attempt ${attempt + 1}:`, (e as Error).message)
-          }
-        }
-
-        // Fallback: try Fact-Finder search API (may work from some edge locations)
-        if (!searchData) {
-          try {
-            const ffUrl = `https://timsa.fact-finder.pl/FACT-Finder/Search.ff?channel=TIM-2025&query=${encodeURIComponent(q.trim())}&page=${page}&productsPerPage=${limit}&format=JSON`
-            const ffRes = await fetch(ffUrl, {
-              headers: { 'Accept': 'application/json', 'Origin': BASE, 'Referer': BASE + '/' },
-            })
-            if (ffRes.ok) {
-              const ffData = await ffRes.json()
-              // Fact-Finder returns records in searchResult.records
-              const records = ffData?.searchResult?.records || []
-              if (records.length > 0) {
-                searchData = {
-                  product: records.map((r: any) => ({
-                    _source: {
-                      name: r.record?.Name || r.record?.name || '',
-                      sku: r.record?.ProductNumber || r.record?.sku || r.id || '',
-                      productLink: r.record?.Deeplink || r.record?.deeplink || '',
-                      imageLink: r.record?.ImageUrl || r.record?.image || '',
-                      price: r.record?.Price ? parseFloat(r.record.Price) : null,
-                      manufacturer: r.record?.Manufacturer || r.record?.manufacturer || '',
-                    }
-                  })),
-                  total: ffData?.searchResult?.resultCount || records.length,
-                }
+        let products: any[] = []
+        for (const ld of jsonLdList) {
+          if (ld['@type'] === 'ItemList' && ld.itemListElement) {
+            products = ld.itemListElement.map((item: any) => {
+              const p = item.item || item
+              return {
+                name: p.name || '',
+                sku: extractSku(p.url || ''),
+                url: p.url || '',
+                image: Array.isArray(p.image) ? p.image[0] : (p.image || ''),
+                price: p.offers?.price ? parseFloat(p.offers.price) : null,
+                publicPrice: p.offers?.price ? parseFloat(p.offers.price) : null,
+                rating: p.aggregateRating?.ratingValue || null,
               }
-            } else {
-              console.error('tim-proxy search: Fact-Finder returned', ffRes.status)
-            }
-          } catch (ffErr) {
-            console.error('tim-proxy search: Fact-Finder fallback failed:', (ffErr as Error).message)
+            })
+            break
           }
         }
 
-        if (!searchData) {
-          return json({ products: [], query: q, total: 0, source: 'public', debug: 'All search methods failed (rwd + fact-finder)' })
-        }
-        const rawProducts = searchData?.product || []
-        const totalProducts = searchData?.total || 0
-
-        let products: any[] = rawProducts.map((item: any) => {
-          const s = item._source || item
-          const imgPath = s.imageLink || ''
-          return {
-            name: s.name || '',
-            sku: s.sku || item._id || '',
-            url: s.productLink ? BASE + s.productLink : '',
-            image: imgPath ? (imgPath.startsWith('http') ? imgPath : BASE + imgPath) : '',
-            price: s.price || null,
-            publicPrice: s.price || null,
-            manufacturer: s.manufacturer || '',
-            stock: s.stock ?? null,
-            ean: s.ean || '',
+        // HTML fallback: extract product links when JSON-LD is missing
+        if (products.length === 0) {
+          const seen = new Set<string>()
+          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          let lm: RegExpExecArray | null
+          while ((lm = linkRe.exec(html)) !== null) {
+            const href = lm[1]
+            const psku = extractSku(href)
+            if (!psku || seen.has(psku)) continue
+            seen.add(psku)
+            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
+            if (text.length < 3 || text.length > 200) continue
+            products.push({ name: text, sku: psku, url: BASE + href, image: '', price: null, publicPrice: null })
           }
-        })
+        }
+
+        // Extract total from HTML
+        const totalMatch = html.match(/znalezionych[^:]*:\s*(\d+)|Znaleziono[^:]*:\s*(\d+)|wyników[^:]*:\s*(\d+)|"totalProducts"\s*:\s*(\d+)/i)
+        const totalProducts = totalMatch ? parseInt(totalMatch[1] || totalMatch[2] || totalMatch[3] || totalMatch[4]) : products.length
+        const totalPages = extractMaxPage(html)
 
         // Enrich with personal prices via GraphQL
         let source = 'public'
         const skuList = products.map((p: any) => p.sku).filter(Boolean)
         if (gqlWorks && skuList.length) {
-          const pp = await fetchPersonalPrices(skuList, jar)
-          if (pp.size) {
+          const personalPrices = await fetchPersonalPrices(skuList, jar)
+          if (personalPrices.size) {
             source = 'personal'
             for (const p of products) {
-              const price = pp.get(p.sku)
-              if (price) {
+              const pp = personalPrices.get(p.sku)
+              if (pp) {
                 p.publicPrice = p.price
-                p.price = price.netValue
-                p.stock = price.stock
-                p.unit = price.unit
-                p.stockColor = price.stockColor
-                p.shippingText = price.shippingText
+                p.price = pp.netValue
+                p.stock = pp.stock
+                p.unit = pp.unit
+                p.stockColor = pp.stockColor
+                p.shippingText = pp.shippingText
               }
             }
           }
         }
 
-        return json({ products, query: q, total: totalProducts, source })
+        return json({ products, query: q, total: totalProducts, totalPages, source })
       }
 
       default:
