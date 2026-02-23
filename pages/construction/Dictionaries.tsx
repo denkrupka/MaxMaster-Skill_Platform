@@ -27,6 +27,9 @@ import { WholesalerIntegrationModal } from './WholesalerIntegrationModal';
 import { TIMIntegrator } from './TIMIntegrator';
 import { OninenIntegrator } from './OninenIntegrator';
 import { SpeckableIntegrator } from './SpeckableIntegrator';
+import { RentalIntegrationModal } from './RentalIntegrationModal';
+import { AtutIntegrator } from './AtutIntegrator';
+import { RamirentIntegrator } from './RamirentIntegrator';
 
 // ============ Типы для вкладок ============
 type TabType = 'work_types' | 'materials' | 'equipment' | 'slownik';
@@ -124,6 +127,7 @@ export const DictionariesPage: React.FC = () => {
   const [equipmentSubTab, setEquipmentSubTab] = useState<'own' | string>('own');
   const [slownikMainSubTab, setSlownikMainSubTab] = useState<'own' | string>('own');
   const [showIntegrationModal, setShowIntegrationModal] = useState(false);
+  const [showRentalIntegrationModal, setShowRentalIntegrationModal] = useState(false);
   const [integrations, setIntegrations] = useState<WholesalerIntegration[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -4593,7 +4597,7 @@ export const DictionariesPage: React.FC = () => {
 
               {activeTab === 'equipment' && (
                 <div>
-                  {/* Sub-tabs: Własny katalog + wholesaler tabs + Integrację button */}
+                  {/* Sub-tabs: Własny katalog + rental tabs + Integracje button */}
                   <div className="flex items-center gap-1 mb-4">
                     <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
                       <button
@@ -4606,13 +4610,13 @@ export const DictionariesPage: React.FC = () => {
                       >
                         Własny katalog
                       </button>
-                      {integrations.filter(i => i.is_active).map(integ => (
+                      {integrations.filter(i => i.is_active && i.branza === 'sprzet').map(integ => (
                         <button
                           key={integ.id}
                           onClick={() => setEquipmentSubTab(integ.wholesaler_id)}
                           className={`px-4 py-2 rounded-md text-sm font-medium transition ${
                             equipmentSubTab === integ.wholesaler_id
-                              ? 'bg-white text-blue-600 shadow-sm'
+                              ? 'bg-white text-orange-600 shadow-sm'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
@@ -4621,22 +4625,25 @@ export const DictionariesPage: React.FC = () => {
                       ))}
                     </div>
                     <button
-                      onClick={() => setShowIntegrationModal(true)}
-                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                      onClick={() => setShowRentalIntegrationModal(true)}
+                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
                     >
                       <Store className="w-4 h-4" />
-                      Integrację
+                      Integracje
                     </button>
                   </div>
                   {equipmentSubTab === 'own' && renderEquipmentTab()}
-                  {equipmentSubTab === 'tim' && (
-                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
+                  {equipmentSubTab === 'atut-rental' && (
+                    <AtutIntegrator
+                      integrationId={integrations.find(i => i.wholesaler_id === 'atut-rental' && i.is_active)?.id}
+                      onAddToOwnCatalog={handleAddToOwnCatalog}
+                    />
                   )}
-                  {equipmentSubTab === 'oninen' && (
-                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
-                  )}
-                  {equipmentSubTab === 'speckable' && (
-                    <SpeckableIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'speckable')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
+                  {equipmentSubTab === 'ramirent' && (
+                    <RamirentIntegrator
+                      integrationId={integrations.find(i => i.wholesaler_id === 'ramirent' && i.is_active)?.id}
+                      onAddToOwnCatalog={handleAddToOwnCatalog}
+                    />
                   )}
                 </div>
               )}
@@ -4729,6 +4736,15 @@ export const DictionariesPage: React.FC = () => {
       <WholesalerIntegrationModal
         isOpen={showIntegrationModal}
         onClose={() => setShowIntegrationModal(false)}
+        companyId={currentUser?.company_id || ''}
+        integrations={integrations}
+        onIntegrationChange={loadIntegrations}
+      />
+
+      {/* Rental Integration Modal */}
+      <RentalIntegrationModal
+        isOpen={showRentalIntegrationModal}
+        onClose={() => setShowRentalIntegrationModal(false)}
         companyId={currentUser?.company_id || ''}
         integrations={integrations}
         onIntegrationChange={loadIntegrations}

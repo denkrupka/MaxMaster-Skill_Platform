@@ -7,7 +7,7 @@ const corsHeaders = {
 }
 
 const BASE = 'https://www.speckable.pl'
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 
 // ═══ COOKIE JAR ═══
 type CookieJar = Record<string, string>
@@ -41,8 +41,20 @@ function cookieString(jar: CookieJar): string {
 function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = {
     'User-Agent': UA,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Accept-Language': 'pl-PL,pl;q=0.9',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-CH-UA': '"Chromium";v="131", "Not_A Brand";v="24"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    'Connection': 'keep-alive',
     ...(extra || {}),
   }
   if (jar && Object.keys(jar).length) h['Cookie'] = cookieString(jar)
@@ -51,21 +63,25 @@ function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<st
 
 async function fetchPage(url: string, jar: CookieJar): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
-  const res = await fetch(fullUrl, { headers: makeHeaders(jar), redirect: 'follow' })
+  const res = await fetch(fullUrl, {
+    headers: makeHeaders(jar, { 'Referer': BASE + '/' }),
+    redirect: 'follow',
+  })
   parseCookiesFromHeaders(res.headers, jar)
   if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
   return res.text()
 }
 
-async function postForm(url: string, body: string, jar: CookieJar): Promise<string> {
+async function postForm(url: string, body: string, jar: CookieJar, referer?: string): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
   const res = await fetch(fullUrl, {
     method: 'POST',
-    headers: {
-      ...makeHeaders(jar),
+    headers: makeHeaders(jar, {
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Referer': BASE + '/pl/login',
-    },
+      'Origin': BASE,
+      'Referer': referer || BASE + '/pl/login',
+      'Sec-Fetch-Site': 'same-origin',
+    }),
     body,
     redirect: 'follow',
   })
@@ -376,6 +392,11 @@ function parseProductPage(html: string): any {
 const SESSION_FRESH_MS = 30 * 60 * 1000
 
 async function doLogin(username: string, password: string, jar: CookieJar): Promise<boolean> {
+  // Step 0: Visit homepage first to get initial session cookies
+  try {
+    await fetchPage('/', jar)
+  } catch { /* ok if homepage fails, login page will set cookies */ }
+
   // Step 1: Fetch login page to get CSRF token
   const loginHtml = await fetchPage('/pl/login', jar)
 
@@ -387,7 +408,12 @@ async function doLogin(username: string, password: string, jar: CookieJar): Prom
   // Extract CSRF token
   const tokenMatch = loginHtml.match(/name="login\[_token\]"\s*value="([^"]+)"/i)
     || loginHtml.match(/value="([^"]+)"\s*name="login\[_token\]"/i)
+    || loginHtml.match(/login\[_token\][^>]*value="([^"]+)"/i)
   if (!tokenMatch) {
+    // Check if we got a Cloudflare challenge or other block
+    if (loginHtml.includes('cf-browser-verification') || loginHtml.includes('challenge-platform')) {
+      throw new Error('Strona jest zabezpieczona przez Cloudflare — spróbuj ponownie za chwilę')
+    }
     throw new Error('Nie znaleziono tokena CSRF na stronie logowania')
   }
   const token = tokenMatch[1]
@@ -400,7 +426,7 @@ async function doLogin(username: string, password: string, jar: CookieJar): Prom
     `login[password]=${encodeURIComponent(password)}`,
   ].join('&')
 
-  const responseHtml = await postForm('/pl/login', formData, jar)
+  const responseHtml = await postForm('/pl/login', formData, jar, BASE + '/pl/login')
 
   // Step 3: Verify success
   if (responseHtml.includes('/pl/logout') || responseHtml.includes('Wyloguj') || responseHtml.includes('Moje konto')) {
