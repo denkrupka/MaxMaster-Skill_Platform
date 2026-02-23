@@ -81,9 +81,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  zIndex?: number;
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md', zIndex }) => {
   if (!isOpen) return null;
 
   const sizeClasses = {
@@ -94,7 +95,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 overflow-y-auto" style={{ zIndex: zIndex || 50 }}>
       <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 transition-opacity bg-slate-500 bg-opacity-75" onClick={onClose} />
         <span className="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
@@ -144,6 +145,7 @@ export const DictionariesPage: React.FC = () => {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
   const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: string; name: string; parent_id?: string | null } | null>(null);
+  const [deleteMaterialConfirm, setDeleteMaterialConfirm] = useState<{ id: string; name: string } | null>(null);
   const [addSubcategoryParentId, setAddSubcategoryParentId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [customManufacturers, setCustomManufacturers] = useState<{ id: string; name: string }[]>([]);
@@ -488,6 +490,18 @@ export const DictionariesPage: React.FC = () => {
         .insert(materialData);
 
       if (error) throw error;
+
+      // Also add manufacturer to custom manufacturers if present
+      if (p.manufacturer && currentUser.company_id) {
+        const alreadyExists = customManufacturers.some(m => m.name === p.manufacturer);
+        if (!alreadyExists) {
+          await supabase
+            .from('kosztorys_custom_manufacturers')
+            .upsert({ company_id: currentUser.company_id, name: p.manufacturer }, { onConflict: 'company_id,name' });
+          await loadCustomManufacturers();
+        }
+      }
+
       showNotification('Materiał dodany do katalogu Własnego', 'success');
       setAddToCatalogModal(null);
       await loadMaterials();
@@ -3062,12 +3076,7 @@ export const DictionariesPage: React.FC = () => {
                     Edytuj
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm('Czy na pewno chcesz usunąć ten materiał?')) {
-                        handleDeleteMaterial(dm.id);
-                        setDetailMaterial(null);
-                      }
-                    }}
+                    onClick={() => setDeleteMaterialConfirm({ id: dm.id, name: dm.name })}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -3201,7 +3210,7 @@ export const DictionariesPage: React.FC = () => {
               {dm.description && (
                 <div className="px-5 pb-4">
                   <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">{dm.description}</p>
+                  <div className="text-xs text-slate-500 leading-relaxed prose prose-xs max-w-none" dangerouslySetInnerHTML={{ __html: dm.description }} />
                 </div>
               )}
 
@@ -3229,6 +3238,7 @@ export const DictionariesPage: React.FC = () => {
         onClose={() => { setMaterialDialog(false); setEditingMaterial(null); setMaterialImages([]); }}
         title={editingMaterial?.id ? 'Edytuj materiał' : 'Dodaj materiał'}
         size="lg"
+        zIndex={75}
       >
         <div className="space-y-4">
           {/* Aktywny checkbox at top left */}
@@ -3296,7 +3306,14 @@ export const DictionariesPage: React.FC = () => {
                       <option key={cat.id} value={cat.name}>{'—'.repeat(depth) + (depth ? ' ' : '') + cat.name}</option>,
                       ...renderOpts(cat.id, depth + 1),
                     ]).flat();
-                  return renderOpts(null, 0);
+                  const customCatNames = new Set(customCategories.map(c => c.name));
+                  const extraCats = [...new Set(materials.map(m => m.category).filter((c): c is string => !!c && !customCatNames.has(c)))];
+                  return [
+                    ...renderOpts(null, 0),
+                    ...extraCats.map(name => (
+                      <option key={`extra-${name}`} value={name}>{name}</option>
+                    )),
+                  ];
                 })()}
               </select>
               <button
@@ -3344,9 +3361,18 @@ export const DictionariesPage: React.FC = () => {
                 className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Wybierz producenta...</option>
-                {customManufacturers.map(mfr => (
-                  <option key={mfr.id} value={mfr.name}>{mfr.name}</option>
-                ))}
+                {(() => {
+                  const customNames = new Set(customManufacturers.map(m => m.name));
+                  const materialMfrs = [...new Set(materials.map(m => m.manufacturer).filter((m): m is string => !!m && !customNames.has(m)))];
+                  return [
+                    ...customManufacturers.map(mfr => (
+                      <option key={mfr.id} value={mfr.name}>{mfr.name}</option>
+                    )),
+                    ...materialMfrs.map(name => (
+                      <option key={`mat-${name}`} value={name}>{name}</option>
+                    )),
+                  ];
+                })()}
               </select>
               <button
                 type="button"
@@ -4543,6 +4569,37 @@ export const DictionariesPage: React.FC = () => {
               >
                 <Trash2 className="w-4 h-4" />
                 Usuń kategorię
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Material Confirmation Modal */}
+      {deleteMaterialConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteMaterialConfirm(null)}>
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Usunąć materiał?</h3>
+            <p className="text-sm text-slate-600 mb-5">
+              Czy na pewno chcesz usunąć materiał <span className="font-semibold">«{deleteMaterialConfirm.name}»</span>?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteMaterialConfirm(null)}
+                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={async () => {
+                  await handleDeleteMaterial(deleteMaterialConfirm.id);
+                  setDeleteMaterialConfirm(null);
+                  setDetailMaterial(null);
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Usuń materiał
               </button>
             </div>
           </div>
