@@ -155,10 +155,9 @@ function parseSubcategories(html: string, currentSlug?: string): Array<{ slug: s
     }
   }
 
-  // If we have the current slug, prefer only child links
-  if (normCurrent && subs.length > 0) {
-    const children = subs.filter(s => s.slug.replace(/\/$/, '').startsWith(normCurrent + '/'))
-    if (children.length > 0) return children
+  // If we have the current slug, ONLY return child links (not sidebar nav)
+  if (normCurrent) {
+    return subs.filter(s => s.slug.replace(/\/$/, '').startsWith(normCurrent + '/'))
   }
 
   return subs
