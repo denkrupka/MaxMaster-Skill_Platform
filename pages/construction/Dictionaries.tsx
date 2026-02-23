@@ -140,7 +140,12 @@ export const DictionariesPage: React.FC = () => {
   const [materialSearch, setMaterialSearch] = useState('');
 
   // ============ Расширенные состояния для каталога Własny ============
-  const [customCategories, setCustomCategories] = useState<{ id: string; name: string; sort_order: number }[]>([]);
+  const [customCategories, setCustomCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState<{ id: string; name: string; parent_id?: string | null } | null>(null);
+  const [addSubcategoryParentId, setAddSubcategoryParentId] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [customManufacturers, setCustomManufacturers] = useState<{ id: string; name: string }[]>([]);
   const [customUnits, setCustomUnits] = useState<{ id: string; value: string; label: string }[]>([]);
   const [materialViewMode, setMaterialViewMode] = useState<'grid' | 'list'>('grid');
@@ -283,15 +288,22 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
-  const handleAddCustomCategory = async () => {
+  const handleAddCustomCategory = async (parentId?: string | null) => {
     if (!newCategoryName.trim() || !currentUser?.company_id) return;
     try {
       const { error } = await supabase
         .from('kosztorys_custom_categories')
-        .insert({ company_id: currentUser.company_id, name: newCategoryName.trim(), sort_order: customCategories.length });
+        .insert({
+          company_id: currentUser.company_id,
+          name: newCategoryName.trim(),
+          sort_order: customCategories.length,
+          parent_id: parentId || null,
+        });
       if (error) throw error;
       setNewCategoryName('');
       setShowAddCategory(false);
+      setAddSubcategoryParentId(null);
+      if (parentId) setExpandedCategories(prev => new Set([...prev, parentId]));
       await loadCustomCategories();
       showNotification('Kategoria dodana', 'success');
     } catch (err: any) {
@@ -299,15 +311,81 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
-  const handleDeleteCustomCategory = async (id: string) => {
+  const handleRenameCategory = async (id: string) => {
+    if (!editingCategoryName.trim()) return;
     try {
+      const { error } = await supabase
+        .from('kosztorys_custom_categories')
+        .update({ name: editingCategoryName.trim() })
+        .eq('id', id);
+      if (error) throw error;
+
+      // Update materials that reference old name
+      const oldCat = customCategories.find(c => c.id === id);
+      if (oldCat && oldCat.name !== editingCategoryName.trim()) {
+        await supabase
+          .from('kosztorys_materials')
+          .update({ category: editingCategoryName.trim() })
+          .eq('category', oldCat.name)
+          .eq('company_id', currentUser?.company_id);
+      }
+
+      setEditingCategoryId(null);
+      setEditingCategoryName('');
+      await loadCustomCategories();
+      await loadMaterials();
+      showNotification('Kategoria zmieniona', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteCustomCategory = async (id: string) => {
+    const cat = customCategories.find(c => c.id === id);
+    if (!cat) return;
+
+    try {
+      // Find parent category name (materials move there)
+      const parentCat = cat.parent_id ? customCategories.find(c => c.id === cat.parent_id) : null;
+      const newCategory = parentCat?.name || null;
+
+      // Move materials to parent category
+      await supabase
+        .from('kosztorys_materials')
+        .update({ category: newCategory })
+        .eq('category', cat.name)
+        .eq('company_id', currentUser?.company_id);
+
+      // Move subcategories to parent
+      await supabase
+        .from('kosztorys_custom_categories')
+        .update({ parent_id: cat.parent_id || null })
+        .eq('parent_id', id);
+
+      // Delete the category
       const { error } = await supabase.from('kosztorys_custom_categories').delete().eq('id', id);
       if (error) throw error;
+
+      setDeleteCategoryConfirm(null);
+      if (selectedMaterialCategory === cat.name) setSelectedMaterialCategory(null);
       await loadCustomCategories();
+      await loadMaterials();
       showNotification('Kategoria usunięta', 'success');
     } catch (err: any) {
       showNotification(err.message || 'Błąd', 'error');
     }
+  };
+
+  // Build category tree helper
+  const getCategoryChildren = (parentId: string | null): typeof customCategories =>
+    customCategories.filter(c => (c.parent_id || null) === parentId);
+
+  const getCategoryMaterialCount = (catName: string): number => {
+    const cat = customCategories.find(c => c.name === catName);
+    if (!cat) return 0;
+    const directCount = materials.filter(m => m.category === catName).length;
+    const children = customCategories.filter(c => c.parent_id === cat.id);
+    return directCount + children.reduce((sum, ch) => sum + getCategoryMaterialCount(ch.name), 0);
   };
 
   const handleAddCustomManufacturer = async () => {
@@ -1047,18 +1125,31 @@ export const DictionariesPage: React.FC = () => {
       wt.name?.toLowerCase().includes(workTypeSearch.toLowerCase())
     ), [workTypes, workTypeSearch]);
 
+  // Collect all category names in subtree (for filtering when parent selected)
+  const getCategorySubtreeNames = (catName: string): string[] => {
+    const cat = customCategories.find(c => c.name === catName);
+    if (!cat) return [catName];
+    const children = customCategories.filter(c => c.parent_id === cat.id);
+    return [catName, ...children.flatMap(ch => getCategorySubtreeNames(ch.name))];
+  };
+
   const filteredMaterials = useMemo(() =>
     materials.filter(m => {
       const matchesSearch = !materialSearch ||
         m.code?.toLowerCase().includes(materialSearch.toLowerCase()) ||
         m.name?.toLowerCase().includes(materialSearch.toLowerCase()) ||
-        (m as any).ean?.toLowerCase().includes(materialSearch.toLowerCase()) ||
-        (m as any).sku?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        m.ean?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        m.sku?.toLowerCase().includes(materialSearch.toLowerCase()) ||
         m.manufacturer?.toLowerCase().includes(materialSearch.toLowerCase());
-      const matchesCategory = !selectedMaterialCategory ||
-        (selectedMaterialCategory === '__none__' ? !m.category : m.category === selectedMaterialCategory);
+      let matchesCategory = true;
+      if (selectedMaterialCategory === '__none__') {
+        matchesCategory = !m.category;
+      } else if (selectedMaterialCategory) {
+        const validNames = getCategorySubtreeNames(selectedMaterialCategory);
+        matchesCategory = validNames.includes(m.category || '');
+      }
       return matchesSearch && matchesCategory;
-    }), [materials, materialSearch, selectedMaterialCategory]);
+    }), [materials, materialSearch, selectedMaterialCategory, customCategories]);
 
   const filteredEquipment = useMemo(() =>
     equipment.filter(e =>
@@ -2610,11 +2701,11 @@ export const DictionariesPage: React.FC = () => {
       {/* ===== Onninen-style layout ===== */}
       <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 320px)', minHeight: 500 }}>
         {/* Left sidebar: Categories */}
-        <div className="w-56 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+        <div className="w-60 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
           <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
             <button
-              onClick={() => setShowAddCategory(true)}
+              onClick={() => { setShowAddCategory(true); setAddSubcategoryParentId(null); setNewCategoryName(''); }}
               className="p-1 text-blue-600 hover:bg-blue-50 rounded"
               title="Dodaj kategorię"
             >
@@ -2622,14 +2713,12 @@ export const DictionariesPage: React.FC = () => {
             </button>
           </div>
 
-          {/* "All" category */}
           <div className="py-1">
+            {/* "All" */}
             <button
               onClick={() => setSelectedMaterialCategory(null)}
               className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
-                !selectedMaterialCategory
-                  ? 'bg-blue-50 text-blue-700 font-semibold'
-                  : 'text-slate-600 hover:bg-slate-50'
+                !selectedMaterialCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <FolderOpen className="w-3.5 h-3.5 opacity-40" />
@@ -2637,40 +2726,148 @@ export const DictionariesPage: React.FC = () => {
               <span className="ml-auto text-[10px] text-slate-400">{materials.length}</span>
             </button>
 
-            {customCategories.map(cat => {
-              const count = materials.filter(m => m.category === cat.name).length;
-              return (
-                <div key={cat.id} className="group flex items-center">
-                  <button
-                    onClick={() => setSelectedMaterialCategory(cat.name)}
-                    className={`flex-1 text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
-                      selectedMaterialCategory === cat.name
-                        ? 'bg-blue-50 text-blue-700 font-semibold'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <FolderOpen className="w-3.5 h-3.5 opacity-40" />
-                    <span className="truncate">{cat.name}</span>
-                    <span className="ml-auto text-[10px] text-slate-400">{count}</span>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCustomCategory(cat.id)}
-                    className="hidden group-hover:block p-1 text-slate-400 hover:text-red-500 mr-1"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              );
-            })}
+            {/* Recursive category tree */}
+            {(() => {
+              const renderCatNode = (cat: typeof customCategories[0], depth: number): React.ReactNode => {
+                const children = getCategoryChildren(cat.id);
+                const hasChildren = children.length > 0;
+                const isExpanded = expandedCategories.has(cat.id);
+                const isEditing = editingCategoryId === cat.id;
+                const isAddingSub = addSubcategoryParentId === cat.id;
+                const directCount = materials.filter(m => m.category === cat.name).length;
+                const totalCount = getCategoryMaterialCount(cat.name);
+
+                return (
+                  <div key={cat.id}>
+                    {isEditing ? (
+                      /* ---- Inline rename mode ---- */
+                      <div className="px-1.5 py-1" style={{ paddingLeft: 6 + depth * 14 }}>
+                        <input
+                          autoFocus
+                          value={editingCategoryName}
+                          onChange={e => setEditingCategoryName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameCategory(cat.id);
+                            if (e.key === 'Escape') { setEditingCategoryId(null); setEditingCategoryName(''); }
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-blue-400 rounded focus:ring-1 focus:ring-blue-500 mb-1"
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleRenameCategory(cat.id)}
+                            className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700"
+                          >
+                            Zapisz
+                          </button>
+                          <button
+                            onClick={() => setDeleteCategoryConfirm({ id: cat.id, name: cat.name, parent_id: cat.parent_id })}
+                            className="py-0.5 px-2 bg-red-50 text-red-600 rounded text-[10px] hover:bg-red-100"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => { setEditingCategoryId(null); setEditingCategoryName(''); }}
+                            className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50"
+                          >
+                            Anuluj
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ---- Normal category row ---- */
+                      <div className="group flex items-center" style={{ paddingLeft: depth * 14 }}>
+                        <button
+                          onClick={() => {
+                            setSelectedMaterialCategory(cat.name);
+                            if (hasChildren) {
+                              setExpandedCategories(prev => {
+                                const next = new Set(prev);
+                                if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                return next;
+                              });
+                            }
+                          }}
+                          className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${
+                            selectedMaterialCategory === cat.name
+                              ? 'bg-blue-50 text-blue-700 font-semibold'
+                              : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {hasChildren ? (
+                            <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          ) : (
+                            <span className="w-3 flex-shrink-0" />
+                          )}
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                          <span className="truncate">{cat.name}</span>
+                          <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{totalCount}</span>
+                        </button>
+
+                        {/* Edit + Add sub buttons (on hover) */}
+                        <div className="hidden group-hover:flex items-center gap-0.5 pr-1 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCategoryId(cat.id);
+                              setEditingCategoryName(cat.name);
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-blue-600 rounded"
+                            title="Edytuj kategorię"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAddSubcategoryParentId(cat.id);
+                              setNewCategoryName('');
+                              setExpandedCategories(prev => new Set([...prev, cat.id]));
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-green-600 rounded"
+                            title="Dodaj podkategorię"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Children */}
+                    {isExpanded && hasChildren && children.map(child => renderCatNode(child, depth + 1))}
+
+                    {/* Add subcategory inline form */}
+                    {isAddingSub && (
+                      <div className="px-1.5 py-1" style={{ paddingLeft: 12 + (depth + 1) * 14 }}>
+                        <input
+                          autoFocus
+                          value={newCategoryName}
+                          onChange={e => setNewCategoryName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleAddCustomCategory(cat.id);
+                            if (e.key === 'Escape') { setAddSubcategoryParentId(null); setNewCategoryName(''); }
+                          }}
+                          placeholder="Nazwa podkategorii..."
+                          className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 mb-1"
+                        />
+                        <div className="flex gap-1">
+                          <button onClick={() => handleAddCustomCategory(cat.id)} className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                          <button onClick={() => { setAddSubcategoryParentId(null); setNewCategoryName(''); }} className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return getCategoryChildren(null).map(cat => renderCatNode(cat, 0));
+            })()}
 
             {/* Uncategorized */}
             {materials.some(m => !m.category) && (
               <button
                 onClick={() => setSelectedMaterialCategory('__none__')}
                 className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
-                  selectedMaterialCategory === '__none__'
-                    ? 'bg-blue-50 text-blue-700 font-semibold'
-                    : 'text-slate-600 hover:bg-slate-50'
+                  selectedMaterialCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <FolderOpen className="w-3.5 h-3.5 opacity-40" />
@@ -2680,19 +2877,22 @@ export const DictionariesPage: React.FC = () => {
             )}
           </div>
 
-          {/* Add category inline form */}
-          {showAddCategory && (
+          {/* Add root category inline form */}
+          {showAddCategory && !addSubcategoryParentId && (
             <div className="px-2 py-2 border-t border-slate-200">
               <input
                 autoFocus
                 value={newCategoryName}
                 onChange={e => setNewCategoryName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleAddCustomCategory()}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleAddCustomCategory(null);
+                  if (e.key === 'Escape') { setShowAddCategory(false); setNewCategoryName(''); }
+                }}
                 placeholder="Nazwa kategorii..."
                 className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
               />
               <div className="flex gap-1 mt-1">
-                <button onClick={handleAddCustomCategory} className="flex-1 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                <button onClick={() => handleAddCustomCategory(null)} className="flex-1 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
                 <button onClick={() => { setShowAddCategory(false); setNewCategoryName(''); }} className="flex-1 py-1 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
               </div>
             </div>
@@ -3090,9 +3290,14 @@ export const DictionariesPage: React.FC = () => {
                 className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Wybierz kategorię...</option>
-                {customCategories.map(cat => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
-                ))}
+                {(() => {
+                  const renderOpts = (parentId: string | null, depth: number): React.ReactNode[] =>
+                    getCategoryChildren(parentId).map(cat => [
+                      <option key={cat.id} value={cat.name}>{'—'.repeat(depth) + (depth ? ' ' : '') + cat.name}</option>,
+                      ...renderOpts(cat.id, depth + 1),
+                    ]).flat();
+                  return renderOpts(null, 0);
+                })()}
               </select>
               <button
                 type="button"
@@ -4309,6 +4514,40 @@ export const DictionariesPage: React.FC = () => {
         integrations={integrations}
         onIntegrationChange={loadIntegrations}
       />
+
+      {/* Delete Category Confirmation Modal */}
+      {deleteCategoryConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteCategoryConfirm(null)}>
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Usunąć kategorię?</h3>
+            <p className="text-sm text-slate-600 mb-1">
+              Czy na pewno chcesz usunąć kategorię <span className="font-semibold">«{deleteCategoryConfirm.name}»</span>?
+            </p>
+            <p className="text-xs text-slate-500 mb-5">
+              {deleteCategoryConfirm.parent_id
+                ? `Materiały z tej kategorii zostaną przeniesione do kategorii nadrzędnej «${customCategories.find(c => c.id === deleteCategoryConfirm.parent_id)?.name || '—'}».`
+                : 'Materiały z tej kategorii zostaną przeniesione do «Bez kategorii».'
+              }
+              {' '}Podkategorie zostaną przeniesione na wyższy poziom.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteCategoryConfirm(null)}
+                className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => handleDeleteCustomCategory(deleteCategoryConfirm.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Usuń kategorię
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add to Own Catalog — Price Sync Modal */}
       {addToCatalogModal && (
