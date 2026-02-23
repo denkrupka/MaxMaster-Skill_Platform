@@ -737,6 +737,7 @@ export const DictionariesPage: React.FC = () => {
         source_wholesaler: addToEquipmentCatalogModal.wholesaler,
         source_wholesaler_url: p.url || null,
         price_sync_mode: eqPriceSyncMode,
+        parameters: p.params && p.params.length > 0 ? JSON.stringify(p.params) : null,
       };
 
       const { error } = await supabase
@@ -4397,6 +4398,31 @@ export const DictionariesPage: React.FC = () => {
                   <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-line">{de.description}</p>
                 </div>
               )}
+
+              {/* Parameters */}
+              {(() => {
+                const params: Array<{ name: string; value: string }> = (() => {
+                  try {
+                    if (!de.parameters) return [];
+                    if (typeof de.parameters === 'string') return JSON.parse(de.parameters);
+                    return de.parameters as any;
+                  } catch { return []; }
+                })();
+                if (params.length === 0) return null;
+                return (
+                  <div className="px-5 pb-4">
+                    <h4 className="text-xs font-semibold text-slate-600 mb-2">Parametry techniczne</h4>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      {params.map((p, i) => (
+                        <div key={i} className={`flex items-center text-xs ${i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                          <div className="w-1/2 px-3 py-2 text-slate-500 font-medium">{p.name}</div>
+                          <div className="w-1/2 px-3 py-2 text-slate-700 font-semibold text-right">{p.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* All images */}
               {imgs.length > 1 && (

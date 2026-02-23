@@ -1892,6 +1892,7 @@ export interface KosztorysEquipment {
   source_wholesaler?: string;
   source_wholesaler_url?: string;
   price_sync_mode?: 'fixed' | 'synced';
+  parameters?: string;
 }
 
 // Шаблонное задание

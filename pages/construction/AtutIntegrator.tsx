@@ -225,6 +225,7 @@ const ProductDetail: React.FC<{
                     manufacturer: detail.brand || undefined,
                     unit: detail.priceUnit || 'DOBA',
                     description: detail.description,
+                    params: detail.params || [],
                     url: BASE + product.slug,
                     wholesaler: 'atut-rental',
                     category: detail.breadcrumb?.map(b => b.name).join(' > ') || undefined,
