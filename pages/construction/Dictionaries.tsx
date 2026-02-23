@@ -4341,11 +4341,6 @@ export const DictionariesPage: React.FC = () => {
                         <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu</div>
                         <div className="text-xl font-bold text-blue-600">
                           {(de.purchase_price || de.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
-                          {de.catalog_price && de.catalog_price > 0 && (de.purchase_price || de.default_price) < de.catalog_price && (
-                            <span className="ml-2 text-sm font-semibold text-green-600">
-                              -{((de.catalog_price - (de.purchase_price || de.default_price)) / de.catalog_price * 100).toFixed(1)}%
-                            </span>
-                          )}
                         </div>
                         {de.catalog_price != null && (
                           <div className="mt-1 text-xs text-slate-400">
@@ -4512,17 +4507,7 @@ export const DictionariesPage: React.FC = () => {
                 placeholder="Opcjonalna" />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-700 mb-0.5 block">
-                Cena wynajmu *
-                {(() => {
-                  const catPrice = (editingEquipment as any)?.catalog_price;
-                  const buyPrice = (editingEquipment as any)?.purchase_price || editingEquipment?.default_price;
-                  if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
-                    return <span className="ml-1 text-[10px] font-normal text-green-600">-{((catPrice - buyPrice) / catPrice * 100).toFixed(0)}%</span>;
-                  }
-                  return null;
-                })()}
-              </label>
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">Cena netto *</label>
               <input type="number" step="0.01" min="0"
                 disabled={(editingEquipment as any)?.price_sync_mode === 'synced'}
                 value={(editingEquipment as any)?.purchase_price || editingEquipment?.default_price || ''}
