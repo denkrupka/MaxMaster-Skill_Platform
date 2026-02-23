@@ -548,7 +548,9 @@ serve(async (req) => {
         }
 
         const apiPage = Math.max(0, page - 1)
-        const data = await apiGet(`/search?query=${encodeURIComponent(q.trim())}&page=${apiPage}`, jar)
+        // Onninen search requires /szukaj: prefix in query parameter
+        const searchQuery = `/szukaj:${q.trim()}`
+        const data = await apiGet(`/search?query=${encodeURIComponent(searchQuery)}&page=${apiPage}`, jar)
 
         // Try multiple response structures:
         // Structure 1: data.items[0].items[] (category-style)

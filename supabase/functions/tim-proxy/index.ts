@@ -106,16 +106,58 @@ function extractLinks(html: string): Array<{ href: string; text: string }> {
   return links
 }
 
-// Extract pagination links
+// Extract pagination links (supports ?page=N, ?p=N, and HTML-encoded &amp;p=N)
 function extractMaxPage(html: string): number {
   let maxPage = 1
-  const re = /[?&]page=(\d+)/g
+  const re = /[?&](?:amp;)?(?:page|p)=(\d+)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
     const pg = parseInt(m[1])
     if (pg > maxPage) maxPage = pg
   }
   return maxPage
+}
+
+// Extract products from __NUXT_DATA__ (used when JSON-LD ItemList is missing)
+function extractNuxtSearchProducts(html: string): { products: any[]; totalProducts: number } {
+  const nuxtMatch = html.match(/<script\s+id="__NUXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+  if (!nuxtMatch) return { products: [], totalProducts: 0 }
+  const raw = nuxtMatch[1]
+
+  const products: any[] = []
+  const seen = new Set<string>()
+
+  // NUXT serialization embeds JSON-LD Product entries in a flat array format:
+  //   "ProductName", {"@type":N,...}, "Product", [imgIdx], "imageUrl",
+  //   {"@type":N,"price":N,"priceCurrency":N}, "Offer", PRICE, "PLN", "productUrl"
+  // We extract: name, image, price, url, sku
+  const re = /"Offer",([0-9.]+),"PLN","(https:\/\/www\.tim\.pl\/[^"]*\/p\/(\d{4}-\d{5}-\d{5}))"/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(raw)) !== null) {
+    const price = parseFloat(m[1])
+    const url = m[2]
+    const sku = m[3]
+    if (seen.has(sku)) continue
+    seen.add(sku)
+
+    // Extract product name: look backwards from this match for the product name string
+    // Pattern: "NAME",{"@type":... before "Product",[...],"IMAGE_URL",{...},"Offer"
+    const before = raw.substring(Math.max(0, m.index - 600), m.index)
+
+    // Find the image URL (right before the Offer block)
+    const imgMatch = before.match(/"(https:\/\/www\.tim\.pl\/media\/[^"]+)"[^"]*$/)
+    const image = imgMatch ? imgMatch[1] : ''
+
+    // Find the product name (before the {"@type":...},"Product" block)
+    const nameMatch = before.match(/"([^"]{10,200})",\{"@type":\d+,"name":\d+/)
+    const name = nameMatch ? nameMatch[1] : ''
+
+    products.push({ name, sku, url, image, price, publicPrice: price, rating: null })
+  }
+
+  // totalProducts: in NUXT_DATA, "totalProducts":N is a reference index, not the actual value.
+  // We extract it from the HTML instead (handled by caller).
+  return { products, totalProducts: products.length }
 }
 
 // ═══ GQL QUERIES ═══
@@ -553,10 +595,16 @@ serve(async (req) => {
           }
         }
 
-        // HTML fallback: extract product links when JSON-LD is missing
+        // NUXT_DATA fallback (TIM may not include JSON-LD ItemList)
+        if (products.length === 0) {
+          const nuxtResult = extractNuxtSearchProducts(html)
+          products = nuxtResult.products
+        }
+
+        // HTML fallback: extract product links (href containing /p/SKU)
         if (products.length === 0) {
           const seen = new Set<string>()
-          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          const linkRe = /<a\s[^>]*href="([^"]*\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
           let lm: RegExpExecArray | null
           while ((lm = linkRe.exec(html)) !== null) {
             const href = lm[1]
@@ -565,7 +613,8 @@ serve(async (req) => {
             seen.add(psku)
             const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
             if (text.length < 3 || text.length > 200) continue
-            products.push({ name: text, sku: psku, url: BASE + href, image: '', price: null })
+            const fullUrl = href.startsWith('http') ? href : BASE + href
+            products.push({ name: text, sku: psku, url: fullUrl, image: '', price: null })
           }
         }
 
@@ -747,11 +796,12 @@ serve(async (req) => {
           }
         }
 
-        // Fetch TIM search results page as HTML (same proven approach as products)
-        const searchPath = `/szukaj?q=${encodeURIComponent(q.trim())}${page > 1 ? `&page=${page}` : ''}`
+        // Fetch TIM search results page (new URL format: /wyszukiwanie/wyniki?q=...&p=...)
+        const searchPath = `/wyszukiwanie/wyniki?q=${encodeURIComponent(q.trim())}${page > 1 ? `&p=${page}` : ''}`
         const html = await fetchPage(searchPath, jar)
-        const jsonLdList = extractJsonLd(html)
 
+        // 1) Try JSON-LD ItemList (legacy, may be empty on new TIM pages)
+        const jsonLdList = extractJsonLd(html)
         let products: any[] = []
         for (const ld of jsonLdList) {
           if (ld['@type'] === 'ItemList' && ld.itemListElement) {
@@ -771,10 +821,18 @@ serve(async (req) => {
           }
         }
 
-        // HTML fallback: extract product links when JSON-LD is missing
+        // 2) NUXT_DATA extraction (primary method — TIM embeds products here)
+        let totalProducts = products.length
+        if (products.length === 0) {
+          const nuxtResult = extractNuxtSearchProducts(html)
+          products = nuxtResult.products
+          totalProducts = nuxtResult.totalProducts
+        }
+
+        // 3) HTML fallback: extract product links (href containing /p/SKU)
         if (products.length === 0) {
           const seen = new Set<string>()
-          const linkRe = /<a\s[^>]*href="(\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          const linkRe = /<a\s[^>]*href="([^"]*\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
           let lm: RegExpExecArray | null
           while ((lm = linkRe.exec(html)) !== null) {
             const href = lm[1]
@@ -783,13 +841,12 @@ serve(async (req) => {
             seen.add(psku)
             const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
             if (text.length < 3 || text.length > 200) continue
-            products.push({ name: text, sku: psku, url: BASE + href, image: '', price: null, publicPrice: null })
+            const fullUrl = href.startsWith('http') ? href : BASE + href
+            products.push({ name: text, sku: psku, url: fullUrl, image: '', price: null, publicPrice: null })
           }
+          totalProducts = totalProducts || products.length
         }
 
-        // Extract total from HTML
-        const totalMatch = html.match(/znalezionych[^:]*:\s*(\d+)|Znaleziono[^:]*:\s*(\d+)|wyników[^:]*:\s*(\d+)|"totalProducts"\s*:\s*(\d+)/i)
-        const totalProducts = totalMatch ? parseInt(totalMatch[1] || totalMatch[2] || totalMatch[3] || totalMatch[4]) : products.length
         const totalPages = extractMaxPage(html)
 
         // Enrich with personal prices via GraphQL
