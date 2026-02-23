@@ -4313,7 +4313,7 @@ export const DictionariesPage: React.FC = () => {
                   </button>
                 </div>
                 <span className="text-xs text-slate-400 font-mono">
-                  {de.code}{de.ean ? ` · EAN: ${de.ean}` : ''}{de.sku ? ` · SKU: ${de.sku}` : ''}{de.ref_num ? ` · Ref: ${de.ref_num}` : ''}
+                  {de.code}{de.sku ? ` · SKU: ${de.sku}` : ''}
                 </span>
                 <button onClick={() => setDetailEquipment(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
               </div>
@@ -4338,7 +4338,7 @@ export const DictionariesPage: React.FC = () => {
                   <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
                     {(de.purchase_price || de.default_price) ? (
                       <>
-                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena zakupu</div>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu</div>
                         <div className="text-xl font-bold text-blue-600">
                           {(de.purchase_price || de.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
                           {de.catalog_price && de.catalog_price > 0 && (de.purchase_price || de.default_price) < de.catalog_price && (
@@ -4349,7 +4349,7 @@ export const DictionariesPage: React.FC = () => {
                         </div>
                         {de.catalog_price != null && (
                           <div className="mt-1 text-xs text-slate-400">
-                            Cena katalogowa: <span className="line-through">{de.catalog_price?.toFixed(2)} zł</span>
+                            Cena brutto: <span className="line-through">{de.catalog_price?.toFixed(2)} zł</span>
                           </div>
                         )}
                       </>
@@ -4380,11 +4380,48 @@ export const DictionariesPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Rental price comparison table */}
+              {de.source_wholesaler && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny w wypożyczalniach</h4>
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-slate-500 font-medium">Wypożyczalnia</th>
+                          <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena netto</th>
+                          <th className="px-3 py-2 text-center text-slate-500 font-medium">J.M.</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="bg-white">
+                          <td className="px-3 py-2 font-medium text-slate-700">
+                            {de.source_wholesaler === 'atut-rental' ? 'Atut Rental' : de.source_wholesaler === 'ramirent' ? 'Ramirent' : de.source_wholesaler}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-slate-800">
+                            {(de.purchase_price || de.default_price)?.toFixed(2) ?? '—'} zł
+                          </td>
+                          <td className="px-3 py-2 text-center text-slate-600">{de.unit || '—'}</td>
+                          <td className="px-3 py-2">
+                            {de.source_wholesaler_url && (
+                              <a href={de.source_wholesaler_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Description */}
               {de.description && (
                 <div className="px-5 pb-4">
                   <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-                  <div className="text-xs text-slate-500 leading-relaxed prose prose-xs max-w-none" dangerouslySetInnerHTML={{ __html: de.description }} />
+                  <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-line">{de.description}</p>
                 </div>
               )}
 
@@ -4411,201 +4448,168 @@ export const DictionariesPage: React.FC = () => {
         isOpen={equipmentDialog}
         onClose={() => { setEquipmentDialog(false); setEditingEquipment(null); setEquipmentImages([]); }}
         title={editingEquipment?.id ? 'Edytuj sprzęt' : 'Dodaj sprzęt'}
-        size="lg"
+        size="md"
         zIndex={75}
       >
-        <div className="space-y-4">
-          {/* Aktywny checkbox */}
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="eq-active-top" checked={editingEquipment?.is_active ?? true}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 rounded border-slate-300" />
-            <label htmlFor="eq-active-top" className="text-sm font-medium text-slate-700">Aktywny</label>
-          </div>
-
-          {/* Code + auto-generate */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">Kod sprzętu {isEqCodeRequired ? '*' : ''}</label>
-              <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
-                <input type="checkbox" checked={autoGenerateEqCode} onChange={(e) => setAutoGenerateEqCode(e.target.checked)}
-                  className="h-3.5 w-3.5 text-blue-600 rounded border-slate-300" disabled={!!editingEquipment?.id} />
-                Generuj automatycznie
-              </label>
+        <div className="space-y-3">
+          {/* Row 1: Aktywny + Code */}
+          <div className="flex items-end gap-3">
+            <div className="flex items-center gap-2 pb-2">
+              <input type="checkbox" id="eq-active-top" checked={editingEquipment?.is_active ?? true}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, is_active: e.target.checked })}
+                className="h-4 w-4 text-blue-600 rounded border-slate-300" />
+              <label htmlFor="eq-active-top" className="text-xs font-medium text-slate-700 whitespace-nowrap">Aktywny</label>
             </div>
-            <input type="text"
-              value={autoGenerateEqCode && !editingEquipment?.id ? '(automatycznie)' : editingEquipment?.code || ''}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, code: e.target.value })}
-              disabled={autoGenerateEqCode && !editingEquipment?.id}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
-              placeholder="np. EQ-00001" />
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-0.5">
+                <label className="text-xs font-medium text-slate-700">Kod {isEqCodeRequired ? '*' : ''}</label>
+                <label className="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                  <input type="checkbox" checked={autoGenerateEqCode} onChange={(e) => setAutoGenerateEqCode(e.target.checked)}
+                    className="h-3 w-3 text-blue-600 rounded border-slate-300" disabled={!!editingEquipment?.id} />
+                  Auto
+                </label>
+              </div>
+              <input type="text"
+                value={autoGenerateEqCode && !editingEquipment?.id ? '(auto)' : editingEquipment?.code || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, code: e.target.value })}
+                disabled={autoGenerateEqCode && !editingEquipment?.id}
+                className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400" />
+            </div>
           </div>
 
           {/* Nazwa */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+            <label className="text-xs font-medium text-slate-700 mb-0.5 block">Nazwa *</label>
             <input type="text" value={editingEquipment?.name || ''}
               onChange={(e) => setEditingEquipment({ ...editingEquipment, name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nazwa sprzętu" />
+              className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nazwa sprzętu" />
           </div>
 
-          {/* Kategoria dropdown + add */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-            <div className="flex gap-1.5">
-              <select value={editingEquipment?.category || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value })}
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                <option value="">Wybierz kategorię...</option>
-                {(() => {
-                  const renderOpts = (parentId: string | null, depth: number): React.ReactNode[] =>
-                    getEqCategoryChildren(parentId).map(cat => [
-                      <option key={cat.id} value={cat.name}>{'—'.repeat(depth) + (depth ? ' ' : '') + cat.name}</option>,
-                      ...renderOpts(cat.id, depth + 1),
-                    ]).flat();
-                  const eqCatNames = new Set(equipmentCategories.map(c => c.name));
-                  const extraCats = [...new Set(equipment.map(e => e.category).filter((c): c is string => !!c && !eqCatNames.has(c)))];
-                  return [
-                    ...renderOpts(null, 0),
-                    ...extraCats.map(name => (<option key={`extra-${name}`} value={name}>{name}</option>)),
-                  ];
-                })()}
+          {/* Row: Kategoria + Producent */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">Kategoria</label>
+              <div className="flex gap-1">
+                <select value={editingEquipment?.category || ''}
+                  onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value })}
+                  className="flex-1 px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Wybierz...</option>
+                  {(() => {
+                    const renderOpts = (parentId: string | null, depth: number): React.ReactNode[] =>
+                      getEqCategoryChildren(parentId).map(cat => [
+                        <option key={cat.id} value={cat.name}>{'—'.repeat(depth) + (depth ? ' ' : '') + cat.name}</option>,
+                        ...renderOpts(cat.id, depth + 1),
+                      ]).flat();
+                    const eqCatNames = new Set(equipmentCategories.map(c => c.name));
+                    const extraCats = [...new Set(equipment.map(e => e.category).filter((c): c is string => !!c && !eqCatNames.has(c)))];
+                    return [...renderOpts(null, 0), ...extraCats.map(name => (<option key={`extra-${name}`} value={name}>{name}</option>))];
+                  })()}
+                </select>
+                <button type="button"
+                  onClick={() => { setShowAddEqCategory(true); setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); }}
+                  className="px-1.5 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-500">
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">Producent</label>
+              <input type="text" value={editingEquipment?.manufacturer || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, manufacturer: e.target.value })}
+                className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Producent" />
+            </div>
+          </div>
+
+          {/* Row: Jednostka + Prices */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">Jednostka</label>
+              <select value={(editingEquipment as any)?.unit || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, unit: e.target.value } as any)}
+                className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option value="">Wybierz...</option>
+                <option value="szt.">szt. (sztuki)</option>
+                <option value="godz.">godz. (godziny)</option>
+                <option value="mth">mth (motogodziny)</option>
+                <option value="doba">doba (dni)</option>
+                <option value="tydz.">tydz. (tygodnie)</option>
+                <option value="mies.">mies. (miesiące)</option>
+                <option value="kpl.">kpl. (komplet)</option>
+                <option value="km">km (kilometry)</option>
+                <option value="zmiana">zmiana</option>
               </select>
-              <button type="button"
-                onClick={() => { setShowAddEqCategory(true); setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); }}
-                className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600" title="Dodaj nową kategorię">
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* EAN + SKU */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">EAN</label>
-              <input type="text" value={(editingEquipment as any)?.ean || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, ean: e.target.value } as any)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Kod EAN" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">SKU</label>
-              <input type="text" value={(editingEquipment as any)?.sku || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, sku: e.target.value } as any)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Kod SKU" />
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">Cena brutto</label>
+              <input type="number" step="0.01" min="0"
+                disabled={(editingEquipment as any)?.price_sync_mode === 'synced'}
+                value={(editingEquipment as any)?.catalog_price || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, catalog_price: parseFloat(e.target.value) || null } as any)}
+                className={`w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${(editingEquipment as any)?.price_sync_mode === 'synced' ? 'bg-slate-100 text-slate-400' : ''}`}
+                placeholder="Opcjonalna" />
             </div>
-          </div>
-
-          {/* Producent */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
-            <input type="text" value={editingEquipment?.manufacturer || ''}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, manufacturer: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Producent sprzętu" />
-          </div>
-
-          {/* Jednostka */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka miary</label>
-            <select value={(editingEquipment as any)?.unit || ''}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, unit: e.target.value } as any)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-              <option value="">Wybierz...</option>
-              {(() => {
-                const customValues = new Set(customUnits.map(u => u.value));
-                const defaultFiltered = DEFAULT_UNITS.filter(u => !customValues.has(u.value));
-                return [
-                  ...customUnits.map(u => (<option key={u.id} value={u.value}>{u.label}</option>)),
-                  ...defaultFiltered.map(u => (<option key={`def-${u.value}`} value={u.value}>{u.label}</option>)),
-                ];
-              })()}
-            </select>
+            <div>
+              <label className="text-xs font-medium text-slate-700 mb-0.5 block">
+                Cena wynajmu *
+                {(() => {
+                  const catPrice = (editingEquipment as any)?.catalog_price;
+                  const buyPrice = (editingEquipment as any)?.purchase_price || editingEquipment?.default_price;
+                  if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
+                    return <span className="ml-1 text-[10px] font-normal text-green-600">-{((catPrice - buyPrice) / catPrice * 100).toFixed(0)}%</span>;
+                  }
+                  return null;
+                })()}
+              </label>
+              <input type="number" step="0.01" min="0"
+                disabled={(editingEquipment as any)?.price_sync_mode === 'synced'}
+                value={(editingEquipment as any)?.purchase_price || editingEquipment?.default_price || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
+                className={`w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${(editingEquipment as any)?.price_sync_mode === 'synced' ? 'bg-slate-100 text-slate-400' : ''}`}
+                placeholder="netto" />
+            </div>
           </div>
 
           {/* Price sync toggle */}
           {(editingEquipment as any)?.source_wholesaler && (
-            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <label className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer">
               <input type="checkbox" id="eqPriceSyncToggle"
                 checked={(editingEquipment as any)?.price_sync_mode === 'synced'}
                 onChange={(e) => setEditingEquipment({ ...editingEquipment, price_sync_mode: e.target.checked ? 'synced' : 'fixed' } as any)}
-                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
-              <label htmlFor="eqPriceSyncToggle" className="text-sm text-blue-800 cursor-pointer">
+                className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+              <span className="text-xs text-blue-800">
                 Synchronizacja ceny z wypożyczalnią
-                <span className="text-xs text-blue-600 ml-1">
+                <span className="text-[10px] text-blue-600 ml-1">
                   ({(editingEquipment as any)?.source_wholesaler === 'atut-rental' ? 'Atut Rental' : (editingEquipment as any)?.source_wholesaler === 'ramirent' ? 'Ramirent' : (editingEquipment as any)?.source_wholesaler})
                 </span>
-              </label>
-            </div>
+              </span>
+            </label>
           )}
-
-          {/* Prices */}
-          {(() => {
-            const isSynced = (editingEquipment as any)?.price_sync_mode === 'synced';
-            return (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena katalogowa (PLN)</label>
-                  <input type="number" step="0.01" min="0" disabled={isSynced}
-                    value={(editingEquipment as any)?.catalog_price || ''}
-                    onChange={(e) => setEditingEquipment({ ...editingEquipment, catalog_price: parseFloat(e.target.value) || null } as any)}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
-                    placeholder="Opcjonalna" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Cena zakupu (PLN) *
-                    {(() => {
-                      const catPrice = (editingEquipment as any)?.catalog_price;
-                      const buyPrice = (editingEquipment as any)?.purchase_price || editingEquipment?.default_price;
-                      if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
-                        const discount = ((catPrice - buyPrice) / catPrice * 100).toFixed(1);
-                        return <span className="ml-2 text-xs font-normal text-green-600">-{discount}%</span>;
-                      }
-                      return null;
-                    })()}
-                  </label>
-                  <input type="number" step="0.01" min="0" disabled={isSynced}
-                    value={(editingEquipment as any)?.purchase_price || editingEquipment?.default_price || ''}
-                    onChange={(e) => setEditingEquipment({ ...editingEquipment, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
-                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
-                    placeholder="Cena zakupu netto" />
-                </div>
-              </div>
-            );
-          })()}
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+            <label className="text-xs font-medium text-slate-700 mb-0.5 block">Opis</label>
             <textarea value={editingEquipment?.description || ''}
               onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })}
-              rows={2} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Opcjonalny opis sprzętu" />
+              rows={2} className="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Opcjonalny opis" />
           </div>
 
           {/* Photos */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Zdjęcia sprzętu</label>
-            <div className="flex flex-wrap gap-2 mb-2">
+            <label className="text-xs font-medium text-slate-700 mb-0.5 block">Zdjęcia</label>
+            <div className="flex flex-wrap gap-1.5">
               {equipmentImages.map((img, idx) => (
-                <div key={idx} className="relative group w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center overflow-hidden">
+                <div key={idx} className="relative group w-16 h-16 bg-slate-50 rounded border border-slate-200 flex items-center justify-center overflow-hidden">
                   <img src={img} alt="" className="max-w-full max-h-full object-contain" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                    {idx > 0 && (
-                      <button type="button" onClick={() => { const newImgs = [...equipmentImages]; [newImgs[idx - 1], newImgs[idx]] = [newImgs[idx], newImgs[idx - 1]]; setEquipmentImages(newImgs); }}
-                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"><ArrowUp className="w-3 h-3" /></button>
-                    )}
-                    {idx < equipmentImages.length - 1 && (
-                      <button type="button" onClick={() => { const newImgs = [...equipmentImages]; [newImgs[idx], newImgs[idx + 1]] = [newImgs[idx + 1], newImgs[idx]]; setEquipmentImages(newImgs); }}
-                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"><ArrowDown className="w-3 h-3" /></button>
-                    )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <button type="button" onClick={() => setEquipmentImages(equipmentImages.filter((_, i) => i !== idx))}
-                      className="p-1 bg-white rounded text-red-600 hover:bg-red-50"><X className="w-3 h-3" /></button>
+                      className="p-0.5 bg-white rounded text-red-600 hover:bg-red-50"><X className="w-3 h-3" /></button>
                   </div>
                 </div>
               ))}
-              <label className="w-20 h-20 bg-slate-50 rounded border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                <Upload className="w-5 h-5 text-slate-400" />
-                <span className="text-[10px] text-slate-400 mt-1">Dodaj</span>
+              <label className="w-16 h-16 bg-slate-50 rounded border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <Upload className="w-4 h-4 text-slate-400" />
+                <span className="text-[9px] text-slate-400 mt-0.5">Dodaj</span>
                 <input type="file" accept="image/*" multiple className="hidden"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
@@ -4618,16 +4622,15 @@ export const DictionariesPage: React.FC = () => {
                   }} />
               </label>
             </div>
-            <p className="text-[10px] text-slate-400">Przeciągnij aby zmienić kolejność. Pierwsze zdjęcie = miniaturka.</p>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
+        <div className="flex justify-end gap-2 mt-4 pt-3 border-t">
           <button onClick={() => { setEquipmentDialog(false); setEditingEquipment(null); setEquipmentImages([]); }}
-            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+            className="px-3 py-1.5 text-sm text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
           <button onClick={handleSaveEquipment} disabled={saving || !canSaveEquipment}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             Zapisz
           </button>
         </div>
