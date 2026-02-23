@@ -9,7 +9,10 @@ const corsHeaders = {
 const BASE = 'https://www.speckable.pl'
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
-// ═══ RELAY: PHP proxy on hosting to bypass WAF/IP blocks ═══
+// ═══ ScraperAPI: bypass Cloudflare WAF directly from edge function ═══
+const SCRAPER_API_KEY = Deno.env.get('SCRAPER_API_KEY') || ''
+
+// Legacy relay (JDM.pl hosting blocked by nginx from cloud IPs — not used)
 const RELAY_URL = Deno.env.get('SPECKABLE_RELAY_URL') || ''
 const RELAY_KEY = Deno.env.get('SPECKABLE_RELAY_KEY') || ''
 
@@ -53,37 +56,42 @@ function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<st
   return h
 }
 
-// Route request through PHP relay on hosting (cookies handled by relay)
-async function viaRelay(
-  url: string, jar: CookieJar, method: string, body?: string, extraHeaders?: string[]
-): Promise<{ status: number; body: string }> {
-  const resp = await fetch(RELAY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: RELAY_KEY, url, method,
-      body: body || '', cookies: jar, headers: extraHeaders || [],
-    }),
-  })
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(`Relay error ${resp.status}: ${text.substring(0, 200)}`)
-  }
-  const data = await resp.json()
-  // Merge cookies returned by relay
-  if (data.cookies && typeof data.cookies === 'object') {
-    for (const [k, v] of Object.entries(data.cookies)) {
-      if (typeof v === 'string') jar[k] = v
+// Fetch a page via ScraperAPI (bypasses Cloudflare from any IP)
+async function viaScraperAPI(url: string, method = 'GET', postBody?: string): Promise<{ status: number; body: string }> {
+  if (method === 'GET') {
+    const params = new URLSearchParams({
+      api_key: SCRAPER_API_KEY,
+      url,
+    })
+    const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
+      headers: { 'Accept-Language': 'pl-PL,pl;q=0.9' },
+    })
+    return { status: resp.status, body: await resp.text() }
+  } else {
+    // POST via ScraperAPI JSON API
+    const payload = {
+      apiKey: SCRAPER_API_KEY,
+      url,
+      method: 'POST',
+      body: postBody || '',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept-Language': 'pl-PL,pl;q=0.9',
+      },
     }
+    const resp = await fetch('https://api.scraperapi.com/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return { status: resp.status, body: await resp.text() }
   }
-  if (data.error) throw new Error(data.error)
-  return { status: data.status ?? 200, body: data.body ?? '' }
 }
 
 async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
-  // When using relay+ScraperAPI, reduce retries (ScraperAPI has its own retries)
-  const maxRetries = RELAY_URL ? 1 : retries
+  // ScraperAPI has its own retries, so limit ours
+  const maxRetries = SCRAPER_API_KEY ? 1 : retries
   let lastError = ''
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
@@ -93,15 +101,14 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
       let status: number
       let body: string
 
-      if (RELAY_URL) {
-        // Route through PHP relay on hosting (bypass WAF/IP block)
-        const hdrs: string[] = []
-        if (attempt > 0) hdrs.push('Referer: ' + BASE + '/')
-        const r = await viaRelay(fullUrl, jar, 'GET', undefined, hdrs)
+      if (SCRAPER_API_KEY) {
+        // Use ScraperAPI to bypass Cloudflare WAF
+        const r = await viaScraperAPI(fullUrl, 'GET')
         status = r.status
         body = r.body
+        console.log(`[fetchPage] ScraperAPI ${fullUrl} → ${status}, ${body.length} bytes`)
       } else {
-        // Direct fetch (fallback when no relay configured)
+        // Direct fetch (works only from non-blocked IPs)
         const headers: Record<string, string> = {
           'User-Agent': UA,
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -119,15 +126,14 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
       if (status >= 200 && status < 400) return body
       lastError = `HTTP ${status}`
       if (status === 403) {
-        if (body.includes('challenge') || body.includes('cf-') || body.includes('Checking your browser')) {
-          console.log(`[fetchPage] 403 challenge on attempt ${attempt + 1}, retrying...`)
-          continue
-        }
+        console.log(`[fetchPage] 403 on attempt ${attempt + 1}`)
+        continue
       }
       if (status >= 500) continue
     } catch (e: any) {
       lastError = e.message || String(e)
-      if (attempt < retries) continue
+      console.log(`[fetchPage] Error on attempt ${attempt + 1}: ${lastError}`)
+      if (attempt < maxRetries) continue
     }
   }
   throw new Error(lastError)
@@ -136,16 +142,13 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
 async function postForm(url: string, body: string, jar: CookieJar, referer?: string): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
 
-  if (RELAY_URL) {
-    const hdrs = [
-      'Content-Type: application/x-www-form-urlencoded',
-      'Referer: ' + (referer || BASE + '/pl/login'),
-    ]
-    const r = await viaRelay(fullUrl, jar, 'POST', body, hdrs)
+  if (SCRAPER_API_KEY) {
+    const r = await viaScraperAPI(fullUrl, 'POST', body)
+    console.log(`[postForm] ScraperAPI POST ${fullUrl} → ${r.status}, ${r.body.length} bytes`)
     return r.body
   }
 
-  // Direct (fallback)
+  // Direct (works only from non-blocked IPs)
   const headers: Record<string, string> = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -539,10 +542,10 @@ async function getIntegrationSession(
 
   if (error || !integration) throw new Error('Integration not found')
 
-  // When using relay/ScraperAPI, skip session management —
+  // When using ScraperAPI, skip session management —
   // ScraperAPI doesn't maintain cookies between requests,
   // and the catalog is publicly accessible without login
-  if (RELAY_URL) {
+  if (SCRAPER_API_KEY) {
     return { jar: {}, integration }
   }
 
