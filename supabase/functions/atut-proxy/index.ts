@@ -356,47 +356,64 @@ function parseProductPage(html: string) {
     }
   }
 
-  // Description — grab all paragraphs between "OPIS PRODUKTU" and next section
+  // Description — grab text from OPIS PRODUKTU section
   p.description = ''
-  // Method 1: find OPIS PRODUKTU section and grab all <p> content until PODOBNY SPRZET or next major header
-  const opisMatch = html.match(/OPIS\s+PRODUKTU[\s\S]{0,100}?<\/(?:h\d|div|span)>([\s\S]*?)(?=PODOBNY\s+SPRZ|class="[^"]*rent_like|class="[^"]*product_rent__header|$)/i)
-  if (opisMatch) {
-    // Extract text from all <p> tags in the section
-    const section = opisMatch[1]
+  // Find the OPIS PRODUKTU header position and grab a large chunk after it
+  const opisIdx = html.search(/OPIS\s+PRODUKTU/i)
+  if (opisIdx > -1) {
+    // Grab up to 10000 chars after OPIS PRODUKTU, stop at PODOBNY SPRZET or rent_like section
+    const afterOpis = html.substring(opisIdx, opisIdx + 10000)
+    const endIdx = afterOpis.search(/PODOBNY\s+SPRZ|class="[^"]*rent_like|class="[^"]*product_rent__header(?!.*OPIS)/i)
+    const section = endIdx > 0 ? afterOpis.substring(0, endIdx) : afterOpis
+
     const paragraphs: string[] = []
-    const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi
-    let pMatch
-    while ((pMatch = pRe.exec(section)) !== null) {
-      const txt = pMatch[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
-      if (txt.length > 3 && !txt.includes('{') && !txt.includes('background-image')) {
+
+    // Method 1: div.ewa-rteLine elements (inside opis_ul_fix or anywhere in OPIS section)
+    const ewaRe = /<div[^>]*class="[^"]*ewa-rteLine[^"]*"[^>]*>([\s\S]*?)<\/div>/gi
+    let ewaMatch
+    while ((ewaMatch = ewaRe.exec(section)) !== null) {
+      const txt = ewaMatch[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+      if (txt.length > 0 && !txt.includes('{') && !txt.includes('background-image')) {
         paragraphs.push(txt)
       }
     }
+
+    // Method 2: also grab <p> tags in the section (some products may use <p> instead)
+    if (paragraphs.length === 0) {
+      const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi
+      let pMatch
+      while ((pMatch = pRe.exec(section)) !== null) {
+        const txt = pMatch[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+        if (txt.length > 3 && !txt.includes('{') && !txt.includes('background-image') && !/OPIS\s+PRODUKTU/i.test(txt)) {
+          paragraphs.push(txt)
+        }
+      }
+    }
+
+    // Method 3: fallback — grab ALL text content from divs in the section (strip markup)
+    if (paragraphs.length === 0) {
+      const divRe = /<div[^>]*>([\s\S]*?)<\/div>/gi
+      let divMatch
+      while ((divMatch = divRe.exec(section)) !== null) {
+        const txt = divMatch[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+        if (txt.length > 10 && !txt.includes('{') && !txt.includes('background-image') && !/OPIS\s+PRODUKTU/i.test(txt)) {
+          paragraphs.push(txt)
+          break // take first meaningful div
+        }
+      }
+    }
+
     if (paragraphs.length > 0) {
       p.description = paragraphs.join('\n\n')
     }
   }
-  // Method 2 fallback: <p class="product_rent__text">
+  // Method 4 fallback: <p class="product_rent__text">
   if (!p.description) {
     const descM = html.match(/<(?:p|div|span)[^>]*class="[^"]*product_rent__text[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div|span)>/i)
     if (descM) {
       const txt = descM[1].replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       if (txt.length > 5 && !txt.includes('{') && !txt.includes('background-image')) {
         p.description = txt
-      }
-    }
-  }
-  // Method 3 fallback: single tag after opis header
-  if (!p.description) {
-    const opisIdx = html.search(/product_rent__header[^>]*>[^]*?[Oo]pis/i)
-    if (opisIdx > -1) {
-      const after = html.substring(opisIdx, opisIdx + 3000)
-      const nextTag = after.match(/<(?:p|div|span)[^>]*>([^<]{10,})<\/(?:p|div|span)>/i)
-      if (nextTag) {
-        const txt = nextTag[1].trim()
-        if (!txt.includes('{') && !txt.includes('background-image')) {
-          p.description = txt
-        }
       }
     }
   }
