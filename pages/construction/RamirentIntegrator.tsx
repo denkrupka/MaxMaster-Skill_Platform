@@ -228,7 +228,7 @@ const GroupDetail: React.FC<{
                   });
                   onClose();
                 }}
-                className="w-full py-2.5 mt-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 mt-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Package className="w-4 h-4" />
                 Dodaj do katalogu Własnego

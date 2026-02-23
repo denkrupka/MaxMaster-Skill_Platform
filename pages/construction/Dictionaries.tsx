@@ -4616,7 +4616,7 @@ export const DictionariesPage: React.FC = () => {
                           onClick={() => setEquipmentSubTab(integ.wholesaler_id)}
                           className={`px-4 py-2 rounded-md text-sm font-medium transition ${
                             equipmentSubTab === integ.wholesaler_id
-                              ? 'bg-white text-orange-600 shadow-sm'
+                              ? 'bg-white text-blue-600 shadow-sm'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
@@ -4626,7 +4626,7 @@ export const DictionariesPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setShowRentalIntegrationModal(true)}
-                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                     >
                       <Store className="w-4 h-4" />
                       Integracje

@@ -286,11 +286,29 @@ function parseProductPage(html: string) {
     }
   }
 
-  // Description
+  // Description (skip <style> tags, only match in <p>/<div>/<span>)
   p.description = ''
-  const descM = html.match(/product_rent__text[^>]*>([^<]+)/i)
-  if (descM && descM[1].trim().length > 5) {
-    p.description = descM[1].trim()
+  // Method 1: <p class="product_rent__text">
+  const descM = html.match(/<(?:p|div|span)[^>]*class="[^"]*product_rent__text[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div|span)>/i)
+  if (descM) {
+    const txt = descM[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    if (txt.length > 5 && !txt.includes('{') && !txt.includes('background-image')) {
+      p.description = txt
+    }
+  }
+  // Method 2: text after OPIS PRODUKTU header
+  if (!p.description) {
+    const opisIdx = html.search(/product_rent__header[^>]*>[^]*?[Oo]pis/i)
+    if (opisIdx > -1) {
+      const after = html.substring(opisIdx, opisIdx + 2000)
+      const nextTag = after.match(/<(?:p|div|span)[^>]*>([^<]{10,})<\/(?:p|div|span)>/i)
+      if (nextTag) {
+        const txt = nextTag[1].trim()
+        if (!txt.includes('{') && !txt.includes('background-image')) {
+          p.description = txt
+        }
+      }
+    }
   }
 
   // Parameters

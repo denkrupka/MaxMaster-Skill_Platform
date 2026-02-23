@@ -21,16 +21,16 @@ const RENTALS: Record<string, {
     {
       id: 'atut-rental',
       name: 'Atut Rental',
-      logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRqR0kHd4xT5AfQq99j48Ga88cXKhZmG6Wpvg&s',
-      color: '#e53e3e',
+      logo: 'https://www.atutrental.com.pl/wp-content/themes/atutrental2022/assets/img/header/logo.png',
+      color: '#2563eb',
       description: 'AtutRental.com.pl — wynajem sprzętu budowlanego, maszyn i narzędzi',
       authRequired: false,
     },
     {
       id: 'ramirent',
       name: 'Ramirent',
-      logo: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTlAomjgaH-upacyrUdxoacC_zc1FQNOzra6Q&s',
-      color: '#0066cc',
+      logo: 'https://ramirent.pl/public/images/logo/loxam-ramirent-v2.svg',
+      color: '#2563eb',
       description: 'Ramirent.pl — profesjonalny wynajem maszyn i urządzeń budowlanych',
       authRequired: true,
     },
@@ -192,7 +192,7 @@ export const RentalIntegrationModal: React.FC<Props> = ({
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
             <div className="flex items-center gap-3">
-              <Truck className="w-5 h-5 text-orange-600" />
+              <Truck className="w-5 h-5 text-blue-600" />
               <h3 className="text-lg font-semibold text-slate-900">Integracje z wypożyczalniami sprzętu</h3>
             </div>
             <button onClick={onClose} className="text-slate-400 hover:text-slate-500">
@@ -212,7 +212,7 @@ export const RentalIntegrationModal: React.FC<Props> = ({
                   onClick={() => setSelectedCategory(c.id)}
                   className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between transition-colors ${
                     selectedCategory === c.id
-                      ? 'bg-orange-50 text-orange-700 border-r-2 border-orange-500'
+                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-500'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >

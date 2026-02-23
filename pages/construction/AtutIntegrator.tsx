@@ -83,7 +83,7 @@ const CatNode: React.FC<{
       onClick={() => onPick(cat)}
       className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
         active
-          ? 'bg-orange-50 text-orange-700 font-semibold'
+          ? 'bg-blue-50 text-blue-700 font-semibold'
           : 'text-slate-600 hover:bg-slate-50'
       }`}
     >
@@ -115,7 +115,7 @@ const ProductDetail: React.FC<{
   if (loading) return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl p-12 text-center" onClick={e => e.stopPropagation()}>
-        <Loader2 className="w-6 h-6 animate-spin text-orange-600 mx-auto mb-2" />
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
         <p className="text-sm text-slate-500">Ładowanie danych sprzętu...</p>
       </div>
     </div>
@@ -137,9 +137,9 @@ const ProductDetail: React.FC<{
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
           <div className="flex items-center gap-2">
-            <Truck className="w-4 h-4 text-orange-600" />
+            <Truck className="w-4 h-4 text-blue-600" />
             <span className="text-sm font-semibold text-slate-700">Atut Rental</span>
-            {detail.ribbon && <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{detail.ribbon}</span>}
+            {detail.ribbon && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{detail.ribbon}</span>}
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
@@ -178,7 +178,7 @@ const ProductDetail: React.FC<{
                   {detail.priceNetto != null && (
                     <>
                       <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu</div>
-                      <div className="text-xl font-bold text-orange-600">
+                      <div className="text-xl font-bold text-blue-600">
                         {detail.priceNetto.toFixed(2)} <span className="text-sm font-normal">zł netto / {detail.priceUnit || 'DOBA'}</span>
                       </div>
                     </>
@@ -195,7 +195,7 @@ const ProductDetail: React.FC<{
             {/* Price unit badge */}
             {detail.priceUnit && (
               <div className="flex items-center gap-1.5 mb-3">
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-50 rounded text-[10px] text-orange-600">
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 rounded text-[10px] text-blue-600">
                   <Clock className="w-3 h-3" />
                   Stawka za: <b>{detail.priceUnit}</b>
                 </span>
@@ -207,7 +207,7 @@ const ProductDetail: React.FC<{
               href={BASE + product.slug}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
             >
               <ExternalLink className="w-4 h-4" />
               Otwórz na AtutRental.com.pl
@@ -231,7 +231,7 @@ const ProductDetail: React.FC<{
                   });
                   onClose();
                 }}
-                className="w-full py-2.5 mt-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 mt-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Package className="w-4 h-4" />
                 Dodaj do katalogu Własnego
@@ -302,7 +302,7 @@ const ProductDetail: React.FC<{
 const ProductCardGrid: React.FC<{ p: AtutProduct; onClick: () => void }> = ({ p, onClick }) => (
   <div
     onClick={onClick}
-    className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-orange-400 hover:shadow-md transition-all"
+    className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
   >
     <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
       {p.image ? (
@@ -319,7 +319,7 @@ const ProductCardGrid: React.FC<{ p: AtutProduct; onClick: () => void }> = ({ p,
       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
         {p.priceNetto != null ? (
           <div>
-            <span className="text-sm font-bold text-orange-600">{p.priceNetto.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
+            <span className="text-sm font-bold text-blue-600">{p.priceNetto.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
             <span className="text-[10px] text-slate-400 ml-1">netto/{p.priceUnit || 'DOBA'}</span>
           </div>
         ) : (
@@ -334,7 +334,7 @@ const ProductCardGrid: React.FC<{ p: AtutProduct; onClick: () => void }> = ({ p,
 const ProductCardList: React.FC<{ p: AtutProduct; onClick: () => void }> = ({ p, onClick }) => (
   <div
     onClick={onClick}
-    className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-orange-400 transition-colors"
+    className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
   >
     <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
       {p.image ? (
@@ -352,7 +352,7 @@ const ProductCardList: React.FC<{ p: AtutProduct; onClick: () => void }> = ({ p,
     <div className="flex-shrink-0 text-right">
       {p.priceNetto != null ? (
         <div>
-          <span className="text-sm font-bold text-orange-600">{p.priceNetto.toFixed(2)} zł</span>
+          <span className="text-sm font-bold text-blue-600">{p.priceNetto.toFixed(2)} zł</span>
           <div className="text-[10px] text-slate-400">netto/{p.priceUnit || 'DOBA'}</div>
         </div>
       ) : (
@@ -480,7 +480,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
       {/* Sidebar: Categories */}
       <div className="w-64 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
         <div className="px-3 py-2.5 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Truck className="w-3.5 h-3.5 text-orange-500" />
+          <Truck className="w-3.5 h-3.5 text-blue-500" />
           Kategorie Atut Rental
         </div>
         {catLoading ? (
@@ -516,7 +516,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
               placeholder="Szukaj w Atut Rental..."
               className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 text-slate-700"
             />
-            {searchLoading && <Loader2 className="w-4 h-4 animate-spin text-orange-500 mr-1" />}
+            {searchLoading && <Loader2 className="w-4 h-4 animate-spin text-blue-500 mr-1" />}
             {search && (
               <button onClick={() => { setSearch(''); setSearchResult(null); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
                 <X className="w-4 h-4" />
@@ -527,13 +527,13 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
           <div className="flex gap-1 bg-slate-100 rounded p-0.5">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
             >
               <Grid3X3 className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}
+              className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
             >
               <List className="w-4 h-4" />
             </button>
@@ -543,7 +543,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
         {/* Breadcrumb nav */}
         {navStack.length > 1 && !searchResult && (
           <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-1 text-xs text-slate-500 bg-slate-50">
-            <button onClick={goBack} className="flex items-center gap-1 text-orange-600 hover:text-orange-700">
+            <button onClick={goBack} className="flex items-center gap-1 text-blue-600 hover:text-blue-700">
               <ChevronLeft className="w-3.5 h-3.5" /> Wstecz
             </button>
             <span className="mx-1 text-slate-300">|</span>
@@ -573,7 +573,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
                       <button
                         key={c.slug || i}
                         onClick={() => { setSelectedCat(c); }}
-                        className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-600 hover:border-orange-400 hover:text-orange-600 transition-colors"
+                        className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
                         {c.name}
                       </button>
@@ -584,7 +584,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
             </div>
           ) : isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-orange-600 mr-2" />
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
               <span className="text-sm text-slate-500">Ładowanie...</span>
             </div>
           ) : browseError ? (
@@ -644,7 +644,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
                     <div
                       key={item.slug || i}
                       onClick={() => navigateTo(item)}
-                      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-orange-400 hover:shadow-md transition-all"
+                      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                     >
                       <div className="h-28 bg-slate-50 flex items-center justify-center border-b border-slate-100">
                         {item.image ? (
@@ -655,7 +655,7 @@ export const AtutIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatal
                       </div>
                       <div className="p-2.5">
                         <div className="text-xs font-medium text-slate-800 line-clamp-2">{item.name}</div>
-                        {item.price && <div className="text-[10px] text-orange-600 mt-1">{item.price}</div>}
+                        {item.price && <div className="text-[10px] text-blue-600 mt-1">{item.price}</div>}
                       </div>
                     </div>
                   ))}
