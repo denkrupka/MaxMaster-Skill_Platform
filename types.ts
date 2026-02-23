@@ -1859,6 +1859,7 @@ export interface KosztorysMaterial {
   default_price?: number;
   ean?: string;
   sku?: string;
+  ref_num?: string;
   catalog_price?: number;
   purchase_price?: number;
   images?: string;

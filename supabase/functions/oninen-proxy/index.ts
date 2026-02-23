@@ -258,6 +258,7 @@ function mapProduct(p: any) {
   return {
     name: p.name || '',
     sku: p.index || p.catalogindex || '',
+    ref_num: p.catalogindex || '',
     slug: p.slug || '',
     url: p.slug ? `${BASE}/produkt/${p.slug}` : '',
     image: p.imagemd || p.imageth || '',
@@ -632,6 +633,7 @@ serve(async (req) => {
         const product = {
           name: p.name || '',
           sku: p.index || p.catalogindex || '',
+          ref_num: p.catalogindex || '',
           slug: productSlug,
           url: `${BASE}/produkt/${p.slug || productSlug}`,
           image: extImages[0] || p.imagemd || p.imageth || '',

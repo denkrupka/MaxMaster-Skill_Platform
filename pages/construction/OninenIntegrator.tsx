@@ -17,6 +17,7 @@ interface OninenCategory {
 interface OninenProduct {
   name: string;
   sku: string;
+  ref_num?: string;
   slug?: string;
   url?: string;
   image?: string;
@@ -47,6 +48,7 @@ interface OninenProductDetail {
   brand?: string;
   unit?: string;
   ean?: string;
+  ref_num?: string;
   description?: string;
   specs?: Array<{ name: string; value: string }>;
   deliveryTime?: string;
@@ -57,7 +59,7 @@ interface OninenProductDetail {
 interface Props {
   integrationId?: string;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
 }
 
 // ═══ Helper: invoke oninen-proxy edge function ═══
@@ -146,7 +148,7 @@ const ProductDetail: React.FC<{
   integrationId?: string;
   onClose: () => void;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
 }> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog }) => {
   const [detail, setDetail] = useState<OninenProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -214,6 +216,7 @@ const ProductDetail: React.FC<{
           <div className="flex-1 p-5 min-w-[260px]">
             <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{detail.name}</h2>
             {detail.brand && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{detail.brand}</span></p>}
+            {detail.ref_num && <p className="text-xs text-slate-400 mt-0.5">Indeks producenta: {detail.ref_num}</p>}
 
             {/* Price block */}
             <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -299,6 +302,7 @@ const ProductDetail: React.FC<{
                     name: detail.name,
                     sku: detail.sku,
                     ean: detail.ean,
+                    ref_num: detail.ref_num || undefined,
                     price: detail.priceEnd ?? null,
                     catalogPrice: detail.priceCatalog ?? null,
                     image: detail.image,

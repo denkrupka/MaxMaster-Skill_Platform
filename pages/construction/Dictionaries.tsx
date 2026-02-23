@@ -233,54 +233,93 @@ export const DictionariesPage: React.FC = () => {
     return parsed;
   }
 
-  // Auto-fetch wholesaler prices when product detail opens
+  // Auto-fetch wholesaler prices when product detail opens (multi-query + scoring)
   useEffect(() => {
     if (!detailMaterial) { setWholesalerPrices([]); setLoadingPrices(false); return; }
     const dm = detailMaterial as any;
     const activeIntegrations = integrations.filter(i => i.is_active);
     if (activeIntegrations.length === 0) return;
 
-    const searchQuery = dm.ean || dm.sku || dm.name;
-    if (!searchQuery) return;
+    // Build multiple search queries for cross-validation
+    const queries: string[] = [];
+    if (dm.ref_num) queries.push(dm.ref_num);
+    if (dm.ean) queries.push(dm.ean);
+    if (dm.sku && dm.sku !== dm.ref_num && dm.sku !== dm.ean) queries.push(dm.sku);
+    if (queries.length === 0 && dm.name) queries.push(dm.name);
+    if (queries.length === 0) return;
+
+    // Score how well a search result matches our product
+    const scoreProduct = (p: any): number => {
+      let score = 0;
+      const pName = (p.name || '').toLowerCase();
+      const pSku = (p.sku || '').toLowerCase();
+      const pRefNum = (p.ref_num || '').toLowerCase();
+
+      // Exact ref_num match (strongest signal)
+      if (dm.ref_num) {
+        const ref = dm.ref_num.toLowerCase();
+        if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
+      }
+      // EAN match in name or sku
+      if (dm.ean && (pName.includes(dm.ean) || pSku.includes(dm.ean))) score += 15;
+      // Name keyword overlap (ignore short words)
+      const dmWords = (dm.name || '').toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+      const matchingWords = dmWords.filter((w: string) => pName.includes(w));
+      score += matchingWords.length * 2;
+      return score;
+    };
 
     setLoadingPrices(true);
     setWholesalerPrices([]);
 
+    // For each integration, search all queries in parallel, then pick best match
     Promise.allSettled(activeIntegrations.map(async (integration) => {
       const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
-      const result = await wholesalerProxy(proxyName, 'search', {
-        integrationId: integration.id,
-        q: searchQuery,
-      });
-      return { integration, products: result.products || [] };
+
+      // Fire all queries for this wholesaler in parallel
+      const queryResults = await Promise.allSettled(
+        queries.map(q => wholesalerProxy(proxyName, 'search', { integrationId: integration.id, q }))
+      );
+
+      // Collect all products, dedup by sku, score each
+      const seen = new Map<string, { product: any; score: number }>();
+      for (const qr of queryResults) {
+        if (qr.status !== 'fulfilled') continue;
+        for (const p of (qr.value.products || [])) {
+          const key = p.sku || p.url || p.name;
+          const score = scoreProduct(p);
+          const existing = seen.get(key);
+          if (!existing || score > existing.score) {
+            seen.set(key, { product: p, score });
+          }
+        }
+      }
+
+      // Pick the best scoring product (must score > 0 if we have ref_num/ean to validate against)
+      let best: any = null;
+      let bestScore = -1;
+      for (const { product, score } of seen.values()) {
+        if (score > bestScore) { best = product; bestScore = score; }
+      }
+
+      // If we have strong identifiers but no product scored above 0, skip (avoids wrong matches)
+      if ((dm.ref_num || dm.ean) && bestScore <= 0) best = null;
+
+      return { integration, best };
     })).then(results => {
       const prices: Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }> = [];
 
       for (const r of results) {
         if (r.status !== 'fulfilled') continue;
-        const { integration, products } = r.value;
-        if (!products.length) continue;
+        const { integration, best } = r.value;
+        if (!best) continue;
 
         const isTim = integration.wholesaler_id === 'tim';
         const wholesalerLabel = isTim ? 'TIM' : 'Onninen';
-
-        // Find best matching product: prefer exact EAN/SKU match, else first result
-        let best = products[0];
-        if (dm.ean) {
-          const eanMatch = products.find((p: any) => p.ean === dm.ean);
-          if (eanMatch) best = eanMatch;
-        }
-        if (!best && dm.sku) {
-          const skuMatch = products.find((p: any) => p.sku === dm.sku);
-          if (skuMatch) best = skuMatch;
-        }
-
         const purchasePrice = isTim ? (best.price ?? null) : (best.priceEnd ?? null);
         const catalogPrice = isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null);
-        const stock = best.stock ?? null;
-        const url = best.url || undefined;
 
-        prices.push({ wholesaler: wholesalerLabel, catalogPrice, purchasePrice, stock, url });
+        prices.push({ wholesaler: wholesalerLabel, catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
       }
 
       setWholesalerPrices(prices);
@@ -551,6 +590,7 @@ export const DictionariesPage: React.FC = () => {
         company_id: currentUser.company_id,
         ean: p.ean || null,
         sku: p.sku || null,
+        ref_num: p.ref_num || null,
         catalog_price: p.catalogPrice || null,
         purchase_price: p.price || 0,
         images: p.image ? JSON.stringify([p.image]) : '[]',
@@ -3170,7 +3210,7 @@ export const DictionariesPage: React.FC = () => {
                   </button>
                 </div>
                 <span className="text-xs text-slate-400 font-mono">
-                  {dm.code}{dm.ean ? ` · EAN: ${dm.ean}` : ''}{dm.sku ? ` · SKU: ${dm.sku}` : ''}
+                  {dm.code}{dm.ean ? ` · EAN: ${dm.ean}` : ''}{dm.sku ? ` · SKU: ${dm.sku}` : ''}{dm.ref_num ? ` · Ref: ${dm.ref_num}` : ''}
                 </span>
                 <button onClick={() => setDetailMaterial(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
               </div>
