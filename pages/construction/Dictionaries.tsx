@@ -448,7 +448,15 @@ export const DictionariesPage: React.FC = () => {
 
   const generateMaterialCode = () => {
     const prefix = 'MAT';
-    const num = String(materials.length + 1).padStart(5, '0');
+    let maxNum = 0;
+    materials.forEach(m => {
+      const match = m.code?.match(/^MAT-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    });
+    const num = String(maxNum + 1).padStart(5, '0');
     return `${prefix}-${num}`;
   };
 
@@ -3139,8 +3147,10 @@ export const DictionariesPage: React.FC = () => {
                         Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler}</b>
                       </span>
                     )}
-                    {dm.price_sync_mode === 'synced' && (
-                      <span className="px-2 py-0.5 bg-yellow-100 rounded text-[10px] text-yellow-700">Synchronizacja cen</span>
+                    {dm.source_wholesaler && (
+                      dm.price_sync_mode === 'synced'
+                        ? <span className="px-2 py-0.5 bg-yellow-100 rounded text-[10px] text-yellow-700">Synchronizacja cen</span>
+                        : <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-500">Cena nie synchronizowana</span>
                     )}
                     <span className={`px-2 py-0.5 rounded text-[10px] ${dm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
                       {dm.is_active ? 'Aktywny' : 'Nieaktywny'}
@@ -3473,43 +3483,50 @@ export const DictionariesPage: React.FC = () => {
           )}
 
           {/* Prices */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Cena katalogowa (PLN)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={(editingMaterial as any)?.catalog_price || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, catalog_price: parseFloat(e.target.value) || null } as any)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Opcjonalna"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Cena zakupu (PLN) *
-                {(() => {
-                  const catPrice = (editingMaterial as any)?.catalog_price;
-                  const buyPrice = (editingMaterial as any)?.purchase_price || editingMaterial?.default_price;
-                  if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
-                    const discount = ((catPrice - buyPrice) / catPrice * 100).toFixed(1);
-                    return <span className="ml-2 text-xs font-normal text-green-600">-{discount}%</span>;
-                  }
-                  return null;
-                })()}
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={(editingMaterial as any)?.purchase_price || editingMaterial?.default_price || ''}
-                onChange={(e) => setEditingMaterial({ ...editingMaterial, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="Cena zakupu netto"
-              />
-            </div>
-          </div>
+          {(() => {
+            const isSynced = (editingMaterial as any)?.price_sync_mode === 'synced';
+            return (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena katalogowa (PLN)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    disabled={isSynced}
+                    value={(editingMaterial as any)?.catalog_price || ''}
+                    onChange={(e) => setEditingMaterial({ ...editingMaterial, catalog_price: parseFloat(e.target.value) || null } as any)}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
+                    placeholder="Opcjonalna"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Cena zakupu (PLN) *
+                    {(() => {
+                      const catPrice = (editingMaterial as any)?.catalog_price;
+                      const buyPrice = (editingMaterial as any)?.purchase_price || editingMaterial?.default_price;
+                      if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
+                        const discount = ((catPrice - buyPrice) / catPrice * 100).toFixed(1);
+                        return <span className="ml-2 text-xs font-normal text-green-600">-{discount}%</span>;
+                      }
+                      return null;
+                    })()}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    disabled={isSynced}
+                    value={(editingMaterial as any)?.purchase_price || editingMaterial?.default_price || ''}
+                    onChange={(e) => setEditingMaterial({ ...editingMaterial, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
+                    placeholder="Cena zakupu netto"
+                  />
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Description */}
           <div>
