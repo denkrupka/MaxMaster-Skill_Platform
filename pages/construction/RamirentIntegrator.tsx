@@ -35,6 +35,7 @@ interface RamirentGroupDetail {
   contactOnly?: boolean;
   models?: Array<{ code: string; slug: string; name: string; image?: string; badge?: string }>;
   related?: Array<{ slug: string; name: string; image?: string }>;
+  parameters?: Array<{ name: string; value: string }>;
   detailUrl?: string;
 }
 
@@ -241,7 +242,22 @@ const GroupDetail: React.FC<{
         {detail.description && (
           <div className="px-5 pb-3">
             <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">{detail.description}</p>
+            <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{detail.description}</p>
+          </div>
+        )}
+
+        {/* Parameters */}
+        {detail.parameters && detail.parameters.length > 0 && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-2">Parametry techniczne</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              {detail.parameters.map((p, i) => (
+                <div key={i} className={`flex items-center text-xs ${i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                  <div className="w-1/2 px-3 py-2 text-slate-500 font-medium">{p.name}</div>
+                  <div className="w-1/2 px-3 py-2 text-slate-700 font-semibold text-right">{p.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -252,26 +268,6 @@ const GroupDetail: React.FC<{
             <div className="flex gap-2 overflow-x-auto pb-2">
               {detail.images.map((img, i) => (
                 <img key={i} src={img} alt="" className="w-20 h-20 object-contain bg-slate-50 rounded border border-slate-200 flex-shrink-0" />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Models */}
-        {detail.models && detail.models.length > 0 && (
-          <div className="px-5 pb-4">
-            <h4 className="text-xs font-semibold text-slate-600 mb-2">Modele ({detail.models.length})</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-              {detail.models.map((model, i) => (
-                <div
-                  key={model.code || i}
-                  onClick={() => { if (model.slug) { onClose(); onNavigate(model.slug); } }}
-                  className="bg-slate-50 rounded-lg border border-slate-200 p-2 text-center cursor-pointer hover:border-blue-400 transition-colors"
-                >
-                  {model.image ? <img src={model.image} alt="" className="w-16 h-16 object-contain mx-auto" /> : <Package className="w-8 h-8 text-slate-200 mx-auto" />}
-                  <div className="text-[10px] text-slate-700 font-medium mt-1 line-clamp-2">{model.name}</div>
-                  {model.badge && <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded mt-0.5 inline-block">{model.badge}</span>}
-                </div>
               ))}
             </div>
           </div>
@@ -360,11 +356,21 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
     ramirentProxy('browse', { integrationId, slug })
       .then(data => {
         if (data.type === 'group') {
-          // Group/product page
-          setBrowseType('group');
-          setGroupDetail(data.group);
-          setItems(data.group?.models || []);
-          setBrowseTitle(data.group?.title || '');
+          const group = data.group;
+          // If group has NO models (single product) — auto-open detail modal
+          if (!group?.models || group.models.length === 0) {
+            setDetailSlug(slug);
+            setBrowseType('group');
+            setGroupDetail(group);
+            setItems([]);
+            setBrowseTitle(group?.title || '');
+          } else {
+            // Group with models — show models grid
+            setBrowseType('group');
+            setGroupDetail(group);
+            setItems(group.models || []);
+            setBrowseTitle(group.title || '');
+          }
         } else {
           // Category page
           setBrowseType('category');
@@ -424,7 +430,7 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
   if (connectionError && categories.length === 0) {
     return (
       <div className="text-center py-12">
-        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+        <AlertTriangle className="w-10 h-10 text-blue-400 mx-auto mb-3" />
         <h3 className="text-base font-semibold text-slate-700 mb-2">Nie udało się połączyć z Ramirent</h3>
         <p className="text-sm text-slate-500 mb-4">{connectionError}</p>
       </div>
@@ -588,7 +594,12 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
             </>
           ) : items.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm">
-              {browseType === 'group' ? 'Brak modeli w tej grupie.' : 'Brak podkategorii.'}
+              {browseType === 'group' ? (
+                <div>
+                  <Package className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                  <p>Kliknij «Szczegóły» aby zobaczyć informacje o produkcie.</p>
+                </div>
+              ) : 'Brak podkategorii.'}
             </div>
           ) : browseType === 'group' && groupDetail?.models && groupDetail.models.length > 0 ? (
             // Models grid

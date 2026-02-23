@@ -175,9 +175,43 @@ function parseGroupPage(html: string) {
   const codeM = html.match(/text-primary\s+font-bold[^>]*>([^<]+)/i)
   result.code = codeM ? codeM[1].trim() : ''
 
-  // Description
-  const descM = html.match(/class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p)>/i)
-  result.description = descM ? descM[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500) : ''
+  // Description — try multiple selectors
+  result.description = ''
+  // Method 1: class containing "description"
+  const descM = html.match(/class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+  if (descM) {
+    result.description = descM[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 1000)
+  }
+  // Method 2: meta description
+  if (!result.description) {
+    const metaM = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i)
+    if (metaM) result.description = metaM[1].trim()
+  }
+  // Method 3: og:description
+  if (!result.description) {
+    const ogM = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i)
+    if (ogM) result.description = ogM[1].trim()
+  }
+
+  // Parameters / specs
+  result.parameters = []
+  const specRe = /c-product-spec__(?:label|name)[^>]*>([^<]+)[\s\S]*?c-product-spec__value[^>]*>([^<]+)/gi
+  let specM
+  while ((specM = specRe.exec(html)) !== null) {
+    const name = specM[1].trim()
+    const value = specM[2].trim()
+    if (name && value) result.parameters.push({ name, value })
+  }
+  // Fallback: table rows with th/td
+  if (result.parameters.length === 0) {
+    const trRe = /<tr[^>]*>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<\/tr>/gi
+    let trM
+    while ((trM = trRe.exec(html)) !== null) {
+      const name = trM[1].trim()
+      const value = trM[2].trim()
+      if (name && value && name.length < 80 && value.length < 80) result.parameters.push({ name, value })
+    }
+  }
 
   // JSON-LD price
   const ldRe = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
@@ -515,7 +549,11 @@ serve(async (req) => {
         const hasModels = html.includes('c-product-card')
         const hasDetailLoad = html.includes('data-jsLoad')
 
-        if (hasModels || hasDetailLoad) {
+        // First check for subcategories — if they exist, this is a category page even if product cards are present
+        const subs = parseSubcategories(html, path)
+        const hasChildCategories = subs.length > 0
+
+        if ((hasModels || hasDetailLoad) && !hasChildCategories) {
           const group = parseGroupPage(html)
 
           // Try AJAX detail for prices
@@ -530,6 +568,11 @@ serve(async (req) => {
           } catch { /* skip */ }
 
           return json({ type: 'group', group })
+        } else if (hasChildCategories) {
+          // Category page with subcategories
+          const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+          const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
+          return json({ type: 'category', title, items: subs })
         } else if (path.startsWith('/produkt/')) {
           // Individual product page
           const group = parseGroupPage(html)
@@ -547,11 +590,11 @@ serve(async (req) => {
           }
           return json({ type: 'group', group })
         } else {
-          // Category page
-          const subs = parseSubcategories(html, path)
+          // Category page (no subcategories found, no product cards)
+          const fallbackSubs = parseSubcategories(html, path)
           const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
           const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
-          return json({ type: 'category', title, items: subs })
+          return json({ type: 'category', title, items: fallbackSubs })
         }
       }
 
