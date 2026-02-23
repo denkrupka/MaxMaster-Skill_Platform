@@ -550,15 +550,36 @@ serve(async (req) => {
         const apiPage = Math.max(0, page - 1)
         const data = await apiGet(`/search?query=${encodeURIComponent(q.trim())}&page=${apiPage}`, jar)
 
-        // Products are nested: data.items[0].items[]
+        // Try multiple response structures:
+        // Structure 1: data.items[0].items[] (category-style)
+        // Structure 2: data.items[] directly (some search queries)
+        // Structure 3: data.products[] (alternative)
+        let rawProducts: any[] = []
+        let totalProducts = 0
+
         const wrapper = (data?.items || [])[0] || {}
-        const rawProducts: any[] = wrapper.items || []
+        if (wrapper.items && wrapper.items.length > 0) {
+          // Category-style nested response
+          rawProducts = wrapper.items
+          totalProducts = data?.total || wrapper.total || rawProducts.length
+        } else if (Array.isArray(data?.items) && data.items.length > 0 && data.items[0]?.name) {
+          // Direct items array (items are products themselves)
+          rawProducts = data.items
+          totalProducts = data?.total || rawProducts.length
+        } else if (Array.isArray(data?.products)) {
+          rawProducts = data.products
+          totalProducts = data?.total || rawProducts.length
+        }
 
         const products = rawProducts.map((p: any) => mapProduct(p))
 
-        const totalProducts = data?.total || wrapper.total || products.length
+        // Debug: log response structure keys for troubleshooting
+        const debugKeys = data ? Object.keys(data) : []
+        const debugItemsCount = Array.isArray(data?.items) ? data.items.length : 0
+        const debugFirstItemKeys = debugItemsCount > 0 ? Object.keys(data.items[0] || {}).slice(0, 10) : []
+        console.log(`[oninen search] q="${q}" items=${debugItemsCount} firstItemKeys=${JSON.stringify(debugFirstItemKeys)} products=${products.length} total=${totalProducts}`)
 
-        return json({ products, query: q, total: totalProducts, source: Object.keys(jar).length > 0 ? 'personal' : 'public' })
+        return json({ products, query: q, total: totalProducts, source: Object.keys(jar).length > 0 ? 'personal' : 'public', debug: { keys: debugKeys, itemsCount: debugItemsCount, firstItemKeys: debugFirstItemKeys } })
       }
 
       // ═══ PRODUCT DETAIL ═══

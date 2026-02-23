@@ -508,6 +508,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
     setSearchLoading(true);
     timProxy('search', { integrationId, q: q.trim() })
       .then(r => {
+        console.log('[TIM search response]', { products: r.products?.length, total: r.total, totalPages: r.totalPages, source: r.source });
         setSearchResult(r.products || []);
         setSearchTotal(r.total || 0);
         setSearchLoading(false);

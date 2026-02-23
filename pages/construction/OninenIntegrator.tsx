@@ -512,6 +512,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
     setSearchLoading(true);
     oninenProxy('search', { integrationId, q: q.trim() })
       .then(r => {
+        console.log('[Onninen search response]', { products: r.products?.length, total: r.total, debug: r.debug });
         setSearchResult(r.products || []);
         setSearchTotal(r.total || 0);
         setSearchLoading(false);
