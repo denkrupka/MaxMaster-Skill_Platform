@@ -9,6 +9,10 @@ const corsHeaders = {
 const BASE = 'https://www.speckable.pl'
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
+// ═══ RELAY: PHP proxy on hosting to bypass WAF/IP blocks ═══
+const RELAY_URL = Deno.env.get('SPECKABLE_RELAY_URL') || ''
+const RELAY_KEY = Deno.env.get('SPECKABLE_RELAY_KEY') || ''
+
 // ═══ COOKIE JAR ═══
 type CookieJar = Record<string, string>
 
@@ -49,37 +53,78 @@ function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<st
   return h
 }
 
+// Route request through PHP relay on hosting (cookies handled by relay)
+async function viaRelay(
+  url: string, jar: CookieJar, method: string, body?: string, extraHeaders?: string[]
+): Promise<{ status: number; body: string }> {
+  const resp = await fetch(RELAY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: RELAY_KEY, url, method,
+      body: body || '', cookies: jar, headers: extraHeaders || [],
+    }),
+  })
+  if (!resp.ok) {
+    const text = await resp.text()
+    throw new Error(`Relay error ${resp.status}: ${text.substring(0, 200)}`)
+  }
+  const data = await resp.json()
+  // Merge cookies returned by relay
+  if (data.cookies && typeof data.cookies === 'object') {
+    for (const [k, v] of Object.entries(data.cookies)) {
+      if (typeof v === 'string') jar[k] = v
+    }
+  }
+  if (data.error) throw new Error(data.error)
+  return { status: data.status ?? 200, body: data.body ?? '' }
+}
+
 async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
+  // When using relay+ScraperAPI, reduce retries (ScraperAPI has its own retries)
+  const maxRetries = RELAY_URL ? 1 : retries
   let lastError = ''
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       await new Promise(r => setTimeout(r, 800 * attempt))
     }
     try {
-      // Use minimal headers — matches working Node.js proxy approach
-      const headers: Record<string, string> = {
-        'User-Agent': UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pl-PL,pl;q=0.9',
+      let status: number
+      let body: string
+
+      if (RELAY_URL) {
+        // Route through PHP relay on hosting (bypass WAF/IP block)
+        const hdrs: string[] = []
+        if (attempt > 0) hdrs.push('Referer: ' + BASE + '/')
+        const r = await viaRelay(fullUrl, jar, 'GET', undefined, hdrs)
+        status = r.status
+        body = r.body
+      } else {
+        // Direct fetch (fallback when no relay configured)
+        const headers: Record<string, string> = {
+          'User-Agent': UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pl-PL,pl;q=0.9',
+        }
+        if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
+        if (attempt > 0) headers['Referer'] = BASE + '/'
+        const res = await fetch(fullUrl, { headers, redirect: 'follow' })
+        parseCookiesFromHeaders(res.headers, jar)
+        status = res.status
+        if (res.ok) return await res.text()
+        body = await res.text()
       }
-      if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
-      // On retries, vary headers slightly
-      if (attempt > 0) {
-        headers['Referer'] = BASE + '/'
-      }
-      const res = await fetch(fullUrl, { headers, redirect: 'follow' })
-      parseCookiesFromHeaders(res.headers, jar)
-      if (res.ok) return res.text()
-      lastError = `HTTP ${res.status} ${res.statusText}`
-      const body = await res.text()
-      if (res.status === 403) {
+
+      if (status >= 200 && status < 400) return body
+      lastError = `HTTP ${status}`
+      if (status === 403) {
         if (body.includes('challenge') || body.includes('cf-') || body.includes('Checking your browser')) {
           console.log(`[fetchPage] 403 challenge on attempt ${attempt + 1}, retrying...`)
           continue
         }
       }
-      if (res.status >= 500) continue
+      if (status >= 500) continue
     } catch (e: any) {
       lastError = e.message || String(e)
       if (attempt < retries) continue
@@ -90,6 +135,17 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
 
 async function postForm(url: string, body: string, jar: CookieJar, referer?: string): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
+
+  if (RELAY_URL) {
+    const hdrs = [
+      'Content-Type: application/x-www-form-urlencoded',
+      'Referer: ' + (referer || BASE + '/pl/login'),
+    ]
+    const r = await viaRelay(fullUrl, jar, 'POST', body, hdrs)
+    return r.body
+  }
+
+  // Direct (fallback)
   const headers: Record<string, string> = {
     'User-Agent': UA,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -452,12 +508,7 @@ async function doLogin(username: string, password: string, jar: CookieJar): Prom
 
     throw new Error('Niepoprawne dane logowania')
   } catch (e: any) {
-    const msg = e.message || ''
-    // If blocked by WAF/Cloudflare/403 — save credentials without verification
-    if (msg.includes('403') || msg.includes('CSRF_NOT_FOUND') || msg.includes('challenge') || msg.includes('Cloudflare')) {
-      console.log('[speckable] Site blocked direct access, saving credentials without verification')
-      return true // Credentials will be saved, real session will be established when site becomes accessible
-    }
+    console.log('[speckable] Login failed:', e.message)
     throw e
   }
 }
@@ -487,6 +538,13 @@ async function getIntegrationSession(
     .single()
 
   if (error || !integration) throw new Error('Integration not found')
+
+  // When using relay/ScraperAPI, skip session management —
+  // ScraperAPI doesn't maintain cookies between requests,
+  // and the catalog is publicly accessible without login
+  if (RELAY_URL) {
+    return { jar: {}, integration }
+  }
 
   const creds = integration.credentials || {}
   let jar: CookieJar = creds.cookies || {}
