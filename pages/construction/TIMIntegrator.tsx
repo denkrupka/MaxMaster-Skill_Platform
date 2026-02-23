@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, Loader2, X, ChevronRight,
   FolderOpen, Grid3X3, List, Package, AlertTriangle,
@@ -473,13 +473,6 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
 
-  // Background loading: all products from selected category for local search
-  const [allCatProducts, setAllCatProducts] = useState<TIMProduct[]>([]);
-  const [allCatLoading, setAllCatLoading] = useState(false);
-  const [allCatLoadedCount, setAllCatLoadedCount] = useState(0);
-  const [allCatTotalCount, setAllCatTotalCount] = useState(0);
-  const allCatAbortRef = useRef(false);
-
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load categories
@@ -509,77 +502,33 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
 
-  // Background-load all products from selected category for local search
-  const loadAllCategoryProducts = useCallback(async (catSlug: string) => {
-    allCatAbortRef.current = false;
-    setAllCatLoading(true);
-    setAllCatProducts([]);
-    setAllCatLoadedCount(0);
-    setAllCatTotalCount(0);
-
-    let currentPage = 1;
-    let totalPgs = 1;
-    let all: TIMProduct[] = [];
-
-    while (currentPage <= totalPgs && !allCatAbortRef.current) {
-      try {
-        const data = await timProxy('products', { integrationId, cat: catSlug, page: currentPage });
-        const newProducts = data.products || [];
-        all = [...all, ...newProducts];
-        setAllCatProducts([...all]);
-        setAllCatLoadedCount(all.length);
-        if (currentPage === 1) {
-          totalPgs = data.totalPages || 1;
-          setAllCatTotalCount(data.totalProducts || 0);
-        }
-        currentPage++;
-      } catch {
-        break;
-      }
-    }
-
-    if (!allCatAbortRef.current) setAllCatLoading(false);
+  // Fast API-based search (uses wholesaler's search endpoint)
+  const doSearch = useCallback((q: string) => {
+    if (!q.trim()) { setSearchResult(null); setSearchLoading(false); return; }
+    setSearchLoading(true);
+    timProxy('search', { integrationId, q: q.trim() })
+      .then(r => {
+        setSearchResult(r.products || []);
+        setSearchTotal(r.total || 0);
+        setSearchLoading(false);
+      })
+      .catch(() => { setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
   }, [integrationId]);
-
-  // Local search filtering
-  const localSearchResults = useMemo(() => {
-    if (!search || search.length < 2 || !selectedCat) return null;
-    const q = search.toLowerCase();
-    return allCatProducts.filter(p => {
-      const mfr = typeof p.manufacturer === 'string' ? p.manufacturer : (p.manufacturer as any)?.name || '';
-      return p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        (p._id || '').toLowerCase().includes(q) ||
-        mfr.toLowerCase().includes(q);
-    });
-  }, [search, allCatProducts, selectedCat]);
 
   const onSearchChange = (v: string) => {
     setSearch(v);
-    if (!selectedCat) return;
-    // Start background loading when user types for the first time in this category
-    if (v.length >= 2 && allCatProducts.length === 0 && !allCatLoading) {
-      loadAllCategoryProducts(selectedCat.slug);
-    }
-    if (v.length >= 2) {
-      setSearchResult(localSearchResults || []);
-      setSearchTotal(localSearchResults?.length || 0);
+    if (searchRef.current) clearTimeout(searchRef.current);
+    if (v.length >= 2 && selectedCat) {
+      setSearchLoading(true);
+      searchRef.current = setTimeout(() => doSearch(v), 400);
     } else {
       setSearchResult(null);
+      setSearchLoading(false);
     }
   };
 
-  // Update search results reactively when allCatProducts changes during background load
-  useEffect(() => {
-    if (search.length >= 2 && selectedCat && localSearchResults !== null) {
-      setSearchResult(localSearchResults);
-      setSearchTotal(localSearchResults.length);
-      setSearchLoading(allCatLoading);
-    }
-  }, [localSearchResults, allCatLoading]);
-
   const display = searchResult !== null ? searchResult : products;
-  const isLoading = (searchLoading && allCatLoading) || prodLoading;
+  const isLoading = searchLoading || prodLoading;
   const hasContent = selectedCat || searchResult !== null;
 
   // Connection error
@@ -616,7 +565,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
                 cat={c}
                 depth={0}
                 selectedSlug={selectedCat?.slug || null}
-                onPick={cat => { setSelectedCat(cat); setPage(1); setSearch(''); setSearchResult(null); allCatAbortRef.current = true; setAllCatProducts([]); setAllCatLoading(false); setAllCatLoadedCount(0); }}
+                onPick={cat => { setSelectedCat(cat); setPage(1); setSearch(''); setSearchResult(null); }}
               />
             ))}
           </div>
@@ -632,15 +581,13 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
             <input
               value={search}
               onChange={e => onSearchChange(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && selectedCat && doSearch(search)}
               disabled={!selectedCat}
-              placeholder={selectedCat ? `Szukaj w: ${selectedCat.name}...` : 'Wybierz kategorię, aby wyszukać...'}
+              placeholder={selectedCat ? `Szukaj w TIM: ${selectedCat.name}...` : 'Wybierz kategorię, aby wyszukać...'}
               className={`flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 ${selectedCat ? 'text-slate-700' : 'text-slate-300 cursor-not-allowed'}`}
             />
-            {allCatLoading && search.length >= 2 && (
-              <span className="text-[10px] text-blue-500 whitespace-nowrap mr-2 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                {allCatLoadedCount}/{allCatTotalCount || '...'}
-              </span>
+            {searchLoading && (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500 mr-1" />
             )}
             {search && (
               <button onClick={() => { setSearch(''); setSearchResult(null); setSearchTotal(0); setSearchLoading(false); }} className="text-slate-400 hover:text-slate-600">
@@ -716,10 +663,7 @@ export const TIMIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct,
                 <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
               )}
               {searchResult !== null && (
-                <p className="text-xs text-slate-400 mb-3">
-                  Wynik wyszukiwania «{search}»: {searchResult.length} produktów
-                  {allCatLoading && <span className="ml-1 text-blue-500">(ładowanie...)</span>}
-                </p>
+                <p className="text-xs text-slate-400 mb-3">Wynik wyszukiwania «{search}»: {searchTotal > searchResult.length ? `${searchResult.length} z ${searchTotal}` : searchResult.length} produktów</p>
               )}
 
               {viewMode === 'grid' ? (
