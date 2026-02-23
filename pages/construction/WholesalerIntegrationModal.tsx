@@ -15,6 +15,7 @@ const WHOLESALERS: Record<string, { id: string; name: string; logo?: string; col
   elektryczne: [
     { id: 'tim', name: 'TIM S.A.', logo: '/logos/tim.png', color: '#b5421a', description: 'Hurtownia elektryczna TIM.pl - największy dystrybutor materiałów elektrycznych w Polsce' },
     { id: 'oninen', name: 'Onninen', logo: '/logos/onninen.svg', color: '#003DA5', description: 'Hurtownia elektryczna i przemysłowa Onninen.pl - szeroki asortyment materiałów instalacyjnych' },
+    { id: 'speckable', name: 'Speckable', logo: '/logos/speckable.png', color: '#1a73e8', description: 'Hurtownia elektryczna Speckable.pl - materiały i osprzęt elektryczny' },
   ],
   sanitarne: [],
   klimatyzacyjne: [],
@@ -25,6 +26,7 @@ function getProxyName(wholesalerId: string): string {
   switch (wholesalerId) {
     case 'tim': return 'tim-proxy';
     case 'oninen': return 'oninen-proxy';
+    case 'speckable': return 'speckable-proxy';
     default: return 'tim-proxy';
   }
 }

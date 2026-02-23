@@ -57,6 +57,7 @@ import type {
 } from '../../types';
 import { OninenIntegrator } from './OninenIntegrator';
 import { TIMIntegrator } from './TIMIntegrator';
+import { SpeckableIntegrator } from './SpeckableIntegrator';
 
 // View mode types - extended with all views from eKosztorysowanie
 type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia' | 'pozycje';
@@ -11473,6 +11474,18 @@ export const KosztorysEditorPage: React.FC = () => {
                   TIM
                 </button>
               )}
+              {searchMaterialIntegrations.some(i => i.wholesaler_id === 'speckable') && (
+                <button
+                  onClick={() => setSearchMaterialSubTab('speckable')}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    searchMaterialSubTab === 'speckable'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Speckable
+                </button>
+              )}
             </div>
 
             {/* Tab content */}
@@ -11557,6 +11570,15 @@ export const KosztorysEditorPage: React.FC = () => {
                 <div className="p-0">
                   <TIMIntegrator
                     integrationId={searchMaterialIntegrations.find(i => i.wholesaler_id === 'tim')?.id}
+                    onSelectProduct={(p) => handleApplyMaterialFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, unit: p.unit })}
+                  />
+                </div>
+              )}
+
+              {searchMaterialSubTab === 'speckable' && (
+                <div className="p-0">
+                  <SpeckableIntegrator
+                    integrationId={searchMaterialIntegrations.find(i => i.wholesaler_id === 'speckable')?.id}
                     onSelectProduct={(p) => handleApplyMaterialFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, unit: p.unit })}
                   />
                 </div>

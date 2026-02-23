@@ -7,53 +7,41 @@ import {
 import { supabase } from '../../lib/supabase';
 
 // ═══ Types ═══
-interface OninenCategory {
-  id: string;
+interface SpeckableCategory {
   name: string;
   slug: string;
-  subcategories?: OninenCategory[];
-}
-
-interface OninenProduct {
-  name: string;
-  sku: string;
-  ref_num?: string;
-  slug?: string;
-  url?: string;
   image?: string;
-  priceEnd?: number | null;
-  priceCatalog?: number | null;
-  stock?: number | null;
-  stockLocal?: number | null;
-  dotStatus?: number | null;
-  availDescription?: string;
-  brand?: string;
-  unit?: string;
-  deliveryTime?: string;
+  subcategories?: SpeckableCategory[];
 }
 
-interface OninenProductDetail {
+interface SpeckableProduct {
+  name: string;
+  symbol: string;
+  slug: string;
+  image?: string;
+  priceNetto?: number | null;
+  currency?: string;
+  stock?: string;
+  price?: string;
+}
+
+interface SpeckableProductDetail {
   name: string;
   sku: string;
-  slug: string;
-  url?: string;
+  ean?: string;
+  brand?: string;
+  priceNetto?: number | null;
+  priceGross?: number | null;
+  currency?: string;
+  stock?: string;
+  stockExternal?: string;
+  unit?: string;
   image?: string;
   images?: string[];
-  priceEnd?: number | null;
-  priceCatalog?: number | null;
-  stock?: number | null;
-  stockLocal?: number | null;
-  dotStatus?: number | null;
-  availDescription?: string;
-  brand?: string;
-  unit?: string;
-  ean?: string;
-  ref_num?: string;
   description?: string;
-  specs?: Array<{ name: string; value: string }>;
-  deliveryTime?: string;
-  deliveryCost?: string;
-  category?: string;
+  breadcrumb?: string;
+  url?: string;
+  related?: SpeckableProduct[];
 }
 
 interface Props {
@@ -62,9 +50,9 @@ interface Props {
   onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
 }
 
-// ═══ Helper: invoke oninen-proxy edge function ═══
-async function oninenProxy(action: string, params: Record<string, any> = {}): Promise<any> {
-  const { data, error } = await supabase.functions.invoke('oninen-proxy', {
+// ═══ Helper: invoke speckable-proxy edge function ═══
+async function speckableProxy(action: string, params: Record<string, any> = {}): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('speckable-proxy', {
     body: { action, ...params },
   });
   if (error) {
@@ -78,7 +66,7 @@ async function oninenProxy(action: string, params: Record<string, any> = {}): Pr
         }
       }
     } catch { /* ignore */ }
-    console.error('[oninen-proxy]', action, 'error:', error.message, detail || '');
+    console.error('[speckable-proxy]', action, 'error:', error.message, detail || '');
     throw new Error(detail ? `${error.message}: ${detail}` : (error.message || 'Edge function error'));
   }
   const parsed = typeof data === 'string' ? JSON.parse(data) : data;
@@ -86,31 +74,30 @@ async function oninenProxy(action: string, params: Record<string, any> = {}): Pr
   return parsed;
 }
 
-// ═══ Stock status color dot (Onninen dotstatus: 1=green, 2=yellow, 3=red) ═══
-function stockDotColor(dotStatus: number | null | undefined, qty?: number | null): string {
-  if (dotStatus === 1) return 'bg-green-500';
-  if (dotStatus === 2) return 'bg-yellow-500';
-  if (dotStatus === 3) return 'bg-red-500';
-  // Fallback to quantity-based
-  if (qty == null) return 'bg-slate-300';
-  if (qty > 10) return 'bg-green-500';
-  if (qty > 0) return 'bg-yellow-500';
+// ═══ Stock color ═══
+function stockColor(stock: string | undefined): string {
+  if (!stock) return 'bg-slate-300';
+  const num = parseInt(stock);
+  if (isNaN(num)) {
+    if (stock.toLowerCase().includes('brak') || stock === '0') return 'bg-red-500';
+    return 'bg-green-500';
+  }
+  if (num > 10) return 'bg-green-500';
+  if (num > 0) return 'bg-yellow-500';
   return 'bg-red-500';
 }
 
-function stockLabel(qty: number | null | undefined, unit?: string, availDesc?: string): string {
-  if (availDesc) return availDesc;
-  if (qty == null) return '—';
-  if (qty <= 0) return 'Brak';
-  return `${qty} ${unit || 'szt'}`;
+function stockLabel(stock: string | undefined): string {
+  if (!stock) return '—';
+  return stock;
 }
 
 // ═══ Category Tree Node ═══
 const CatNode: React.FC<{
-  cat: OninenCategory;
+  cat: SpeckableCategory;
   depth: number;
   selectedSlug: string | null;
-  onPick: (cat: OninenCategory) => void;
+  onPick: (cat: SpeckableCategory) => void;
 }> = ({ cat, depth, selectedSlug, onPick }) => {
   const [open, setOpen] = useState(false);
   const hasSub = (cat.subcategories?.length || 0) > 0;
@@ -136,7 +123,7 @@ const CatNode: React.FC<{
         <span className="truncate">{cat.name}</span>
       </button>
       {open && hasSub && cat.subcategories!.map((s, i) => (
-        <CatNode key={s.slug || s.id || i} cat={s} depth={depth + 1} selectedSlug={selectedSlug} onPick={onPick} />
+        <CatNode key={s.slug || i} cat={s} depth={depth + 1} selectedSlug={selectedSlug} onPick={onPick} />
       ))}
     </div>
   );
@@ -144,13 +131,13 @@ const CatNode: React.FC<{
 
 // ═══ Product Detail Modal ═══
 const ProductDetail: React.FC<{
-  product: OninenProduct;
+  product: SpeckableProduct;
   integrationId?: string;
   onClose: () => void;
-  onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
+  onSelectProduct?: Props['onSelectProduct'];
+  onAddToOwnCatalog?: Props['onAddToOwnCatalog'];
 }> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog }) => {
-  const [detail, setDetail] = useState<OninenProductDetail | null>(null);
+  const [detail, setDetail] = useState<SpeckableProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [otherPrices, setOtherPrices] = useState<Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
@@ -164,7 +151,7 @@ const ProductDetail: React.FC<{
     }
     setLoading(true);
     setError(null);
-    oninenProxy('product', { integrationId, slug: product.slug })
+    speckableProxy('product', { integrationId, slug: product.slug })
       .then(r => { setDetail(r.product); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [product.slug, integrationId]);
@@ -178,24 +165,22 @@ const ProductDetail: React.FC<{
     Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true))
       .then(({ data: integrations }) => {
         if (!integrations?.length) { setLoadingOtherPrices(false); return; }
-        const others = integrations.filter(i => i.wholesaler_id !== 'oninen');
+        const others = integrations.filter(i => i.wholesaler_id !== 'speckable');
         if (!others.length) { setLoadingOtherPrices(false); return; }
 
         const queries: string[] = [];
-        if (detail.ref_num) queries.push(detail.ref_num);
+        if (detail.sku) queries.push(detail.sku);
         if (detail.ean) queries.push(detail.ean);
-        if (detail.sku && detail.sku !== detail.ref_num && detail.sku !== detail.ean) queries.push(detail.sku);
         if (!queries.length && detail.name) queries.push(detail.name);
         if (!queries.length) { setLoadingOtherPrices(false); return; }
 
         const scoreProduct = (p: any): number => {
           let score = 0;
           const pName = (p.name || '').toLowerCase();
-          const pSku = (p.sku || '').toLowerCase();
-          const pRefNum = (p.ref_num || '').toLowerCase();
-          if (detail.ref_num) {
-            const ref = detail.ref_num.toLowerCase();
-            if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
+          const pSku = (p.sku || p.ref_num || '').toLowerCase();
+          if (detail.sku) {
+            const ref = detail.sku.toLowerCase();
+            if (pSku === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
           }
           if (detail.ean && (pName.includes(detail.ean) || pSku.includes(detail.ean))) score += 15;
           const words = (detail.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
@@ -204,7 +189,7 @@ const ProductDetail: React.FC<{
         };
 
         Promise.allSettled(others.map(async (integ) => {
-          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
+          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'oninen' ? 'oninen-proxy' : 'speckable-proxy';
           const qResults = await Promise.allSettled(
             queries.map(q =>
               supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integ.id, q } })
@@ -228,7 +213,7 @@ const ProductDetail: React.FC<{
           }
           let best: any = null, bestScore = -1;
           for (const { product: pr, score: sc } of seen.values()) { if (sc > bestScore) { best = pr; bestScore = sc; } }
-          if ((detail.ref_num || detail.ean) && bestScore <= 0) best = null;
+          if ((detail.sku || detail.ean) && bestScore <= 0) best = null;
           return { integ, best };
         })).then(results => {
           const prices: typeof otherPrices = [];
@@ -237,11 +222,11 @@ const ProductDetail: React.FC<{
             const { integ, best } = r.value;
             if (!best) continue;
             const isTim = integ.wholesaler_id === 'tim';
-            const isSpeckable = integ.wholesaler_id === 'speckable';
+            const isOnninen = integ.wholesaler_id === 'oninen';
             prices.push({
-              wholesaler: isTim ? 'TIM' : isSpeckable ? 'Speckable' : 'Onninen',
-              catalogPrice: isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
-              purchasePrice: isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
+              wholesaler: isTim ? 'TIM' : isOnninen ? 'Onninen' : 'Speckable',
+              catalogPrice: isTim ? (best.publicPrice ?? null) : isOnninen ? (best.priceCatalog ?? null) : (best.priceGross ?? null),
+              purchasePrice: isTim ? (best.price ?? null) : isOnninen ? (best.priceEnd ?? null) : (best.priceNetto ?? null),
               stock: best.stock ?? null,
               url: best.url || undefined,
             });
@@ -267,7 +252,7 @@ const ProductDetail: React.FC<{
       <div className="bg-white rounded-xl p-8 text-center max-w-sm" onClick={e => e.stopPropagation()}>
         <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
         <p className="text-sm text-red-600 mb-1">Błąd: {error || 'Produkt nie znaleziony'}</p>
-        <p className="text-xs text-slate-400">SKU: {product.sku}</p>
+        <p className="text-xs text-slate-400">SKU: {product.symbol}</p>
         <button onClick={onClose} className="mt-4 px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">
           Zamknij
         </button>
@@ -275,8 +260,8 @@ const ProductDetail: React.FC<{
     </div>
   );
 
-  const discount = detail.priceCatalog && detail.priceEnd && detail.priceCatalog > detail.priceEnd
-    ? Math.round((1 - detail.priceEnd / detail.priceCatalog) * 100)
+  const discount = detail.priceGross && detail.priceNetto && detail.priceGross > detail.priceNetto
+    ? Math.round((1 - detail.priceNetto / detail.priceGross) * 100)
     : null;
 
   return (
@@ -302,25 +287,26 @@ const ProductDetail: React.FC<{
           <div className="flex-1 p-5 min-w-[260px]">
             <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{detail.name}</h2>
             {detail.brand && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{detail.brand}</span></p>}
-            {detail.ref_num && <p className="text-xs text-slate-400 mt-0.5">Indeks producenta: {detail.ref_num}</p>}
 
             {/* Price block */}
             <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-              {detail.priceEnd != null ? (
+              {detail.priceNetto != null ? (
                 <>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Twoja cena</div>
-                  <div className="text-xl font-bold text-blue-600">{detail.priceEnd.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
-                  {detail.priceCatalog != null && discount != null && discount > 0 && (
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena netto (zakup)</div>
+                  <div className="text-xl font-bold text-blue-600">{detail.priceNetto.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                  {detail.priceGross != null && (
                     <div className="mt-1 text-xs text-slate-400">
-                      Cena katalogowa: <span className="line-through">{detail.priceCatalog.toFixed(2)} zł</span>
-                      <span className="ml-1.5 text-green-600 font-medium">-{discount}%</span>
+                      Cena brutto: {detail.priceGross.toFixed(2)} zł
+                      {discount != null && discount > 0 && (
+                        <span className="ml-1.5 text-green-600 font-medium">-{discount}%</span>
+                      )}
                     </div>
                   )}
                 </>
-              ) : detail.priceCatalog != null ? (
+              ) : detail.priceGross != null ? (
                 <>
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena katalogowa</div>
-                  <div className="text-xl font-bold text-slate-700">{detail.priceCatalog.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena brutto</div>
+                  <div className="text-xl font-bold text-slate-700">{detail.priceGross.toFixed(2)} <span className="text-sm font-normal">zł</span></div>
                 </>
               ) : (
                 <>
@@ -333,19 +319,18 @@ const ProductDetail: React.FC<{
             {/* Stock badges */}
             <div className="flex flex-wrap gap-1.5 mb-3">
               <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                <span className={`w-2 h-2 rounded-full ${stockDotColor(detail.dotStatus, detail.stock)}`} />
-                Magazyn centralny: <b>{stockLabel(detail.stock, detail.unit, detail.availDescription)}</b>
+                <span className={`w-2 h-2 rounded-full ${stockColor(detail.stock)}`} />
+                Magazyn: <b>{stockLabel(detail.stock)}</b>
               </span>
-              {detail.stockLocal != null && (
+              {detail.stockExternal && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                  <span className={`w-2 h-2 rounded-full ${stockDotColor(null, detail.stockLocal)}`} />
-                  Lokalny: <b>{stockLabel(detail.stockLocal, detail.unit)}</b>
+                  <span className={`w-2 h-2 rounded-full ${stockColor(detail.stockExternal)}`} />
+                  Zewnętrzny: <b>{stockLabel(detail.stockExternal)}</b>
                 </span>
               )}
-              {detail.deliveryTime && (
+              {detail.unit && (
                 <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                  <Truck className="w-3 h-3 opacity-50" />
-                  <b>{detail.deliveryTime}</b>
+                  Jedn.: <b>{detail.unit}</b>
                 </span>
               )}
             </div>
@@ -355,7 +340,7 @@ const ProductDetail: React.FC<{
                 onClick={() => {
                   onSelectProduct({
                     name: detail.name,
-                    price: detail.priceEnd ?? null,
+                    price: detail.priceNetto ?? null,
                     sku: detail.sku,
                     ean: detail.ean,
                     unit: detail.unit,
@@ -377,7 +362,7 @@ const ProductDetail: React.FC<{
                 className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
               >
                 <ExternalLink className="w-4 h-4" />
-                Otwórz na Onninen.pl
+                Otwórz na Speckable.pl
               </a>
             )}
 
@@ -388,16 +373,15 @@ const ProductDetail: React.FC<{
                     name: detail.name,
                     sku: detail.sku,
                     ean: detail.ean,
-                    ref_num: detail.ref_num || undefined,
-                    price: detail.priceEnd ?? null,
-                    catalogPrice: detail.priceCatalog ?? null,
+                    price: detail.priceNetto ?? null,
+                    catalogPrice: detail.priceGross ?? null,
                     image: detail.image,
                     manufacturer: detail.brand || undefined,
                     unit: detail.unit,
                     description: detail.description,
                     url: detail.url,
-                    wholesaler: 'oninen',
-                    category: detail.category?.split(' > ').pop() || undefined,
+                    wholesaler: 'speckable',
+                    category: detail.breadcrumb?.split(' > ').pop() || undefined,
                   });
                   onClose();
                 }}
@@ -441,8 +425,8 @@ const ProductDetail: React.FC<{
                         <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
                         <td className="px-3 py-2 text-center">
                           {wp.stock != null ? (
-                            <span className={`px-1.5 py-0.5 rounded ${wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                              {wp.stock > 0 ? `${wp.stock} szt.` : 'Brak'}
+                            <span className={`px-1.5 py-0.5 rounded ${typeof wp.stock === 'number' ? (wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600') : 'bg-green-100 text-green-700'}`}>
+                              {typeof wp.stock === 'number' ? (wp.stock > 0 ? `${wp.stock} szt.` : 'Brak') : wp.stock}
                             </span>
                           ) : '—'}
                         </td>
@@ -466,44 +450,14 @@ const ProductDetail: React.FC<{
         {detail.description && (
           <div className="px-5 pb-3">
             <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-            <div
-              className="text-xs text-slate-600 leading-relaxed prose prose-xs max-w-none
-                [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-slate-700 [&_h2]:mt-3 [&_h2]:mb-1.5
-                [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-700 [&_h3]:mt-2.5 [&_h3]:mb-1
-                [&_p]:mb-2 [&_p]:text-slate-600
-                [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:mb-2 [&_ul]:space-y-0.5
-                [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:mb-2 [&_ol]:space-y-0.5
-                [&_li]:text-slate-600
-                [&_strong]:font-semibold [&_strong]:text-slate-700
-                [&_a]:text-blue-600 [&_a]:underline"
-              dangerouslySetInnerHTML={{ __html: detail.description }}
-            />
-          </div>
-        )}
-
-        {/* Technical specs */}
-        {detail.specs && detail.specs.length > 0 && (
-          <div className="px-5 pb-4">
-            <h4 className="text-xs font-semibold text-slate-600 mb-2">Dane techniczne</h4>
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <tbody>
-                  {detail.specs.map((s, i) => (
-                    <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                      <td className="px-3 py-1.5 text-slate-500 w-1/2 border-r border-slate-100">{s.name}</td>
-                      <td className="px-3 py-1.5 text-slate-700 font-medium">{s.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">{detail.description}</p>
           </div>
         )}
 
         {/* Category breadcrumb */}
-        {detail.category && (
+        {detail.breadcrumb && (
           <div className="px-5 pb-4">
-            <p className="text-[10px] text-slate-400">{detail.category}</p>
+            <p className="text-[10px] text-slate-400">{detail.breadcrumb}</p>
           </div>
         )}
       </div>
@@ -512,110 +466,83 @@ const ProductDetail: React.FC<{
 };
 
 // ═══ Product Card (grid) ═══
-const ProductCardGrid: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ p, onClick }) => {
-  const discount = p.priceCatalog && p.priceEnd && p.priceCatalog > p.priceEnd
-    ? Math.round((1 - p.priceEnd / p.priceCatalog) * 100)
-    : null;
-
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
-    >
-      <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
-        {p.image ? (
-          <img src={p.image} alt="" className="max-w-[85%] max-h-28 object-contain" />
-        ) : (
-          <Package className="w-10 h-10 text-slate-200" />
-        )}
-      </div>
-      <div className="p-2.5">
-        <div className="text-[10px] text-slate-400 font-mono">SKU: {p.sku}</div>
-        <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{p.name}</div>
-        {p.brand && <div className="text-[10px] text-slate-400 mt-0.5">{p.brand}</div>}
-        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-          {p.priceEnd != null ? (
-            <div>
-              <span className="text-sm font-bold text-blue-600">{p.priceEnd.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
-              {discount != null && discount > 0 && (
-                <span className="ml-1.5 text-[10px] text-green-600 font-medium">-{discount}%</span>
-              )}
-            </div>
-          ) : p.priceCatalog != null ? (
-            <span className="text-sm font-bold text-slate-600">{p.priceCatalog.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
-          ) : (
-            <span className="text-[10px] text-slate-300">—</span>
-          )}
-          <span className="flex items-center gap-1">
-            <span className={`w-2 h-2 rounded-full ${stockDotColor(p.dotStatus, p.stock)}`} />
-            <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit, p.availDescription)}</span>
-          </span>
-        </div>
-      </div>
+const ProductCardGrid: React.FC<{ p: SpeckableProduct; onClick: () => void }> = ({ p, onClick }) => (
+  <div
+    onClick={onClick}
+    className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+  >
+    <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+      {p.image ? (
+        <img src={p.image} alt="" className="max-w-[85%] max-h-28 object-contain" />
+      ) : (
+        <Package className="w-10 h-10 text-slate-200" />
+      )}
     </div>
-  );
-};
-
-// ═══ Product Card (list) ═══
-const ProductCardList: React.FC<{ p: OninenProduct; onClick: () => void }> = ({ p, onClick }) => {
-  const discount = p.priceCatalog && p.priceEnd && p.priceCatalog > p.priceEnd
-    ? Math.round((1 - p.priceEnd / p.priceCatalog) * 100)
-    : null;
-
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
-    >
-      <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
-        {p.image ? (
-          <img src={p.image} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
-        ) : (
-          <Package className="w-6 h-6 text-slate-200" />
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-slate-800 truncate">{p.name || '—'}</div>
-        <div className="text-[10px] text-slate-400 font-mono">{p.sku}{p.brand ? ` · ${p.brand}` : ''}</div>
-      </div>
-      <div className="flex-shrink-0 flex items-center gap-1">
-        <span className={`w-2 h-2 rounded-full ${stockDotColor(p.dotStatus, p.stock)}`} />
-        <span className="text-[10px] text-slate-500">{stockLabel(p.stock, p.unit, p.availDescription)}</span>
-      </div>
-      <div className="flex-shrink-0 text-right">
-        {p.priceEnd != null ? (
-          <div>
-            <span className="text-sm font-bold text-blue-600">{p.priceEnd.toFixed(2)} zł</span>
-            {discount != null && discount > 0 && (
-              <div className="text-[10px] text-green-600 font-medium">-{discount}%</div>
-            )}
-          </div>
-        ) : p.priceCatalog != null ? (
-          <span className="text-sm font-bold text-slate-600">{p.priceCatalog.toFixed(2)} zł</span>
+    <div className="p-2.5">
+      {p.symbol && <div className="text-[10px] text-slate-400 font-mono">SKU: {p.symbol}</div>}
+      <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{p.name}</div>
+      <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+        {p.priceNetto != null ? (
+          <span className="text-sm font-bold text-blue-600">{p.priceNetto.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł netto</span></span>
         ) : (
           <span className="text-[10px] text-slate-300">—</span>
         )}
+        <span className="flex items-center gap-1">
+          <span className={`w-2 h-2 rounded-full ${stockColor(p.stock)}`} />
+          <span className="text-[10px] text-slate-500">{stockLabel(p.stock)}</span>
+        </span>
       </div>
     </div>
-  );
-};
+  </div>
+);
+
+// ═══ Product Card (list) ═══
+const ProductCardList: React.FC<{ p: SpeckableProduct; onClick: () => void }> = ({ p, onClick }) => (
+  <div
+    onClick={onClick}
+    className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
+  >
+    <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+      {p.image ? (
+        <img src={p.image} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+      ) : (
+        <Package className="w-6 h-6 text-slate-200" />
+      )}
+    </div>
+    <div className="flex-1 min-w-0">
+      <div className="text-xs font-medium text-slate-800 truncate">{p.name || '—'}</div>
+      <div className="text-[10px] text-slate-400 font-mono">{p.symbol}</div>
+    </div>
+    <div className="flex-shrink-0 flex items-center gap-1">
+      <span className={`w-2 h-2 rounded-full ${stockColor(p.stock)}`} />
+      <span className="text-[10px] text-slate-500">{stockLabel(p.stock)}</span>
+    </div>
+    <div className="flex-shrink-0 text-right">
+      {p.priceNetto != null ? (
+        <span className="text-sm font-bold text-blue-600">{p.priceNetto.toFixed(2)} zł</span>
+      ) : (
+        <span className="text-[10px] text-slate-300">—</span>
+      )}
+    </div>
+  </div>
+);
 
 // ═══ MAIN COMPONENT ═══
-export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct, onAddToOwnCatalog }) => {
-  const [categories, setCategories] = useState<OninenCategory[]>([]);
+export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct, onAddToOwnCatalog }) => {
+  const [categories, setCategories] = useState<SpeckableCategory[]>([]);
   const [catLoading, setCatLoading] = useState(true);
-  const [selectedCat, setSelectedCat] = useState<OninenCategory | null>(null);
-  const [products, setProducts] = useState<OninenProduct[]>([]);
+  const [selectedCat, setSelectedCat] = useState<SpeckableCategory | null>(null);
+  const [products, setProducts] = useState<SpeckableProduct[]>([]);
   const [prodLoading, setProdLoading] = useState(false);
   const [prodError, setProdError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState('');
-  const [searchResult, setSearchResult] = useState<OninenProduct[] | null>(null);
+  const [searchResult, setSearchResult] = useState<SpeckableProduct[] | null>(null);
   const [searchTotal, setSearchTotal] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [detailProduct, setDetailProduct] = useState<OninenProduct | null>(null);
+  const [detailProduct, setDetailProduct] = useState<SpeckableProduct | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
 
@@ -624,7 +551,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
   // Load categories
   useEffect(() => {
     setCatLoading(true);
-    oninenProxy('categories', { integrationId })
+    speckableProxy('categories', { integrationId })
       .then(data => {
         setCategories(data.categories || []);
         setCatLoading(false);
@@ -637,7 +564,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
     if (!selectedCat) return;
     setProdLoading(true);
     setProdError(null);
-    oninenProxy('products', { integrationId, cat: selectedCat.slug, page })
+    speckableProxy('products', { integrationId, cat: selectedCat.slug, page })
       .then(data => {
         setProducts(data.products || []);
         setTotalPages(data.totalPages || 0);
@@ -648,18 +575,17 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
 
-  // Fast API-based search (uses wholesaler's search endpoint)
+  // Fast search
   const doSearch = useCallback((q: string) => {
     if (!q.trim()) { setSearchResult(null); setSearchLoading(false); return; }
     setSearchLoading(true);
-    oninenProxy('search', { integrationId, q: q.trim() })
+    speckableProxy('search', { integrationId, q: q.trim() })
       .then(r => {
-        console.log('[Onninen search response]', { products: r.products?.length, total: r.total, debug: r.debug });
         setSearchResult(r.products || []);
         setSearchTotal(r.total || 0);
         setSearchLoading(false);
       })
-      .catch(err => { console.error('[Onninen search error]', err); setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
+      .catch(() => { setSearchResult([]); setSearchTotal(0); setSearchLoading(false); });
   }, [integrationId]);
 
   const onSearchChange = (v: string) => {
@@ -682,7 +608,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
     return (
       <div className="text-center py-12">
         <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-        <h3 className="text-base font-semibold text-slate-700 mb-2">Nie udało się połączyć z Onninen</h3>
+        <h3 className="text-base font-semibold text-slate-700 mb-2">Nie udało się połączyć ze Speckable</h3>
         <p className="text-sm text-slate-500 mb-4">{connectionError}</p>
       </div>
     );
@@ -693,7 +619,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
       {/* Sidebar: Categories */}
       <div className="w-64 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
         <div className="px-3 py-2.5 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          Kategorie Onninen
+          Kategorie Speckable
         </div>
         {catLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -707,7 +633,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
           <div className="py-1">
             {categories.map((c, i) => (
               <CatNode
-                key={c.slug || c.id || i}
+                key={c.slug || i}
                 cat={c}
                 depth={0}
                 selectedSlug={selectedCat?.slug || null}
@@ -728,7 +654,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
               value={search}
               onChange={e => onSearchChange(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && doSearch(search)}
-              placeholder="Szukaj w Onninen..."
+              placeholder="Szukaj w Speckable..."
               className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none placeholder-slate-400 text-slate-700"
             />
             {searchLoading && (
@@ -766,7 +692,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
           {!hasContent ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Package className="w-12 h-12 text-slate-200 mb-4" />
-              <h3 className="text-lg font-semibold text-slate-600 mb-2">Katalog materiałów Onninen.pl</h3>
+              <h3 className="text-lg font-semibold text-slate-600 mb-2">Katalog materiałów Speckable.pl</h3>
               <p className="text-sm text-slate-400 max-w-sm">
                 Wybierz kategorię z listy po lewej, aby przeglądać i wyszukiwać produkty.
               </p>
@@ -776,7 +702,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
                   <div className="flex flex-wrap gap-2 justify-center">
                     {categories.slice(0, 10).map((c, i) => (
                       <button
-                        key={c.slug || c.id || i}
+                        key={c.slug || i}
                         onClick={() => { setSelectedCat(c); setPage(1); }}
                         className="bg-white border border-slate-200 rounded-md px-3 py-1.5 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
                       >
@@ -790,9 +716,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
           ) : isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
-              <span className="text-sm text-slate-500">
-Ładowanie produktów...
-              </span>
+              <span className="text-sm text-slate-500">Ładowanie produktów...</span>
             </div>
           ) : prodError ? (
             <div className="text-center py-8 bg-white rounded-lg border border-slate-200">
@@ -816,7 +740,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {display.map((p, i) => (
                     <ProductCardGrid
-                      key={p.sku || i}
+                      key={p.slug || i}
                       p={p}
                       onClick={() => setDetailProduct(p)}
                     />
@@ -826,7 +750,7 @@ export const OninenIntegrator: React.FC<Props> = ({ integrationId, onSelectProdu
                 <div className="space-y-2">
                   {display.map((p, i) => (
                     <ProductCardList
-                      key={p.sku || i}
+                      key={p.slug || i}
                       p={p}
                       onClick={() => setDetailProduct(p)}
                     />

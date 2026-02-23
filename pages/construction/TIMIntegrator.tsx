@@ -203,7 +203,7 @@ const ProductDetail: React.FC<{
         };
 
         Promise.allSettled(others.map(async (integ) => {
-          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
+          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
           const qResults = await Promise.allSettled(
             queries.map(q =>
               supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integ.id, q } })
@@ -236,10 +236,11 @@ const ProductDetail: React.FC<{
             const { integ, best } = r.value;
             if (!best) continue;
             const isTim = integ.wholesaler_id === 'tim';
+            const isSpeckable = integ.wholesaler_id === 'speckable';
             prices.push({
-              wholesaler: isTim ? 'TIM' : 'Onninen',
-              catalogPrice: isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null),
-              purchasePrice: isTim ? (best.price ?? null) : (best.priceEnd ?? null),
+              wholesaler: isTim ? 'TIM' : isSpeckable ? 'Speckable' : 'Onninen',
+              catalogPrice: isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
+              purchasePrice: isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
               stock: best.stock ?? null,
               url: best.url || undefined,
             });
