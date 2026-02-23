@@ -3449,9 +3449,18 @@ export const DictionariesPage: React.FC = () => {
                 className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Wybierz...</option>
-                {customUnits.map(u => (
-                  <option key={u.id} value={u.value}>{u.label}</option>
-                ))}
+                {(() => {
+                  const customValues = new Set(customUnits.map(u => u.value));
+                  const defaultFiltered = DEFAULT_UNITS.filter(u => !customValues.has(u.value));
+                  return [
+                    ...customUnits.map(u => (
+                      <option key={u.id} value={u.value}>{u.label}</option>
+                    )),
+                    ...defaultFiltered.map(u => (
+                      <option key={`def-${u.value}`} value={u.value}>{u.label}</option>
+                    )),
+                  ];
+                })()}
               </select>
               <button
                 type="button"
