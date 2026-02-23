@@ -178,6 +178,24 @@ export const DictionariesPage: React.FC = () => {
   const [editingEquipment, setEditingEquipment] = useState<Partial<KosztorysEquipment> | null>(null);
   const [equipmentSearch, setEquipmentSearch] = useState('');
 
+  // ============ Расширенные состояния для каталога Sprzęt ============
+  const [equipmentCategories, setEquipmentCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
+  const [editingEqCategoryId, setEditingEqCategoryId] = useState<string | null>(null);
+  const [editingEqCategoryName, setEditingEqCategoryName] = useState('');
+  const [deleteEqCategoryConfirm, setDeleteEqCategoryConfirm] = useState<{ id: string; name: string; parent_id?: string | null } | null>(null);
+  const [deleteEquipmentConfirm, setDeleteEquipmentConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [addEqSubcategoryParentId, setAddEqSubcategoryParentId] = useState<string | null>(null);
+  const [expandedEqCategories, setExpandedEqCategories] = useState<Set<string>>(new Set());
+  const [equipmentViewMode, setEquipmentViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedEquipmentCategory, setSelectedEquipmentCategory] = useState<string | null>(null);
+  const [detailEquipment, setDetailEquipment] = useState<KosztorysEquipment | null>(null);
+  const [autoGenerateEqCode, setAutoGenerateEqCode] = useState(true);
+  const [newEqCategoryName, setNewEqCategoryName] = useState('');
+  const [showAddEqCategory, setShowAddEqCategory] = useState(false);
+  const [equipmentImages, setEquipmentImages] = useState<string[]>([]);
+  const [addToEquipmentCatalogModal, setAddToEquipmentCatalogModal] = useState<{ product: any; wholesaler: string } | null>(null);
+  const [eqPriceSyncMode, setEqPriceSyncMode] = useState<'fixed' | 'synced'>('fixed');
+
   // ============ Шаблонные задания ============
   const [templateTasks, setTemplateTasks] = useState<any[]>([]);
   const [templateDialog, setTemplateDialog] = useState(false);
@@ -557,6 +575,196 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
+  // ============ Equipment categories ============
+  const loadEquipmentCategories = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_equipment_categories')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('sort_order', { ascending: true });
+      if (!error) setEquipmentCategories(data || []);
+    } catch (err) {
+      console.error('Error loading equipment categories:', err);
+    }
+  };
+
+  const handleAddEqCategory = async (parentId?: string | null) => {
+    if (!newEqCategoryName.trim() || !currentUser?.company_id) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_equipment_categories')
+        .insert({
+          company_id: currentUser.company_id,
+          name: newEqCategoryName.trim(),
+          sort_order: equipmentCategories.length,
+          parent_id: parentId || null,
+        });
+      if (error) throw error;
+      setNewEqCategoryName('');
+      setShowAddEqCategory(false);
+      setAddEqSubcategoryParentId(null);
+      if (parentId) setExpandedEqCategories(prev => new Set([...prev, parentId]));
+      await loadEquipmentCategories();
+      showNotification('Kategoria dodana', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleRenameEqCategory = async (id: string) => {
+    if (!editingEqCategoryName.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_equipment_categories')
+        .update({ name: editingEqCategoryName.trim() })
+        .eq('id', id);
+      if (error) throw error;
+
+      const oldCat = equipmentCategories.find(c => c.id === id);
+      if (oldCat && oldCat.name !== editingEqCategoryName.trim()) {
+        await supabase
+          .from('kosztorys_equipment')
+          .update({ category: editingEqCategoryName.trim() })
+          .eq('category', oldCat.name)
+          .eq('company_id', currentUser?.company_id);
+      }
+
+      setEditingEqCategoryId(null);
+      setEditingEqCategoryName('');
+      await loadEquipmentCategories();
+      await loadEquipment();
+      showNotification('Kategoria zmieniona', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteEqCategory = async (id: string) => {
+    const cat = equipmentCategories.find(c => c.id === id);
+    if (!cat) return;
+
+    try {
+      const parentCat = cat.parent_id ? equipmentCategories.find(c => c.id === cat.parent_id) : null;
+      const newCategory = parentCat?.name || null;
+
+      await supabase
+        .from('kosztorys_equipment')
+        .update({ category: newCategory })
+        .eq('category', cat.name)
+        .eq('company_id', currentUser?.company_id);
+
+      await supabase
+        .from('kosztorys_equipment_categories')
+        .update({ parent_id: cat.parent_id || null })
+        .eq('parent_id', id);
+
+      const { error } = await supabase.from('kosztorys_equipment_categories').delete().eq('id', id);
+      if (error) throw error;
+
+      setDeleteEqCategoryConfirm(null);
+      if (selectedEquipmentCategory === cat.name) setSelectedEquipmentCategory(null);
+      await loadEquipmentCategories();
+      await loadEquipment();
+      showNotification('Kategoria usunięta', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const getEqCategoryChildren = (parentId: string | null): typeof equipmentCategories =>
+    equipmentCategories.filter(c => (c.parent_id || null) === parentId);
+
+  const getEqCategoryCount = (catName: string): number => {
+    const cat = equipmentCategories.find(c => c.name === catName);
+    if (!cat) return 0;
+    const directCount = equipment.filter(e => e.category === catName).length;
+    const children = equipmentCategories.filter(c => c.parent_id === cat.id);
+    return directCount + children.reduce((sum, ch) => sum + getEqCategoryCount(ch.name), 0);
+  };
+
+  const getEqCategorySubtreeNames = (catName: string): string[] => {
+    const cat = equipmentCategories.find(c => c.name === catName);
+    if (!cat) return [catName];
+    const children = equipmentCategories.filter(c => c.parent_id === cat.id);
+    return [catName, ...children.flatMap(ch => getEqCategorySubtreeNames(ch.name))];
+  };
+
+  const generateEquipmentCode = () => {
+    const prefix = 'EQ';
+    let maxNum = 0;
+    equipment.forEach(e => {
+      const match = e.code?.match(/^EQ-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    });
+    const num = String(maxNum + 1).padStart(5, '0');
+    return `${prefix}-${num}`;
+  };
+
+  // ============ Добавление продукта из гуртовни в каталог Sprzęt ============
+  const handleAddToEquipmentCatalog = (product: any) => {
+    setAddToEquipmentCatalogModal({ product, wholesaler: product.wholesaler });
+    setEqPriceSyncMode('fixed');
+  };
+
+  const handleConfirmAddToEquipmentCatalog = async () => {
+    if (!addToEquipmentCatalogModal || !currentUser) return;
+    setSaving(true);
+    const p = addToEquipmentCatalogModal.product;
+    const code = generateEquipmentCode();
+
+    try {
+      const eqData: any = {
+        code,
+        name: p.name,
+        category: p.category || null,
+        unit: p.unit || 'szt.',
+        description: p.description || null,
+        manufacturer: p.manufacturer || null,
+        default_price: p.price || 0,
+        is_active: true,
+        company_id: currentUser.company_id,
+        ean: p.ean || null,
+        sku: p.sku || null,
+        ref_num: p.ref_num || null,
+        catalog_price: p.catalogPrice || null,
+        purchase_price: p.price || 0,
+        images: p.image ? JSON.stringify([p.image]) : '[]',
+        source_wholesaler: addToEquipmentCatalogModal.wholesaler,
+        source_wholesaler_url: p.url || null,
+        price_sync_mode: eqPriceSyncMode,
+      };
+
+      const { error } = await supabase
+        .from('kosztorys_equipment')
+        .insert(eqData);
+
+      if (error) throw error;
+
+      if (p.category && currentUser.company_id) {
+        const catExists = equipmentCategories.some(c => c.name === p.category);
+        if (!catExists) {
+          await supabase
+            .from('kosztorys_equipment_categories')
+            .upsert({ company_id: currentUser.company_id, name: p.category, sort_order: equipmentCategories.length }, { onConflict: 'company_id,name' });
+          await loadEquipmentCategories();
+        }
+      }
+
+      showNotification('Sprzęt dodany do katalogu Własnego', 'success');
+      setAddToEquipmentCatalogModal(null);
+      await loadEquipment();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas dodawania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const generateMaterialCode = () => {
     const prefix = 'MAT';
     let maxNum = 0;
@@ -659,6 +867,7 @@ export const DictionariesPage: React.FC = () => {
         loadCustomCategories(),
         loadCustomManufacturers(),
         loadCustomUnits(),
+        loadEquipmentCategories(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1024,38 +1233,42 @@ export const DictionariesPage: React.FC = () => {
     if (!editingEquipment || !currentUser) return;
     setSaving(true);
 
+    const code = autoGenerateEqCode && !editingEquipment.id ? generateEquipmentCode() : editingEquipment.code;
+
     try {
+      const eqData: any = {
+        code,
+        name: editingEquipment.name,
+        category: editingEquipment.category || null,
+        unit: editingEquipment.unit,
+        description: editingEquipment.description,
+        manufacturer: editingEquipment.manufacturer || null,
+        default_price: (editingEquipment as any).purchase_price || editingEquipment.default_price || 0,
+        is_active: editingEquipment.is_active,
+        ean: (editingEquipment as any).ean || null,
+        sku: (editingEquipment as any).sku || null,
+        ref_num: (editingEquipment as any).ref_num || null,
+        catalog_price: (editingEquipment as any).catalog_price || null,
+        purchase_price: (editingEquipment as any).purchase_price || editingEquipment.default_price || 0,
+        images: equipmentImages.length > 0 ? JSON.stringify(equipmentImages) : '[]',
+        source_wholesaler: (editingEquipment as any).source_wholesaler || null,
+        source_wholesaler_url: (editingEquipment as any).source_wholesaler_url || null,
+        price_sync_mode: (editingEquipment as any).price_sync_mode || 'fixed',
+      };
+
       if (editingEquipment.id) {
         const { error } = await supabase
           .from('kosztorys_equipment')
-          .update({
-            code: editingEquipment.code,
-            name: editingEquipment.name,
-            category: editingEquipment.category,
-            unit: editingEquipment.unit,
-            description: editingEquipment.description,
-            manufacturer: editingEquipment.manufacturer,
-            default_price: editingEquipment.default_price,
-            is_active: editingEquipment.is_active,
-          })
+          .update(eqData)
           .eq('id', editingEquipment.id);
 
         if (error) throw error;
         showNotification('Sprzęt zaktualizowany', 'success');
       } else {
+        eqData.company_id = currentUser.company_id;
         const { error } = await supabase
           .from('kosztorys_equipment')
-          .insert({
-            code: editingEquipment.code,
-            name: editingEquipment.name,
-            category: editingEquipment.category,
-            unit: editingEquipment.unit,
-            description: editingEquipment.description,
-            manufacturer: editingEquipment.manufacturer,
-            default_price: editingEquipment.default_price || 0,
-            is_active: editingEquipment.is_active ?? true,
-            company_id: currentUser.company_id,
-          });
+          .insert(eqData);
 
         if (error) throw error;
         showNotification('Sprzęt dodany', 'success');
@@ -1063,6 +1276,8 @@ export const DictionariesPage: React.FC = () => {
 
       setEquipmentDialog(false);
       setEditingEquipment(null);
+      setEquipmentImages([]);
+      setAutoGenerateEqCode(true);
       await loadEquipment();
     } catch (error: any) {
       showNotification(error.message || 'Błąd podczas zapisywania', 'error');
@@ -1297,10 +1512,22 @@ export const DictionariesPage: React.FC = () => {
     }), [materials, materialSearch, selectedMaterialCategory, customCategories]);
 
   const filteredEquipment = useMemo(() =>
-    equipment.filter(e =>
-      e.code?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
-      e.name?.toLowerCase().includes(equipmentSearch.toLowerCase())
-    ), [equipment, equipmentSearch]);
+    equipment.filter(e => {
+      const matchesSearch = !equipmentSearch ||
+        e.code?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+        e.name?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+        e.ean?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+        e.sku?.toLowerCase().includes(equipmentSearch.toLowerCase()) ||
+        e.manufacturer?.toLowerCase().includes(equipmentSearch.toLowerCase());
+      let matchesCategory = true;
+      if (selectedEquipmentCategory === '__none__') {
+        matchesCategory = !e.category;
+      } else if (selectedEquipmentCategory) {
+        const validNames = getEqCategorySubtreeNames(selectedEquipmentCategory);
+        matchesCategory = validNames.includes(e.category || '');
+      }
+      return matchesSearch && matchesCategory;
+    }), [equipment, equipmentSearch, selectedEquipmentCategory, equipmentCategories]);
 
   const filteredTemplates = useMemo(() =>
     templateTasks.filter(t =>
@@ -3780,205 +4007,634 @@ export const DictionariesPage: React.FC = () => {
   };
 
   // ============ Render Equipment Tab ============
-  const renderEquipmentTab = () => (
+  const renderEquipmentTab = () => {
+    const eq = editingEquipment as any;
+    const isEqCodeRequired = !autoGenerateEqCode;
+    const canSaveEquipment = editingEquipment?.name && ((editingEquipment as any).purchase_price > 0 || editingEquipment.default_price) && (autoGenerateEqCode || editingEquipment.code);
+
+    return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Szukaj..."
-            value={equipmentSearch}
-            onChange={(e) => setEquipmentSearch(e.target.value)}
-            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      {/* ===== Onninen-style layout ===== */}
+      <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 320px)', minHeight: 500 }}>
+        {/* Left sidebar: Categories */}
+        <div className="w-60 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+          <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+            <button
+              onClick={() => { setShowAddEqCategory(true); setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); }}
+              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+              title="Dodaj kategorię"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="py-1">
+            {/* "All" */}
+            <button
+              onClick={() => setSelectedEquipmentCategory(null)}
+              className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                !selectedEquipmentCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+              <span className="truncate">Wszystkie</span>
+              <span className="ml-auto text-[10px] text-slate-400">{equipment.length}</span>
+            </button>
+
+            {/* Recursive category tree */}
+            {(() => {
+              const renderEqCatNode = (cat: typeof equipmentCategories[0], depth: number): React.ReactNode => {
+                const children = getEqCategoryChildren(cat.id);
+                const hasChildren = children.length > 0;
+                const isExpanded = expandedEqCategories.has(cat.id);
+                const isEditing = editingEqCategoryId === cat.id;
+                const isAddingSub = addEqSubcategoryParentId === cat.id;
+                const totalCount = getEqCategoryCount(cat.name);
+
+                return (
+                  <div key={cat.id}>
+                    {isEditing ? (
+                      <div className="px-1.5 py-1" style={{ paddingLeft: 6 + depth * 14 }}>
+                        <input
+                          autoFocus
+                          value={editingEqCategoryName}
+                          onChange={e => setEditingEqCategoryName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameEqCategory(cat.id);
+                            if (e.key === 'Escape') { setEditingEqCategoryId(null); setEditingEqCategoryName(''); }
+                          }}
+                          className="w-full px-2 py-1 text-xs border border-blue-400 rounded focus:ring-1 focus:ring-blue-500 mb-1"
+                        />
+                        <div className="flex gap-1">
+                          <button onClick={() => handleRenameEqCategory(cat.id)} className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Zapisz</button>
+                          <button onClick={() => setDeleteEqCategoryConfirm({ id: cat.id, name: cat.name, parent_id: cat.parent_id })} className="py-0.5 px-2 bg-red-50 text-red-600 rounded text-[10px] hover:bg-red-100"><Trash2 className="w-3 h-3" /></button>
+                          <button onClick={() => { setEditingEqCategoryId(null); setEditingEqCategoryName(''); }} className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="group flex items-center" style={{ paddingLeft: depth * 14 }}>
+                        <button
+                          onClick={() => {
+                            setSelectedEquipmentCategory(cat.name);
+                            if (hasChildren) {
+                              setExpandedEqCategories(prev => {
+                                const next = new Set(prev);
+                                if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                return next;
+                              });
+                            }
+                          }}
+                          className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${
+                            selectedEquipmentCategory === cat.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {hasChildren ? (
+                            <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          ) : (
+                            <span className="w-3 flex-shrink-0" />
+                          )}
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                          <span className="truncate">{cat.name}</span>
+                          <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{totalCount}</span>
+                        </button>
+                        <div className="flex items-center gap-0.5 pr-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
+                          <button onClick={(e) => { e.stopPropagation(); setEditingEqCategoryId(cat.id); setEditingEqCategoryName(cat.name); }} className="p-0.5 text-slate-400 hover:text-blue-600 rounded" title="Edytuj kategorię"><Pencil className="w-3 h-3" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setAddEqSubcategoryParentId(cat.id); setShowAddEqCategory(false); setNewEqCategoryName(''); setExpandedEqCategories(prev => new Set([...prev, cat.id])); }} className="p-0.5 text-slate-400 hover:text-green-600 rounded" title="Dodaj podkategorię"><Plus className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                    )}
+                    {isExpanded && hasChildren && children.map(child => renderEqCatNode(child, depth + 1))}
+                    {isAddingSub && (
+                      <div className="px-1.5 py-1" style={{ paddingLeft: 12 + (depth + 1) * 14 }}>
+                        <input
+                          autoFocus value={newEqCategoryName} onChange={e => setNewEqCategoryName(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleAddEqCategory(cat.id); if (e.key === 'Escape') { setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); } }}
+                          placeholder="Nazwa podkategorii..." className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 mb-1"
+                        />
+                        <div className="flex gap-1">
+                          <button onClick={() => handleAddEqCategory(cat.id)} className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                          <button onClick={() => { setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); }} className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+              return getEqCategoryChildren(null).map(cat => renderEqCatNode(cat, 0));
+            })()}
+
+            {/* Uncategorized */}
+            {equipment.some(e => !e.category) && (
+              <button
+                onClick={() => setSelectedEquipmentCategory('__none__')}
+                className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                  selectedEquipmentCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                <span className="truncate">Bez kategorii</span>
+                <span className="ml-auto text-[10px] text-slate-400">{equipment.filter(e => !e.category).length}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Add root category inline form */}
+          {showAddEqCategory && !addEqSubcategoryParentId && (
+            <div className="px-2 py-2 border-t border-slate-200">
+              <input
+                autoFocus value={newEqCategoryName} onChange={e => setNewEqCategoryName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddEqCategory(null); if (e.key === 'Escape') { setShowAddEqCategory(false); setNewEqCategoryName(''); } }}
+                placeholder="Nazwa kategorii..." className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
+              />
+              <div className="flex gap-1 mt-1">
+                <button onClick={() => handleAddEqCategory(null)} className="flex-1 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                <button onClick={() => { setShowAddEqCategory(false); setNewEqCategoryName(''); }} className="flex-1 py-1 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+              </div>
+            </div>
+          )}
         </div>
-        <button
-          onClick={() => {
-            setEditingEquipment({ is_active: true, default_price: 0 });
-            setEquipmentDialog(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          Dodaj sprzęt
-        </button>
+
+        {/* Main content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Search bar */}
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
+            <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                value={equipmentSearch} onChange={e => setEquipmentSearch(e.target.value)}
+                placeholder="Szukaj sprzętu..."
+                className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
+              />
+              {equipmentSearch && (
+                <button onClick={() => setEquipmentSearch('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+
+            <div className="flex gap-1 bg-slate-100 rounded p-0.5">
+              <button onClick={() => setEquipmentViewMode('grid')} className={`p-1.5 rounded transition-colors ${equipmentViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Grid3X3 className="w-4 h-4" /></button>
+              <button onClick={() => setEquipmentViewMode('list')} className={`p-1.5 rounded transition-colors ${equipmentViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
+            </div>
+
+            <span className="text-xs text-slate-400 whitespace-nowrap">{filteredEquipment.length} sprzętu</span>
+
+            <button
+              onClick={() => {
+                setEditingEquipment({ is_active: true, default_price: 0 } as any);
+                setAutoGenerateEqCode(true);
+                setEquipmentImages([]);
+                setEquipmentDialog(true);
+              }}
+              className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              Dodaj sprzęt
+            </button>
+          </div>
+
+          {/* Content area */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {filteredEquipment.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <Monitor className="w-12 h-12 text-slate-200 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog sprzętu</h3>
+                <p className="text-sm text-slate-400 max-w-sm">
+                  {equipmentSearch ? `Brak wyników dla «${equipmentSearch}»` : 'Dodaj sprzęt ręcznie lub importuj z wypożyczalni.'}
+                </p>
+              </div>
+            ) : equipmentViewMode === 'grid' ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {filteredEquipment.map(item => {
+                  const imgs = (() => { try { return JSON.parse((item as any).images || '[]'); } catch { return []; } })();
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setDetailEquipment(item)}
+                      className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
+                    >
+                      <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                        {imgs.length > 0 ? (
+                          <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" />
+                        ) : (
+                          <Monitor className="w-10 h-10 text-slate-200" />
+                        )}
+                      </div>
+                      <div className="p-2.5">
+                        <div className="text-[10px] text-slate-400 font-mono">{item.code}</div>
+                        <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{item.name}</div>
+                        {item.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{item.manufacturer}</div>}
+                        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                          {((item as any).purchase_price || item.default_price) ? (
+                            <span className="text-sm font-bold text-blue-600">
+                              {((item as any).purchase_price || item.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
+                          <span className={`px-1.5 py-0.5 text-[10px] rounded ${item.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {item.is_active ? 'Aktywny' : 'Nieaktywny'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredEquipment.map(item => {
+                  const imgs = (() => { try { return JSON.parse((item as any).images || '[]'); } catch { return []; } })();
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => setDetailEquipment(item)}
+                      className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
+                    >
+                      <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+                        {imgs.length > 0 ? (
+                          <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                        ) : (
+                          <Monitor className="w-6 h-6 text-slate-200" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-slate-800 truncate">{item.name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{item.code}{item.manufacturer ? ` · ${item.manufacturer}` : ''}</div>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${item.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {item.is_active ? 'Aktywny' : 'Nieaktywny'}
+                        </span>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {((item as any).purchase_price || item.default_price) ? (
+                          <span className="text-sm font-bold text-blue-600">{((item as any).purchase_price || item.default_price)?.toFixed(2)} zł</span>
+                        ) : (
+                          <span className="text-[10px] text-slate-300">—</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Producent</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Cena</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-200">
-            {filteredEquipment.map((e) => (
-              <tr key={e.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-medium text-slate-900">{e.code}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{e.name}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
-                    {e.category || '-'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{e.manufacturer || '-'}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{e.unit}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 text-right">
-                  {e.default_price?.toLocaleString('pl-PL', { style: 'currency', currency: 'PLN' })}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-1 text-xs rounded-full ${e.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {e.is_active ? 'Aktywny' : 'Nieaktywny'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
+      {/* ===== Equipment Detail Modal ===== */}
+      {detailEquipment && (() => {
+        const de = detailEquipment as any;
+        const imgs = (() => { try { return JSON.parse(de.images || '[]'); } catch { return []; } })();
+        return (
+          <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={() => setDetailEquipment(null)}>
+            <div className="bg-white rounded-xl max-w-3xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setEditingEquipment(e);
+                      setEditingEquipment(de);
+                      setAutoGenerateEqCode(false);
+                      setEquipmentImages(imgs);
                       setEquipmentDialog(true);
                     }}
-                    className="p-1 text-slate-400 hover:text-blue-600"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edytuj
                   </button>
                   <button
-                    onClick={() => setShowDeleteConfirm({ type: 'equipment', id: e.id })}
-                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
+                    onClick={() => setDeleteEquipmentConfirm({ id: de.id, name: de.name })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Usuń
                   </button>
-                </td>
-              </tr>
-            ))}
-            {filteredEquipment.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                  Brak sprzętu
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </div>
+                <span className="text-xs text-slate-400 font-mono">
+                  {de.code}{de.ean ? ` · EAN: ${de.ean}` : ''}{de.sku ? ` · SKU: ${de.sku}` : ''}{de.ref_num ? ` · Ref: ${de.ref_num}` : ''}
+                </span>
+                <button onClick={() => setDetailEquipment(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+              </div>
 
-      {/* Equipment Dialog */}
+              <div className="flex flex-wrap">
+                {/* Image */}
+                <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+                  {imgs.length > 0 ? (
+                    <img src={imgs[0]} alt="" className="max-w-[90%] max-h-52 object-contain" />
+                  ) : (
+                    <Monitor className="w-14 h-14 text-slate-200" />
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 p-5 min-w-[260px]">
+                  <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{de.name}</h2>
+                  {de.manufacturer && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{de.manufacturer}</span></p>}
+                  {de.category && <p className="text-xs text-slate-400 mt-0.5">Kategoria: {de.category}</p>}
+
+                  {/* Price block */}
+                  <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                    {(de.purchase_price || de.default_price) ? (
+                      <>
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena zakupu</div>
+                        <div className="text-xl font-bold text-blue-600">
+                          {(de.purchase_price || de.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
+                          {de.catalog_price && de.catalog_price > 0 && (de.purchase_price || de.default_price) < de.catalog_price && (
+                            <span className="ml-2 text-sm font-semibold text-green-600">
+                              -{((de.catalog_price - (de.purchase_price || de.default_price)) / de.catalog_price * 100).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                        {de.catalog_price != null && (
+                          <div className="mt-1 text-xs text-slate-400">
+                            Cena katalogowa: <span className="line-through">{de.catalog_price?.toFixed(2)} zł</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-xs text-slate-400">Cena niedostępna</div>
+                    )}
+                  </div>
+
+                  {/* Meta badges */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {de.unit && (
+                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Jedn.: <b>{de.unit}</b></span>
+                    )}
+                    {de.source_wholesaler && (
+                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                        Źródło: <b>{de.source_wholesaler === 'atut-rental' ? 'Atut Rental' : de.source_wholesaler === 'ramirent' ? 'Ramirent' : de.source_wholesaler}</b>
+                      </span>
+                    )}
+                    {de.source_wholesaler && (
+                      de.price_sync_mode === 'synced'
+                        ? <span className="px-2 py-0.5 bg-yellow-100 rounded text-[10px] text-yellow-700">Synchronizacja cen</span>
+                        : <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-500">Cena nie synchronizowana</span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded text-[10px] ${de.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {de.is_active ? 'Aktywny' : 'Nieaktywny'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              {de.description && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+                  <div className="text-xs text-slate-500 leading-relaxed prose prose-xs max-w-none" dangerouslySetInnerHTML={{ __html: de.description }} />
+                </div>
+              )}
+
+              {/* All images */}
+              {imgs.length > 1 && (
+                <div className="px-5 pb-4">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-2">Zdjęcia</h4>
+                  <div className="flex gap-2 flex-wrap">
+                    {imgs.map((img: string, i: number) => (
+                      <div key={i} className="w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center">
+                        <img src={img} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== Equipment Dialog (Dodaj / Edytuj sprzęt) ===== */}
       <Modal
         isOpen={equipmentDialog}
-        onClose={() => setEquipmentDialog(false)}
+        onClose={() => { setEquipmentDialog(false); setEditingEquipment(null); setEquipmentImages([]); }}
         title={editingEquipment?.id ? 'Edytuj sprzęt' : 'Dodaj sprzęt'}
+        size="lg"
+        zIndex={75}
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
-              <input
-                type="text"
-                value={editingEquipment?.code || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, code: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-              <input
-                type="text"
-                value={editingEquipment?.category || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          {/* Aktywny checkbox */}
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="eq-active-top" checked={editingEquipment?.is_active ?? true}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, is_active: e.target.checked })}
+              className="h-4 w-4 text-blue-600 rounded border-slate-300" />
+            <label htmlFor="eq-active-top" className="text-sm font-medium text-slate-700">Aktywny</label>
           </div>
+
+          {/* Code + auto-generate */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-slate-700">Kod sprzętu {isEqCodeRequired ? '*' : ''}</label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+                <input type="checkbox" checked={autoGenerateEqCode} onChange={(e) => setAutoGenerateEqCode(e.target.checked)}
+                  className="h-3.5 w-3.5 text-blue-600 rounded border-slate-300" disabled={!!editingEquipment?.id} />
+                Generuj automatycznie
+              </label>
+            </div>
+            <input type="text"
+              value={autoGenerateEqCode && !editingEquipment?.id ? '(automatycznie)' : editingEquipment?.code || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, code: e.target.value })}
+              disabled={autoGenerateEqCode && !editingEquipment?.id}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
+              placeholder="np. EQ-00001" />
+          </div>
+
+          {/* Nazwa */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
-            <input
-              type="text"
-              value={editingEquipment?.name || ''}
+            <input type="text" value={editingEquipment?.name || ''}
               onChange={(e) => setEditingEquipment({ ...editingEquipment, name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nazwa sprzętu" />
           </div>
+
+          {/* Kategoria dropdown + add */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+            <div className="flex gap-1.5">
+              <select value={editingEquipment?.category || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, category: e.target.value })}
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <option value="">Wybierz kategorię...</option>
+                {(() => {
+                  const renderOpts = (parentId: string | null, depth: number): React.ReactNode[] =>
+                    getEqCategoryChildren(parentId).map(cat => [
+                      <option key={cat.id} value={cat.name}>{'—'.repeat(depth) + (depth ? ' ' : '') + cat.name}</option>,
+                      ...renderOpts(cat.id, depth + 1),
+                    ]).flat();
+                  const eqCatNames = new Set(equipmentCategories.map(c => c.name));
+                  const extraCats = [...new Set(equipment.map(e => e.category).filter((c): c is string => !!c && !eqCatNames.has(c)))];
+                  return [
+                    ...renderOpts(null, 0),
+                    ...extraCats.map(name => (<option key={`extra-${name}`} value={name}>{name}</option>)),
+                  ];
+                })()}
+              </select>
+              <button type="button"
+                onClick={() => { setShowAddEqCategory(true); setAddEqSubcategoryParentId(null); setNewEqCategoryName(''); }}
+                className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600" title="Dodaj nową kategorię">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* EAN + SKU */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
-              <input
-                type="text"
-                value={editingEquipment?.manufacturer || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, manufacturer: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+              <label className="block text-sm font-medium text-slate-700 mb-1">EAN</label>
+              <input type="text" value={(editingEquipment as any)?.ean || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, ean: e.target.value } as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Kod EAN" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
-              <select
-                value={editingEquipment?.unit || ''}
-                onChange={(e) => setEditingEquipment({ ...editingEquipment, unit: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Wybierz...</option>
-                {DEFAULT_UNITS.map(u => (
-                  <option key={u.value} value={u.value}>{u.label}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-slate-700 mb-1">SKU</label>
+              <input type="text" value={(editingEquipment as any)?.sku || ''}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, sku: e.target.value } as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Kod SKU" />
             </div>
           </div>
+
+          {/* Producent */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Cena domyślna (PLN)</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={editingEquipment?.default_price || ''}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, default_price: parseFloat(e.target.value) })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1">Producent</label>
+            <input type="text" value={editingEquipment?.manufacturer || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, manufacturer: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Producent sprzętu" />
           </div>
+
+          {/* Jednostka */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka miary</label>
+            <select value={(editingEquipment as any)?.unit || ''}
+              onChange={(e) => setEditingEquipment({ ...editingEquipment, unit: e.target.value } as any)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+              <option value="">Wybierz...</option>
+              {(() => {
+                const customValues = new Set(customUnits.map(u => u.value));
+                const defaultFiltered = DEFAULT_UNITS.filter(u => !customValues.has(u.value));
+                return [
+                  ...customUnits.map(u => (<option key={u.id} value={u.value}>{u.label}</option>)),
+                  ...defaultFiltered.map(u => (<option key={`def-${u.value}`} value={u.value}>{u.label}</option>)),
+                ];
+              })()}
+            </select>
+          </div>
+
+          {/* Price sync toggle */}
+          {(editingEquipment as any)?.source_wholesaler && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <input type="checkbox" id="eqPriceSyncToggle"
+                checked={(editingEquipment as any)?.price_sync_mode === 'synced'}
+                onChange={(e) => setEditingEquipment({ ...editingEquipment, price_sync_mode: e.target.checked ? 'synced' : 'fixed' } as any)}
+                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+              <label htmlFor="eqPriceSyncToggle" className="text-sm text-blue-800 cursor-pointer">
+                Synchronizacja ceny z wypożyczalnią
+                <span className="text-xs text-blue-600 ml-1">
+                  ({(editingEquipment as any)?.source_wholesaler === 'atut-rental' ? 'Atut Rental' : (editingEquipment as any)?.source_wholesaler === 'ramirent' ? 'Ramirent' : (editingEquipment as any)?.source_wholesaler})
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Prices */}
+          {(() => {
+            const isSynced = (editingEquipment as any)?.price_sync_mode === 'synced';
+            return (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Cena katalogowa (PLN)</label>
+                  <input type="number" step="0.01" min="0" disabled={isSynced}
+                    value={(editingEquipment as any)?.catalog_price || ''}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, catalog_price: parseFloat(e.target.value) || null } as any)}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
+                    placeholder="Opcjonalna" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Cena zakupu (PLN) *
+                    {(() => {
+                      const catPrice = (editingEquipment as any)?.catalog_price;
+                      const buyPrice = (editingEquipment as any)?.purchase_price || editingEquipment?.default_price;
+                      if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
+                        const discount = ((catPrice - buyPrice) / catPrice * 100).toFixed(1);
+                        return <span className="ml-2 text-xs font-normal text-green-600">-{discount}%</span>;
+                      }
+                      return null;
+                    })()}
+                  </label>
+                  <input type="number" step="0.01" min="0" disabled={isSynced}
+                    value={(editingEquipment as any)?.purchase_price || editingEquipment?.default_price || ''}
+                    onChange={(e) => setEditingEquipment({ ...editingEquipment, purchase_price: parseFloat(e.target.value) || 0, default_price: parseFloat(e.target.value) || 0 } as any)}
+                    className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isSynced ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : ''}`}
+                    placeholder="Cena zakupu netto" />
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
-            <textarea
-              value={editingEquipment?.description || ''}
+            <textarea value={editingEquipment?.description || ''}
               onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
+              rows={2} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Opcjonalny opis sprzętu" />
           </div>
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="eq-active"
-              checked={editingEquipment?.is_active ?? true}
-              onChange={(e) => setEditingEquipment({ ...editingEquipment, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 rounded border-slate-300"
-            />
-            <label htmlFor="eq-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+
+          {/* Photos */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Zdjęcia sprzętu</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {equipmentImages.map((img, idx) => (
+                <div key={idx} className="relative group w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center overflow-hidden">
+                  <img src={img} alt="" className="max-w-full max-h-full object-contain" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    {idx > 0 && (
+                      <button type="button" onClick={() => { const newImgs = [...equipmentImages]; [newImgs[idx - 1], newImgs[idx]] = [newImgs[idx], newImgs[idx - 1]]; setEquipmentImages(newImgs); }}
+                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"><ArrowUp className="w-3 h-3" /></button>
+                    )}
+                    {idx < equipmentImages.length - 1 && (
+                      <button type="button" onClick={() => { const newImgs = [...equipmentImages]; [newImgs[idx], newImgs[idx + 1]] = [newImgs[idx + 1], newImgs[idx]]; setEquipmentImages(newImgs); }}
+                        className="p-1 bg-white rounded text-slate-600 hover:bg-slate-100"><ArrowDown className="w-3 h-3" /></button>
+                    )}
+                    <button type="button" onClick={() => setEquipmentImages(equipmentImages.filter((_, i) => i !== idx))}
+                      className="p-1 bg-white rounded text-red-600 hover:bg-red-50"><X className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              ))}
+              <label className="w-20 h-20 bg-slate-50 rounded border-2 border-dashed border-slate-300 flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <Upload className="w-5 h-5 text-slate-400" />
+                <span className="text-[10px] text-slate-400 mt-1">Dodaj</span>
+                <input type="file" accept="image/*" multiple className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    files.forEach(file => {
+                      const reader = new FileReader();
+                      reader.onload = (ev) => { if (ev.target?.result) setEquipmentImages(prev => [...prev, ev.target!.result as string]); };
+                      reader.readAsDataURL(file);
+                    });
+                    e.target.value = '';
+                  }} />
+              </label>
+            </div>
+            <p className="text-[10px] text-slate-400">Przeciągnij aby zmienić kolejność. Pierwsze zdjęcie = miniaturka.</p>
           </div>
         </div>
+
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-          <button
-            onClick={() => setEquipmentDialog(false)}
-            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
-          >
-            Anuluj
-          </button>
-          <button
-            onClick={handleSaveEquipment}
-            disabled={saving || !editingEquipment?.code || !editingEquipment?.name}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
+          <button onClick={() => { setEquipmentDialog(false); setEditingEquipment(null); setEquipmentImages([]); }}
+            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+          <button onClick={handleSaveEquipment} disabled={saving || !canSaveEquipment}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Zapisz
           </button>
         </div>
       </Modal>
     </div>
-  );
+    );
+  };
 
   // ============ Render Templates Tab ============
   const renderTemplatesTab = () => (
@@ -4636,13 +5292,13 @@ export const DictionariesPage: React.FC = () => {
                   {equipmentSubTab === 'atut-rental' && (
                     <AtutIntegrator
                       integrationId={integrations.find(i => i.wholesaler_id === 'atut-rental' && i.is_active)?.id}
-                      onAddToOwnCatalog={handleAddToOwnCatalog}
+                      onAddToOwnCatalog={handleAddToEquipmentCatalog}
                     />
                   )}
                   {equipmentSubTab === 'ramirent' && (
                     <RamirentIntegrator
                       integrationId={integrations.find(i => i.wholesaler_id === 'ramirent' && i.is_active)?.id}
-                      onAddToOwnCatalog={handleAddToOwnCatalog}
+                      onAddToOwnCatalog={handleAddToEquipmentCatalog}
                     />
                   )}
                 </div>
@@ -4874,6 +5530,86 @@ export const DictionariesPage: React.FC = () => {
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Dodaj do katalogu
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add to Equipment Catalog — Price Sync Modal */}
+      {addToEquipmentCatalogModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setAddToEquipmentCatalogModal(null)}>
+          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Dodaj do katalogu Sprzętu</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              <span className="font-medium">{addToEquipmentCatalogModal.product.name}</span>
+              <br />
+              <span className="text-xs text-slate-400">
+                z {addToEquipmentCatalogModal.wholesaler === 'atut-rental' ? 'Atut Rental' : addToEquipmentCatalogModal.wholesaler === 'ramirent' ? 'Ramirent' : addToEquipmentCatalogModal.wholesaler}
+                {addToEquipmentCatalogModal.product.price != null && ` · ${addToEquipmentCatalogModal.product.price?.toFixed(2)} zł`}
+              </span>
+            </p>
+
+            <div className="space-y-3 mb-6">
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                <input type="radio" name="eqSyncMode" checked={eqPriceSyncMode === 'fixed'} onChange={() => setEqPriceSyncMode('fixed')} className="mt-0.5 text-blue-600" />
+                <div>
+                  <div className="text-sm font-medium text-slate-800">Zapisać cenę</div>
+                  <div className="text-xs text-slate-500">Cena w katalogu Własnym pozostanie taka, jaka jest teraz. Nie zmieni się przy aktualizacji cen w wypożyczalni.</div>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                <input type="radio" name="eqSyncMode" checked={eqPriceSyncMode === 'synced'} onChange={() => setEqPriceSyncMode('synced')} className="mt-0.5 text-blue-600" />
+                <div>
+                  <div className="text-sm font-medium text-slate-800">Synchronizować z wypożyczalnią</div>
+                  <div className="text-xs text-slate-500">Jeśli cena w wypożyczalni się zmieni — cena w katalogu Własnym również się zaktualizuje automatycznie.</div>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setAddToEquipmentCatalogModal(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={handleConfirmAddToEquipmentCatalog} disabled={saving}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Dodaj do katalogu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Equipment Category Confirmation Modal */}
+      {deleteEqCategoryConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteEqCategoryConfirm(null)}>
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Usunąć kategorię?</h3>
+            <p className="text-sm text-slate-600 mb-1">
+              Czy na pewno chcesz usunąć kategorię <span className="font-semibold">«{deleteEqCategoryConfirm.name}»</span>?
+            </p>
+            <p className="text-xs text-slate-400 mb-4">Sprzęt z tej kategorii zostanie przeniesiony do kategorii nadrzędnej.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteEqCategoryConfirm(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={() => handleDeleteEqCategory(deleteEqCategoryConfirm.id)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Usuń</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Equipment Item Confirmation Modal */}
+      {deleteEquipmentConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDeleteEquipmentConfirm(null)}>
+          <div className="bg-white rounded-xl max-w-sm w-full shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Usunąć sprzęt?</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Czy na pewno chcesz usunąć <span className="font-semibold">«{deleteEquipmentConfirm.name}»</span>? Ta operacja jest nieodwracalna.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteEquipmentConfirm(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={async () => {
+                await handleDeleteEquipment(deleteEquipmentConfirm.id);
+                setDeleteEquipmentConfirm(null);
+                setDetailEquipment(null);
+              }} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Usuń</button>
             </div>
           </div>
         </div>

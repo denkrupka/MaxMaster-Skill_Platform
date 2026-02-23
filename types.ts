@@ -1874,13 +1874,24 @@ export interface KosztorysEquipment {
   company_id: string;
   code: string;
   name: string;
-  category: 'machines' | 'tools';
+  category?: string;
   unit_id: number;
   description?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  unit?: UnitMeasure;
+  unit?: UnitMeasure | string;
+  manufacturer?: string;
+  default_price?: number;
+  ean?: string;
+  sku?: string;
+  ref_num?: string;
+  catalog_price?: number;
+  purchase_price?: number;
+  images?: string;
+  source_wholesaler?: string;
+  source_wholesaler_url?: string;
+  price_sync_mode?: 'fixed' | 'synced';
 }
 
 // Шаблонное задание
