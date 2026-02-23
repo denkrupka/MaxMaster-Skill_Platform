@@ -827,12 +827,34 @@ serve(async (req) => {
         const searchPath = `/wyszukiwanie/wyniki?q=${encodeURIComponent(q.trim())}${page > 1 ? `&p=${page}` : ''}`
         const html = await fetchPage(searchPath, jar)
 
-        // 1) Try JSON-LD ItemList (legacy, may be empty on new TIM pages)
-        const jsonLdList = extractJsonLd(html)
+        // Extract products using multiple methods, pick the one that finds the most
         let products: any[] = []
+        let totalProducts = 0
+
+        // Method 1: HTML links (most reliable — finds all products)
+        const htmlProducts: any[] = []
+        {
+          const seen = new Set<string>()
+          const linkRe = /<a\s[^>]*href="([^"]*\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+          let lm: RegExpExecArray | null
+          while ((lm = linkRe.exec(html)) !== null) {
+            const href = lm[1]
+            const psku = extractSku(href)
+            if (!psku || seen.has(psku)) continue
+            seen.add(psku)
+            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
+            if (text.length < 3 || text.length > 200) continue
+            const fullUrl = href.startsWith('http') ? href : BASE + href
+            htmlProducts.push({ name: text, sku: psku, url: fullUrl, image: '', price: null, publicPrice: null })
+          }
+        }
+
+        // Method 2: JSON-LD ItemList (has images + prices)
+        const jsonLdList = extractJsonLd(html)
+        let jsonLdProducts: any[] = []
         for (const ld of jsonLdList) {
           if (ld['@type'] === 'ItemList' && ld.itemListElement) {
-            products = ld.itemListElement.map((item: any) => {
+            jsonLdProducts = ld.itemListElement.map((item: any) => {
               const p = item.item || item
               return {
                 name: p.name || '',
@@ -848,30 +870,23 @@ serve(async (req) => {
           }
         }
 
-        // 2) NUXT_DATA extraction (primary method — TIM embeds products here)
-        let totalProducts = products.length
-        if (products.length === 0) {
-          const nuxtResult = extractNuxtSearchProducts(html)
-          products = nuxtResult.products
-          totalProducts = nuxtResult.totalProducts
-        }
+        // Method 3: NUXT_DATA Offer regex (has prices + names)
+        const nuxtResult = extractNuxtSearchProducts(html)
 
-        // 3) HTML fallback: extract product links (href containing /p/SKU)
-        if (products.length === 0) {
-          const seen = new Set<string>()
-          const linkRe = /<a\s[^>]*href="([^"]*\/p\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
-          let lm: RegExpExecArray | null
-          while ((lm = linkRe.exec(html)) !== null) {
-            const href = lm[1]
-            const psku = extractSku(href)
-            if (!psku || seen.has(psku)) continue
-            seen.add(psku)
-            const text = lm[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ')
-            if (text.length < 3 || text.length > 200) continue
-            const fullUrl = href.startsWith('http') ? href : BASE + href
-            products.push({ name: text, sku: psku, url: fullUrl, image: '', price: null, publicPrice: null })
-          }
-          totalProducts = totalProducts || products.length
+        // Pick the method that found the most products
+        if (jsonLdProducts.length >= htmlProducts.length && jsonLdProducts.length >= nuxtResult.products.length) {
+          products = jsonLdProducts
+        } else if (htmlProducts.length >= nuxtResult.products.length) {
+          products = htmlProducts
+        } else {
+          products = nuxtResult.products
+        }
+        totalProducts = products.length
+
+        // Always enrich images from NUXT_DATA image map (SKU in filenames)
+        const imageMap = extractNuxtImageMap(html)
+        for (const p of products) {
+          if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
         }
 
         const totalPages = extractMaxPage(html)
@@ -894,14 +909,6 @@ serve(async (req) => {
                 p.shippingText = pp.shippingText
               }
             }
-          }
-        }
-
-        // Enrich missing images from NUXT_DATA (SKU embedded in image filenames)
-        if (products.some((p: any) => !p.image)) {
-          const imageMap = extractNuxtImageMap(html)
-          for (const p of products) {
-            if (!p.image && imageMap.has(p.sku)) p.image = imageMap.get(p.sku)
           }
         }
 
