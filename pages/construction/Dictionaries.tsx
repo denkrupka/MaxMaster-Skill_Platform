@@ -3563,17 +3563,17 @@ export const DictionariesPage: React.FC = () => {
 
           {/* Price sync toggle */}
           {(editingMaterial as any)?.source_wholesaler && (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <input
                 type="checkbox"
                 id="priceSyncToggle"
                 checked={(editingMaterial as any)?.price_sync_mode === 'synced'}
                 onChange={(e) => setEditingMaterial({ ...editingMaterial, price_sync_mode: e.target.checked ? 'synced' : 'fixed' } as any)}
-                className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
               />
-              <label htmlFor="priceSyncToggle" className="text-sm text-amber-800 cursor-pointer">
+              <label htmlFor="priceSyncToggle" className="text-sm text-blue-800 cursor-pointer">
                 Synchronizacja ceny z hurtownią
-                <span className="text-xs text-amber-600 ml-1">
+                <span className="text-xs text-blue-600 ml-1">
                   ({(editingMaterial as any)?.source_wholesaler === 'tim' ? 'TIM' : (editingMaterial as any)?.source_wholesaler === 'oninen' ? 'Onninen' : (editingMaterial as any)?.source_wholesaler === 'speckable' ? 'Speckable' : (editingMaterial as any)?.source_wholesaler})
                 </span>
               </label>
@@ -4510,7 +4510,7 @@ export const DictionariesPage: React.FC = () => {
   const stats = [
     { label: 'Robocizna', value: workTypes.length, icon: Wrench, color: 'text-blue-600' },
     { label: 'Materiały', value: materials.length, icon: Package, color: 'text-green-600' },
-    { label: 'Sprzęt', value: equipment.length, icon: Monitor, color: 'text-orange-600' },
+    { label: 'Sprzęt', value: equipment.length, icon: Monitor, color: 'text-blue-600' },
   ];
 
   return (
@@ -4560,7 +4560,7 @@ export const DictionariesPage: React.FC = () => {
                       >
                         Własny katalog
                       </button>
-                      {integrations.filter(i => i.is_active).map(integ => (
+                      {integrations.filter(i => i.is_active && i.branza !== 'sprzet').map(integ => (
                         <button
                           key={integ.id}
                           onClick={() => setMaterialsSubTab(integ.wholesaler_id)}

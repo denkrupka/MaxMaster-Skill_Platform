@@ -181,13 +181,27 @@ function parseListPage(html: string, requestedSlug: string) {
   }
   let items = Array.from(bySlug.values())
 
-  if (items.length > 30) {
-    const slug = (requestedSlug || '/wynajem/').replace(/\/$/, '')
-    if (slug === '/wynajem') {
-      items = items.filter((i: any) => i.slug.replace(/\/$/, '').split('/').filter(Boolean).length === 2)
-    } else {
-      const ch = items.filter((i: any) => i.slug.startsWith(slug + '/') && i.slug !== slug + '/')
-      if (ch.length > 0) items = ch
+  // Always filter to children of the current slug to avoid showing siblings
+  const slug = (requestedSlug || '/wynajem/').replace(/\/$/, '')
+  if (slug === '/wynajem') {
+    const topLevel = items.filter((i: any) => i.slug.replace(/\/$/, '').split('/').filter(Boolean).length === 2)
+    if (topLevel.length > 0) items = topLevel
+  } else {
+    const ch = items.filter((i: any) => i.slug.startsWith(slug + '/') && i.slug !== slug + '/')
+    if (ch.length > 0) items = ch
+  }
+
+  // If no child links found, check if items are actually products (last-level page)
+  // by detecting if any items have product-like URLs or image patterns
+  if (items.length === 0 && allLinks.length > 0) {
+    // This is likely a product listing page where products weren't detected by Strategy 1
+    // Return all filtered links as products
+    const productLike = allLinks.filter((i: any) => {
+      const parts = i.slug.replace(/\/$/, '').split('/').filter(Boolean)
+      return parts.length >= 3 && i.slug !== requestedSlug
+    })
+    if (productLike.length > 0) {
+      return { title, breadcrumb, items: productLike, hasProducts: true }
     }
   }
 

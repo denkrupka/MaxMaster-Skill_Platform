@@ -7,7 +7,7 @@ const corsHeaders = {
 }
 
 const BASE = 'https://www.speckable.pl'
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
 // ═══ COOKIE JAR ═══
 type CookieJar = Record<string, string>
@@ -41,66 +41,66 @@ function cookieString(jar: CookieJar): string {
 function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = {
     'User-Agent': UA,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
-    'Sec-CH-UA': '"Chromium";v="131", "Not_A Brand";v="24"',
-    'Sec-CH-UA-Mobile': '?0',
-    'Sec-CH-UA-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
-    'Connection': 'keep-alive',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pl-PL,pl;q=0.9',
     ...(extra || {}),
   }
   if (jar && Object.keys(jar).length) h['Cookie'] = cookieString(jar)
   return h
 }
 
-async function fetchPage(url: string, jar: CookieJar, retries = 2): Promise<string> {
+async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
   let lastError = ''
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
-      // Wait before retry with increasing delay
-      await new Promise(r => setTimeout(r, 1000 * attempt))
+      await new Promise(r => setTimeout(r, 800 * attempt))
     }
-    const res = await fetch(fullUrl, {
-      headers: makeHeaders(jar, { 'Referer': BASE + '/' }),
-      redirect: 'follow',
-    })
-    parseCookiesFromHeaders(res.headers, jar)
-    if (res.ok) return res.text()
-    lastError = `HTTP ${res.status} ${res.statusText}`
-    // On 403, consume body and check for Cloudflare challenge
-    const body = await res.text()
-    if (res.status === 403) {
-      // If it's a Cloudflare JS challenge, cookies might have been set — retry
-      if (body.includes('challenge') || body.includes('cf-') || body.includes('Checking your browser')) {
-        console.log(`[fetchPage] 403 challenge detected on attempt ${attempt + 1}, retrying...`)
-        continue
+    try {
+      // Use minimal headers — matches working Node.js proxy approach
+      const headers: Record<string, string> = {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pl-PL,pl;q=0.9',
       }
-      // Plain 403 — try without some headers on next attempt
+      if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
+      // On retries, vary headers slightly
+      if (attempt > 0) {
+        headers['Referer'] = BASE + '/'
+      }
+      const res = await fetch(fullUrl, { headers, redirect: 'follow' })
+      parseCookiesFromHeaders(res.headers, jar)
+      if (res.ok) return res.text()
+      lastError = `HTTP ${res.status} ${res.statusText}`
+      const body = await res.text()
+      if (res.status === 403) {
+        if (body.includes('challenge') || body.includes('cf-') || body.includes('Checking your browser')) {
+          console.log(`[fetchPage] 403 challenge on attempt ${attempt + 1}, retrying...`)
+          continue
+        }
+      }
+      if (res.status >= 500) continue
+    } catch (e: any) {
+      lastError = e.message || String(e)
+      if (attempt < retries) continue
     }
-    if (res.status >= 500) continue // server error, retry
   }
   throw new Error(lastError)
 }
 
 async function postForm(url: string, body: string, jar: CookieJar, referer?: string): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
+  const headers: Record<string, string> = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'pl-PL,pl;q=0.9',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Referer': referer || BASE + '/pl/login',
+  }
+  if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
   const res = await fetch(fullUrl, {
     method: 'POST',
-    headers: makeHeaders(jar, {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Origin': BASE,
-      'Referer': referer || BASE + '/pl/login',
-      'Sec-Fetch-Site': 'same-origin',
-    }),
+    headers,
     body,
     redirect: 'follow',
   })
@@ -672,7 +672,24 @@ serve(async (req) => {
         }
 
         // Fetch the root list page for categories
-        const html = await fetchPage('/', jar)
+        let html: string
+        try {
+          html = await fetchPage('/', jar)
+        } catch (fetchErr: any) {
+          // If site blocks us (403/WAF), return static categories so UI doesn't break
+          console.log('[categories] fetchPage failed:', fetchErr.message, '— using static fallback')
+          const staticCategories = [
+            { name: 'Osprzęt elektryczny', slug: '/pl/list/osprzet-elektryczny', image: '', subcategories: [] },
+            { name: 'Kable i przewody', slug: '/pl/list/kable-i-przewody', image: '', subcategories: [] },
+            { name: 'Rozdzielnice', slug: '/pl/list/rozdzielnice', image: '', subcategories: [] },
+            { name: 'Oświetlenie', slug: '/pl/list/oswietlenie', image: '', subcategories: [] },
+            { name: 'Aparatura modułowa', slug: '/pl/list/aparatura-modulowa', image: '', subcategories: [] },
+            { name: 'Automatyka', slug: '/pl/list/automatyka', image: '', subcategories: [] },
+            { name: 'Narzędzia', slug: '/pl/list/narzedzia', image: '', subcategories: [] },
+            { name: 'Systemy instalacyjne', slug: '/pl/list/systemy-instalacyjne', image: '', subcategories: [] },
+          ]
+          return json({ categories: staticCategories, total: staticCategories.length, fallback: true })
+        }
 
         // Parse category links href="/pl/list/..."
         const catBySlug = new Map<string, { slug: string; name: string; image: string }>()

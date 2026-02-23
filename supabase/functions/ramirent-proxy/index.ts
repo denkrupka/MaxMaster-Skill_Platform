@@ -125,9 +125,10 @@ function parseCategories(html: string): Array<{ slug: string; name: string; imag
   return cats
 }
 
-function parseSubcategories(html: string): Array<{ slug: string; name: string; image: string }> {
+function parseSubcategories(html: string, currentSlug?: string): Array<{ slug: string; name: string; image: string }> {
   const subs: Array<{ slug: string; name: string; image: string }> = []
   const seen = new Set<string>()
+  const normCurrent = currentSlug?.replace(/\/$/, '') || ''
 
   // Links within main content area pointing to /wynajem/
   const linkRe = /<a[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
@@ -138,6 +139,9 @@ function parseSubcategories(html: string): Array<{ slug: string; name: string; i
     if (/(?:c-header|c-footer|<header|<footer|<nav)/i.test(before)) continue
 
     const href = m[1]
+    const normHref = href.replace(/\/$/, '')
+    // Skip current page (self-reference)
+    if (normCurrent && normHref === normCurrent) continue
     if (seen.has(href)) continue
     seen.add(href)
 
@@ -149,6 +153,12 @@ function parseSubcategories(html: string): Array<{ slug: string; name: string; i
     if (title && title.length > 1 && title.length < 120) {
       subs.push({ slug: href, name: title, image: img })
     }
+  }
+
+  // If we have the current slug, prefer only child links
+  if (normCurrent && subs.length > 0) {
+    const children = subs.filter(s => s.slug.replace(/\/$/, '').startsWith(normCurrent + '/'))
+    if (children.length > 0) return children
   }
 
   return subs
@@ -538,7 +548,7 @@ serve(async (req) => {
           return json({ type: 'group', group })
         } else {
           // Category page
-          const subs = parseSubcategories(html)
+          const subs = parseSubcategories(html, path)
           const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
           const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
           return json({ type: 'category', title, items: subs })
