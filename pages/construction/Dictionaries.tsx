@@ -3110,10 +3110,17 @@ export const DictionariesPage: React.FC = () => {
                     {(dm.purchase_price || dm.default_price) ? (
                       <>
                         <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena zakupu</div>
-                        <div className="text-xl font-bold text-blue-600">{(dm.purchase_price || dm.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                        <div className="text-xl font-bold text-blue-600">
+                          {(dm.purchase_price || dm.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
+                          {dm.catalog_price && dm.catalog_price > 0 && (dm.purchase_price || dm.default_price) < dm.catalog_price && (
+                            <span className="ml-2 text-sm font-semibold text-green-600">
+                              -{((dm.catalog_price - (dm.purchase_price || dm.default_price)) / dm.catalog_price * 100).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
                         {dm.catalog_price != null && (
                           <div className="mt-1 text-xs text-slate-400">
-                            Cena katalogowa: <span>{dm.catalog_price?.toFixed(2)} zł</span>
+                            Cena katalogowa: <span className="line-through">{dm.catalog_price?.toFixed(2)} zł</span>
                           </div>
                         )}
                       </>
@@ -3293,7 +3300,7 @@ export const DictionariesPage: React.FC = () => {
           {/* Kategoria dropdown + add */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <select
                 value={editingMaterial?.category || ''}
                 onChange={(e) => setEditingMaterial({ ...editingMaterial, category: e.target.value })}
@@ -3316,10 +3323,46 @@ export const DictionariesPage: React.FC = () => {
                   ];
                 })()}
               </select>
+              {/* Edit selected category */}
+              {editingMaterial?.category && customCategories.some(c => c.name === editingMaterial.category) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cat = customCategories.find(c => c.name === editingMaterial.category);
+                    if (cat) {
+                      setEditingCategoryId(cat.id);
+                      setEditingCategoryName(cat.name);
+                    }
+                  }}
+                  className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-blue-600"
+                  title="Edytuj kategorię"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {/* Add subcategory of selected */}
+              {editingMaterial?.category && customCategories.some(c => c.name === editingMaterial.category) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cat = customCategories.find(c => c.name === editingMaterial.category);
+                    if (cat) {
+                      setAddSubcategoryParentId(cat.id);
+                      setNewCategoryName('');
+                      setExpandedCategories(prev => new Set([...prev, cat.id]));
+                    }
+                  }}
+                  className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-green-600"
+                  title="Dodaj podkategorię"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {/* Add new root category */}
               <button
                 type="button"
-                onClick={() => setShowAddCategory(true)}
-                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
+                onClick={() => { setShowAddCategory(true); setAddSubcategoryParentId(null); setNewCategoryName(''); }}
+                className="px-2 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600"
                 title="Dodaj nową kategorię"
               >
                 <Plus className="w-4 h-4" />
@@ -3410,6 +3453,25 @@ export const DictionariesPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Price sync toggle */}
+          {(editingMaterial as any)?.source_wholesaler && (
+            <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <input
+                type="checkbox"
+                id="priceSyncToggle"
+                checked={(editingMaterial as any)?.price_sync_mode === 'synced'}
+                onChange={(e) => setEditingMaterial({ ...editingMaterial, price_sync_mode: e.target.checked ? 'synced' : 'fixed' } as any)}
+                className="w-4 h-4 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+              />
+              <label htmlFor="priceSyncToggle" className="text-sm text-amber-800 cursor-pointer">
+                Synchronizacja ceny z hurtownią
+                <span className="text-xs text-amber-600 ml-1">
+                  ({(editingMaterial as any)?.source_wholesaler === 'tim' ? 'TIM' : (editingMaterial as any)?.source_wholesaler === 'oninen' ? 'Onninen' : (editingMaterial as any)?.source_wholesaler})
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Prices */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -3425,7 +3487,18 @@ export const DictionariesPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Cena zakupu (PLN) *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Cena zakupu (PLN) *
+                {(() => {
+                  const catPrice = (editingMaterial as any)?.catalog_price;
+                  const buyPrice = (editingMaterial as any)?.purchase_price || editingMaterial?.default_price;
+                  if (catPrice && buyPrice && catPrice > 0 && buyPrice < catPrice) {
+                    const discount = ((catPrice - buyPrice) / catPrice * 100).toFixed(1);
+                    return <span className="ml-2 text-xs font-normal text-green-600">-{discount}%</span>;
+                  }
+                  return null;
+                })()}
+              </label>
               <input
                 type="number"
                 step="0.01"
