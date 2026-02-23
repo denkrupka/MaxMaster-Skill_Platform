@@ -4334,7 +4334,7 @@ export const DictionariesPage: React.FC = () => {
                   className="mt-0.5 text-blue-600"
                 />
                 <div>
-                  <div className="text-sm font-medium text-slate-800">Zafixować cenę</div>
+                  <div className="text-sm font-medium text-slate-800">Zapisać cenę</div>
                   <div className="text-xs text-slate-500">Cena w katalogu Własnym pozostanie taka, jaka jest teraz. Nie zmieni się przy aktualizacji cen w hurtowni.</div>
                 </div>
               </label>
