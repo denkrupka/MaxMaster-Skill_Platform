@@ -181,27 +181,36 @@ function parseListPage(html: string, requestedSlug: string) {
   }
   let items = Array.from(bySlug.values())
 
-  // Always filter to children of the current slug to avoid showing siblings
+  // Always filter to children of the current slug — never show siblings
   const slug = (requestedSlug || '/wynajem/').replace(/\/$/, '')
   if (slug === '/wynajem') {
     const topLevel = items.filter((i: any) => i.slug.replace(/\/$/, '').split('/').filter(Boolean).length === 2)
     if (topLevel.length > 0) items = topLevel
   } else {
-    const ch = items.filter((i: any) => i.slug.startsWith(slug + '/') && i.slug !== slug + '/')
-    if (ch.length > 0) items = ch
+    // Only keep links that are CHILDREN of the current path
+    items = items.filter((i: any) => {
+      const normSlug = i.slug.replace(/\/$/, '')
+      return normSlug.startsWith(slug + '/') && normSlug !== slug
+    })
   }
 
-  // If no child links found, check if items are actually products (last-level page)
-  // by detecting if any items have product-like URLs or image patterns
-  if (items.length === 0 && allLinks.length > 0) {
-    // This is likely a product listing page where products weren't detected by Strategy 1
-    // Return all filtered links as products
-    const productLike = allLinks.filter((i: any) => {
-      const parts = i.slug.replace(/\/$/, '').split('/').filter(Boolean)
-      return parts.length >= 3 && i.slug !== requestedSlug
+  // If no child links found, this is likely a product listing page
+  // (last-level category where products are shown)
+  if (items.length === 0) {
+    // Strategy 2b: Try to find product-like items WITH images from allLinks
+    // Content-area items have images, sidebar items don't
+    const withImages = allLinks.filter((i: any) => i.image && i.slug !== requestedSlug)
+    if (withImages.length > 0) {
+      return { title, breadcrumb, items: withImages, hasProducts: true }
+    }
+
+    // Strategy 2c: Look for any product links deeper than current path in ALL links
+    const childProducts = allLinks.filter((i: any) => {
+      const normSlug = i.slug.replace(/\/$/, '')
+      return normSlug.startsWith(slug + '/') && normSlug !== slug
     })
-    if (productLike.length > 0) {
-      return { title, breadcrumb, items: productLike, hasProducts: true }
+    if (childProducts.length > 0) {
+      return { title, breadcrumb, items: childProducts, hasProducts: true }
     }
   }
 

@@ -762,7 +762,22 @@ serve(async (req) => {
         }
 
         const pagePath = cat.startsWith('/') ? cat : '/' + cat
-        const html = await fetchPage(pagePath, jar)
+        let html: string
+        try {
+          html = await fetchPage(pagePath, jar)
+        } catch (fetchErr: any) {
+          console.log('[products] fetchPage failed:', fetchErr.message)
+          return json({
+            products: [],
+            categories: [],
+            page,
+            totalPages: 0,
+            totalProducts: 0,
+            hasProducts: false,
+            title: '',
+            error: 'Strona Speckable.pl jest tymczasowo niedostępna. Spróbuj ponownie później.',
+          })
+        }
 
         // Check if session expired mid-request
         if (html.includes('login[_token]') && !html.includes('/pl/logout')) {
@@ -808,7 +823,13 @@ serve(async (req) => {
         }
 
         const searchUrl = `/pl/query/${encodeURIComponent(q.trim())}?availability=all`
-        const html = await fetchPage(searchUrl, jar)
+        let html: string
+        try {
+          html = await fetchPage(searchUrl, jar)
+        } catch (fetchErr: any) {
+          console.log('[search] fetchPage failed:', fetchErr.message)
+          return json({ products: [], query: q, total: 0, hasProducts: false, error: 'Strona Speckable.pl jest tymczasowo niedostępna.' })
+        }
         const data = parseListPage(html, `/pl/query/${q}`)
 
         const products = data.items || []
@@ -829,7 +850,13 @@ serve(async (req) => {
         }
 
         const productPath = slug.startsWith('/') ? slug : '/pl/product/' + slug
-        const html = await fetchPage(productPath, jar)
+        let html: string
+        try {
+          html = await fetchPage(productPath, jar)
+        } catch (fetchErr: any) {
+          console.log('[product] fetchPage failed:', fetchErr.message)
+          return json({ product: null, error: 'Strona Speckable.pl jest tymczasowo niedostępna.' })
+        }
         const p = parseProductPage(html)
 
         const product = {

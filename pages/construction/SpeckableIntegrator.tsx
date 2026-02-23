@@ -566,6 +566,11 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
     setProdError(null);
     speckableProxy('products', { integrationId, cat: selectedCat.slug, page })
       .then(data => {
+        if (data.error) {
+          setProdError(data.error);
+          setProdLoading(false);
+          return;
+        }
         setProducts(data.products || []);
         setTotalPages(data.totalPages || 0);
         setTotalCount(data.totalProducts || 0);
