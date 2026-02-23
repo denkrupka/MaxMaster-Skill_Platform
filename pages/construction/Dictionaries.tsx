@@ -4374,6 +4374,19 @@ export const DictionariesPage: React.FC = () => {
                       {de.is_active ? 'Aktywny' : 'Nieaktywny'}
                     </span>
                   </div>
+
+                  {/* Link to source */}
+                  {(de as any).source_wholesaler_url && (
+                    <a
+                      href={(de as any).source_wholesaler_url.startsWith('http') ? (de as any).source_wholesaler_url : `https://www.atutrental.com.pl${(de as any).source_wholesaler_url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      {de.source_wholesaler === 'atut-rental' ? 'Otwórz na AtutRental.com.pl' : de.source_wholesaler === 'ramirent' ? 'Otwórz na Ramirent.pl' : 'Otwórz stronę źródłową'}
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -4399,20 +4412,6 @@ export const DictionariesPage: React.FC = () => {
                 </div>
               )}
 
-              {/* Link to source */}
-              {(de as any).source_wholesaler_url && (
-                <div className="px-5 pb-4">
-                  <a
-                    href={(de as any).source_wholesaler_url.startsWith('http') ? (de as any).source_wholesaler_url : `https://www.atutrental.com.pl${(de as any).source_wholesaler_url}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {de.source_wholesaler === 'atut-rental' ? 'Otwórz na AtutRental.com.pl' : de.source_wholesaler === 'ramirent' ? 'Otwórz na Ramirent.pl' : 'Otwórz stronę źródłową'}
-                  </a>
-                </div>
-              )}
             </div>
           </div>
         );
