@@ -57,7 +57,7 @@ interface OninenProductDetail {
 interface Props {
   integrationId?: string;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
 }
 
 // ═══ Helper: invoke oninen-proxy edge function ═══
@@ -146,7 +146,7 @@ const ProductDetail: React.FC<{
   integrationId?: string;
   onClose: () => void;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
 }> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog }) => {
   const [detail, setDetail] = useState<OninenProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -307,6 +307,7 @@ const ProductDetail: React.FC<{
                     description: detail.description,
                     url: detail.url,
                     wholesaler: 'oninen',
+                    category: detail.category?.split(' > ').pop() || undefined,
                   });
                   onClose();
                 }}

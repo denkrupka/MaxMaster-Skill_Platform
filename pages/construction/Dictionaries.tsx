@@ -476,7 +476,7 @@ export const DictionariesPage: React.FC = () => {
       const materialData: any = {
         code,
         name: p.name,
-        category: null,
+        category: p.category || null,
         unit: p.unit || 'szt.',
         description: p.description || null,
         manufacturer: p.manufacturer || null,
@@ -498,6 +498,17 @@ export const DictionariesPage: React.FC = () => {
         .insert(materialData);
 
       if (error) throw error;
+
+      // Also add category to custom categories if present
+      if (p.category && currentUser.company_id) {
+        const catExists = customCategories.some(c => c.name === p.category);
+        if (!catExists) {
+          await supabase
+            .from('kosztorys_custom_categories')
+            .upsert({ company_id: currentUser.company_id, name: p.category, sort_order: customCategories.length }, { onConflict: 'company_id,name' });
+          await loadCustomCategories();
+        }
+      }
 
       // Also add manufacturer to custom manufacturers if present
       if (p.manufacturer && currentUser.company_id) {
