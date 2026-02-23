@@ -149,6 +149,8 @@ const ProductDetail: React.FC<{
   const [detail, setDetail] = useState<TIMProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [otherPrices, setOtherPrices] = useState<Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
+  const [loadingOtherPrices, setLoadingOtherPrices] = useState(false);
 
   // Fallback image from product card
   const fallbackImage = product.image || product.default_image || '';
@@ -165,6 +167,89 @@ const ProductDetail: React.FC<{
       .then(r => { setDetail(r.product); setLoading(false); })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [product.url, product.sku, product._id, integrationId]);
+
+  // Fetch prices from other wholesalers
+  useEffect(() => {
+    if (!detail) return;
+    setLoadingOtherPrices(true);
+    setOtherPrices([]);
+
+    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true))
+      .then(({ data: integrations }) => {
+        if (!integrations?.length) { setLoadingOtherPrices(false); return; }
+        const others = integrations.filter(i => i.wholesaler_id !== 'tim');
+        if (!others.length) { setLoadingOtherPrices(false); return; }
+
+        const queries: string[] = [];
+        if (detail.ref_num) queries.push(detail.ref_num);
+        if (detail.ean) queries.push(detail.ean);
+        if (detail.sku && detail.sku !== detail.ref_num && detail.sku !== detail.ean) queries.push(detail.sku);
+        if (!queries.length && detail.name) queries.push(detail.name);
+        if (!queries.length) { setLoadingOtherPrices(false); return; }
+
+        const scoreProduct = (p: any): number => {
+          let score = 0;
+          const pName = (p.name || '').toLowerCase();
+          const pSku = (p.sku || '').toLowerCase();
+          const pRefNum = (p.ref_num || '').toLowerCase();
+          if (detail.ref_num) {
+            const ref = detail.ref_num.toLowerCase();
+            if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
+          }
+          if (detail.ean && (pName.includes(detail.ean) || pSku.includes(detail.ean))) score += 15;
+          const words = (detail.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+          score += words.filter(w => pName.includes(w)).length * 2;
+          return score;
+        };
+
+        Promise.allSettled(others.map(async (integ) => {
+          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
+          const qResults = await Promise.allSettled(
+            queries.map(q =>
+              supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integ.id, q } })
+                .then(({ data, error: err }) => {
+                  if (err) throw err;
+                  const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+                  if (parsed?.error) throw new Error(parsed.error);
+                  return parsed;
+                })
+            )
+          );
+          const seen = new Map<string, { product: any; score: number }>();
+          for (const qr of qResults) {
+            if (qr.status !== 'fulfilled') continue;
+            for (const p of (qr.value.products || [])) {
+              const key = p.sku || p.url || p.name;
+              const sc = scoreProduct(p);
+              const ex = seen.get(key);
+              if (!ex || sc > ex.score) seen.set(key, { product: p, score: sc });
+            }
+          }
+          let best: any = null, bestScore = -1;
+          for (const { product: pr, score: sc } of seen.values()) { if (sc > bestScore) { best = pr; bestScore = sc; } }
+          if ((detail.ref_num || detail.ean) && bestScore <= 0) best = null;
+          return { integ, best };
+        })).then(results => {
+          const prices: typeof otherPrices = [];
+          for (const r of results) {
+            if (r.status !== 'fulfilled') continue;
+            const { integ, best } = r.value;
+            if (!best) continue;
+            const isTim = integ.wholesaler_id === 'tim';
+            prices.push({
+              wholesaler: isTim ? 'TIM' : 'Onninen',
+              catalogPrice: isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null),
+              purchasePrice: isTim ? (best.price ?? null) : (best.priceEnd ?? null),
+              stock: best.stock ?? null,
+              url: best.url || undefined,
+            });
+          }
+          setOtherPrices(prices);
+          setLoadingOtherPrices(false);
+        });
+      })
+      .catch(() => setLoadingOtherPrices(false));
+  }, [detail]);
 
   if (loading) return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -323,6 +408,58 @@ const ProductDetail: React.FC<{
             )}
           </div>
         </div>
+
+        {/* Prices in other wholesalers */}
+        {(loadingOtherPrices || otherPrices.length > 0) && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny i dostępność w innych hurtowniach</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Hurtownia</th>
+                    <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
+                    <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
+                    <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
+                    <th className="px-3 py-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingOtherPrices ? (
+                    <tr><td colSpan={5} className="px-3 py-4 text-center"><Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" /></td></tr>
+                  ) : otherPrices.map((wp, idx) => {
+                    const allPrices = otherPrices.filter(p => p.purchasePrice != null).map(p => p.purchasePrice!);
+                    const best = allPrices.length > 0 ? Math.min(...allPrices) : null;
+                    const worst = allPrices.length > 1 ? Math.max(...allPrices) : null;
+                    const isBest = best != null && wp.purchasePrice === best && allPrices.length > 1;
+                    const isWorst = worst != null && wp.purchasePrice === worst && worst !== best;
+                    return (
+                      <tr key={idx} className={isBest ? 'bg-green-50' : isWorst ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{wp.catalogPrice?.toFixed(2) ?? '—'} zł</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
+                        <td className="px-3 py-2 text-center">
+                          {wp.stock != null ? (
+                            <span className={`px-1.5 py-0.5 rounded ${wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                              {wp.stock > 0 ? `${wp.stock} szt.` : 'Brak'}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {wp.url && (
+                            <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         {detail.description && (
