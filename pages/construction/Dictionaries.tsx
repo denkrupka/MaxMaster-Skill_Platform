@@ -1253,7 +1253,7 @@ export const DictionariesPage: React.FC = () => {
         images: equipmentImages.length > 0 ? JSON.stringify(equipmentImages) : '[]',
         source_wholesaler: (editingEquipment as any).source_wholesaler || null,
         source_wholesaler_url: (editingEquipment as any).source_wholesaler_url || null,
-        price_sync_mode: (editingEquipment as any).price_sync_mode || 'fixed',
+        price_sync_mode: eqPriceSyncMode,
       };
 
       if (editingEquipment.id) {
@@ -4183,6 +4183,7 @@ export const DictionariesPage: React.FC = () => {
                 setEditingEquipment({ is_active: true, default_price: 0 } as any);
                 setAutoGenerateEqCode(true);
                 setEquipmentImages([]);
+                setEqPriceSyncMode('fixed');
                 setEquipmentDialog(true);
               }}
               className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
@@ -4297,6 +4298,7 @@ export const DictionariesPage: React.FC = () => {
                       setEditingEquipment(de);
                       setAutoGenerateEqCode(false);
                       setEquipmentImages(imgs);
+                      setEqPriceSyncMode((de as any).price_sync_mode === 'synced' ? 'synced' : 'fixed');
                       setEquipmentDialog(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
