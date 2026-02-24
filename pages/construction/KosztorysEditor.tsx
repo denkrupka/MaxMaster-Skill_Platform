@@ -3356,16 +3356,14 @@ export const KosztorysEditorPage: React.FC = () => {
   };
 
   // Apply selected product from equipment search modal to the current resource
-  const handleApplyEquipmentFromSearch = (result: { name: string; price?: number | null; sku?: string; index?: string; ean?: string; unit?: string }) => {
+  const handleApplyEquipmentFromSearch = (result: { name: string; price?: number | null; sku?: string; index?: string; ean?: string; ref_num?: string; unit?: string; manufacturer?: string }) => {
     const updates: Partial<any> = {};
     if (result.name) updates.name = result.name;
-    const idx = result.index || result.sku || '';
-    if (idx) {
-      const currentResource = selectedItem as KosztorysResource | null;
-      updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: idx };
-    }
+    // Pick the best available code: index > sku > ean > ref_num, generate if none
+    const idx = result.index || result.sku || result.ean || result.ref_num || `EQ-${Date.now().toString(36).toUpperCase()}`;
+    const currentResource = selectedItem as KosztorysResource | null;
+    updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: idx };
     if (result.price != null) {
-      const currentResource = selectedItem as KosztorysResource | null;
       updates.unitPrice = { ...(currentResource?.unitPrice || { type: 'custom' }), value: result.price };
     }
     if (result.unit) {
@@ -11708,7 +11706,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     <input
                       value={searchEquipmentSearch}
                       onChange={e => setSearchEquipmentSearch(e.target.value)}
-                      placeholder="Szukaj w katalogu własnym..."
+                      placeholder="Szukaj sprzętu..."
                       className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
                     />
                     {searchEquipmentSearch && (
@@ -11716,6 +11714,11 @@ export const KosztorysEditorPage: React.FC = () => {
                         <X className="w-4 h-4" />
                       </button>
                     )}
+                    <span className="text-xs text-slate-400 ml-2 whitespace-nowrap">
+                      {searchEquipmentOwnData.filter(eq =>
+                        !searchEquipmentSearch || eq.name.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.code.toLowerCase().includes(searchEquipmentSearch.toLowerCase())
+                      ).length} sprzętu
+                    </span>
                   </div>
                   {(() => {
                     const filtered = searchEquipmentOwnData.filter(eq =>
@@ -11727,42 +11730,62 @@ export const KosztorysEditorPage: React.FC = () => {
                       </div>
                     );
                     return (
-                      <div className="border border-slate-200 rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kod</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Nazwa</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kategoria</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Producent</th>
-                              <th className="px-3 py-2 text-center text-slate-600 font-medium w-24">Akcja</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filtered.slice(0, 100).map((eq, i) => (
-                              <tr key={eq.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50 transition-colors`}>
-                                <td className="px-3 py-2 font-mono text-slate-600">{eq.code}</td>
-                                <td className="px-3 py-2 text-slate-800">{eq.name}</td>
-                                <td className="px-3 py-2 text-slate-500">{eq.category || '—'}</td>
-                                <td className="px-3 py-2 text-slate-500">{eq.manufacturer || '—'}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <button
-                                    onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code })}
-                                    className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-colors"
-                                  >
-                                    Dodaj
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {filtered.slice(0, 100).map(eq => {
+                            const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
+                            return (
+                              <div
+                                key={eq.id}
+                                className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all"
+                              >
+                                {/* Image */}
+                                <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                                  {imgs.length > 0 ? (
+                                    <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" />
+                                  ) : (
+                                    <Monitor className="w-10 h-10 text-slate-200" />
+                                  )}
+                                </div>
+                                {/* Content */}
+                                <div className="p-2.5">
+                                  <div className="text-[10px] text-slate-400 font-mono">{eq.code}</div>
+                                  <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{eq.name}</div>
+                                  {eq.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{eq.manufacturer}</div>}
+                                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                    {((eq as any).purchase_price || eq.default_price) ? (
+                                      <span className="text-sm font-bold text-blue-600">
+                                        {((eq as any).purchase_price || eq.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-300">—</span>
+                                    )}
+                                    <button
+                                      onClick={() => handleApplyEquipmentFromSearch({
+                                        name: eq.name,
+                                        index: eq.code,
+                                        price: (eq as any).purchase_price || eq.default_price || null,
+                                        sku: eq.sku,
+                                        ean: eq.ean,
+                                        ref_num: eq.ref_num,
+                                        manufacturer: eq.manufacturer,
+                                      })}
+                                      className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                                    >
+                                      Dodaj
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                         {filtered.length > 100 && (
-                          <div className="px-3 py-2 text-xs text-slate-400 text-center bg-slate-50 border-t border-slate-200">
+                          <div className="mt-3 text-xs text-slate-400 text-center">
                             Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.
                           </div>
                         )}
-                      </div>
+                      </>
                     );
                   })()}
                 </div>
@@ -11772,7 +11795,8 @@ export const KosztorysEditorPage: React.FC = () => {
                 <div className="p-0">
                   <AtutIntegrator
                     integrationId={searchEquipmentIntegrations.find(i => i.wholesaler_id === 'atut-rental')?.id}
-                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, unit: p.unit })}
+                    catalogButtonLabel="Dodaj do kosztorysu"
+                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, ref_num: p.ref_num, unit: p.unit, manufacturer: p.manufacturer })}
                   />
                 </div>
               )}
@@ -11781,7 +11805,8 @@ export const KosztorysEditorPage: React.FC = () => {
                 <div className="p-0">
                   <RamirentIntegrator
                     integrationId={searchEquipmentIntegrations.find(i => i.wholesaler_id === 'ramirent')?.id}
-                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, unit: p.unit })}
+                    catalogButtonLabel="Dodaj do kosztorysu"
+                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, ref_num: p.ref_num, unit: p.unit, manufacturer: p.manufacturer })}
                   />
                 </div>
               )}

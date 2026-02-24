@@ -42,6 +42,7 @@ interface RamirentGroupDetail {
 interface Props {
   integrationId?: string;
   onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string; params?: Array<{ name: string; value: string }> }) => void;
+  catalogButtonLabel?: string;
 }
 
 // ═══ Proxy helper ═══
@@ -99,7 +100,8 @@ const GroupDetail: React.FC<{
   onClose: () => void;
   onAddToOwnCatalog?: Props['onAddToOwnCatalog'];
   onNavigate: (slug: string) => void;
-}> = ({ slug, integrationId, onClose, onAddToOwnCatalog, onNavigate }) => {
+  catalogButtonLabel?: string;
+}> = ({ slug, integrationId, onClose, onAddToOwnCatalog, onNavigate, catalogButtonLabel }) => {
   const [detail, setDetail] = useState<RamirentGroupDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -240,7 +242,7 @@ const GroupDetail: React.FC<{
                 className="w-full py-2.5 mt-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Package className="w-4 h-4" />
-                Dodaj do katalogu Własnego
+                {catalogButtonLabel || 'Dodaj do katalogu Własnego'}
               </button>
             )}
           </div>
@@ -325,7 +327,7 @@ const ItemCard: React.FC<{ item: RamirentItem; onClick: () => void }> = ({ item,
 );
 
 // ═══ MAIN COMPONENT ═══
-export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatalog }) => {
+export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnCatalog, catalogButtonLabel }) => {
   const [categories, setCategories] = useState<RamirentCategory[]>([]);
   const [catLoading, setCatLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState<RamirentCategory | null>(null);
@@ -585,6 +587,7 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
           integrationId={integrationId}
           onClose={() => setDetailSlug(null)}
           onAddToOwnCatalog={onAddToOwnCatalog}
+          catalogButtonLabel={catalogButtonLabel}
           onNavigate={(slug) => { setDetailSlug(null); navigateTo(slug); }}
         />
       )}
