@@ -171,7 +171,14 @@ const ProductDetail: React.FC<{
     Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true))
       .then(({ data: integrations }) => {
         if (!integrations?.length) { setLoadingOtherPrices(false); return; }
-        const others = integrations.filter(i => i.wholesaler_id !== 'speckable');
+        // Deduplicate by wholesaler_id — only one integration per wholesaler
+        const seenWholesalers = new Set<string>();
+        const others = integrations.filter(i => {
+          if (i.wholesaler_id === 'speckable') return false;
+          if (seenWholesalers.has(i.wholesaler_id)) return false;
+          seenWholesalers.add(i.wholesaler_id);
+          return true;
+        });
         if (!others.length) { setLoadingOtherPrices(false); return; }
 
         const queries: string[] = [];

@@ -406,16 +406,28 @@ function parseProductPage(html: string): any {
     }
   }
 
-  // HTML description (formatted) from esp_column_description
-  const descBlockRe = /<div[^>]*class="[^"]*esp_column_description[^"]*"[^>]*>([\s\S]*?)(?=<\/div>\s*<!\-\-\- SELLASIST HTML END|\Z)/i
-  const descBlockMatch = descBlockRe.exec(html)
-  if (descBlockMatch) {
-    p.descriptionHtml = descBlockMatch[1]
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/\s+on\w+="[^"]*"/gi, '')
-      .replace(/javascript:/gi, '')
-      .substring(0, 8000)
+  // HTML description (formatted)
+  // Try productDescription div first, then esp_column_description, then JSON-LD HTML
+  const sanitizeHtml = (raw: string) => raw
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/\s+on\w+="[^"]*"/gi, '')
+    .replace(/javascript:/gi, '')
+    .substring(0, 8000)
+
+  const descRe1 = /<div[^>]*class="[^"]*productDescription[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+  const descRe2 = /<div[^>]*class="[^"]*esp_column_description[^"]*"[^>]*>([\s\S]*?)(?=<\/div>\s*<!\-\-\- SELLASIST HTML END|\Z)/i
+  const descMatch = descRe1.exec(html) || descRe2.exec(html)
+  if (descMatch) {
+    p.descriptionHtml = sanitizeHtml(descMatch[1])
+  } else {
+    // Fallback: JSON-LD description often contains HTML on Speckable
+    for (const j of jsonLdList) {
+      if (j['@type'] === 'Product' && j.description && /<[a-z]/i.test(j.description)) {
+        p.descriptionHtml = sanitizeHtml(j.description)
+        break
+      }
+    }
   }
 
   // Technical specifications (Dane techniczne)
@@ -426,8 +438,8 @@ function parseProductPage(html: string): any {
     const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi
     let liM: RegExpExecArray | null
     while ((liM = liRe.exec(techMatch[1])) !== null) {
-      const kvMatch = liM[1].match(/^([^:<]+):\s*<b>([^<]*)<\/b>/i)
-        || liM[1].match(/^([^:<]+):\s*<strong>([^<]*)<\/strong>/i)
+      const kvMatch = liM[1].match(/^\s*([^:<]+):\s*<b>\s*([^<]*)<\/b>/i)
+        || liM[1].match(/^\s*([^:<]+):\s*<strong>\s*([^<]*)<\/strong>/i)
       if (kvMatch) {
         specItems.push({ name: stripHtml(kvMatch[1]).trim(), value: stripHtml(kvMatch[2]).trim() })
       }
