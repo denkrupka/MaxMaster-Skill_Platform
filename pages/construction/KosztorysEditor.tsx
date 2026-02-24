@@ -981,6 +981,10 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchMaterialIntegrations, setSearchMaterialIntegrations] = useState<WholesalerIntegration[]>([]);
   const [searchMaterialOwnData, setSearchMaterialOwnData] = useState<KosztorysMaterial[]>([]);
   const [searchMaterialSearch, setSearchMaterialSearch] = useState('');
+  const [searchMatCategories, setSearchMatCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
+  const [searchMatSelectedCategory, setSearchMatSelectedCategory] = useState<string | null>(null);
+  const [searchMatViewMode, setSearchMatViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchMatExpandedCats, setSearchMatExpandedCats] = useState<Set<string>>(new Set());
 
   // Search Equipment modal state
   const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
@@ -988,6 +992,10 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchEquipmentIntegrations, setSearchEquipmentIntegrations] = useState<WholesalerIntegration[]>([]);
   const [searchEquipmentOwnData, setSearchEquipmentOwnData] = useState<KosztorysEquipment[]>([]);
   const [searchEquipmentSearch, setSearchEquipmentSearch] = useState('');
+  const [searchEqCategories, setSearchEqCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
+  const [searchEqSelectedCategory, setSearchEqSelectedCategory] = useState<string | null>(null);
+  const [searchEqViewMode, setSearchEqViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchEqExpandedCats, setSearchEqExpandedCats] = useState<Set<string>>(new Set());
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -3296,34 +3304,35 @@ export const KosztorysEditorPage: React.FC = () => {
     updateEstimateData(newData);
   };
 
-  // Open search material modal — load integrations + own materials
+  // Open search material modal — load integrations + own materials + categories
   const openSearchMaterialModal = async () => {
     setShowSearchMaterialModal(true);
     setSearchMaterialSubTab('own');
     setSearchMaterialSearch('');
+    setSearchMatSelectedCategory(null);
+    setSearchMatViewMode('grid');
     try {
-      const [intRes, matRes] = await Promise.all([
+      const [intRes, matRes, catRes] = await Promise.all([
         supabase.from('wholesaler_integrations').select('*').eq('company_id', currentUser?.company_id || ''),
-        supabase.from('kosztorys_materials').select('*').order('name', { ascending: true }),
+        supabase.from('kosztorys_materials').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
+        supabase.from('kosztorys_custom_categories').select('*').eq('company_id', currentUser?.company_id || '').order('sort_order', { ascending: true }),
       ]);
       setSearchMaterialIntegrations((intRes.data || []).filter((i: WholesalerIntegration) => i.is_active));
       setSearchMaterialOwnData(matRes.data || []);
+      setSearchMatCategories(catRes.data || []);
     } catch (err) {
       console.error('Error loading search material data:', err);
     }
   };
 
   // Apply selected product from search modal to the current resource
-  const handleApplyMaterialFromSearch = (result: { name: string; price?: number | null; sku?: string; index?: string; ean?: string; unit?: string }) => {
+  const handleApplyMaterialFromSearch = (result: { name: string; price?: number | null; sku?: string; index?: string; ean?: string; ref_num?: string; unit?: string }) => {
     const updates: Partial<any> = {};
     if (result.name) updates.name = result.name;
-    const idx = result.index || result.sku || '';
-    if (idx) {
-      const currentResource = selectedItem as KosztorysResource | null;
-      updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: idx };
-    }
+    const idx = result.index || result.sku || result.ean || result.ref_num || `MAT-${Date.now().toString(36).toUpperCase()}`;
+    const currentResource = selectedItem as KosztorysResource | null;
+    updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: idx };
     if (result.price != null) {
-      const currentResource = selectedItem as KosztorysResource | null;
       updates.unitPrice = { ...(currentResource?.unitPrice || { type: 'custom' }), value: result.price };
     }
     if (result.unit) {
@@ -3338,18 +3347,22 @@ export const KosztorysEditorPage: React.FC = () => {
     setShowSearchMaterialModal(false);
   };
 
-  // Open search equipment modal — load integrations + own equipment
+  // Open search equipment modal — load integrations + own equipment + categories
   const openSearchEquipmentModal = async () => {
     setShowSearchEquipmentModal(true);
     setSearchEquipmentSubTab('own');
     setSearchEquipmentSearch('');
+    setSearchEqSelectedCategory(null);
+    setSearchEqViewMode('grid');
     try {
-      const [intRes, eqRes] = await Promise.all([
+      const [intRes, eqRes, catRes] = await Promise.all([
         supabase.from('wholesaler_integrations').select('*').eq('company_id', currentUser?.company_id || ''),
-        supabase.from('kosztorys_equipment').select('*').order('name', { ascending: true }),
+        supabase.from('kosztorys_equipment').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
+        supabase.from('kosztorys_equipment_categories').select('*').eq('company_id', currentUser?.company_id || '').order('sort_order', { ascending: true }),
       ]);
       setSearchEquipmentIntegrations((intRes.data || []).filter((i: WholesalerIntegration) => i.is_active));
       setSearchEquipmentOwnData(eqRes.data || []);
+      setSearchEqCategories(catRes.data || []);
     } catch (err) {
       console.error('Error loading search equipment data:', err);
     }
@@ -11548,73 +11561,150 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto">
-              {searchMaterialSubTab === 'own' && (
-                <div className="p-4">
-                  <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200 mb-4">
-                    <Search className="w-4 h-4 text-slate-400" />
-                    <input
-                      value={searchMaterialSearch}
-                      onChange={e => setSearchMaterialSearch(e.target.value)}
-                      placeholder="Szukaj w katalogu własnym..."
-                      className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
-                    />
-                    {searchMaterialSearch && (
-                      <button onClick={() => setSearchMaterialSearch('')} className="text-slate-400 hover:text-slate-600">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                  {(() => {
-                    const filtered = searchMaterialOwnData.filter(m =>
-                      !searchMaterialSearch || m.name.toLowerCase().includes(searchMaterialSearch.toLowerCase()) || m.code.toLowerCase().includes(searchMaterialSearch.toLowerCase())
-                    );
-                    if (filtered.length === 0) return (
-                      <div className="text-center py-8 text-sm text-slate-400">
-                        {searchMaterialOwnData.length === 0 ? 'Brak materiałów w katalogu własnym.' : 'Brak wyników.'}
+            <div className="flex-1 overflow-hidden">
+              {searchMaterialSubTab === 'own' && (() => {
+                const getMatCatChildren = (parentId: string | null) => searchMatCategories.filter(c => (c.parent_id || null) === parentId);
+                const getMatCatSubtreeNames = (catName: string): string[] => {
+                  const cat = searchMatCategories.find(c => c.name === catName);
+                  if (!cat) return [catName];
+                  return [catName, ...searchMatCategories.filter(c => c.parent_id === cat.id).flatMap(ch => getMatCatSubtreeNames(ch.name))];
+                };
+                const getMatCatCount = (catName: string): number => {
+                  const cat = searchMatCategories.find(c => c.name === catName);
+                  if (!cat) return 0;
+                  return searchMaterialOwnData.filter(m => m.category === catName).length + searchMatCategories.filter(c => c.parent_id === cat.id).reduce((s, ch) => s + getMatCatCount(ch.name), 0);
+                };
+                const filtered = searchMaterialOwnData.filter(m => {
+                  const matchesSearch = !searchMaterialSearch || m.code?.toLowerCase().includes(searchMaterialSearch.toLowerCase()) || m.name?.toLowerCase().includes(searchMaterialSearch.toLowerCase()) || m.ean?.toLowerCase().includes(searchMaterialSearch.toLowerCase()) || m.sku?.toLowerCase().includes(searchMaterialSearch.toLowerCase()) || m.manufacturer?.toLowerCase().includes(searchMaterialSearch.toLowerCase());
+                  let matchesCat = true;
+                  if (searchMatSelectedCategory === '__none__') matchesCat = !m.category;
+                  else if (searchMatSelectedCategory) matchesCat = getMatCatSubtreeNames(searchMatSelectedCategory).includes(m.category || '');
+                  return matchesSearch && matchesCat;
+                });
+                const renderMatCatNode = (cat: typeof searchMatCategories[0], depth: number): React.ReactNode => {
+                  const children = getMatCatChildren(cat.id);
+                  const hasChildren = children.length > 0;
+                  const isExpanded = searchMatExpandedCats.has(cat.id);
+                  return (
+                    <div key={cat.id}>
+                      <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
+                        <button
+                          onClick={() => { setSearchMatSelectedCategory(cat.name); if (hasChildren) setSearchMatExpandedCats(prev => { const next = new Set(prev); if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id); return next; }); }}
+                          className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${searchMatSelectedCategory === cat.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          {hasChildren ? <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /> : <span className="w-3 flex-shrink-0" />}
+                          <Package className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                          <span className="truncate">{cat.name}</span>
+                          <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{getMatCatCount(cat.name)}</span>
+                        </button>
                       </div>
-                    );
-                    return (
-                      <div className="border border-slate-200 rounded-lg overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kod</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Nazwa</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kategoria</th>
-                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Producent</th>
-                              <th className="px-3 py-2 text-center text-slate-600 font-medium w-24">Akcja</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filtered.slice(0, 100).map((m, i) => (
-                              <tr key={m.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50 transition-colors`}>
-                                <td className="px-3 py-2 font-mono text-slate-600">{m.code}</td>
-                                <td className="px-3 py-2 text-slate-800">{m.name}</td>
-                                <td className="px-3 py-2 text-slate-500">{m.category || '—'}</td>
-                                <td className="px-3 py-2 text-slate-500">{m.manufacturer || '—'}</td>
-                                <td className="px-3 py-2 text-center">
-                                  <button
-                                    onClick={() => handleApplyMaterialFromSearch({ name: m.name, index: m.code })}
-                                    className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-colors"
-                                  >
-                                    Dodaj
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {filtered.length > 100 && (
-                          <div className="px-3 py-2 text-xs text-slate-400 text-center bg-slate-50 border-t border-slate-200">
-                            Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.
-                          </div>
+                      {isExpanded && hasChildren && children.map(child => renderMatCatNode(child, depth + 1))}
+                    </div>
+                  );
+                };
+                return (
+                  <div className="flex h-full" style={{ height: 'calc(90vh - 120px)' }}>
+                    {/* Category sidebar */}
+                    <div className="w-52 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                      <div className="px-3 py-2.5 border-b border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+                      </div>
+                      <div className="py-1">
+                        <button onClick={() => setSearchMatSelectedCategory(null)} className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${!searchMatSelectedCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                          <Package className="w-3.5 h-3.5 opacity-40" />
+                          <span className="truncate">Wszystkie</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{searchMaterialOwnData.length}</span>
+                        </button>
+                        {getMatCatChildren(null).map(cat => renderMatCatNode(cat, 0))}
+                        {searchMaterialOwnData.some(m => !m.category) && (
+                          <button onClick={() => setSearchMatSelectedCategory('__none__')} className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${searchMatSelectedCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                            <Package className="w-3.5 h-3.5 opacity-40" />
+                            <span className="truncate">Bez kategorii</span>
+                            <span className="ml-auto text-[10px] text-slate-400">{searchMaterialOwnData.filter(m => !m.category).length}</span>
+                          </button>
                         )}
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                    </div>
+                    {/* Main content */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      {/* Search bar + view toggle */}
+                      <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white flex-shrink-0">
+                        <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+                          <Search className="w-4 h-4 text-slate-400" />
+                          <input value={searchMaterialSearch} onChange={e => setSearchMaterialSearch(e.target.value)} placeholder="Szukaj materiałów..." className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400" />
+                          {searchMaterialSearch && <button onClick={() => setSearchMaterialSearch('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
+                        </div>
+                        <div className="flex gap-1 bg-slate-100 rounded p-0.5">
+                          <button onClick={() => setSearchMatViewMode('grid')} className={`p-1.5 rounded transition-colors ${searchMatViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Grid3X3 className="w-4 h-4" /></button>
+                          <button onClick={() => setSearchMatViewMode('list')} className={`p-1.5 rounded transition-colors ${searchMatViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
+                        </div>
+                        <span className="text-xs text-slate-400 whitespace-nowrap">{filtered.length} materiałów</span>
+                      </div>
+                      {/* Items */}
+                      <div className="flex-1 overflow-y-auto p-4">
+                        {filtered.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <Package className="w-12 h-12 text-slate-200 mb-4" />
+                            <p className="text-sm text-slate-400">{searchMaterialOwnData.length === 0 ? 'Brak materiałów w katalogu własnym.' : 'Brak wyników.'}</p>
+                          </div>
+                        ) : searchMatViewMode === 'grid' ? (
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {filtered.slice(0, 100).map(m => {
+                              const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
+                              return (
+                                <div key={m.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all">
+                                  <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                                    {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" /> : <Package className="w-10 h-10 text-slate-200" />}
+                                  </div>
+                                  <div className="p-2.5">
+                                    <div className="text-[10px] text-slate-400 font-mono">{m.code}</div>
+                                    <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{m.name}</div>
+                                    {m.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{m.manufacturer}</div>}
+                                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                      {((m as any).purchase_price || (m as any).default_price) ? (
+                                        <span className="text-sm font-bold text-blue-600">{((m as any).purchase_price || (m as any).default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
+                                      ) : <span className="text-[10px] text-slate-300">—</span>}
+                                      <button onClick={() => handleApplyMaterialFromSearch({ name: m.name, index: m.code, price: (m as any).purchase_price || (m as any).default_price || null, sku: m.sku, ean: m.ean, ref_num: m.ref_num })} className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
+                                        Dodaj do kosztorysu
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {filtered.slice(0, 100).map(m => {
+                              const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
+                              return (
+                                <div key={m.id} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 hover:border-blue-400 transition-colors">
+                                  <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+                                    {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" /> : <Package className="w-6 h-6 text-slate-200" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-slate-800 truncate">{m.name}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono">{m.code}{m.manufacturer ? ` · ${m.manufacturer}` : ''}</div>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    {((m as any).purchase_price || (m as any).default_price) ? (
+                                      <span className="text-sm font-bold text-blue-600">{((m as any).purchase_price || (m as any).default_price)?.toFixed(2)} zł</span>
+                                    ) : <span className="text-[10px] text-slate-300">—</span>}
+                                  </div>
+                                  <button onClick={() => handleApplyMaterialFromSearch({ name: m.name, index: m.code, price: (m as any).purchase_price || (m as any).default_price || null, sku: m.sku, ean: m.ean, ref_num: m.ref_num })} className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
+                                    Dodaj do kosztorysu
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {filtered.length > 100 && <div className="mt-3 text-xs text-slate-400 text-center">Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {searchMaterialSubTab === 'onninen' && (
                 <div className="p-0">
@@ -11698,98 +11788,150 @@ export const KosztorysEditorPage: React.FC = () => {
             </div>
 
             {/* Tab content */}
-            <div className="flex-1 overflow-y-auto">
-              {searchEquipmentSubTab === 'own' && (
-                <div className="p-4">
-                  <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200 mb-4">
-                    <Search className="w-4 h-4 text-slate-400" />
-                    <input
-                      value={searchEquipmentSearch}
-                      onChange={e => setSearchEquipmentSearch(e.target.value)}
-                      placeholder="Szukaj sprzętu..."
-                      className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
-                    />
-                    {searchEquipmentSearch && (
-                      <button onClick={() => setSearchEquipmentSearch('')} className="text-slate-400 hover:text-slate-600">
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                    <span className="text-xs text-slate-400 ml-2 whitespace-nowrap">
-                      {searchEquipmentOwnData.filter(eq =>
-                        !searchEquipmentSearch || eq.name.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.code.toLowerCase().includes(searchEquipmentSearch.toLowerCase())
-                      ).length} sprzętu
-                    </span>
-                  </div>
-                  {(() => {
-                    const filtered = searchEquipmentOwnData.filter(eq =>
-                      !searchEquipmentSearch || eq.name.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.code.toLowerCase().includes(searchEquipmentSearch.toLowerCase())
-                    );
-                    if (filtered.length === 0) return (
-                      <div className="text-center py-8 text-sm text-slate-400">
-                        {searchEquipmentOwnData.length === 0 ? 'Brak sprzętu w katalogu własnym.' : 'Brak wyników.'}
+            <div className="flex-1 overflow-hidden">
+              {searchEquipmentSubTab === 'own' && (() => {
+                const getEqCatChildren = (parentId: string | null) => searchEqCategories.filter(c => (c.parent_id || null) === parentId);
+                const getEqCatSubtreeNames = (catName: string): string[] => {
+                  const cat = searchEqCategories.find(c => c.name === catName);
+                  if (!cat) return [catName];
+                  return [catName, ...searchEqCategories.filter(c => c.parent_id === cat.id).flatMap(ch => getEqCatSubtreeNames(ch.name))];
+                };
+                const getEqCatCount = (catName: string): number => {
+                  const cat = searchEqCategories.find(c => c.name === catName);
+                  if (!cat) return 0;
+                  return searchEquipmentOwnData.filter(e => e.category === catName).length + searchEqCategories.filter(c => c.parent_id === cat.id).reduce((s, ch) => s + getEqCatCount(ch.name), 0);
+                };
+                const filtered = searchEquipmentOwnData.filter(eq => {
+                  const matchesSearch = !searchEquipmentSearch || eq.code?.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.name?.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.ean?.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.sku?.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.manufacturer?.toLowerCase().includes(searchEquipmentSearch.toLowerCase());
+                  let matchesCat = true;
+                  if (searchEqSelectedCategory === '__none__') matchesCat = !eq.category;
+                  else if (searchEqSelectedCategory) matchesCat = getEqCatSubtreeNames(searchEqSelectedCategory).includes(eq.category || '');
+                  return matchesSearch && matchesCat;
+                });
+                const renderEqCatNode = (cat: typeof searchEqCategories[0], depth: number): React.ReactNode => {
+                  const children = getEqCatChildren(cat.id);
+                  const hasChildren = children.length > 0;
+                  const isExpanded = searchEqExpandedCats.has(cat.id);
+                  return (
+                    <div key={cat.id}>
+                      <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
+                        <button
+                          onClick={() => { setSearchEqSelectedCategory(cat.name); if (hasChildren) setSearchEqExpandedCats(prev => { const next = new Set(prev); if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id); return next; }); }}
+                          className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${searchEqSelectedCategory === cat.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          {hasChildren ? <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /> : <span className="w-3 flex-shrink-0" />}
+                          <Monitor className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                          <span className="truncate">{cat.name}</span>
+                          <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{getEqCatCount(cat.name)}</span>
+                        </button>
                       </div>
-                    );
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {filtered.slice(0, 100).map(eq => {
-                            const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
-                            return (
-                              <div
-                                key={eq.id}
-                                className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all"
-                              >
-                                {/* Image */}
-                                <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
-                                  {imgs.length > 0 ? (
-                                    <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" />
-                                  ) : (
-                                    <Monitor className="w-10 h-10 text-slate-200" />
-                                  )}
-                                </div>
-                                {/* Content */}
-                                <div className="p-2.5">
-                                  <div className="text-[10px] text-slate-400 font-mono">{eq.code}</div>
-                                  <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{eq.name}</div>
-                                  {eq.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{eq.manufacturer}</div>}
-                                  <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                                    {((eq as any).purchase_price || eq.default_price) ? (
-                                      <span className="text-sm font-bold text-blue-600">
-                                        {((eq as any).purchase_price || eq.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] text-slate-300">—</span>
-                                    )}
-                                    <button
-                                      onClick={() => handleApplyEquipmentFromSearch({
-                                        name: eq.name,
-                                        index: eq.code,
-                                        price: (eq as any).purchase_price || eq.default_price || null,
-                                        sku: eq.sku,
-                                        ean: eq.ean,
-                                        ref_num: eq.ref_num,
-                                        manufacturer: eq.manufacturer,
-                                      })}
-                                      className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                                    >
-                                      Dodaj
-                                    </button>
+                      {isExpanded && hasChildren && children.map(child => renderEqCatNode(child, depth + 1))}
+                    </div>
+                  );
+                };
+                return (
+                  <div className="flex h-full" style={{ height: 'calc(90vh - 120px)' }}>
+                    {/* Category sidebar */}
+                    <div className="w-52 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+                      <div className="px-3 py-2.5 border-b border-slate-200">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+                      </div>
+                      <div className="py-1">
+                        <button onClick={() => setSearchEqSelectedCategory(null)} className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${!searchEqSelectedCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                          <Monitor className="w-3.5 h-3.5 opacity-40" />
+                          <span className="truncate">Wszystkie</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{searchEquipmentOwnData.length}</span>
+                        </button>
+                        {getEqCatChildren(null).map(cat => renderEqCatNode(cat, 0))}
+                        {searchEquipmentOwnData.some(e => !e.category) && (
+                          <button onClick={() => setSearchEqSelectedCategory('__none__')} className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${searchEqSelectedCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}>
+                            <Monitor className="w-3.5 h-3.5 opacity-40" />
+                            <span className="truncate">Bez kategorii</span>
+                            <span className="ml-auto text-[10px] text-slate-400">{searchEquipmentOwnData.filter(e => !e.category).length}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* Main content */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                      {/* Search bar + view toggle */}
+                      <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white flex-shrink-0">
+                        <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+                          <Search className="w-4 h-4 text-slate-400" />
+                          <input value={searchEquipmentSearch} onChange={e => setSearchEquipmentSearch(e.target.value)} placeholder="Szukaj sprzętu..." className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400" />
+                          {searchEquipmentSearch && <button onClick={() => setSearchEquipmentSearch('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
+                        </div>
+                        <div className="flex gap-1 bg-slate-100 rounded p-0.5">
+                          <button onClick={() => setSearchEqViewMode('grid')} className={`p-1.5 rounded transition-colors ${searchEqViewMode === 'grid' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><Grid3X3 className="w-4 h-4" /></button>
+                          <button onClick={() => setSearchEqViewMode('list')} className={`p-1.5 rounded transition-colors ${searchEqViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
+                        </div>
+                        <span className="text-xs text-slate-400 whitespace-nowrap">{filtered.length} sprzętu</span>
+                      </div>
+                      {/* Items */}
+                      <div className="flex-1 overflow-y-auto p-4">
+                        {filtered.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full text-center">
+                            <Monitor className="w-12 h-12 text-slate-200 mb-4" />
+                            <p className="text-sm text-slate-400">{searchEquipmentOwnData.length === 0 ? 'Brak sprzętu w katalogu własnym.' : 'Brak wyników.'}</p>
+                          </div>
+                        ) : searchEqViewMode === 'grid' ? (
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {filtered.slice(0, 100).map(eq => {
+                              const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
+                              return (
+                                <div key={eq.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all">
+                                  <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                                    {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" /> : <Monitor className="w-10 h-10 text-slate-200" />}
+                                  </div>
+                                  <div className="p-2.5">
+                                    <div className="text-[10px] text-slate-400 font-mono">{eq.code}</div>
+                                    <div className="text-xs font-medium text-slate-800 mt-0.5 line-clamp-2 min-h-[32px]">{eq.name}</div>
+                                    {eq.manufacturer && <div className="text-[10px] text-slate-400 mt-0.5">{eq.manufacturer}</div>}
+                                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                                      {((eq as any).purchase_price || eq.default_price) ? (
+                                        <span className="text-sm font-bold text-blue-600">{((eq as any).purchase_price || eq.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
+                                      ) : <span className="text-[10px] text-slate-300">—</span>}
+                                      <button onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code, price: (eq as any).purchase_price || eq.default_price || null, sku: eq.sku, ean: eq.ean, ref_num: eq.ref_num, manufacturer: eq.manufacturer })} className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
+                                        Dodaj do kosztorysu
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {filtered.length > 100 && (
-                          <div className="mt-3 text-xs text-slate-400 text-center">
-                            Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {filtered.slice(0, 100).map(eq => {
+                              const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
+                              return (
+                                <div key={eq.id} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 hover:border-blue-400 transition-colors">
+                                  <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
+                                    {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" /> : <Monitor className="w-6 h-6 text-slate-200" />}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-medium text-slate-800 truncate">{eq.name}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono">{eq.code}{eq.manufacturer ? ` · ${eq.manufacturer}` : ''}</div>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    {((eq as any).purchase_price || eq.default_price) ? (
+                                      <span className="text-sm font-bold text-blue-600">{((eq as any).purchase_price || eq.default_price)?.toFixed(2)} zł</span>
+                                    ) : <span className="text-[10px] text-slate-300">—</span>}
+                                  </div>
+                                  <button onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code, price: (eq as any).purchase_price || eq.default_price || null, sku: eq.sku, ean: eq.ean, ref_num: eq.ref_num, manufacturer: eq.manufacturer })} className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
+                                    Dodaj do kosztorysu
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
-                      </>
-                    );
-                  })()}
-                </div>
-              )}
+                        {filtered.length > 100 && <div className="mt-3 text-xs text-slate-400 text-center">Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {searchEquipmentSubTab === 'atut-rental' && (
                 <div className="p-0">
