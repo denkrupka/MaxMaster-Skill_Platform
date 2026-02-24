@@ -58,12 +58,14 @@ async function fetchHTML(path: string, jar?: CookieJar): Promise<string> {
 
 async function fetchAJAX(path: string, jar?: CookieJar): Promise<Response> {
   const url = path.startsWith('http') ? path : BASE + path
+  // Append ?xhr=true as the site expects
+  const ajaxUrl = url.includes('?') ? url + '&xhr=true' : url + '?xhr=true'
   const headers: Record<string, string> = {
     ...makeHeaders(jar),
     'Accept': '*/*',
     'X-Requested-With': 'XMLHttpRequest',
   }
-  const res = await fetch(url, { headers, redirect: 'follow' })
+  const res = await fetch(ajaxUrl, { headers, redirect: 'follow' })
   if (jar) parseCookiesFromHeaders(res.headers, jar)
   return res
 }
@@ -73,38 +75,40 @@ async function fetchJSON(path: string, jar?: CookieJar): Promise<any> {
   return res.json()
 }
 
-// ═══ REGEX HTML PARSERS ═══
+// ═══ PARSERS ═══
 
+// Parse top-level categories from /wynajem page
+// Uses c-category-box links with href /wynajem/wg-produktu/{slug}
 function parseCategories(html: string): Array<{ slug: string; name: string; image: string }> {
   const cats: Array<{ slug: string; name: string; image: string }> = []
   const seen = new Set<string>()
 
-  // Category box links: <a class="c-category-box" href="/wynajem/...">
-  const boxRe = /<a[^>]+class="[^"]*c-category-box[^"]*"[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+  // c-category-box links in the "wg-produktu" tab
+  const boxRe = /<a[^>]+href="([^"]*\/wynajem\/wg-produktu\/[^"]*)"[^>]*class="[^"]*c-category-box[^"]*"[^>]*>([\s\S]*?)<\/a>/gi
   let m
   while ((m = boxRe.exec(html)) !== null) {
     const href = m[1]
     if (seen.has(href)) continue
     seen.add(href)
     const titleM = m[2].match(/c-category-box__title[^>]*>([^<]+)/i)
-    const title = titleM ? titleM[1].trim() : m[2].replace(/<[^>]*>/g, '').trim()
+    const title = titleM ? titleM[1].trim() : ''
     const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i)
     const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
     if (title) cats.push({ slug: href, name: title, image: img })
   }
 
-  // Category tile links as fallback
+  // Also try: class before href
   if (!cats.length) {
-    const tileRe = /<a[^>]+class="[^"]*c-category-tile[^"]*"[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
-    while ((m = tileRe.exec(html)) !== null) {
+    const boxRe2 = /<a[^>]+class="[^"]*c-category-box[^"]*"[^>]+href="([^"]*\/wynajem\/wg-produktu\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+    while ((m = boxRe2.exec(html)) !== null) {
       const href = m[1]
       if (seen.has(href)) continue
       seen.add(href)
-      const titleM = m[2].match(/(?:title|h[23])[^>]*>([^<]+)/i)
-      const title = titleM ? titleM[1].trim() : m[2].replace(/<[^>]*>/g, '').trim()
+      const titleM = m[2].match(/c-category-box__title[^>]*>([^<]+)/i)
+      const title = titleM ? titleM[1].trim() : ''
       const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i)
       const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
-      if (title && title.length < 120) cats.push({ slug: href, name: title, image: img })
+      if (title) cats.push({ slug: href, name: title, image: img })
     }
   }
 
@@ -125,71 +129,187 @@ function parseCategories(html: string): Array<{ slug: string; name: string; imag
   return cats
 }
 
-function parseSubcategories(html: string, currentSlug?: string): Array<{ slug: string; name: string; image: string }> {
-  const subs: Array<{ slug: string; name: string; image: string }> = []
+// Parse c-product-card items on category pages (/wynajem/wg-produktu/{cat})
+// These are subcategory OR product-group tiles with images
+function parseProductCards(html: string): Array<{ slug: string; name: string; image: string }> {
+  const items: Array<{ slug: string; name: string; image: string }> = []
   const seen = new Set<string>()
-  const normCurrent = currentSlug?.replace(/\/$/, '') || ''
 
-  // Links within main content area pointing to /wynajem/
-  const linkRe = /<a[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+  // c-product-card links: <a href="/wynajem/..." class="c-product-card">
+  const re = /<a[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*class="[^"]*c-product-card[^"]*"[^>]*>([\s\S]*?)<\/a>/gi
   let m
-  while ((m = linkRe.exec(html)) !== null) {
-    // Skip if in header/footer/nav (check 300 chars before)
-    const before = html.substring(Math.max(0, m.index - 300), m.index)
-    if (/(?:c-header|c-footer|<header|<footer|<nav)/i.test(before)) continue
-
+  while ((m = re.exec(html)) !== null) {
     const href = m[1]
-    const normHref = href.replace(/\/$/, '')
-    // Skip current page (self-reference)
-    if (normCurrent && normHref === normCurrent) continue
     if (seen.has(href)) continue
     seen.add(href)
-
-    const titleM = m[2].match(/(?:title|h[23]|font-bold)[^>]*>([^<]+)/i)
-    const title = titleM ? titleM[1].trim() : m[2].replace(/<[^>]*>/g, ' ').trim().split('\n')[0].trim()
+    const titleM = m[2].match(/c-product-card__title[^>]*>([^<]+)/i)
+    const title = titleM ? titleM[1].trim() : ''
     const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i) || m[2].match(/<source[^>]+srcset="([^"]+)"/i)
     const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
+    if (title) items.push({ slug: href, name: title, image: img })
+  }
 
-    if (title && title.length > 1 && title.length < 120) {
-      subs.push({ slug: href, name: title, image: img })
+  // Also try: class before href
+  if (!items.length) {
+    const re2 = /<a[^>]+class="[^"]*c-product-card[^"]*"[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+    while ((m = re2.exec(html)) !== null) {
+      const href = m[1]
+      if (seen.has(href)) continue
+      seen.add(href)
+      const titleM = m[2].match(/c-product-card__title[^>]*>([^<]+)/i)
+      const title = titleM ? titleM[1].trim() : ''
+      const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i)
+      const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
+      if (title) items.push({ slug: href, name: title, image: img })
     }
   }
 
-  // If we have the current slug, ONLY return child links (not sidebar nav)
-  if (normCurrent) {
-    return subs.filter(s => s.slug.replace(/\/$/, '').startsWith(normCurrent + '/'))
-  }
-
-  return subs
+  return items
 }
 
-function parseGroupPage(html: string) {
+// Parse p-equipments-list-box items on subcategory pages
+// These are product group links with images and breadcrumbs
+function parseEquipmentListBoxes(html: string): Array<{ slug: string; name: string; image: string; breadcrumb?: string }> {
+  const items: Array<{ slug: string; name: string; image: string; breadcrumb?: string }> = []
+  const seen = new Set<string>()
+
+  const re = /<a[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*class="[^"]*p-equipments-list-box[^"]*"[^>]*>([\s\S]*?)<\/a>/gi
+  let m
+  while ((m = re.exec(html)) !== null) {
+    const href = m[1]
+    if (seen.has(href)) continue
+    seen.add(href)
+    const titleM = m[2].match(/p-equipments-list-box__title[^>]*>([^<]+)/i)
+    const title = titleM ? titleM[1].trim() : ''
+    const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i)
+    const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
+    const bcM = m[2].match(/p-equipments-list-box__breadcrumb[^>]*>([^<]+)/i)
+    const breadcrumb = bcM ? bcM[1].trim() : undefined
+    if (title) items.push({ slug: href, name: title, image: img, breadcrumb })
+  }
+
+  // Also try with class before href
+  if (!items.length) {
+    const re2 = /<a[^>]+class="[^"]*p-equipments-list-box[^"]*"[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+    while ((m = re2.exec(html)) !== null) {
+      const href = m[1]
+      if (seen.has(href)) continue
+      seen.add(href)
+      const titleM = m[2].match(/p-equipments-list-box__title[^>]*>([^<]+)/i)
+      const title = titleM ? titleM[1].trim() : ''
+      const imgM = m[2].match(/<img[^>]+src="([^"]+)"/i)
+      const img = imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : ''
+      if (title) items.push({ slug: href, name: title, image: img })
+    }
+  }
+
+  return items
+}
+
+// Parse product detail page (/wynajem/{product-slug})
+// Uses p-equipments-item structure
+function parseProductPage(html: string) {
   const result: Record<string, any> = {}
 
   // Title
   const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
   result.title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
 
-  // Product code
+  // Product code from text-primary font-bold
   const codeM = html.match(/text-primary\s+font-bold[^>]*>([^<]+)/i)
   result.code = codeM ? codeM[1].trim() : ''
 
-  // Description — try multiple selectors
+  // Group ID from #jsPlaceBtn data-group_id
+  const groupIdM = html.match(/data-group_id="(\d+)"/i) || html.match(/jsPlaceBtn[^>]+data-group_id="(\d+)"/i)
+  result.groupId = groupIdM ? groupIdM[1] : ''
+
+  // Description
   result.description = ''
-  // Method 1: class containing "description"
   const descM = html.match(/class="[^"]*description[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
   if (descM) {
     result.description = descM[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 1000)
   }
-  // Method 2: meta description
   if (!result.description) {
     const metaM = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i)
     if (metaM) result.description = metaM[1].trim()
   }
-  // Method 3: og:description
   if (!result.description) {
     const ogM = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i)
     if (ogM) result.description = ogM[1].trim()
+  }
+
+  // JSON-LD for price and brand
+  const ldRe = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
+  let ldm
+  while ((ldm = ldRe.exec(html)) !== null) {
+    try {
+      const ld = JSON.parse(ldm[1])
+      if (ld.offers) {
+        result.priceBrutto = parseFloat(ld.offers.price) || null
+      }
+      if (ld.brand) result.brand = ld.brand.name || ''
+      if (ld.image) result.image = ld.image
+    } catch { /* skip */ }
+  }
+
+  // Gallery images from p-equipments-item-gallery__item
+  result.images = []
+  const galleryRe = /p-equipments-item-gallery__item[^>]*>[\s\S]*?<(?:img|source)[^>]+(?:src|srcset)="([^"]+)"/gi
+  let gm
+  while ((gm = galleryRe.exec(html)) !== null) {
+    const src = gm[1].startsWith('http') ? gm[1] : BASE + gm[1]
+    if (!result.images.includes(src)) result.images.push(src)
+  }
+  // Fallback: data-jsGalleryItems
+  if (!result.images.length) {
+    const galleryRe2 = /data-jsGalleryItems[^>]*>[\s\S]*?<(?:img|source)[^>]+(?:src|srcset)="([^"]+)"/gi
+    while ((gm = galleryRe2.exec(html)) !== null) {
+      const src = gm[1].startsWith('http') ? gm[1] : BASE + gm[1]
+      if (!result.images.includes(src)) result.images.push(src)
+    }
+  }
+  // og:image fallback
+  if (!result.images.length && !result.image) {
+    const ogImgM = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i)
+    if (ogImgM) result.image = ogImgM[1]
+  }
+
+  // AJAX detail URL (data-jsLoad)
+  const ajaxM = html.match(/data-jsLoad="([^"]+)"/i)
+  result.detailUrl = ajaxM ? ajaxM[1] : ''
+
+  // Models (c-product-card items within this product page)
+  result.models = []
+  // Match cards linking to /produkt/ or /wynajem/
+  const cardRe = /<a[^>]+href="([^"]*\/(?:produkt|wynajem)\/[^"]*)"[^>]*class="[^"]*c-product-card[^"]*"[^>]*>([\s\S]*?)<\/a>/gi
+  let crm
+  while ((crm = cardRe.exec(html)) !== null) {
+    const titleM = crm[2].match(/c-product-card__title[^>]*>([^<]+)/i)
+    const imgM = crm[2].match(/<img[^>]+src="([^"]+)"/i)
+    if (titleM) {
+      result.models.push({
+        code: '',
+        slug: crm[1],
+        name: titleM[1].trim(),
+        image: imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : '',
+      })
+    }
+  }
+  // Also try class before href
+  if (!result.models.length) {
+    const cardRe2 = /<a[^>]+class="[^"]*c-product-card[^"]*"[^>]+href="([^"]*\/(?:produkt|wynajem)\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+    while ((crm = cardRe2.exec(html)) !== null) {
+      const titleM = crm[2].match(/c-product-card__title[^>]*>([^<]+)/i)
+      const imgM = crm[2].match(/<img[^>]+src="([^"]+)"/i)
+      if (titleM) {
+        result.models.push({
+          code: '',
+          slug: crm[1],
+          name: titleM[1].trim(),
+          image: imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : '',
+        })
+      }
+    }
   }
 
   // Parameters / specs
@@ -201,8 +321,8 @@ function parseGroupPage(html: string) {
     const value = specM[2].trim()
     if (name && value) result.parameters.push({ name, value })
   }
-  // Fallback: table rows with th/td
-  if (result.parameters.length === 0) {
+  // Fallback: table rows
+  if (!result.parameters.length) {
     const trRe = /<tr[^>]*>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<\/tr>/gi
     let trM
     while ((trM = trRe.exec(html)) !== null) {
@@ -212,59 +332,12 @@ function parseGroupPage(html: string) {
     }
   }
 
-  // JSON-LD price
-  const ldRe = /<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi
-  let ldm
-  while ((ldm = ldRe.exec(html)) !== null) {
-    try {
-      const ld = JSON.parse(ldm[1])
-      if (ld.offers) {
-        result.priceBrutto = parseFloat(ld.offers.price) || null
-        result.currency = ld.offers.priceCurrency || 'PLN'
-      }
-      if (ld.brand) result.brand = ld.brand.name || ''
-      if (ld.image) result.image = ld.image
-    } catch { /* skip */ }
-  }
-
-  // Gallery images
-  result.images = []
-  const galleryRe = /data-jsGalleryItems[^>]*>[\s\S]*?<(?:img|source)[^>]+(?:src|srcset)="([^"]+)"/gi
-  let gm
-  while ((gm = galleryRe.exec(html)) !== null) {
-    const src = gm[1].startsWith('http') ? gm[1] : BASE + gm[1]
-    if (!result.images.includes(src)) result.images.push(src)
-  }
-
-  // AJAX detail URL
-  const ajaxM = html.match(/data-jsLoad="([^"]+)"/i)
-  result.detailUrl = ajaxM ? ajaxM[1] : ''
-
-  // Models (product cards)
-  result.models = []
-  const cardRe = /c-product-card[^>]*>([\s\S]*?)<\/(?:div|article)>\s*(?=<(?:div|article)[^>]*c-product-card|$)/gi
-  let crm
-  while ((crm = cardRe.exec(html)) !== null) {
-    const codeValM = crm[1].match(/jsAddToCompare[^>]+value="([^"]+)"/i)
-    const hrefM = crm[1].match(/href="([^"]*\/produkt\/[^"]*)"/)
-    const titleM = crm[1].match(/c-product-card__title[^>]*>([^<]+)/i)
-    const imgM = crm[1].match(/<img[^>]+src="([^"]+)"/i)
-
-    if (titleM) {
-      result.models.push({
-        code: codeValM ? codeValM[1] : '',
-        slug: hrefM ? hrefM[1] : '',
-        name: titleM[1].trim(),
-        image: imgM ? (imgM[1].startsWith('http') ? imgM[1] : BASE + imgM[1]) : '',
-      })
-    }
-  }
-
   result.contactOnly = !result.priceBrutto && !result.priceNetto
   return result
 }
 
-function parseProductDetail(html: string) {
+// Parse AJAX detail response (pricing, availability)
+function parseAjaxDetail(html: string) {
   const p: Record<string, any> = {}
 
   // Price from data-price attributes
@@ -302,12 +375,37 @@ function parseProductDetail(html: string) {
   // Availability
   const availM = html.match(/jsPlaceStatus[^>]*>([^<]+)/i)
   p.available = availM ? availM[1].trim() : ''
-
   const placeM = html.match(/jsPlaceLabel[^>]*>([^<]+)/i)
   p.place = placeM ? placeM[1].trim() : ''
 
   p.contactOnly = !p.priceBrutto && !p.priceNetto
   return p
+}
+
+// ═══ PAGE TYPE DETECTION ═══
+// Based on HAR analysis:
+// - /wynajem/wg-produktu/{cat} → category (has c-product-card tiles)
+// - /wynajem/wg-produktu/{cat}/{subcat} → subcategory (has p-equipments-list-box items)
+// - /wynajem/{product-slug} → product detail (has p-equipments-item)
+function detectPageType(path: string, html: string): 'category' | 'product' {
+  // URL-based: /wynajem/wg-produktu/ or /wynajem/wg-zastosowania/ → category/subcategory
+  if (path.includes('/wg-produktu/') || path.includes('/wg-zastosowania/')) {
+    return 'category'
+  }
+  // HTML-based: p-equipments-item → product detail page
+  if (html.includes('p-equipments-item')) {
+    return 'product'
+  }
+  // HTML-based: p-equipments-list-box → listing page
+  if (html.includes('p-equipments-list-box')) {
+    return 'category'
+  }
+  // Fallback: if has c-product-card it's a listing
+  if (html.includes('c-product-card')) {
+    return 'category'
+  }
+  // Default: treat as product (try to parse)
+  return 'product'
 }
 
 // ═══ SESSION REFRESH ═══
@@ -370,11 +468,7 @@ async function getIntegrationSession(
 // ═══ LOGIN FLOW ═══
 async function doLogin(email: string, password: string): Promise<CookieJar> {
   const jar: CookieJar = {}
-
-  // Step 1: Visit homepage for cookies
   await fetchHTML('/', jar)
-
-  // Step 2: POST /konto with AJAX header
   const body = `account_login=${encodeURIComponent(email)}&account_password=${encodeURIComponent(password)}&account_mode=login`
   const loginRes = await fetch(BASE + '/konto?basket=1', {
     method: 'POST',
@@ -392,11 +486,9 @@ async function doLogin(email: string, password: string): Promise<CookieJar> {
   })
   parseCookiesFromHeaders(loginRes.headers, jar)
 
-  // Step 3: Verify via /ajax/init
   const initData = await fetchJSON('/ajax/init', jar)
   const acct = initData?.account || {}
   if (!acct.client_id) throw new Error('Login failed — niepoprawne dane logowania')
-
   return jar
 }
 
@@ -445,18 +537,12 @@ serve(async (req) => {
         if (!username || !password) return errorResponse('Email + hasło wymagane')
 
         const jar = await doLogin(username, password)
-
-        // Get user info
         const initData = await fetchJSON('/ajax/init', jar)
         const acct = initData?.account || {}
 
-        // Save to DB
         const credentialsData = {
-          username,
-          password,
-          cookies: jar,
-          clientId: acct.client_id,
-          clientLogin: acct.client_login,
+          username, password, cookies: jar,
+          clientId: acct.client_id, clientLogin: acct.client_login,
           last_refresh: new Date().toISOString(),
         }
 
@@ -471,36 +557,23 @@ serve(async (req) => {
           const { data: inserted, error: insertErr } = await supabaseAdmin
             .from('wholesaler_integrations')
             .insert({
-              company_id: companyId,
-              wholesaler_id: wholesalerId,
-              wholesaler_name: wholesalerName,
-              branza,
-              credentials: credentialsData,
-              is_active: true,
+              company_id: companyId, wholesaler_id: wholesalerId,
+              wholesaler_name: wholesalerName, branza,
+              credentials: credentialsData, is_active: true,
             })
-            .select('id')
-            .single()
-
+            .select('id').single()
           if (insertErr) throw new Error('Failed to save: ' + insertErr.message)
           integrationId = inserted.id
         }
 
-        return json({
-          success: true,
-          integrationId,
-          username: acct.client_login || username,
-          clientId: acct.client_id,
-        })
+        return json({ success: true, integrationId, username: acct.client_login || username, clientId: acct.client_id })
       }
 
       // ═══ LOGOUT ═══
       case 'logout': {
         const { integrationId } = body
         if (!integrationId) return errorResponse('integrationId required')
-        await supabaseAdmin
-          .from('wholesaler_integrations')
-          .delete()
-          .eq('id', integrationId)
+        await supabaseAdmin.from('wholesaler_integrations').delete().eq('id', integrationId)
         return json({ success: true })
       }
 
@@ -543,57 +616,36 @@ serve(async (req) => {
 
         const path = slug.startsWith('/') ? slug : '/' + slug
         const html = await fetchHTML(path, jar)
+        const pageType = detectPageType(path, html)
 
-        // Check if this is a product/group page with models
-        const hasModels = html.includes('c-product-card')
-        const hasDetailLoad = html.includes('data-jsLoad')
+        if (pageType === 'category') {
+          // Try to find items using both methods
+          const productCards = parseProductCards(html)
+          const equipmentBoxes = parseEquipmentListBoxes(html)
 
-        // First check for subcategories — if they exist, this is a category page even if product cards are present
-        const subs = parseSubcategories(html, path)
-        const hasChildCategories = subs.length > 0
+          // Use whichever found results (equipmentBoxes are deeper subcategories/products)
+          const items = equipmentBoxes.length > 0 ? equipmentBoxes : productCards
 
-        if ((hasModels || hasDetailLoad) && !hasChildCategories) {
-          const group = parseGroupPage(html)
+          const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
+          const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
 
-          // Try AJAX detail for prices
+          return json({ type: 'category', title, items })
+        } else {
+          // Product detail page
+          const group = parseProductPage(html)
+
+          // Fetch AJAX detail for prices/availability
           const detailUrl = group.detailUrl || path
           try {
             const detailRes = await fetchAJAX(detailUrl, jar)
             const detailHtml = await detailRes.text()
-            if (detailHtml.length > 100) {
-              const detail = parseProductDetail(detailHtml)
+            if (detailHtml.length > 50) {
+              const detail = parseAjaxDetail(detailHtml)
               Object.assign(group, detail)
             }
           } catch { /* skip */ }
 
           return json({ type: 'group', group })
-        } else if (hasChildCategories) {
-          // Category page with subcategories
-          const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
-          const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
-          return json({ type: 'category', title, items: subs })
-        } else if (path.startsWith('/produkt/')) {
-          // Individual product page
-          const group = parseGroupPage(html)
-          if (group.detailUrl) {
-            try {
-              const detailRes = await fetchAJAX(group.detailUrl, jar)
-              const detailHtml = await detailRes.text()
-              if (detailHtml.length > 100) {
-                const detail = parseProductDetail(detailHtml)
-                const title = group.title
-                Object.assign(group, detail)
-                group.title = title
-              }
-            } catch { /* skip */ }
-          }
-          return json({ type: 'group', group })
-        } else {
-          // Category page (no subcategories found, no product cards)
-          const fallbackSubs = parseSubcategories(html, path)
-          const h1M = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
-          const title = h1M ? h1M[1].replace(/<[^>]*>/g, '').trim() : ''
-          return json({ type: 'category', title, items: fallbackSubs })
         }
       }
 
@@ -609,15 +661,15 @@ serve(async (req) => {
 
         const path = slug.startsWith('/') ? slug : '/' + slug
         const html = await fetchHTML(path, jar)
-        const group = parseGroupPage(html)
+        const group = parseProductPage(html)
 
         // AJAX detail for prices
         const detailUrl = group.detailUrl || path
         try {
           const detailRes = await fetchAJAX(detailUrl, jar)
           const detailHtml = await detailRes.text()
-          if (detailHtml.length > 100) {
-            const detail = parseProductDetail(detailHtml)
+          if (detailHtml.length > 50) {
+            const detail = parseAjaxDetail(detailHtml)
             Object.assign(group, detail)
           }
         } catch { /* skip */ }
@@ -627,12 +679,12 @@ serve(async (req) => {
           try {
             const connRes = await fetchAJAX(`/ajax/groupsConnections/${group.groupId}`, jar)
             const connHtml = await connRes.text()
-            if (connHtml.length > 100) {
+            if (connHtml.length > 50) {
               group.related = []
               const cardRe = /<a[^>]+href="([^"]*\/wynajem\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
               let rm
               while ((rm = cardRe.exec(connHtml)) !== null) {
-                const titleM = rm[2].match(/c-product-card__title[^>]*>([^<]+)/i)
+                const titleM = rm[2].match(/c-product-card__title[^>]*>([^<]+)/i) || rm[2].match(/p-equipments-list-box__title[^>]*>([^<]+)/i)
                 const imgM = rm[2].match(/<img[^>]+src="([^"]+)"/i)
                 if (titleM) {
                   group.related.push({
@@ -659,10 +711,23 @@ serve(async (req) => {
           try { jar = (await getIntegrationSession(supabaseAdmin, integrationId)).jar } catch { /* anon */ }
         }
 
-        // Ramirent site search
-        const html = await fetchHTML(`/szukaj?q=${encodeURIComponent(q)}`, jar)
-        const subs = parseSubcategories(html)
-        return json({ products: subs, query: q, total: subs.length })
+        // Use XHR search — returns JSON { items: [{name, href, breadcrumb, img}] }
+        try {
+          const searchRes = await fetchAJAX(`/wyszukiwarka?str=${encodeURIComponent(q)}`, jar)
+          const searchData = await searchRes.json()
+          const products = (searchData.items || []).map((item: any) => ({
+            slug: item.href,
+            name: item.name,
+            image: item.img ? (item.img.startsWith('http') ? item.img : BASE + item.img) : '',
+            breadcrumb: item.breadcrumb,
+          }))
+          return json({ products, query: q, total: products.length })
+        } catch {
+          // Fallback: fetch HTML search results
+          const html = await fetchHTML(`/wyszukiwarka?str=${encodeURIComponent(q)}`, jar)
+          const boxes = parseEquipmentListBoxes(html)
+          return json({ products: boxes, query: q, total: boxes.length })
+        }
       }
 
       default:
