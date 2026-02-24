@@ -314,6 +314,7 @@ function parseProductPage(html: string) {
 
   // Parameters / specs
   result.parameters = []
+  // Method 1: c-product-spec classes
   const specRe = /c-product-spec__(?:label|name)[^>]*>([^<]+)[\s\S]*?c-product-spec__value[^>]*>([^<]+)/gi
   let specM
   while ((specM = specRe.exec(html)) !== null) {
@@ -321,13 +322,26 @@ function parseProductPage(html: string) {
     const value = specM[2].trim()
     if (name && value) result.parameters.push({ name, value })
   }
-  // Fallback: table rows
+  // Method 2: c-equipment-specification-table <tr> rows
   if (!result.parameters.length) {
-    const trRe = /<tr[^>]*>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<t[hd][^>]*>([^<]+)<\/t[hd]>\s*<\/tr>/gi
+    const specTableM = html.match(/c-equipment-specification-table[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i)
+    if (specTableM) {
+      const trRe = /<tr[^>]*>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>[\s\S]*?<\/tr>/gi
+      let trM
+      while ((trM = trRe.exec(specTableM[1])) !== null) {
+        const name = trM[1].replace(/<[^>]+>/g, '').trim()
+        const value = trM[2].replace(/<[^>]+>/g, '').trim()
+        if (name && value && name.length < 80 && value.length < 80) result.parameters.push({ name, value })
+      }
+    }
+  }
+  // Method 3: any table rows as fallback
+  if (!result.parameters.length) {
+    const trRe = /<tr[^>]*>[\s\S]*?<t[hd][^>]*>([\s\S]*?)<\/t[hd]>[\s\S]*?<t[hd][^>]*>([\s\S]*?)<\/t[hd]>[\s\S]*?<\/tr>/gi
     let trM
     while ((trM = trRe.exec(html)) !== null) {
-      const name = trM[1].trim()
-      const value = trM[2].trim()
+      const name = trM[1].replace(/<[^>]+>/g, '').trim()
+      const value = trM[2].replace(/<[^>]+>/g, '').trim()
       if (name && value && name.length < 80 && value.length < 80) result.parameters.push({ name, value })
     }
   }
