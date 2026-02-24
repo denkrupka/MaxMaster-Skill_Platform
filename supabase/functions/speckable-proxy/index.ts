@@ -62,8 +62,6 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string): Pr
     const params = new URLSearchParams({
       api_key: SCRAPER_API_KEY,
       url,
-      render: 'true',
-      country_code: 'pl',
     })
     const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
       headers: { 'Accept-Language': 'pl-PL,pl;q=0.9' },
@@ -256,13 +254,19 @@ function parseListPage(html: string, requestedPath: string): any {
   const norm = (requestedPath || '/').replace(/\/$/, '')
   const isRoot = !norm || norm === '/' || norm === '/pl/list'
 
-  // Products (product cards with ins-v-product-thumbnail class)
+  // Products — only from the product-list-container (after H1), NOT from
+  // the "featured/tags-browser" section that shows the same products on every page.
   const products: any[] = []
   const pSeen = new Set<string>()
   if (!isRoot) {
-    const cardRe = /<[^>]*class="[^"]*ins-v-product-thumbnail[^"]*"[^>]*>([\s\S]*?)(?=<[^>]*class="[^"]*ins-v-product-thumbnail|$)/gi
+    // Isolate the actual category product listing section
+    const plcStart = html.indexOf('product-list-container')
+    const productHtml = plcStart > 0 ? html.substring(plcStart) : html
+
+    // Match insTable cards (category/search listing) — each card is ~18KB
+    const cardRe = /<[^>]*class="[^"]*ins-v-product-thumbnail[^"]*insTable[^"]*"[^>]*>([\s\S]*?)(?=<[^>]*class="[^"]*ins-v-product-thumbnail[^"]*insTable|$)/gi
     let card: RegExpExecArray | null
-    while ((card = cardRe.exec(html)) !== null) {
+    while ((card = cardRe.exec(productHtml)) !== null) {
       const block = card[0]
       // Extract product URL
       const hrefMatch = block.match(/<a[^>]*href="(\/pl\/product\/[^"]+)"[^>]*>/i)
@@ -271,23 +275,47 @@ function parseListPage(html: string, requestedPath: string): any {
       if (pSeen.has(slug)) continue
       pSeen.add(slug)
 
-      // Name: from .heading or img alt
-      const headingMatch = block.match(/<[^>]*class="[^"]*heading[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
-      let name = headingMatch ? stripHtml(headingMatch[1]) : ''
+      // Name: from .product-name div, then .heading, then img alt
+      let name = ''
+      const pnameMatch = block.match(/<[^>]*class="[^"]*product-name[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+      if (pnameMatch) {
+        const txt = stripHtml(pnameMatch[1])
+        if (txt && !txt.startsWith('{{')) name = txt
+      }
       if (!name) {
-        const altMatch = block.match(/<img[^>]*class="[^"]*photo[^"]*"[^>]*alt="([^"]*)"[^>]*>/i)
-        if (altMatch) name = altMatch[1]
+        const headingMatch = block.match(/<[^>]*class="[^"]*heading[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
+        if (headingMatch) {
+          const txt = stripHtml(headingMatch[1])
+          if (txt && !txt.startsWith('{{')) name = txt
+        }
+      }
+      if (!name) {
+        const altMatch = block.match(/<img[^>]*alt="([^"]+)"[^>]*>/i)
+        if (altMatch && !altMatch[1].startsWith('{{') && altMatch[1].length > 5) name = altMatch[1]
       }
       if (!name) continue
 
-      // Image
-      const imgMatch = block.match(/<img[^>]*class="[^"]*photo[^"]*"[^>]*(?:src|data-src)="([^"]*)"[^>]*>/i)
-        || block.match(/<img[^>]*(?:src|data-src)="([^"]*)"[^>]*class="[^"]*photo[^"]*"[^>]*>/i)
-      const image = imgMatch ? absUrl(imgMatch[1]) : ''
+      // Image: from product-photo container, then general img
+      let image = ''
+      const photoMatch = block.match(/<[^>]*class="[^"]*product-photo[^"]*"[^>]*>[\s\S]*?<img[^>]*(?:src|data-src)="([^"]*(?:media\/cache|assets)[^"]*)"[^>]*>/i)
+      if (photoMatch) {
+        image = absUrl(photoMatch[1])
+      } else {
+        const imgMatch = block.match(/<img[^>]*(?:src|data-src)="([^"]*(?:media\/cache|assets\/default\/photos)[^"]*)"[^>]*>/i)
+        if (imgMatch) image = absUrl(imgMatch[1])
+      }
 
-      // Symbol (SKU) from <strong>
-      const strongMatch = block.match(/<strong[^>]*>([^<]+)<\/strong>/i)
-      const symbol = strongMatch ? strongMatch[1].trim() : ''
+      // Symbol (SKU): from .symbol div, or first <strong> with numeric content
+      let symbol = ''
+      const symMatch = block.match(/<[^>]*class="[^"]*symbol[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+      if (symMatch) {
+        // Extract text, removing "Symbol:" prefix
+        symbol = stripHtml(symMatch[1]).replace(/^Symbol:\s*/i, '').trim()
+      }
+      if (!symbol) {
+        const strongMatch = block.match(/<strong[^>]*>(\d[\d.]*)<\/strong>/i)
+        if (strongMatch) symbol = strongMatch[1].trim()
+      }
 
       // Price netto
       const priceNetBlock = block.match(/<[^>]*class="[^"]*price-net[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
@@ -295,6 +323,11 @@ function parseListPage(html: string, requestedPath: string): any {
       if (priceNetBlock) {
         priceNetto = parsePrice(priceNetBlock[1])
         if (priceNetto === null) priceNetto = parsePriceFromText(stripHtml(priceNetBlock[1]))
+      }
+      // Fallback: first <strong> with a decimal number (price value)
+      if (priceNetto === null) {
+        const priceStrong = block.match(/<strong[^>]*>(\d+\.\d{2,4})<\/strong>/i)
+        if (priceStrong) priceNetto = parseFloat(priceStrong[1])
       }
 
       // Stock
