@@ -9,6 +9,28 @@ const corsHeaders = {
 const BASE = 'https://www.speckable.pl'
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
+// ═══ PAGE CACHE — avoid re-fetching the same URL via ScraperAPI ═══
+const PAGE_CACHE = new Map<string, { html: string; ts: number }>()
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const CACHE_MAX = 50 // max entries
+
+function getCachedPage(url: string): string | null {
+  const entry = PAGE_CACHE.get(url)
+  if (!entry) return null
+  if (Date.now() - entry.ts > CACHE_TTL_MS) { PAGE_CACHE.delete(url); return null }
+  return entry.html
+}
+
+function setCachedPage(url: string, html: string): void {
+  // Evict oldest if full
+  if (PAGE_CACHE.size >= CACHE_MAX) {
+    let oldestKey = '', oldestTs = Infinity
+    for (const [k, v] of PAGE_CACHE) { if (v.ts < oldestTs) { oldestTs = v.ts; oldestKey = k } }
+    if (oldestKey) PAGE_CACHE.delete(oldestKey)
+  }
+  PAGE_CACHE.set(url, { html, ts: Date.now() })
+}
+
 // ═══ ScraperAPI: bypass Cloudflare WAF directly from edge function ═══
 const SCRAPER_API_KEY = Deno.env.get('SCRAPER_API_KEY') || ''
 
@@ -92,6 +114,13 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
   const fullUrl = url.startsWith('http') ? url : BASE + url
   const errors: string[] = []
 
+  // Check cache first
+  const cached = getCachedPage(fullUrl)
+  if (cached) {
+    console.log(`[fetchPage] Cache HIT for ${fullUrl} (${cached.length} bytes)`)
+    return cached
+  }
+
   // Strategy 1: Try ScraperAPI first (if configured)
   if (SCRAPER_API_KEY) {
     try {
@@ -101,6 +130,7 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
       if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
         // Verify it's not a Cloudflare challenge page
         if (!r.body.includes('cf-browser-verification') && !r.body.includes('challenge-platform')) {
+          setCachedPage(fullUrl, r.body)
           return r.body
         }
         errors.push(`ScraperAPI: Cloudflare challenge (${r.body.length}b)`)
@@ -136,6 +166,7 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
           errors.push(`Direct[${attempt + 1}]: Cloudflare challenge`)
           continue
         }
+        setCachedPage(fullUrl, body)
         return body
       }
       errors.push(`Direct[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)

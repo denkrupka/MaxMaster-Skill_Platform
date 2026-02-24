@@ -588,6 +588,10 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Client-side cache for product listings and product details (avoids re-fetching)
+  const productsCache = useRef<Record<string, { products: SpeckableProduct[]; totalPages: number; totalProducts: number; hasProducts: boolean; categories: any[]; ts: number }>>({});
+  const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
   // Load categories
   useEffect(() => {
     setCatLoading(true);
@@ -599,9 +603,23 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
       .catch(e => { setCatLoading(false); setConnectionError(e.message); });
   }, [integrationId]);
 
-  // Load products by category
+  // Load products by category (with client-side cache)
   useEffect(() => {
     if (!selectedCat) return;
+    const cacheKey = `${selectedCat.slug}::${page}`;
+    const cached = productsCache.current[cacheKey];
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      setProducts(cached.products);
+      setTotalPages(cached.totalPages);
+      setTotalCount(cached.totalProducts);
+      setProdLoading(false);
+      setProdError(null);
+      setSearchResult(null);
+      if (!cached.hasProducts && cached.categories?.length > 0) {
+        setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: cached.categories }));
+      }
+      return;
+    }
     setProdLoading(true);
     setProdError(null);
     speckableProxy('products', { integrationId, cat: selectedCat.slug, page })
@@ -616,6 +634,15 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
         setTotalCount(data.totalProducts || 0);
         setProdLoading(false);
         setSearchResult(null);
+        // Cache the result
+        productsCache.current[cacheKey] = {
+          products: data.products || [],
+          totalPages: data.totalPages || 0,
+          totalProducts: data.totalProducts || 0,
+          hasProducts: data.hasProducts,
+          categories: data.categories || [],
+          ts: Date.now(),
+        };
         // Store subcategories when API returns categories instead of products
         if (!data.hasProducts && data.categories && data.categories.length > 0) {
           setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: data.categories }));
