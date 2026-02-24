@@ -90,53 +90,63 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string): Pr
 
 async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
-  // ScraperAPI has its own retries, so limit ours
-  const maxRetries = SCRAPER_API_KEY ? 1 : retries
-  let lastError = ''
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  const errors: string[] = []
+
+  // Strategy 1: Try ScraperAPI first (if configured)
+  if (SCRAPER_API_KEY) {
+    try {
+      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}`)
+      const r = await viaScraperAPI(fullUrl, 'GET')
+      console.log(`[fetchPage] ScraperAPI → ${r.status}, ${r.body.length} bytes`)
+      if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
+        // Verify it's not a Cloudflare challenge page
+        if (!r.body.includes('cf-browser-verification') && !r.body.includes('challenge-platform')) {
+          return r.body
+        }
+        errors.push(`ScraperAPI: Cloudflare challenge (${r.body.length}b)`)
+      } else {
+        errors.push(`ScraperAPI: HTTP ${r.status} (${r.body.length}b)`)
+      }
+    } catch (e: any) {
+      errors.push(`ScraperAPI: ${e.message}`)
+      console.log(`[fetchPage] ScraperAPI error: ${e.message}`)
+    }
+  }
+
+  // Strategy 2: Direct fetch with retries (fallback or primary if no ScraperAPI)
+  for (let attempt = 0; attempt < retries; attempt++) {
     if (attempt > 0) {
       await new Promise(r => setTimeout(r, 800 * attempt))
     }
     try {
-      let status: number
-      let body: string
+      const headers: Record<string, string> = {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pl-PL,pl;q=0.9',
+      }
+      if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
+      if (attempt > 0) headers['Referer'] = BASE + '/'
+      const res = await fetch(fullUrl, { headers, redirect: 'follow' })
+      parseCookiesFromHeaders(res.headers, jar)
+      const body = await res.text()
+      console.log(`[fetchPage] Direct attempt ${attempt + 1} → ${res.status}, ${body.length} bytes`)
 
-      if (SCRAPER_API_KEY) {
-        // Use ScraperAPI to bypass Cloudflare WAF
-        const r = await viaScraperAPI(fullUrl, 'GET')
-        status = r.status
-        body = r.body
-        console.log(`[fetchPage] ScraperAPI ${fullUrl} → ${status}, ${body.length} bytes`)
-      } else {
-        // Direct fetch (works only from non-blocked IPs)
-        const headers: Record<string, string> = {
-          'User-Agent': UA,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'pl-PL,pl;q=0.9',
+      if (res.ok && body.length > 500) {
+        if (body.includes('cf-browser-verification') || body.includes('challenge-platform')) {
+          errors.push(`Direct[${attempt + 1}]: Cloudflare challenge`)
+          continue
         }
-        if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
-        if (attempt > 0) headers['Referer'] = BASE + '/'
-        const res = await fetch(fullUrl, { headers, redirect: 'follow' })
-        parseCookiesFromHeaders(res.headers, jar)
-        status = res.status
-        if (res.ok) return await res.text()
-        body = await res.text()
+        return body
       }
-
-      if (status >= 200 && status < 400) return body
-      lastError = `HTTP ${status}`
-      if (status === 403) {
-        console.log(`[fetchPage] 403 on attempt ${attempt + 1}`)
-        continue
-      }
-      if (status >= 500) continue
+      errors.push(`Direct[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)
+      if (res.status === 403 || res.status >= 500) continue
     } catch (e: any) {
-      lastError = e.message || String(e)
-      console.log(`[fetchPage] Error on attempt ${attempt + 1}: ${lastError}`)
-      if (attempt < maxRetries) continue
+      errors.push(`Direct[${attempt + 1}]: ${e.message}`)
+      console.log(`[fetchPage] Direct error: ${e.message}`)
     }
   }
-  throw new Error(lastError)
+
+  throw new Error(errors.join(' → '))
 }
 
 async function postForm(url: string, body: string, jar: CookieJar, referer?: string): Promise<string> {
@@ -720,6 +730,66 @@ serve(async (req) => {
         }
       }
 
+      // ═══ DEBUG: Test connectivity to Speckable.pl ═══
+      case 'debug': {
+        const results: Record<string, any> = {
+          scraperApiKeySet: !!SCRAPER_API_KEY,
+          scraperApiKeyPrefix: SCRAPER_API_KEY ? SCRAPER_API_KEY.slice(0, 8) + '...' : '(not set)',
+          timestamp: new Date().toISOString(),
+          tests: {},
+        }
+
+        // Test 1: Direct fetch
+        try {
+          const t0 = Date.now()
+          const directResp = await fetch(BASE + '/pl/list/narzedzia', {
+            headers: { 'User-Agent': UA, 'Accept-Language': 'pl-PL,pl;q=0.9' },
+          })
+          const directBody = await directResp.text()
+          results.tests.directFetch = {
+            status: directResp.status,
+            bodyLength: directBody.length,
+            hasProducts: directBody.includes('ins-v-product-thumbnail'),
+            hasCloudflareChallenge: directBody.includes('cf-browser-verification') || directBody.includes('challenge-platform'),
+            isLoginPage: directBody.includes('login[_token]'),
+            titleMatch: directBody.match(/<title>([^<]+)/)?.[1]?.slice(0, 80) || '',
+            timeMs: Date.now() - t0,
+          }
+        } catch (e: any) {
+          results.tests.directFetch = { error: e.message }
+        }
+
+        // Test 2: ScraperAPI (if key is set)
+        if (SCRAPER_API_KEY) {
+          try {
+            const t0 = Date.now()
+            const scraperResult = await viaScraperAPI(BASE + '/pl/list/narzedzia')
+            results.tests.scraperApi = {
+              status: scraperResult.status,
+              bodyLength: scraperResult.body.length,
+              hasProducts: scraperResult.body.includes('ins-v-product-thumbnail'),
+              hasCloudflareChallenge: scraperResult.body.includes('cf-browser-verification') || scraperResult.body.includes('challenge-platform'),
+              titleMatch: scraperResult.body.match(/<title>([^<]+)/)?.[1]?.slice(0, 80) || '',
+              timeMs: Date.now() - t0,
+            }
+          } catch (e: any) {
+            results.tests.scraperApi = { error: e.message }
+          }
+        }
+
+        // Test 3: ScraperAPI account status
+        if (SCRAPER_API_KEY) {
+          try {
+            const accountResp = await fetch(`https://api.scraperapi.com/account?api_key=${SCRAPER_API_KEY}`)
+            results.tests.scraperApiAccount = await accountResp.json()
+          } catch (e: any) {
+            results.tests.scraperApiAccount = { error: e.message }
+          }
+        }
+
+        return json(results)
+      }
+
       // ═══ CATEGORIES ═══
       case 'categories': {
         // Return static categories instantly — fetching the 2.5MB homepage via
@@ -765,7 +835,7 @@ serve(async (req) => {
             totalProducts: 0,
             hasProducts: false,
             title: '',
-            error: 'Strona Speckable.pl jest tymczasowo niedostępna. Spróbuj ponownie później.',
+            error: `Strona Speckable.pl jest tymczasowo niedostępna. (${fetchErr.message})`,
           })
         }
 
@@ -818,7 +888,7 @@ serve(async (req) => {
           html = await fetchPage(searchUrl, jar)
         } catch (fetchErr: any) {
           console.log('[search] fetchPage failed:', fetchErr.message)
-          return json({ products: [], query: q, total: 0, hasProducts: false, error: 'Strona Speckable.pl jest tymczasowo niedostępna.' })
+          return json({ products: [], query: q, total: 0, hasProducts: false, error: `Strona Speckable.pl jest tymczasowo niedostępna. (${fetchErr.message})` })
         }
         const data = parseListPage(html, `/pl/query/${q}`)
 
@@ -845,7 +915,7 @@ serve(async (req) => {
           html = await fetchPage(productPath, jar)
         } catch (fetchErr: any) {
           console.log('[product] fetchPage failed:', fetchErr.message)
-          return json({ product: null, error: 'Strona Speckable.pl jest tymczasowo niedostępna.' })
+          return json({ product: null, error: `Strona Speckable.pl jest tymczasowo niedostępna. (${fetchErr.message})` })
         }
         const p = parseProductPage(html)
 
