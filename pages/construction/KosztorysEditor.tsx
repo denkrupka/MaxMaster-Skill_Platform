@@ -2308,6 +2308,47 @@ export const KosztorysEditorPage: React.FC = () => {
     let updatedPositions = 0;
     let addedResources = 0;
 
+    // Normalize KNR code to database format (e.g., "KNR 4-03 1003-02")
+    // Handles slash format from PDFs: "KNR 403/1003/2" → "KNR 4-03 1003-02"
+    // Handles compact format: "KNNR 5/102/5" → "KNNR 5 0102-05"
+    const normalizeKnrCode = (code: string): string => {
+      let c = code.trim();
+      // Remove ordinal prefixes like "d.1", "d.1.1", "1.", "1.1." etc.
+      c = c.replace(/^d\.\d+(\.\d+)*\s*/i, '');
+      c = c.replace(/^\d+\.\d+\.\s*/, '');
+      // Normalize multiple spaces to single
+      c = c.replace(/\s+/g, ' ');
+
+      // Handle slash-separated format: TYPE CATALOG/TABLE/VARIANT
+      // e.g., "KNR 403/1003/2", "KNNR 5/102/5", "KNR-W 218/704/1"
+      const slashMatch = c.match(/^(KNR-W|KNNR-W|KNR|KNNR|KSNR|KNP|NNRNKB)\s+(\d+)\/(\d+)\/(\d+)$/i);
+      if (slashMatch) {
+        const type = slashMatch[1].toUpperCase();
+        const rawCatalog = slashMatch[2];
+        const rawTable = slashMatch[3];
+        const rawVariant = slashMatch[4];
+
+        // Convert catalog: "403" → "4-03", "5" → "5", "218" → "2-18"
+        let catalog: string;
+        if (rawCatalog.length >= 3) {
+          // First digit(s) = volume, last 2 = chapter: "403" → "4-03", "218" → "2-18"
+          catalog = rawCatalog.slice(0, -2) + '-' + rawCatalog.slice(-2);
+        } else {
+          catalog = rawCatalog;
+        }
+
+        // Pad table to 4 digits, variant to 2 digits
+        const table = rawTable.padStart(4, '0');
+        const variant = rawVariant.padStart(2, '0');
+
+        return `${type} ${catalog} ${table}-${variant}`;
+      }
+
+      // Handle space-separated slash: "KNR 4-03 1003/02" → "KNR 4-03 1003-02"
+      c = c.replace(/(\d{4})\/(\d{2})/, '$1-$2');
+      return c;
+    };
+
     // Get all positions with KNR base codes
     const positionsWithBase = Object.values(newData.positions).filter(pos => pos.base && pos.base.trim());
 
@@ -2316,14 +2357,18 @@ export const KosztorysEditorPage: React.FC = () => {
       return;
     }
 
-    // Get unique base codes
-    const baseCodes = [...new Set(positionsWithBase.map(p => p.base?.trim()))].filter(Boolean);
+    // Get unique base codes (both original and normalized)
+    const rawCodes = [...new Set(positionsWithBase.map(p => p.base?.trim()))].filter(Boolean) as string[];
+    const normalizedCodes = [...new Set(rawCodes.map(normalizeKnrCode))].filter(Boolean);
+    const allCodesToSearch = [...new Set([...rawCodes, ...normalizedCodes])].filter(Boolean);
 
-    // Fetch KNR positions from database by basis (code)
+    console.log('[Uzupełnij] Searching for codes:', allCodesToSearch);
+
+    // Fetch KNR positions from database by basis (code) — try exact match first
     const { data: knrPositions, error: knrError } = await supabase
       .from('knr_positions')
       .select('xid, basis, name, unit')
-      .in('basis', baseCodes);
+      .in('basis', allCodesToSearch);
 
     if (knrError) {
       console.error('Error fetching KNR positions:', knrError);
@@ -2331,17 +2376,44 @@ export const KosztorysEditorPage: React.FC = () => {
       return;
     }
 
-    if (!knrPositions || knrPositions.length === 0) {
-      showNotificationMessage('Nie znaleziono pozycji KNR dla podanych kodów', 'warning');
+    // If no exact matches, try ILIKE search for each code
+    let allKnrPositions = knrPositions || [];
+    if (allKnrPositions.length === 0 && normalizedCodes.length > 0) {
+      console.log('[Uzupełnij] No exact matches, trying fuzzy search...');
+      // Try searching with ILIKE for each code (handles spacing differences)
+      const fuzzyResults: any[] = [];
+      for (const code of normalizedCodes.slice(0, 50)) {
+        // Build a pattern: replace spaces with flexible whitespace matching
+        const likePattern = code.replace(/\s+/g, '%');
+        const { data: fuzzy } = await supabase
+          .from('knr_positions')
+          .select('xid, basis, name, unit')
+          .ilike('basis', likePattern)
+          .limit(1);
+        if (fuzzy && fuzzy.length > 0) fuzzyResults.push(fuzzy[0]);
+      }
+      if (fuzzyResults.length > 0) {
+        allKnrPositions = fuzzyResults;
+        console.log(`[Uzupełnij] Fuzzy search found ${fuzzyResults.length} matches`);
+      }
+    }
+
+    if (allKnrPositions.length === 0) {
+      const sampleCodes = rawCodes.slice(0, 5).join(', ');
+      console.warn('[Uzupełnij] No KNR positions found. Sample codes searched:', sampleCodes);
+      showNotificationMessage(`Nie znaleziono pozycji KNR dla podanych kodów (np. ${sampleCodes})`, 'warning');
       return;
     }
 
-    // Create map of KNR positions by basis code
+    // Create map of KNR positions by basis code (both exact and normalized)
     const knrByBasis = new Map<string, any>();
-    knrPositions.forEach(kp => knrByBasis.set(kp.basis, kp));
+    allKnrPositions.forEach(kp => {
+      knrByBasis.set(kp.basis, kp);
+      knrByBasis.set(normalizeKnrCode(kp.basis), kp);
+    });
 
     // Get all KNR position xids
-    const knrXids = knrPositions.map(kp => kp.xid);
+    const knrXids = allKnrPositions.map(kp => kp.xid);
 
     // Fetch resources for these KNR positions
     const { data: knrResources, error: resError } = await supabase
@@ -2368,7 +2440,8 @@ export const KosztorysEditorPage: React.FC = () => {
     Object.values(newData.positions).forEach(position => {
       if (!position.base || !position.base.trim()) return;
 
-      const knrPosition = knrByBasis.get(position.base.trim());
+      const rawBase = position.base.trim();
+      const knrPosition = knrByBasis.get(rawBase) || knrByBasis.get(normalizeKnrCode(rawBase));
       if (!knrPosition) return;
 
       const knrRes = resourcesByXid.get(knrPosition.xid) || [];
