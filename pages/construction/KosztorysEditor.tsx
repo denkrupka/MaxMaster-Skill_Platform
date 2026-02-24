@@ -1103,6 +1103,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
   const tableContainerRef = React.useRef<HTMLDivElement>(null);
   const rowRefs = React.useRef<{ [key: string]: HTMLTableRowElement | null }>({});
+  const [treeSearchQuery, setTreeSearchQuery] = useState('');
 
   // Title Page Editor state
   const [titlePageData, setTitlePageData] = useState<TitlePageData>({
@@ -1202,6 +1203,36 @@ export const KosztorysEditorPage: React.FC = () => {
     }
     return calculationResult.positions[editorState.selectedItemId] || null;
   }, [editorState.selectedItemType, editorState.selectedItemId, calculationResult]);
+
+  // Search results for navigation tree
+  const treeSearchResults = useMemo(() => {
+    const q = treeSearchQuery.trim().toLowerCase();
+    if (!q || q.length < 2) return null;
+
+    const results: { positionId: string; sectionName: string; base: string; name: string }[] = [];
+
+    for (const [posId, pos] of Object.entries(estimateData.positions)) {
+      const searchableText = [
+        pos.name,
+        pos.base,
+        pos.unit?.label,
+        ...pos.resources.map(r => r.name),
+        ...pos.resources.map(r => r.index || ''),
+      ].join(' ').toLowerCase();
+
+      if (searchableText.includes(q)) {
+        let sectionName = '';
+        for (const sec of Object.values(estimateData.sections)) {
+          if (sec.positionIds.includes(posId)) {
+            sectionName = sec.name;
+            break;
+          }
+        }
+        results.push({ positionId: posId, sectionName, base: pos.base || '', name: pos.name });
+      }
+    }
+    return results;
+  }, [treeSearchQuery, estimateData]);
 
   // Auto-validate when data changes
   useEffect(() => {
@@ -4306,7 +4337,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   {/* Drag handle for positions */}
                   <GripVertical className="w-3 h-3 text-gray-400 cursor-grab flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <button
-                    onClick={() => selectItem(posId, 'position')}
+                    onClick={() => scrollToPosition(posId)}
                     className="flex items-center gap-1 flex-1 text-left"
                   >
                     <FileText className="w-3 h-3 flex-shrink-0" />
@@ -4366,6 +4397,44 @@ export const KosztorysEditorPage: React.FC = () => {
       console.error('Error getting target path:', error);
       return itemType === 'section' ? 'Dział' : itemType === 'position' ? 'Pozycja' : 'Nakład';
     }
+  };
+
+  // Scroll main table to a position and highlight it
+  const scrollToPosition = (positionId: string) => {
+    // Find parent section(s) and expand them
+    const sectionsToExpand: string[] = [];
+    const findSectionForPosition = (sectionId: string): boolean => {
+      const section = estimateData.sections[sectionId];
+      if (!section) return false;
+      if (section.positionIds.includes(positionId)) {
+        sectionsToExpand.push(sectionId);
+        return true;
+      }
+      for (const subId of section.subsectionIds || []) {
+        if (findSectionForPosition(subId)) {
+          sectionsToExpand.push(sectionId);
+          return true;
+        }
+      }
+      return false;
+    };
+    for (const sectionId of estimateData.root.sectionIds) {
+      findSectionForPosition(sectionId);
+    }
+
+    setEditorState(prev => ({
+      ...prev,
+      expandedSections: new Set([...prev.expandedSections, ...sectionsToExpand]),
+      expandedPositions: new Set([...prev.expandedPositions, positionId]),
+      selectedItemId: positionId,
+      selectedItemType: 'position' as const,
+    }));
+
+    setHighlightedItemId(positionId);
+    setTimeout(() => {
+      rowRefs.current[positionId]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    setTimeout(() => setHighlightedItemId(null), 2500);
   };
 
   // Select item
@@ -6483,31 +6552,66 @@ export const KosztorysEditorPage: React.FC = () => {
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                       type="text"
+                      value={treeSearchQuery}
+                      onChange={e => setTreeSearchQuery(e.target.value)}
                       placeholder="Szukaj w kosztorysie"
-                      className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full pl-8 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
+                    {treeSearchQuery && (
+                      <button onClick={() => setTreeSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2">
+                        <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Estimate structure tree */}
+                {/* Estimate structure tree or search results */}
                 <div className="flex-1 overflow-y-auto p-2">
-                  {/* Root node "▼ Kosztorys" per documentation 4.2 */}
-                  <button
-                    onClick={() => setEditorState(prev => ({ ...prev, treeRootExpanded: !prev.treeRootExpanded }))}
-                    className="w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 font-medium"
-                  >
-                    {editorState.treeRootExpanded !== false ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    <span>Kosztorys</span>
-                  </button>
+                  {treeSearchResults ? (
+                    <div className="space-y-1">
+                      <div className="text-xs text-gray-500 px-2 mb-2">
+                        Znaleziono: {treeSearchResults.length} pozycji
+                      </div>
+                      {treeSearchResults.length === 0 && (
+                        <div className="text-sm text-gray-400 text-center py-4">Brak wyników</div>
+                      )}
+                      {treeSearchResults.map(result => (
+                        <button
+                          key={result.positionId}
+                          onClick={() => scrollToPosition(result.positionId)}
+                          className={`w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-sm ${
+                            editorState.selectedItemId === result.positionId ? 'bg-blue-100' : ''
+                          }`}
+                        >
+                          <div className="font-medium text-gray-800 truncate">{result.name}</div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {result.base && <span className="font-mono mr-2">{result.base}</span>}
+                            {result.sectionName}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
+                      {/* Root node "▼ Kosztorys" per documentation 4.2 */}
+                      <button
+                        onClick={() => setEditorState(prev => ({ ...prev, treeRootExpanded: !prev.treeRootExpanded }))}
+                        className="w-full flex items-center gap-1 px-2 py-1.5 text-sm text-left rounded hover:bg-gray-50 font-medium"
+                      >
+                        {editorState.treeRootExpanded !== false ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        <span>Kosztorys</span>
+                      </button>
 
-                  {/* Sections tree - only shown when root is expanded */}
-                  {editorState.treeRootExpanded !== false && estimateData.root.sectionIds.map(sectionId =>
-                    renderSectionTree(sectionId, 0)
-                  )}
+                      {/* Sections tree - only shown when root is expanded */}
+                      {editorState.treeRootExpanded !== false && estimateData.root.sectionIds.map(sectionId =>
+                        renderSectionTree(sectionId, 0)
+                      )}
 
-                  {/* Empty state */}
-                  {estimateData.root.sectionIds.length === 0 && (
-                    <p className="text-sm text-gray-400 text-center py-4">Kosztorys jest pusty</p>
+                      {/* Empty state */}
+                      {estimateData.root.sectionIds.length === 0 && (
+                        <p className="text-sm text-gray-400 text-center py-4">Kosztorys jest pusty</p>
+                      )}
+                    </>
                   )}
                 </div>
 
