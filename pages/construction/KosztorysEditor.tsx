@@ -37,6 +37,12 @@ import {
   createDefaultPurchaseCostsOverhead,
   evaluateMeasurementExpression,
 } from '../../lib/kosztorysCalculator';
+import {
+  parseAthFile,
+  parseJsonFile,
+  parseXmlFile,
+  convertGeminiResponseToEstimate,
+} from '../../lib/kosztorysImportParsers';
 import type {
   KosztorysCostEstimate,
   KosztorysCostEstimateData,
@@ -1000,6 +1006,15 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchEqViewMode, setSearchEqViewMode] = useState<'grid' | 'list'>('grid');
   const [searchEqExpandedCats, setSearchEqExpandedCats] = useState<Set<string>>(new Set());
   const [searchEqDetailItem, setSearchEqDetailItem] = useState<KosztorysEquipment | null>(null);
+
+  // Import modal state
+  const [showImportConfirmModal, setShowImportConfirmModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importDragActive, setImportDragActive] = useState(false);
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -2883,6 +2898,118 @@ export const KosztorysEditorPage: React.FC = () => {
     } catch (error: any) {
       console.error('Error checking existing projects:', error);
       await createNewGanttFromEstimate();
+    }
+  };
+
+  // --- Import handlers ---
+  const handleImportClick = () => {
+    setShowModeDropdown(false);
+    // Check if estimate has existing data
+    const hasSections = estimateData.root.sectionIds.length > 0;
+    const hasPositions = Object.keys(estimateData.positions).length > 0;
+    if (hasSections || hasPositions) {
+      setShowImportConfirmModal(true);
+    } else {
+      setImportFile(null);
+      setImportError(null);
+      setImportProgress('');
+      setShowImportModal(true);
+    }
+  };
+
+  const handleImportConfirm = () => {
+    setShowImportConfirmModal(false);
+    setImportFile(null);
+    setImportError(null);
+    setImportProgress('');
+    setShowImportModal(true);
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImportLoading(true);
+    setImportError(null);
+    setImportProgress('Wczytywanie pliku...');
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      let importedData: KosztorysCostEstimateData;
+
+      if (ext === 'ath') {
+        setImportProgress('Parsowanie pliku ATH...');
+        const buffer = await file.arrayBuffer();
+        importedData = parseAthFile(buffer);
+      } else if (ext === 'json') {
+        setImportProgress('Parsowanie pliku JSON...');
+        const text = await file.text();
+        importedData = parseJsonFile(text);
+      } else if (ext === 'xml') {
+        setImportProgress('Parsowanie pliku XML...');
+        const text = await file.text();
+        importedData = parseXmlFile(text);
+      } else if (['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+        setImportProgress('Przesyłanie do AI (Gemini)...');
+        const buffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+
+        const mimeMap: Record<string, string> = {
+          pdf: 'application/pdf',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          png: 'image/png',
+          webp: 'image/webp',
+        };
+
+        setImportProgress('Analiza dokumentu przez AI...');
+        const { data: funcData, error: funcError } = await supabase.functions.invoke('parse-kosztorys-document', {
+          body: { fileBase64: base64, mimeType: mimeMap[ext] || 'application/pdf' },
+        });
+
+        if (funcError) throw new Error(funcError.message || 'Błąd wywołania funkcji AI');
+        if (!funcData?.success) throw new Error(funcData?.error || 'AI nie zwróciło danych');
+
+        setImportProgress('Konwertowanie wyników...');
+        importedData = convertGeminiResponseToEstimate(funcData.data);
+      } else {
+        throw new Error(`Nieobsługiwany format pliku: .${ext}. Obsługiwane: .ath, .json, .xml, .pdf, .jpg, .png`);
+      }
+
+      // Count imported items
+      const sectionCount = Object.keys(importedData.sections).length;
+      const positionCount = Object.keys(importedData.positions).length;
+
+      if (sectionCount === 0 && positionCount === 0) {
+        throw new Error('Nie znaleziono żadnych działów ani pozycji w pliku');
+      }
+
+      // Apply imported data
+      setEstimateData(importedData);
+
+      // Expand all sections and mark dirty
+      const allSectionIds = Object.keys(importedData.sections);
+      setEditorState(prev => ({
+        ...prev,
+        expandedSections: new Set(allSectionIds),
+        isDirty: true,
+      }));
+
+      // Switch to przedmiar view
+      setViewMode('przedmiar');
+      setActiveNavItem('przedmiar');
+      setLeftPanelMode('overview');
+
+      setShowImportModal(false);
+      showNotificationMessage(`Zaimportowano ${sectionCount} działów i ${positionCount} pozycji`, 'success');
+    } catch (error: any) {
+      console.error('Import error:', error);
+      setImportError(error.message || 'Błąd podczas importu pliku');
+    } finally {
+      setImportLoading(false);
+      setImportProgress('');
     }
   };
 
@@ -5681,6 +5808,14 @@ export const KosztorysEditorPage: React.FC = () => {
             </button>
             {showModeDropdown && (
               <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <button
+                  onClick={handleImportClick}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center gap-2 text-blue-600 font-medium"
+                >
+                  <Upload className="w-4 h-4" />
+                  Import
+                </button>
+                <div className="border-t border-gray-200" />
                 <button
                   onClick={() => { setViewMode('przedmiar'); setActiveNavItem('przedmiar'); setLeftPanelMode('overview'); setShowModeDropdown(false); }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2 ${viewMode === 'przedmiar' && leftPanelMode !== 'export' ? 'bg-blue-50 text-blue-600' : ''}`}
@@ -12255,6 +12390,146 @@ export const KosztorysEditorPage: React.FC = () => {
                   />
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Confirmation Modal */}
+      {showImportConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Zastąpić istniejące dane?</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Obecny kosztorys zawiera:
+            </p>
+            <ul className="text-sm text-gray-700 mb-4 ml-4 list-disc">
+              <li><strong>{estimateData.root.sectionIds.length}</strong> działów</li>
+              <li><strong>{Object.keys(estimateData.positions).length}</strong> pozycji</li>
+            </ul>
+            <p className="text-sm text-red-600 font-medium mb-6">
+              Import zastąpi wszystkie istniejące dane. Tej operacji nie można cofnąć.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowImportConfirmModal(false)}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={handleImportConfirm}
+                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg"
+              >
+                Tak, importuj
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">Import kosztorysu</h3>
+              <button
+                onClick={() => { setShowImportModal(false); setImportFile(null); setImportError(null); }}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={importLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              {/* Drag & Drop Zone */}
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  importDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                } ${importLoading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}
+                onDragOver={(e) => { e.preventDefault(); setImportDragActive(true); }}
+                onDragLeave={() => setImportDragActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setImportDragActive(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) { setImportFile(file); setImportError(null); }
+                }}
+                onClick={() => {
+                  if (importLoading) return;
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.ath,.xml,.json,.pdf,.jpg,.jpeg,.png,.webp';
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (file) { setImportFile(file); setImportError(null); }
+                  };
+                  input.click();
+                }}
+              >
+                <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <p className="text-sm text-gray-600 mb-1">
+                  Przeciągnij plik tutaj lub <span className="text-blue-600 font-medium">wybierz z dysku</span>
+                </p>
+                <p className="text-xs text-gray-400">
+                  Obsługiwane formaty: .ath, .xml, .json, .pdf, .jpg, .png
+                </p>
+              </div>
+
+              {/* Selected file info */}
+              {importFile && !importLoading && (
+                <div className="mt-4 flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <FileText className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{importFile.name}</p>
+                    <p className="text-xs text-gray-500">{(importFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImportFile(null); setImportError(null); }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Loading spinner */}
+              {importLoading && (
+                <div className="mt-4 flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                  <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+                  <p className="text-sm text-blue-700">{importProgress || 'Przetwarzanie...'}</p>
+                </div>
+              )}
+
+              {/* Error display */}
+              {importError && (
+                <div className="mt-4 flex items-start gap-3 p-3 bg-red-50 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{importError}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-4 border-t">
+              <button
+                onClick={() => { setShowImportModal(false); setImportFile(null); setImportError(null); }}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                disabled={importLoading}
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => importFile && handleImportFile(importFile)}
+                className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!importFile || importLoading}
+              >
+                {importLoading ? 'Importowanie...' : 'Importuj'}
+              </button>
             </div>
           </div>
         </div>

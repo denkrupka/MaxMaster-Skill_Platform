@@ -1,0 +1,623 @@
+/**
+ * Kosztorys Import Parsers
+ * Handles parsing of .ath, .json, .xml files and converting Gemini AI responses
+ * into KosztorysCostEstimateData format.
+ */
+
+import type {
+  KosztorysCostEstimateData,
+  KosztorysSection,
+  KosztorysPosition,
+} from '../types';
+
+import {
+  createNewSection,
+  createNewPosition,
+  createNewResource,
+  createEmptyMeasurements,
+  addMeasurementEntry,
+  createDefaultFactors,
+  createDefaultIndirectCostsOverhead,
+  createDefaultProfitOverhead,
+  createDefaultPurchaseCostsOverhead,
+} from './kosztorysCalculator';
+
+// =====================================================
+// Helper: parse Polish number format (comma → dot)
+// =====================================================
+function parsePolishNumber(str: string): number {
+  if (!str || str.trim() === '') return 0;
+  const cleaned = str.trim().replace(',', '.');
+  const val = parseFloat(cleaned);
+  return isNaN(val) ? 0 : val;
+}
+
+// =====================================================
+// ATH PARSER
+// =====================================================
+
+interface AthRmsZestEntry {
+  type: 'labor' | 'material' | 'equipment';
+  name: string;
+  unit: string;
+  unitIndex: string;
+  id: string;
+  quantity: number;
+}
+
+interface AthSection {
+  header: string;
+  lines: string[];
+}
+
+/**
+ * Tokenize ATH content into [SECTION] blocks with their key=value lines
+ */
+function tokenizeAth(content: string): AthSection[] {
+  const sections: AthSection[] = [];
+  let currentHeader = '';
+  let currentLines: string[] = [];
+
+  for (const rawLine of content.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
+    const headerMatch = line.match(/^\[(.+)\]$/);
+    if (headerMatch) {
+      if (currentHeader) {
+        sections.push({ header: currentHeader, lines: currentLines });
+      }
+      currentHeader = headerMatch[1];
+      currentLines = [];
+    } else if (currentHeader) {
+      currentLines.push(line);
+    }
+  }
+  if (currentHeader) {
+    sections.push({ header: currentHeader, lines: currentLines });
+  }
+  return sections;
+}
+
+/**
+ * Extract a key=value map from section lines
+ */
+function parseKeyValues(lines: string[]): Record<string, string> {
+  const kv: Record<string, string> = {};
+  for (const line of lines) {
+    const idx = line.indexOf('=');
+    if (idx > 0) {
+      const key = line.substring(0, idx).trim();
+      const value = line.substring(idx + 1);
+      kv[key] = value;
+    }
+  }
+  return kv;
+}
+
+/**
+ * Parse an ATH file buffer into KosztorysCostEstimateData
+ */
+export function parseAthFile(buffer: ArrayBuffer): KosztorysCostEstimateData {
+  // Decode with windows-1250 (Polish encoding used by Athenasoft/KOMA)
+  const decoder = new TextDecoder('windows-1250');
+  const content = decoder.decode(buffer);
+  const athSections = tokenizeAth(content);
+
+  // Phase 1: Build RMS ZEST database (resource catalog)
+  const rmsZestDb: Record<number, AthRmsZestEntry> = {};
+  for (const sec of athSections) {
+    const match = sec.header.match(/^RMS ZEST (\d+)$/);
+    if (!match) continue;
+    const zestNum = parseInt(match[1], 10);
+    const kv = parseKeyValues(sec.lines);
+
+    const tyRaw = (kv['ty'] || '').split('\t')[0].trim().toUpperCase();
+    let type: 'labor' | 'material' | 'equipment' = 'material';
+    if (tyRaw === 'R') type = 'labor';
+    else if (tyRaw === 'S') type = 'equipment';
+
+    const name = (kv['na'] || '').split('\t')[0].trim();
+    const jmParts = (kv['jm'] || '').split('\t');
+    const unit = jmParts[0]?.trim() || 'szt.';
+    const unitIndex = jmParts[1]?.trim() || '020';
+    const id = (kv['id'] || '').split('\t')[0].trim();
+    const quantity = parsePolishNumber((kv['il'] || '').split('\t')[0]);
+
+    rmsZestDb[zestNum] = { type, name, unit, unitIndex, id, quantity };
+  }
+
+  // Phase 2: State machine to build sections, positions, resources
+  const data: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: [],
+      positionIds: [],
+      factors: createDefaultFactors(),
+      overheads: [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  let currentElement1: KosztorysSection | null = null;
+  let currentElement2: KosztorysSection | null = null;
+  let currentPosition: KosztorysPosition | null = null;
+  let element1Counter = 0;
+  let element2Counter = 0;
+  let positionCounterInSection = 0;
+
+  // Current RMS factors (from MNOŻNIKI RMS blocks that appear after elements/positions)
+  let currentFactors = { wr: 1, wm: 1, ws: 1 };
+
+  for (const sec of athSections) {
+    const kv = parseKeyValues(sec.lines);
+
+    // --- ELEMENT 1: Top-level section ---
+    if (sec.header === 'ELEMENT 1') {
+      element1Counter++;
+      element2Counter = 0;
+      positionCounterInSection = 0;
+      const name = (kv['na'] || '').trim() || `Dział ${element1Counter}`;
+      const section = createNewSection(name, String(element1Counter));
+      currentElement1 = section;
+      currentElement2 = null;
+      currentPosition = null;
+      data.sections[section.id] = section;
+      data.root.sectionIds.push(section.id);
+    }
+
+    // --- ELEMENT 2: Subsection under current ELEMENT 1 ---
+    else if (sec.header === 'ELEMENT 2') {
+      if (!currentElement1) continue;
+      element2Counter++;
+      positionCounterInSection = 0;
+      const name = (kv['na'] || '').trim() || `Poddział ${element2Counter}`;
+      const ordinal = `${currentElement1.ordinalNumber}.${element2Counter}`;
+      const section = createNewSection(name, ordinal);
+      currentElement2 = section;
+      currentPosition = null;
+      data.sections[section.id] = section;
+      currentElement1.subsectionIds.push(section.id);
+    }
+
+    // --- POZYCJA: Position ---
+    else if (sec.header === 'POZYCJA') {
+      positionCounterInSection++;
+      const pdRaw = kv['pd'] || '';
+      // pd= has two known formats:
+      //   Old: "\tKNR 4-03 0313-10\t\t\t\t" (full code in field 1)
+      //   New: "source\tKNR\t2-01 0122-02\t2-01\t0122-02\t\t1" (type in field 1, number in field 2)
+      //   Simple: "\t\t1.1\t\t1.1\t\t0" (no type, just numbering)
+      const pdParts = pdRaw.split('\t');
+      let base = '';
+      if (pdParts.length >= 3) {
+        const typeField = (pdParts[1] || '').trim();
+        const numField = (pdParts[2] || '').trim();
+        // Known short KNR type codes (exact match, no spaces)
+        if (typeField && /^(KNR|KNR-W|KNNR|KNNR-W|KSNR|KNP|KNCK|KPRR|KNZ|NNRNKB|S-\d+|E-\d+)$/.test(typeField) && numField) {
+          base = `${typeField} ${numField}`;
+        } else if (typeField) {
+          base = typeField;
+        } else if (numField) {
+          base = numField;
+        }
+      } else if (pdParts.length >= 2) {
+        base = (pdParts[1] || '').trim();
+      }
+      const name = (kv['na'] || '').trim().replace(/10+$/g, ' ').trim() || 'Pozycja';
+      const jmParts = (kv['jm'] || '').split('\t');
+      const unitLabel = jmParts[0]?.trim() || 'szt.';
+      const unitIndex = jmParts[1]?.trim() || '020';
+
+      const position = createNewPosition(base, name, unitLabel, unitIndex || '020');
+      currentPosition = position;
+      data.positions[position.id] = position;
+
+      // Assign to nearest parent section
+      const parentSection = currentElement2 || currentElement1;
+      if (parentSection) {
+        parentSection.positionIds.push(position.id);
+      } else {
+        data.root.positionIds.push(position.id);
+      }
+    }
+
+    // --- PRZEDMIAR: Measurement ---
+    else if (sec.header === 'PRZEDMIAR') {
+      if (!currentPosition) continue;
+      // wo format: "7.00\t1\t7\t\t\t\t\t" or "5.00\t1\t5\t\t\t\t\t"
+      const woRaw = kv['wo'] || '';
+      const woParts = woRaw.split('\t');
+      const expression = (woParts[0] || '').trim().replace(',', '.');
+
+      if (expression) {
+        currentPosition.measurements = addMeasurementEntry(
+          currentPosition.measurements,
+          expression,
+          null
+        );
+      }
+    }
+
+    // --- MNOŻNIKI RMS: Labor/material/equipment factors ---
+    else if (sec.header === 'MNOŻNIKI RMS' || (sec.header.includes('MNO') && sec.header.includes('RMS') && !sec.header.includes('ZEST'))) {
+      currentFactors = {
+        wr: parsePolishNumber((kv['wr'] || '1').split('\t')[0]),
+        wm: parsePolishNumber((kv['wm'] || '1').split('\t')[0]),
+        ws: parsePolishNumber((kv['ws'] || '1').split('\t')[0]),
+      };
+    }
+
+    // --- RMS N (not ZEST): Resource reference ---
+    else if (/^RMS \d+$/.test(sec.header)) {
+      if (!currentPosition) continue;
+      const rmsNum = parseInt(sec.header.replace('RMS ', ''), 10);
+      const zestEntry = rmsZestDb[rmsNum];
+      if (!zestEntry) continue;
+
+      const normRaw = kv['nz'] || '0';
+      const normValue = parsePolishNumber(normRaw.split('\t')[0]);
+
+      // np field: 1 = percentage auxiliary, 2 = regular
+      const npVal = parseInt(kv['np'] || '0', 10);
+
+      const resource = createNewResource(
+        zestEntry.type,
+        zestEntry.name,
+        normValue,
+        0, // unit price not stored in ATH ślepy (blind estimate)
+        zestEntry.unit,
+        zestEntry.unitIndex
+      );
+
+      // Apply factor from current MNOŻNIKI RMS
+      if (zestEntry.type === 'labor' && currentFactors.wr !== 1) {
+        resource.factor = currentFactors.wr;
+      } else if (zestEntry.type === 'material' && currentFactors.wm !== 1) {
+        resource.factor = currentFactors.wm;
+      } else if (zestEntry.type === 'equipment' && currentFactors.ws !== 1) {
+        resource.factor = currentFactors.ws;
+      }
+
+      // If np=1, it's a percentage-type resource (auxiliary materials etc.)
+      if (npVal === 1) {
+        resource.norm = { type: 'relative', value: normValue };
+      }
+
+      currentPosition.resources.push(resource);
+    }
+  }
+
+  return data;
+}
+
+// =====================================================
+// JSON PARSER
+// =====================================================
+
+/**
+ * Parse a JSON file text into KosztorysCostEstimateData
+ */
+export function parseJsonFile(text: string): KosztorysCostEstimateData {
+  const parsed = JSON.parse(text);
+
+  // Validate basic structure
+  if (!parsed.root || !parsed.sections || !parsed.positions) {
+    throw new Error('Nieprawidłowa struktura pliku JSON. Wymagane pola: root, sections, positions');
+  }
+
+  // Ensure root has required fields with defaults
+  const data: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: parsed.root.sectionIds || [],
+      positionIds: parsed.root.positionIds || [],
+      factors: parsed.root.factors || createDefaultFactors(),
+      overheads: parsed.root.overheads || [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  // Copy sections with defaults
+  for (const [id, sec] of Object.entries(parsed.sections)) {
+    const s = sec as any;
+    data.sections[id] = {
+      id,
+      name: s.name || 'Dział',
+      description: s.description || '',
+      ordinalNumber: s.ordinalNumber || '1',
+      positionIds: s.positionIds || [],
+      subsectionIds: s.subsectionIds || [],
+      factors: s.factors || createDefaultFactors(),
+      overheads: s.overheads || [],
+    };
+  }
+
+  // Copy positions with defaults
+  for (const [id, pos] of Object.entries(parsed.positions)) {
+    const p = pos as any;
+    data.positions[id] = {
+      id,
+      base: p.base || '',
+      originBase: p.originBase || p.base || '',
+      name: p.name || 'Pozycja',
+      marker: p.marker || null,
+      unit: p.unit || { label: 'szt.', unitIndex: '020' },
+      measurements: p.measurements || createEmptyMeasurements(),
+      multiplicationFactor: p.multiplicationFactor ?? 1,
+      resources: p.resources || [],
+      factors: p.factors || createDefaultFactors(),
+      overheads: p.overheads || [],
+      unitPrice: p.unitPrice || { value: 0, currency: 'PLN' },
+    };
+  }
+
+  return data;
+}
+
+// =====================================================
+// XML PARSER
+// =====================================================
+
+/**
+ * Parse an XML file text into KosztorysCostEstimateData
+ */
+export function parseXmlFile(text: string): KosztorysCostEstimateData {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+
+  const data: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: [],
+      positionIds: [],
+      factors: createDefaultFactors(),
+      overheads: [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  // Try to detect XML format by root element
+  const rootEl = doc.documentElement;
+  if (!rootEl || rootEl.nodeName === 'parsererror') {
+    throw new Error('Nieprawidłowy format pliku XML');
+  }
+
+  // Look for common Polish cost estimate XML patterns
+  const sectionElements = doc.querySelectorAll('Dzial, Element, Section, dzial, element, section');
+  const positionElements = doc.querySelectorAll('Pozycja, Position, pozycja, position');
+
+  if (sectionElements.length === 0 && positionElements.length === 0) {
+    throw new Error('Nie znaleziono działów ani pozycji w pliku XML');
+  }
+
+  let sectionCounter = 0;
+
+  // Parse sections
+  sectionElements.forEach((sectionEl) => {
+    sectionCounter++;
+    const name = sectionEl.getAttribute('nazwa') || sectionEl.getAttribute('name') ||
+      sectionEl.querySelector('Nazwa, nazwa, Name, name')?.textContent?.trim() ||
+      `Dział ${sectionCounter}`;
+    const ordinal = sectionEl.getAttribute('numer') || sectionEl.getAttribute('ordinal') || String(sectionCounter);
+
+    const section = createNewSection(name, ordinal);
+    data.sections[section.id] = section;
+    data.root.sectionIds.push(section.id);
+
+    // Parse positions within section
+    const innerPositions = sectionEl.querySelectorAll(':scope > Pozycja, :scope > pozycja, :scope > Position, :scope > position');
+    innerPositions.forEach((posEl) => {
+      const pos = parseXmlPosition(posEl);
+      data.positions[pos.id] = pos;
+      section.positionIds.push(pos.id);
+    });
+
+    // Parse subsections
+    const innerSections = sectionEl.querySelectorAll(':scope > Dzial, :scope > dzial, :scope > Element, :scope > element, :scope > Poddzial, :scope > poddzial');
+    innerSections.forEach((subEl, subIdx) => {
+      const subName = subEl.getAttribute('nazwa') || subEl.getAttribute('name') ||
+        subEl.querySelector('Nazwa, nazwa')?.textContent?.trim() ||
+        `Poddział ${subIdx + 1}`;
+      const sub = createNewSection(subName, `${ordinal}.${subIdx + 1}`);
+      data.sections[sub.id] = sub;
+      section.subsectionIds.push(sub.id);
+
+      const subPositions = subEl.querySelectorAll(':scope > Pozycja, :scope > pozycja, :scope > Position');
+      subPositions.forEach((posEl) => {
+        const pos = parseXmlPosition(posEl);
+        data.positions[pos.id] = pos;
+        sub.positionIds.push(pos.id);
+      });
+    });
+  });
+
+  // Parse standalone positions (not within sections)
+  if (sectionElements.length === 0) {
+    positionElements.forEach((posEl) => {
+      const pos = parseXmlPosition(posEl);
+      data.positions[pos.id] = pos;
+      data.root.positionIds.push(pos.id);
+    });
+  }
+
+  return data;
+}
+
+function parseXmlPosition(el: Element): KosztorysPosition {
+  const base = el.getAttribute('podstawa') || el.getAttribute('base') ||
+    el.querySelector('Podstawa, podstawa, Base, base')?.textContent?.trim() || '';
+  const name = el.getAttribute('nazwa') || el.getAttribute('name') ||
+    el.querySelector('Nazwa, nazwa, Name, name, Opis, opis')?.textContent?.trim() || 'Pozycja';
+  const unit = el.getAttribute('jednostka') || el.getAttribute('unit') ||
+    el.querySelector('Jednostka, jednostka, Unit, unit, Jm, jm')?.textContent?.trim() || 'szt.';
+  const qtyStr = el.getAttribute('ilosc') || el.getAttribute('quantity') ||
+    el.querySelector('Ilosc, ilosc, Quantity, quantity, Obmiar')?.textContent?.trim() || '0';
+
+  const position = createNewPosition(base, name, unit);
+  const qty = parsePolishNumber(qtyStr);
+  if (qty > 0) {
+    position.measurements = addMeasurementEntry(position.measurements, String(qty), null);
+  }
+
+  // Parse resources within position
+  const resourceEls = el.querySelectorAll('Naklad, naklad, Resource, resource, RMS, rms');
+  resourceEls.forEach((resEl) => {
+    const resTypeRaw = (resEl.getAttribute('typ') || resEl.getAttribute('type') ||
+      resEl.querySelector('Typ, typ, Type, type')?.textContent?.trim() || 'M').toUpperCase();
+    let resType: 'labor' | 'material' | 'equipment' = 'material';
+    if (resTypeRaw === 'R' || resTypeRaw.startsWith('ROBOC') || resTypeRaw === 'LABOR') resType = 'labor';
+    else if (resTypeRaw === 'S' || resTypeRaw.startsWith('SPRZ') || resTypeRaw === 'EQUIPMENT') resType = 'equipment';
+
+    const resName = resEl.getAttribute('nazwa') || resEl.getAttribute('name') ||
+      resEl.querySelector('Nazwa, nazwa')?.textContent?.trim() || '';
+    const normStr = resEl.getAttribute('norma') || resEl.getAttribute('norm') ||
+      resEl.querySelector('Norma, norma, Norm')?.textContent?.trim() || '1';
+
+    const resource = createNewResource(resType, resName, parsePolishNumber(normStr));
+    position.resources.push(resource);
+  });
+
+  return position;
+}
+
+// =====================================================
+// GEMINI RESPONSE CONVERTER
+// =====================================================
+
+interface GeminiSection {
+  name: string;
+  ordinal?: string;
+  subsections?: GeminiSection[];
+  positions?: GeminiPosition[];
+}
+
+interface GeminiPosition {
+  base?: string;
+  name: string;
+  unit?: string;
+  quantity?: number;
+  resources?: GeminiResource[];
+}
+
+interface GeminiResource {
+  type?: string;
+  name: string;
+  norm?: number;
+  unit?: string;
+}
+
+interface GeminiKosztorysResponse {
+  title?: string;
+  sections: GeminiSection[];
+}
+
+/**
+ * Convert Gemini AI response into KosztorysCostEstimateData
+ */
+export function convertGeminiResponseToEstimate(data: GeminiKosztorysResponse): KosztorysCostEstimateData {
+  const result: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: [],
+      positionIds: [],
+      factors: createDefaultFactors(),
+      overheads: [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  if (!data.sections || !Array.isArray(data.sections)) {
+    return result;
+  }
+
+  data.sections.forEach((secData, sIdx) => {
+    const section = createNewSection(
+      secData.name || `Dział ${sIdx + 1}`,
+      secData.ordinal || String(sIdx + 1)
+    );
+    result.sections[section.id] = section;
+    result.root.sectionIds.push(section.id);
+
+    // Parse positions within section
+    if (secData.positions && Array.isArray(secData.positions)) {
+      secData.positions.forEach((posData) => {
+        const pos = convertGeminiPosition(posData);
+        result.positions[pos.id] = pos;
+        section.positionIds.push(pos.id);
+      });
+    }
+
+    // Parse subsections
+    if (secData.subsections && Array.isArray(secData.subsections)) {
+      secData.subsections.forEach((subData, subIdx) => {
+        const sub = createNewSection(
+          subData.name || `Poddział ${subIdx + 1}`,
+          `${section.ordinalNumber}.${subIdx + 1}`
+        );
+        result.sections[sub.id] = sub;
+        section.subsectionIds.push(sub.id);
+
+        if (subData.positions && Array.isArray(subData.positions)) {
+          subData.positions.forEach((posData) => {
+            const pos = convertGeminiPosition(posData);
+            result.positions[pos.id] = pos;
+            sub.positionIds.push(pos.id);
+          });
+        }
+      });
+    }
+  });
+
+  return result;
+}
+
+function convertGeminiPosition(posData: GeminiPosition): KosztorysPosition {
+  const position = createNewPosition(
+    posData.base || '',
+    posData.name || 'Pozycja',
+    posData.unit || 'szt.'
+  );
+
+  if (posData.quantity && posData.quantity > 0) {
+    position.measurements = addMeasurementEntry(
+      position.measurements,
+      String(posData.quantity),
+      null
+    );
+  }
+
+  if (posData.resources && Array.isArray(posData.resources)) {
+    posData.resources.forEach((resData) => {
+      const typeRaw = (resData.type || 'material').toLowerCase();
+      let type: 'labor' | 'material' | 'equipment' = 'material';
+      if (typeRaw === 'labor' || typeRaw === 'r' || typeRaw.startsWith('roboc')) type = 'labor';
+      else if (typeRaw === 'equipment' || typeRaw === 's' || typeRaw.startsWith('sprz')) type = 'equipment';
+
+      const resource = createNewResource(
+        type,
+        resData.name || '',
+        resData.norm ?? 1,
+        0,
+        resData.unit || undefined
+      );
+      position.resources.push(resource);
+    });
+  }
+
+  return position;
+}
