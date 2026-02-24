@@ -62,6 +62,8 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string): Pr
     const params = new URLSearchParams({
       api_key: SCRAPER_API_KEY,
       url,
+      render: 'true',
+      country_code: 'pl',
     })
     const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
       headers: { 'Accept-Language': 'pl-PL,pl;q=0.9' },
