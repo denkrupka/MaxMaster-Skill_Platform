@@ -985,6 +985,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchMatSelectedCategory, setSearchMatSelectedCategory] = useState<string | null>(null);
   const [searchMatViewMode, setSearchMatViewMode] = useState<'grid' | 'list'>('grid');
   const [searchMatExpandedCats, setSearchMatExpandedCats] = useState<Set<string>>(new Set());
+  const [searchMatDetailItem, setSearchMatDetailItem] = useState<KosztorysMaterial | null>(null);
 
   // Search Equipment modal state
   const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
@@ -996,6 +997,7 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchEqSelectedCategory, setSearchEqSelectedCategory] = useState<string | null>(null);
   const [searchEqViewMode, setSearchEqViewMode] = useState<'grid' | 'list'>('grid');
   const [searchEqExpandedCats, setSearchEqExpandedCats] = useState<Set<string>>(new Set());
+  const [searchEqDetailItem, setSearchEqDetailItem] = useState<KosztorysEquipment | null>(null);
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -11652,7 +11654,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             {filtered.slice(0, 100).map(m => {
                               const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
                               return (
-                                <div key={m.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all">
+                                <div key={m.id} onClick={() => setSearchMatDetailItem(m)} className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all">
                                   <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
                                     {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" /> : <Package className="w-10 h-10 text-slate-200" />}
                                   </div>
@@ -11664,9 +11666,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                       {((m as any).purchase_price || (m as any).default_price) ? (
                                         <span className="text-sm font-bold text-blue-600">{((m as any).purchase_price || (m as any).default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
                                       ) : <span className="text-[10px] text-slate-300">—</span>}
-                                      <button onClick={() => handleApplyMaterialFromSearch({ name: m.name, index: m.code, price: (m as any).purchase_price || (m as any).default_price || null, sku: m.sku, ean: m.ean, ref_num: m.ref_num })} className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                                        Dodaj do kosztorysu
-                                      </button>
+                                      <span className={`px-1.5 py-0.5 text-[10px] rounded ${m.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{m.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -11678,7 +11678,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             {filtered.slice(0, 100).map(m => {
                               const imgs = (() => { try { return JSON.parse((m as any).images || '[]'); } catch { return []; } })();
                               return (
-                                <div key={m.id} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 hover:border-blue-400 transition-colors">
+                                <div key={m.id} onClick={() => setSearchMatDetailItem(m)} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors">
                                   <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
                                     {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" /> : <Package className="w-6 h-6 text-slate-200" />}
                                   </div>
@@ -11686,14 +11686,14 @@ export const KosztorysEditorPage: React.FC = () => {
                                     <div className="text-xs font-medium text-slate-800 truncate">{m.name}</div>
                                     <div className="text-[10px] text-slate-400 font-mono">{m.code}{m.manufacturer ? ` · ${m.manufacturer}` : ''}</div>
                                   </div>
+                                  <div className="flex-shrink-0">
+                                    <span className={`px-1.5 py-0.5 text-[10px] rounded ${m.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{m.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
+                                  </div>
                                   <div className="flex-shrink-0 text-right">
                                     {((m as any).purchase_price || (m as any).default_price) ? (
                                       <span className="text-sm font-bold text-blue-600">{((m as any).purchase_price || (m as any).default_price)?.toFixed(2)} zł</span>
                                     ) : <span className="text-[10px] text-slate-300">—</span>}
                                   </div>
-                                  <button onClick={() => handleApplyMaterialFromSearch({ name: m.name, index: m.code, price: (m as any).purchase_price || (m as any).default_price || null, sku: m.sku, ean: m.ean, ref_num: m.ref_num })} className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                                    Dodaj do kosztorysu
-                                  </button>
                                 </div>
                               );
                             })}
@@ -11701,6 +11701,79 @@ export const KosztorysEditorPage: React.FC = () => {
                         )}
                         {filtered.length > 100 && <div className="mt-3 text-xs text-slate-400 text-center">Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.</div>}
                       </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Material Detail inside search modal */}
+              {searchMatDetailItem && (() => {
+                const dm = searchMatDetailItem as any;
+                const imgs = (() => { try { return JSON.parse(dm.images || '[]'); } catch { return []; } })();
+                return (
+                  <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={() => setSearchMatDetailItem(null)}>
+                    <div className="bg-white rounded-xl max-w-3xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+                        <span className="text-xs text-slate-400 font-mono">
+                          {dm.code}{dm.ean ? ` · EAN: ${dm.ean}` : ''}{dm.sku ? ` · SKU: ${dm.sku}` : ''}{dm.ref_num ? ` · Ref: ${dm.ref_num}` : ''}
+                        </span>
+                        <button onClick={() => setSearchMatDetailItem(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="flex flex-wrap">
+                        <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+                          {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-52 object-contain" /> : <Package className="w-14 h-14 text-slate-200" />}
+                        </div>
+                        <div className="flex-1 p-5 min-w-[260px]">
+                          <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{dm.name}</h2>
+                          {dm.manufacturer && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{dm.manufacturer}</span></p>}
+                          {dm.category && <p className="text-xs text-slate-400 mt-0.5">Kategoria: {dm.category}</p>}
+                          <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            {(dm.purchase_price || dm.default_price) ? (
+                              <>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena zakupu</div>
+                                <div className="text-xl font-bold text-blue-600">
+                                  {(dm.purchase_price || dm.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
+                                  {dm.catalog_price && dm.catalog_price > 0 && (dm.purchase_price || dm.default_price) < dm.catalog_price && (
+                                    <span className="ml-2 text-sm font-semibold text-green-600">-{((dm.catalog_price - (dm.purchase_price || dm.default_price)) / dm.catalog_price * 100).toFixed(1)}%</span>
+                                  )}
+                                </div>
+                                {dm.catalog_price != null && <div className="mt-1 text-xs text-slate-400">Cena katalogowa: <span className="line-through">{dm.catalog_price?.toFixed(2)} zł</span></div>}
+                              </>
+                            ) : <div className="text-xs text-slate-400">Cena niedostępna</div>}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {dm.unit && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Jedn.: <b>{dm.unit}</b></span>}
+                            {dm.source_wholesaler && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler === 'speckable' ? 'Speckable' : dm.source_wholesaler}</b></span>}
+                            <span className={`px-2 py-0.5 rounded text-[10px] ${dm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{dm.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
+                          </div>
+                          <button
+                            onClick={() => { handleApplyMaterialFromSearch({ name: dm.name, index: dm.code, price: dm.purchase_price || dm.default_price || null, sku: dm.sku, ean: dm.ean, ref_num: dm.ref_num }); setSearchMatDetailItem(null); }}
+                            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Dodaj do kosztorysu
+                          </button>
+                        </div>
+                      </div>
+                      {dm.description && (
+                        <div className="px-5 pb-4">
+                          <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+                          <div className="text-xs text-slate-500 leading-relaxed prose prose-xs max-w-none" dangerouslySetInnerHTML={{ __html: dm.description }} />
+                        </div>
+                      )}
+                      {imgs.length > 1 && (
+                        <div className="px-5 pb-4">
+                          <h4 className="text-xs font-semibold text-slate-600 mb-2">Zdjęcia</h4>
+                          <div className="flex gap-2 flex-wrap">
+                            {imgs.map((img: string, i: number) => (
+                              <div key={i} className="w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center">
+                                <img src={img} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -11879,7 +11952,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             {filtered.slice(0, 100).map(eq => {
                               const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
                               return (
-                                <div key={eq.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all">
+                                <div key={eq.id} onClick={() => setSearchEqDetailItem(eq)} className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all">
                                   <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
                                     {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[85%] max-h-28 object-contain" /> : <Monitor className="w-10 h-10 text-slate-200" />}
                                   </div>
@@ -11891,9 +11964,7 @@ export const KosztorysEditorPage: React.FC = () => {
                                       {((eq as any).purchase_price || eq.default_price) ? (
                                         <span className="text-sm font-bold text-blue-600">{((eq as any).purchase_price || eq.default_price)?.toFixed(2)} <span className="text-[10px] font-normal text-slate-400">zł</span></span>
                                       ) : <span className="text-[10px] text-slate-300">—</span>}
-                                      <button onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code, price: (eq as any).purchase_price || eq.default_price || null, sku: eq.sku, ean: eq.ean, ref_num: eq.ref_num, manufacturer: eq.manufacturer })} className="px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                                        Dodaj do kosztorysu
-                                      </button>
+                                      <span className={`px-1.5 py-0.5 text-[10px] rounded ${eq.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{eq.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -11905,7 +11976,7 @@ export const KosztorysEditorPage: React.FC = () => {
                             {filtered.slice(0, 100).map(eq => {
                               const imgs = (() => { try { return JSON.parse((eq as any).images || '[]'); } catch { return []; } })();
                               return (
-                                <div key={eq.id} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 hover:border-blue-400 transition-colors">
+                                <div key={eq.id} onClick={() => setSearchEqDetailItem(eq)} className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors">
                                   <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
                                     {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-[90%] object-contain" /> : <Monitor className="w-6 h-6 text-slate-200" />}
                                   </div>
@@ -11913,14 +11984,14 @@ export const KosztorysEditorPage: React.FC = () => {
                                     <div className="text-xs font-medium text-slate-800 truncate">{eq.name}</div>
                                     <div className="text-[10px] text-slate-400 font-mono">{eq.code}{eq.manufacturer ? ` · ${eq.manufacturer}` : ''}</div>
                                   </div>
+                                  <div className="flex-shrink-0">
+                                    <span className={`px-1.5 py-0.5 text-[10px] rounded ${eq.is_active ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>{eq.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
+                                  </div>
                                   <div className="flex-shrink-0 text-right">
                                     {((eq as any).purchase_price || eq.default_price) ? (
                                       <span className="text-sm font-bold text-blue-600">{((eq as any).purchase_price || eq.default_price)?.toFixed(2)} zł</span>
                                     ) : <span className="text-[10px] text-slate-300">—</span>}
                                   </div>
-                                  <button onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code, price: (eq as any).purchase_price || eq.default_price || null, sku: eq.sku, ean: eq.ean, ref_num: eq.ref_num, manufacturer: eq.manufacturer })} className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors">
-                                    Dodaj do kosztorysu
-                                  </button>
                                 </div>
                               );
                             })}
@@ -11928,6 +11999,99 @@ export const KosztorysEditorPage: React.FC = () => {
                         )}
                         {filtered.length > 100 && <div className="mt-3 text-xs text-slate-400 text-center">Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.</div>}
                       </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Equipment Detail inside search modal */}
+              {searchEqDetailItem && (() => {
+                const de = searchEqDetailItem as any;
+                const imgs = (() => { try { return JSON.parse(de.images || '[]'); } catch { return []; } })();
+                return (
+                  <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={() => setSearchEqDetailItem(null)}>
+                    <div className="bg-white rounded-xl max-w-3xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+                        <span className="text-xs text-slate-400 font-mono">
+                          {de.code}{de.sku ? ` · SKU: ${de.sku}` : ''}{de.ean ? ` · EAN: ${de.ean}` : ''}
+                        </span>
+                        <button onClick={() => setSearchEqDetailItem(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      </div>
+                      <div className="flex flex-wrap">
+                        <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+                          {imgs.length > 0 ? <img src={imgs[0]} alt="" className="max-w-[90%] max-h-52 object-contain" /> : <Monitor className="w-14 h-14 text-slate-200" />}
+                        </div>
+                        <div className="flex-1 p-5 min-w-[260px]">
+                          <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{de.name}</h2>
+                          {de.manufacturer && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{de.manufacturer}</span></p>}
+                          {de.category && <p className="text-xs text-slate-400 mt-0.5">Kategoria: {de.category}</p>}
+                          <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            {(de.purchase_price || de.default_price) ? (
+                              <>
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu</div>
+                                <div className="text-xl font-bold text-blue-600">
+                                  {(de.purchase_price || de.default_price)?.toFixed(2)} <span className="text-sm font-normal">zł netto</span>
+                                </div>
+                                {de.catalog_price != null && <div className="mt-1 text-xs text-slate-400">Cena brutto: {de.catalog_price?.toFixed(2)} zł</div>}
+                              </>
+                            ) : <div className="text-xs text-slate-400">Cena niedostępna</div>}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {de.unit && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Jedn.: <b>{de.unit}</b></span>}
+                            {de.source_wholesaler && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Źródło: <b>{de.source_wholesaler === 'atut-rental' ? 'Atut Rental' : de.source_wholesaler === 'ramirent' ? 'Ramirent' : de.source_wholesaler}</b></span>}
+                            <span className={`px-2 py-0.5 rounded text-[10px] ${de.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{de.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
+                          </div>
+                          {de.source_wholesaler_url && (
+                            <a href={de.source_wholesaler_url.startsWith('http') ? de.source_wholesaler_url : `https://www.atutrental.com.pl${de.source_wholesaler_url}`} target="_blank" rel="noopener noreferrer" className="w-full flex items-center justify-center gap-2 px-4 py-2 mb-2 text-xs font-medium text-blue-600 border border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors">
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                              {de.source_wholesaler === 'atut-rental' ? 'Otwórz na AtutRental.com.pl' : de.source_wholesaler === 'ramirent' ? 'Otwórz na Ramirent.pl' : 'Otwórz stronę źródłową'}
+                            </a>
+                          )}
+                          <button
+                            onClick={() => { handleApplyEquipmentFromSearch({ name: de.name, index: de.code, price: de.purchase_price || de.default_price || null, sku: de.sku, ean: de.ean, ref_num: de.ref_num, manufacturer: de.manufacturer }); setSearchEqDetailItem(null); }}
+                            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Dodaj do kosztorysu
+                          </button>
+                        </div>
+                      </div>
+                      {de.description && (
+                        <div className="px-5 pb-4">
+                          <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+                          <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-line">{de.description}</p>
+                        </div>
+                      )}
+                      {(() => {
+                        const params: Array<{ name: string; value: string }> = (() => { try { if (!de.parameters) return []; if (typeof de.parameters === 'string') return JSON.parse(de.parameters); return de.parameters as any; } catch { return []; } })();
+                        if (params.length === 0) return null;
+                        return (
+                          <div className="px-5 pb-4">
+                            <h4 className="text-xs font-semibold text-slate-600 mb-2">Parametry techniczne</h4>
+                            <div className="border border-slate-200 rounded-lg overflow-hidden">
+                              {params.map((p: any, i: number) => (
+                                <div key={i} className={`flex items-center text-xs ${i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}`}>
+                                  <div className="w-1/2 px-3 py-2 text-slate-500 font-medium">{p.name}</div>
+                                  <div className="w-1/2 px-3 py-2 text-slate-700 font-semibold text-right">{p.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {imgs.length > 1 && (
+                        <div className="px-5 pb-4">
+                          <h4 className="text-xs font-semibold text-slate-600 mb-2">Zdjęcia</h4>
+                          <div className="flex gap-2 flex-wrap">
+                            {imgs.map((img: string, i: number) => (
+                              <div key={i} className="w-20 h-20 bg-slate-50 rounded border border-slate-200 flex items-center justify-center">
+                                <img src={img} alt="" className="max-w-[90%] max-h-[90%] object-contain" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
