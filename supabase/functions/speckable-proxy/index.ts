@@ -370,6 +370,36 @@ function parseProductPage(html: string): any {
       }
     }
   }
+
+  // HTML description (formatted) from esp_column_description
+  const descBlockRe = /<div[^>]*class="[^"]*esp_column_description[^"]*"[^>]*>([\s\S]*?)(?=<\/div>\s*<!\-\-\- SELLASIST HTML END|\Z)/i
+  const descBlockMatch = descBlockRe.exec(html)
+  if (descBlockMatch) {
+    p.descriptionHtml = descBlockMatch[1]
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/\s+on\w+="[^"]*"/gi, '')
+      .replace(/javascript:/gi, '')
+      .substring(0, 8000)
+  }
+
+  // Technical specifications (Dane techniczne)
+  const specItems: Array<{ name: string; value: string }> = []
+  const techRe = /<h2[^>]*>[^<]*Dane techniczne[^<]*<\/h2>([\s\S]*?)(?=<\/div>\s*<\/div>\s*<\/div>|<div[^>]*class="[^"]*tab-position)/i
+  const techMatch = techRe.exec(html)
+  if (techMatch) {
+    const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi
+    let liM: RegExpExecArray | null
+    while ((liM = liRe.exec(techMatch[1])) !== null) {
+      const kvMatch = liM[1].match(/^([^:<]+):\s*<b>([^<]*)<\/b>/i)
+        || liM[1].match(/^([^:<]+):\s*<strong>([^<]*)<\/strong>/i)
+      if (kvMatch) {
+        specItems.push({ name: stripHtml(kvMatch[1]).trim(), value: stripHtml(kvMatch[2]).trim() })
+      }
+    }
+  }
+  if (specItems.length > 0) p.specification = specItems
+
   if (!p.title) {
     const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
     if (h1Match) p.title = stripHtml(h1Match[1])
@@ -796,14 +826,26 @@ serve(async (req) => {
         // ScraperAPI is too slow (30-80s) and unreliable. Categories rarely change.
         // When user clicks a category, subcategories come from the products response.
         const staticCategories = [
-          { name: 'Osprzęt elektryczny', slug: '/pl/list/osprzet-elektryczny', image: '', subcategories: [] },
           { name: 'Kable i przewody', slug: '/pl/list/kable-i-przewody', image: '', subcategories: [] },
-          { name: 'Rozdzielnice', slug: '/pl/list/rozdzielnice', image: '', subcategories: [] },
-          { name: 'Oświetlenie', slug: '/pl/list/oswietlenie', image: '', subcategories: [] },
+          { name: 'Kable ze złączami', slug: '/pl/list/kable-ze-zlaczami', image: '', subcategories: [] },
+          { name: 'Organizacja kabli', slug: '/pl/list/organizacja-kabli', image: '', subcategories: [] },
+          { name: 'Sieci światłowodowe', slug: '/pl/list/sieci-swiatlowodowe', image: '', subcategories: [] },
+          { name: 'Szafy RACK i wyposażenie', slug: '/pl/list/szafy-rack-i-wyposazenie', image: '', subcategories: [] },
           { name: 'Aparatura modułowa', slug: '/pl/list/aparatura-modulowa', image: '', subcategories: [] },
-          { name: 'Automatyka', slug: '/pl/list/automatyka', image: '', subcategories: [] },
+          { name: 'Puszki instalacyjne i rozdzielnice', slug: '/pl/list/puszki-instalacyjne-i-rozdzielnice', image: '', subcategories: [] },
+          { name: 'Ochrona odgromowa', slug: '/pl/list/ochrona-odgromowa', image: '', subcategories: [] },
+          { name: 'Gniazda i łączniki', slug: '/pl/list/gniazda-i-laczniki', image: '', subcategories: [] },
+          { name: 'Przedłużacze i listwy zasilające', slug: '/pl/list/przedluzacze-i-listwy-zasilajace', image: '', subcategories: [] },
+          { name: 'Wtyki, gniazda i przejściówki', slug: '/pl/list/wtyki-gniazda-i-przejsciowki', image: '', subcategories: [] },
+          { name: 'Oświetlenie', slug: '/pl/list/oswietlenie', image: '', subcategories: [] },
+          { name: 'Fotowoltaika', slug: '/pl/list/fotowoltaika', image: '', subcategories: [] },
+          { name: 'Zasilanie i energia', slug: '/pl/list/zasilanie-i-energia', image: '', subcategories: [] },
+          { name: 'Urządzenia', slug: '/pl/list/urzadzenia', image: '', subcategories: [] },
           { name: 'Narzędzia', slug: '/pl/list/narzedzia', image: '', subcategories: [] },
-          { name: 'Systemy instalacyjne', slug: '/pl/list/systemy-instalacyjne', image: '', subcategories: [] },
+          { name: 'Elektronarzędzia', slug: '/pl/list/elektronarzedzia', image: '', subcategories: [] },
+          { name: 'Mierniki i testery', slug: '/pl/list/mierniki-i-testery', image: '', subcategories: [] },
+          { name: 'Odzież ochronna i BHP', slug: '/pl/list/odziez-ochronna-i-bhp', image: '', subcategories: [] },
+          { name: 'Chemia techniczna', slug: '/pl/list/chemia-techniczna', image: '', subcategories: [] },
         ]
         return json({ categories: staticCategories, total: staticCategories.length })
       }
@@ -821,7 +863,8 @@ serve(async (req) => {
           } catch { /* anonymous */ }
         }
 
-        const pagePath = cat.startsWith('/') ? cat : '/' + cat
+        let pagePath = cat.startsWith('/') ? cat : '/' + cat
+        if (page > 1) pagePath += (pagePath.includes('?') ? '&' : '?') + `page=${page}`
         let html: string
         try {
           html = await fetchPage(pagePath, jar)
@@ -850,19 +893,22 @@ serve(async (req) => {
                 await supabaseAdmin.from('wholesaler_integrations').update({ credentials: { ...integ.credentials, cookies: jar, last_refresh: new Date().toISOString() } }).eq('id', integrationId)
                 const retryHtml = await fetchPage(pagePath, jar)
                 const data = parseListPage(retryHtml, pagePath)
-                const products = (data.items || []).filter((i: any) => data.hasProducts || !i.slug?.includes('/pl/product/'))
-                return json({ products: data.hasProducts ? data.items : [], categories: data.hasProducts ? [] : data.items, page, totalPages: 1, totalProducts: data.items.length, hasProducts: data.hasProducts, title: data.title })
+                const ITEMS_PER_PAGE = 24
+                const retryHasMore = data.hasProducts && data.items.length >= ITEMS_PER_PAGE
+                return json({ products: data.hasProducts ? data.items : [], categories: data.hasProducts ? [] : data.items, page, totalPages: retryHasMore ? page + 1 : page, totalProducts: data.items.length, hasProducts: data.hasProducts, title: data.title })
               }
             } catch { /* ignore */ }
           }
         }
 
         const data = parseListPage(html, pagePath)
+        const ITEMS_PER_PAGE = 24
+        const hasMore = data.hasProducts && data.items.length >= ITEMS_PER_PAGE
         return json({
           products: data.hasProducts ? data.items : [],
           categories: data.hasProducts ? [] : data.items,
           page,
-          totalPages: 1,
+          totalPages: hasMore ? page + 1 : page,
           totalProducts: data.items.length,
           hasProducts: data.hasProducts,
           title: data.title,
@@ -933,6 +979,8 @@ serve(async (req) => {
           image: p.images?.[0] || '',
           images: p.images || [],
           description: p.description || '',
+          descriptionHtml: p.descriptionHtml || '',
+          specification: p.specification || [],
           breadcrumb: (p.breadcrumb || []).map((b: any) => b.name).join(' > '),
           url: BASE + productPath,
           related: p.related || [],

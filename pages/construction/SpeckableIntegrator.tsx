@@ -39,6 +39,8 @@ interface SpeckableProductDetail {
   image?: string;
   images?: string[];
   description?: string;
+  descriptionHtml?: string;
+  specification?: Array<{ name: string; value: string }>;
   breadcrumb?: string;
   url?: string;
   related?: SpeckableProduct[];
@@ -102,6 +104,10 @@ const CatNode: React.FC<{
   const [open, setOpen] = useState(false);
   const hasSub = (cat.subcategories?.length || 0) > 0;
   const active = selectedSlug === cat.slug;
+
+  useEffect(() => {
+    if (active && hasSub && !open) setOpen(true);
+  }, [active, hasSub]);
 
   return (
     <div>
@@ -447,10 +453,36 @@ const ProductDetail: React.FC<{
         )}
 
         {/* Description */}
-        {detail.description && (
+        {(detail.descriptionHtml || detail.description) && (
           <div className="px-5 pb-3">
             <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">{detail.description}</p>
+            {detail.descriptionHtml ? (
+              <div
+                className="text-xs text-slate-600 leading-relaxed prose prose-xs max-w-none [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full [&_td]:p-1 [&_th]:p-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"
+                dangerouslySetInnerHTML={{ __html: detail.descriptionHtml }}
+              />
+            ) : (
+              <p className="text-xs text-slate-600 leading-relaxed">{detail.description}</p>
+            )}
+          </div>
+        )}
+
+        {/* Technical specifications */}
+        {detail.specification && detail.specification.length > 0 && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Dane techniczne</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  {detail.specification.map((spec, idx) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-3 py-1.5 text-slate-500 font-medium w-2/5">{spec.name}</td>
+                      <td className="px-3 py-1.5 text-slate-700">{spec.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -545,6 +577,7 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
   const [detailProduct, setDetailProduct] = useState<SpeckableProduct | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
+  const [dynamicSubcats, setDynamicSubcats] = useState<Record<string, SpeckableCategory[]>>({});
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -576,6 +609,10 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
         setTotalCount(data.totalProducts || 0);
         setProdLoading(false);
         setSearchResult(null);
+        // Store subcategories when API returns categories instead of products
+        if (!data.hasProducts && data.categories && data.categories.length > 0) {
+          setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: data.categories }));
+        }
       })
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
@@ -605,6 +642,15 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
     }
   };
 
+  // Merge dynamically discovered subcategories into category tree
+  const enrichedCategories = categories.map(c => ({
+    ...c,
+    subcategories: dynamicSubcats[c.slug] || c.subcategories || [],
+  }));
+
+  // Subcategories for the currently selected category (shown as tiles when no products)
+  const currentSubcats = selectedCat ? (dynamicSubcats[selectedCat.slug] || selectedCat.subcategories || []) : [];
+
   const display = searchResult !== null ? searchResult : products;
   const isLoading = searchLoading || prodLoading;
   const hasContent = selectedCat || searchResult !== null;
@@ -630,13 +676,13 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
           </div>
-        ) : categories.length === 0 ? (
+        ) : enrichedCategories.length === 0 ? (
           <div className="p-4 text-center text-xs text-slate-400">
             Nie udało się załadować kategorii.
           </div>
         ) : (
           <div className="py-1">
-            {categories.map((c, i) => (
+            {enrichedCategories.map((c, i) => (
               <CatNode
                 key={c.slug || i}
                 cat={c}
@@ -701,11 +747,11 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
               <p className="text-sm text-slate-400 max-w-sm">
                 Wybierz kategorię z listy po lewej, aby przeglądać i wyszukiwać produkty.
               </p>
-              {categories.length > 0 && (
+              {enrichedCategories.length > 0 && (
                 <div className="mt-6 w-full max-w-lg">
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Główne kategorie</div>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    {categories.slice(0, 10).map((c, i) => (
+                    {enrichedCategories.slice(0, 10).map((c, i) => (
                       <button
                         key={c.slug || i}
                         onClick={() => { setSelectedCat(c); setPage(1); }}
@@ -727,6 +773,29 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
             <div className="text-center py-8 bg-white rounded-lg border border-slate-200">
               <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
               <p className="text-sm text-red-600">{prodError}</p>
+            </div>
+          ) : display.length === 0 && currentSubcats.length > 0 ? (
+            <div>
+              {selectedCat && (
+                <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
+              )}
+              <div className="text-xs text-slate-400 uppercase tracking-wider mb-2">Podkategorie</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {currentSubcats.map((sc, i) => (
+                  <button
+                    key={sc.slug || i}
+                    onClick={() => { setSelectedCat(sc); setPage(1); }}
+                    className="bg-white rounded-lg border border-slate-200 p-4 text-left hover:border-blue-400 hover:shadow-md transition-all"
+                  >
+                    {sc.image && (
+                      <div className="h-20 flex items-center justify-center mb-2">
+                        <img src={sc.image} alt="" className="max-w-[80%] max-h-16 object-contain" />
+                      </div>
+                    )}
+                    <div className="text-xs font-medium text-slate-700">{sc.name}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : display.length === 0 ? (
             <div className="text-center py-12 text-slate-400 text-sm">
