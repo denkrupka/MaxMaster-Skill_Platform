@@ -272,6 +272,12 @@ export function parseAthFile(buffer: ArrayBuffer): KosztorysCostEstimateData {
         zestEntry.unitIndex
       );
 
+      // Set resource index for price lookup (from RMS ZEST id field)
+      if (zestEntry.id) {
+        resource.index = zestEntry.id;
+        resource.originIndex = { type: 'knr', index: zestEntry.id };
+      }
+
       // Apply factor from current MNOŻNIKI RMS
       if (zestEntry.type === 'labor' && currentFactors.wr !== 1) {
         resource.factor = currentFactors.wr;
@@ -483,8 +489,14 @@ function parseXmlPosition(el: Element): KosztorysPosition {
       resEl.querySelector('Nazwa, nazwa')?.textContent?.trim() || '';
     const normStr = resEl.getAttribute('norma') || resEl.getAttribute('norm') ||
       resEl.querySelector('Norma, norma, Norm')?.textContent?.trim() || '1';
+    const resIndex = resEl.getAttribute('indeks') || resEl.getAttribute('index') ||
+      resEl.querySelector('Indeks, indeks, Index, index')?.textContent?.trim() || '';
 
     const resource = createNewResource(resType, resName, parsePolishNumber(normStr));
+    if (resIndex) {
+      resource.index = resIndex;
+      resource.originIndex = { type: 'knr', index: resIndex };
+    }
     position.resources.push(resource);
   });
 

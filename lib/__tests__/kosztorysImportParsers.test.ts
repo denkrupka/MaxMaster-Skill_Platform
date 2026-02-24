@@ -144,6 +144,31 @@ describe('parseAthFile — real ATH file', () => {
     expect(materialCount).toBeGreaterThan(0);
   });
 
+  it('resources have index for price lookup', () => {
+    let withIndex = 0;
+    let totalResources = 0;
+    for (const pos of Object.values(data.positions)) {
+      for (const res of pos.resources) {
+        totalResources++;
+        if (res.index && res.index.length > 0) withIndex++;
+      }
+    }
+    console.log(`  Resources with price index: ${withIndex}/${totalResources}`);
+    // Most resources should have an index from RMS ZEST id field
+    expect(withIndex).toBeGreaterThan(totalResources * 0.8);
+  });
+
+  it('resources have originIndex set to knr type', () => {
+    for (const pos of Object.values(data.positions)) {
+      for (const res of pos.resources) {
+        if (res.index) {
+          expect(res.originIndex.type).toBe('knr');
+          expect(res.originIndex.index).toBe(res.index);
+        }
+      }
+    }
+  });
+
   it('resources have norm values', () => {
     let zeroNorms = 0;
     let totalResources = 0;
