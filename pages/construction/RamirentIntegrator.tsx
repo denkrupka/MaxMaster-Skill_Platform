@@ -41,7 +41,7 @@ interface RamirentGroupDetail {
 
 interface Props {
   integrationId?: string;
-  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
+  onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string; params?: Array<{ name: string; value: string }> }) => void;
 }
 
 // ═══ Proxy helper ═══
@@ -233,6 +233,7 @@ const GroupDetail: React.FC<{
                     description: detail.description,
                     url: BASE + slug,
                     wholesaler: 'ramirent',
+                    params: detail.parameters || [],
                   });
                   onClose();
                 }}
