@@ -54,10 +54,13 @@ import type {
   KosztorysType,
   WholesalerIntegration,
   KosztorysMaterial,
+  KosztorysEquipment,
 } from '../../types';
 import { OninenIntegrator } from './OninenIntegrator';
 import { TIMIntegrator } from './TIMIntegrator';
 import { SpeckableIntegrator } from './SpeckableIntegrator';
+import { AtutIntegrator } from './AtutIntegrator';
+import { RamirentIntegrator } from './RamirentIntegrator';
 
 // View mode types - extended with all views from eKosztorysowanie
 type ViewMode = 'przedmiar' | 'kosztorys' | 'naklady' | 'narzuty' | 'zestawienia' | 'pozycje';
@@ -978,6 +981,13 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchMaterialIntegrations, setSearchMaterialIntegrations] = useState<WholesalerIntegration[]>([]);
   const [searchMaterialOwnData, setSearchMaterialOwnData] = useState<KosztorysMaterial[]>([]);
   const [searchMaterialSearch, setSearchMaterialSearch] = useState('');
+
+  // Search Equipment modal state
+  const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
+  const [searchEquipmentSubTab, setSearchEquipmentSubTab] = useState<'own' | 'atut-rental' | 'ramirent'>('own');
+  const [searchEquipmentIntegrations, setSearchEquipmentIntegrations] = useState<WholesalerIntegration[]>([]);
+  const [searchEquipmentOwnData, setSearchEquipmentOwnData] = useState<KosztorysEquipment[]>([]);
+  const [searchEquipmentSearch, setSearchEquipmentSearch] = useState('');
 
   // Comments panel state
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -3326,6 +3336,48 @@ export const KosztorysEditorPage: React.FC = () => {
     }
     handleUpdateSelectedItem(updates);
     setShowSearchMaterialModal(false);
+  };
+
+  // Open search equipment modal — load integrations + own equipment
+  const openSearchEquipmentModal = async () => {
+    setShowSearchEquipmentModal(true);
+    setSearchEquipmentSubTab('own');
+    setSearchEquipmentSearch('');
+    try {
+      const [intRes, eqRes] = await Promise.all([
+        supabase.from('wholesaler_integrations').select('*').eq('company_id', currentUser?.company_id || ''),
+        supabase.from('kosztorys_equipment').select('*').order('name', { ascending: true }),
+      ]);
+      setSearchEquipmentIntegrations((intRes.data || []).filter((i: WholesalerIntegration) => i.is_active));
+      setSearchEquipmentOwnData(eqRes.data || []);
+    } catch (err) {
+      console.error('Error loading search equipment data:', err);
+    }
+  };
+
+  // Apply selected product from equipment search modal to the current resource
+  const handleApplyEquipmentFromSearch = (result: { name: string; price?: number | null; sku?: string; index?: string; ean?: string; unit?: string }) => {
+    const updates: Partial<any> = {};
+    if (result.name) updates.name = result.name;
+    const idx = result.index || result.sku || '';
+    if (idx) {
+      const currentResource = selectedItem as KosztorysResource | null;
+      updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: idx };
+    }
+    if (result.price != null) {
+      const currentResource = selectedItem as KosztorysResource | null;
+      updates.unitPrice = { ...(currentResource?.unitPrice || { type: 'custom' }), value: result.price };
+    }
+    if (result.unit) {
+      const matched = UNITS_REFERENCE.find(u =>
+        u.unit.toLowerCase().replace(/[.\s]/g, '') === result.unit!.toLowerCase().replace(/[.\s]/g, '')
+      );
+      if (matched) {
+        updates.unit = { label: matched.unit, unitIndex: matched.index };
+      }
+    }
+    handleUpdateSelectedItem(updates);
+    setShowSearchEquipmentModal(false);
   };
 
   // Helper to recursively collect all section IDs (including subsections) and their positions
@@ -6470,6 +6522,15 @@ export const KosztorysEditorPage: React.FC = () => {
                             {resource.type === 'material' && (
                               <button
                                 onClick={openSearchMaterialModal}
+                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                              >
+                                <Search className="w-3 h-3" />
+                                Szukaj
+                              </button>
+                            )}
+                            {resource.type === 'equipment' && (
+                              <button
+                                onClick={openSearchEquipmentModal}
                                 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
                               >
                                 <Search className="w-3 h-3" />
@@ -11580,6 +11641,147 @@ export const KosztorysEditorPage: React.FC = () => {
                   <SpeckableIntegrator
                     integrationId={searchMaterialIntegrations.find(i => i.wholesaler_id === 'speckable')?.id}
                     onSelectProduct={(p) => handleApplyMaterialFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, unit: p.unit })}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Equipment Modal */}
+      {showSearchEquipmentModal && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={() => setShowSearchEquipmentModal(false)}>
+          <div className="bg-white rounded-xl max-w-5xl w-full shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 flex-shrink-0">
+              <h2 className="text-base font-semibold text-slate-900">Szukaj Sprzęt</h2>
+              <button onClick={() => setShowSearchEquipmentModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex border-b border-slate-200 px-5 flex-shrink-0">
+              <button
+                onClick={() => setSearchEquipmentSubTab('own')}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  searchEquipmentSubTab === 'own'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Własny katalog
+              </button>
+              {searchEquipmentIntegrations.some(i => i.wholesaler_id === 'atut-rental') && (
+                <button
+                  onClick={() => setSearchEquipmentSubTab('atut-rental')}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    searchEquipmentSubTab === 'atut-rental'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Atut Rental
+                </button>
+              )}
+              {searchEquipmentIntegrations.some(i => i.wholesaler_id === 'ramirent') && (
+                <button
+                  onClick={() => setSearchEquipmentSubTab('ramirent')}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    searchEquipmentSubTab === 'ramirent'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Ramirent
+                </button>
+              )}
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 overflow-y-auto">
+              {searchEquipmentSubTab === 'own' && (
+                <div className="p-4">
+                  <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200 mb-4">
+                    <Search className="w-4 h-4 text-slate-400" />
+                    <input
+                      value={searchEquipmentSearch}
+                      onChange={e => setSearchEquipmentSearch(e.target.value)}
+                      placeholder="Szukaj w katalogu własnym..."
+                      className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
+                    />
+                    {searchEquipmentSearch && (
+                      <button onClick={() => setSearchEquipmentSearch('')} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {(() => {
+                    const filtered = searchEquipmentOwnData.filter(eq =>
+                      !searchEquipmentSearch || eq.name.toLowerCase().includes(searchEquipmentSearch.toLowerCase()) || eq.code.toLowerCase().includes(searchEquipmentSearch.toLowerCase())
+                    );
+                    if (filtered.length === 0) return (
+                      <div className="text-center py-8 text-sm text-slate-400">
+                        {searchEquipmentOwnData.length === 0 ? 'Brak sprzętu w katalogu własnym.' : 'Brak wyników.'}
+                      </div>
+                    );
+                    return (
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kod</th>
+                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Nazwa</th>
+                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Kategoria</th>
+                              <th className="px-3 py-2 text-left text-slate-600 font-medium">Producent</th>
+                              <th className="px-3 py-2 text-center text-slate-600 font-medium w-24">Akcja</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtered.slice(0, 100).map((eq, i) => (
+                              <tr key={eq.id} className={`${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'} hover:bg-blue-50 transition-colors`}>
+                                <td className="px-3 py-2 font-mono text-slate-600">{eq.code}</td>
+                                <td className="px-3 py-2 text-slate-800">{eq.name}</td>
+                                <td className="px-3 py-2 text-slate-500">{eq.category || '—'}</td>
+                                <td className="px-3 py-2 text-slate-500">{eq.manufacturer || '—'}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    onClick={() => handleApplyEquipmentFromSearch({ name: eq.name, index: eq.code })}
+                                    className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded hover:bg-green-100 transition-colors"
+                                  >
+                                    Dodaj
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {filtered.length > 100 && (
+                          <div className="px-3 py-2 text-xs text-slate-400 text-center bg-slate-50 border-t border-slate-200">
+                            Wyświetlono 100 z {filtered.length} wyników. Użyj wyszukiwania, aby zawęzić.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {searchEquipmentSubTab === 'atut-rental' && (
+                <div className="p-0">
+                  <AtutIntegrator
+                    integrationId={searchEquipmentIntegrations.find(i => i.wholesaler_id === 'atut-rental')?.id}
+                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, unit: p.unit })}
+                  />
+                </div>
+              )}
+
+              {searchEquipmentSubTab === 'ramirent' && (
+                <div className="p-0">
+                  <RamirentIntegrator
+                    integrationId={searchEquipmentIntegrations.find(i => i.wholesaler_id === 'ramirent')?.id}
+                    onAddToOwnCatalog={(p) => handleApplyEquipmentFromSearch({ name: p.name, price: p.price, sku: p.sku, unit: p.unit })}
                   />
                 </div>
               )}
