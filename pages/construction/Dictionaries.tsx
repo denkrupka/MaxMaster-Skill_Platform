@@ -167,7 +167,7 @@ export const DictionariesPage: React.FC = () => {
   const [newUnitLabel, setNewUnitLabel] = useState('');
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [materialImages, setMaterialImages] = useState<string[]>([]);
-  const [wholesalerPrices, setWholesalerPrices] = useState<Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
+  const [wholesalerPrices, setWholesalerPrices] = useState<Array<{ wholesaler: string; productName: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [addToCatalogModal, setAddToCatalogModal] = useState<{ product: any; wholesaler: string } | null>(null);
   const [priceSyncMode, setPriceSyncMode] = useState<'fixed' | 'synced'>('fixed');
@@ -330,7 +330,7 @@ export const DictionariesPage: React.FC = () => {
 
       return { integration, best };
     })).then(results => {
-      const prices: Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }> = [];
+      const prices: Array<{ wholesaler: string; productName: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }> = [];
 
       for (const r of results) {
         if (r.status !== 'fulfilled') continue;
@@ -343,7 +343,7 @@ export const DictionariesPage: React.FC = () => {
         const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
         const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
 
-        prices.push({ wholesaler: wholesalerLabel, catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
+        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
       }
 
       setWholesalerPrices(prices);
@@ -3520,6 +3520,7 @@ export const DictionariesPage: React.FC = () => {
                       <thead className="bg-slate-50">
                         <tr>
                           <th className="px-3 py-2 text-left text-slate-500 font-medium">Hurtownia</th>
+                          <th className="px-3 py-2 text-left text-slate-500 font-medium">Produkt</th>
                           <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
                           <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
                           <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
@@ -3529,13 +3530,13 @@ export const DictionariesPage: React.FC = () => {
                       <tbody>
                         {loadingPrices ? (
                           <tr>
-                            <td colSpan={5} className="px-3 py-4 text-center">
+                            <td colSpan={6} className="px-3 py-4 text-center">
                               <Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" />
                             </td>
                           </tr>
                         ) : wholesalerPrices.length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-3 py-4 text-center text-slate-400">
+                            <td colSpan={6} className="px-3 py-4 text-center text-slate-400">
                               Brak danych z hurtowni. Kliknij aby wyszukać.
                             </td>
                           </tr>
@@ -3549,6 +3550,7 @@ export const DictionariesPage: React.FC = () => {
                             return (
                               <tr key={idx} className={`${isBest ? 'bg-green-50' : isWorst ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
                                 <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
+                                <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={wp.productName}>{wp.productName}</td>
                                 <td className="px-3 py-2 text-right text-slate-600">{wp.catalogPrice?.toFixed(2) ?? '—'} zł</td>
                                 <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
                                 <td className="px-3 py-2 text-center">

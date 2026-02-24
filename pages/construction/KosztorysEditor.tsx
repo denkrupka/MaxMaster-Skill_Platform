@@ -15,7 +15,7 @@ import {
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
   GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
   HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen,
-  CalendarClock, ReceiptText, SearchCheck
+  CalendarClock, ReceiptText, SearchCheck, ExternalLink
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -986,6 +986,8 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchMatViewMode, setSearchMatViewMode] = useState<'grid' | 'list'>('grid');
   const [searchMatExpandedCats, setSearchMatExpandedCats] = useState<Set<string>>(new Set());
   const [searchMatDetailItem, setSearchMatDetailItem] = useState<KosztorysMaterial | null>(null);
+  const [searchMatWholesalerPrices, setSearchMatWholesalerPrices] = useState<Array<{ wholesaler: string; productName: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
+  const [searchMatLoadingPrices, setSearchMatLoadingPrices] = useState(false);
 
   // Search Equipment modal state
   const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
@@ -3392,6 +3394,77 @@ export const KosztorysEditorPage: React.FC = () => {
     handleUpdateSelectedItem(updates);
     setShowSearchEquipmentModal(false);
   };
+
+  // Fetch wholesaler prices when material detail opens in search modal
+  useEffect(() => {
+    if (!searchMatDetailItem) { setSearchMatWholesalerPrices([]); setSearchMatLoadingPrices(false); return; }
+    const dm = searchMatDetailItem as any;
+    const activeInts = searchMaterialIntegrations.filter(i => i.is_active);
+    if (activeInts.length === 0) return;
+
+    const queries: string[] = [];
+    if (dm.ref_num) queries.push(dm.ref_num);
+    if (dm.ean) queries.push(dm.ean);
+    if (dm.sku && dm.sku !== dm.ref_num && dm.sku !== dm.ean) queries.push(dm.sku);
+    if (queries.length === 0 && dm.name) queries.push(dm.name);
+    if (queries.length === 0) return;
+
+    const scoreProduct = (p: any): number => {
+      let score = 0;
+      const pName = (p.name || '').toLowerCase();
+      const pSku = (p.sku || '').toLowerCase();
+      const pRefNum = (p.ref_num || '').toLowerCase();
+      if (dm.ref_num) { const ref = dm.ref_num.toLowerCase(); if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) score += 20; }
+      if (dm.ean && (pName.includes(dm.ean) || pSku.includes(dm.ean))) score += 15;
+      const dmWords = (dm.name || '').toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+      score += dmWords.filter((w: string) => pName.includes(w)).length * 2;
+      return score;
+    };
+
+    setSearchMatLoadingPrices(true);
+    setSearchMatWholesalerPrices([]);
+
+    Promise.allSettled(activeInts.map(async (integration) => {
+      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : integration.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
+      const queryResults = await Promise.allSettled(
+        queries.map(q => supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integration.id, q } }).then(({ data, error }) => {
+          if (error) throw error;
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          if (parsed?.error) throw new Error(parsed.error);
+          return parsed;
+        }))
+      );
+      const seen = new Map<string, { product: any; score: number }>();
+      for (const qr of queryResults) {
+        if (qr.status !== 'fulfilled') continue;
+        for (const p of (qr.value.products || [])) {
+          const key = p.sku || p.url || p.name;
+          const score = scoreProduct(p);
+          const existing = seen.get(key);
+          if (!existing || score > existing.score) seen.set(key, { product: p, score });
+        }
+      }
+      let best: any = null; let bestScore = -1;
+      for (const { product, score } of seen.values()) { if (score > bestScore) { best = product; bestScore = score; } }
+      if ((dm.ref_num || dm.ean) && bestScore <= 0) best = null;
+      return { integration, best };
+    })).then(results => {
+      const prices: typeof searchMatWholesalerPrices = [];
+      for (const r of results) {
+        if (r.status !== 'fulfilled') continue;
+        const { integration, best } = r.value;
+        if (!best) continue;
+        const isTim = integration.wholesaler_id === 'tim';
+        const isSpeckable = integration.wholesaler_id === 'speckable';
+        const wholesalerLabel = isTim ? 'TIM' : isSpeckable ? 'Speckable' : 'Onninen';
+        const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
+        const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
+        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
+      }
+      setSearchMatWholesalerPrices(prices);
+      setSearchMatLoadingPrices(false);
+    });
+  }, [searchMatDetailItem, searchMaterialIntegrations]);
 
   // Helper to recursively collect all section IDs (including subsections) and their positions
   const collectSectionAndSubsectionIds = (
@@ -11756,6 +11829,72 @@ export const KosztorysEditorPage: React.FC = () => {
                           </button>
                         </div>
                       </div>
+                      {/* Wholesaler price comparison table */}
+                      {searchMaterialIntegrations.some(i => i.is_active) && (
+                        <div className="px-5 pb-4">
+                          <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny i dostępność w hurtowniach</h4>
+                          <div className="border border-slate-200 rounded-lg overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left text-slate-500 font-medium">Hurtownia</th>
+                                  <th className="px-3 py-2 text-left text-slate-500 font-medium">Produkt</th>
+                                  <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
+                                  <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
+                                  <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
+                                  <th className="px-3 py-2 w-10"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {searchMatLoadingPrices ? (
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-4 text-center">
+                                      <Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" />
+                                    </td>
+                                  </tr>
+                                ) : searchMatWholesalerPrices.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-4 text-center text-slate-400">
+                                      Brak danych z hurtowni.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  searchMatWholesalerPrices.map((wp, idx) => {
+                                    const prices = searchMatWholesalerPrices.filter(p => p.purchasePrice != null).map(p => p.purchasePrice!);
+                                    const bestPrice = prices.length > 0 ? Math.min(...prices) : null;
+                                    const worstPrice = prices.length > 1 ? Math.max(...prices) : null;
+                                    const isBest = bestPrice != null && wp.purchasePrice === bestPrice && prices.length > 1;
+                                    const isWorst = worstPrice != null && wp.purchasePrice === worstPrice && worstPrice !== bestPrice;
+                                    return (
+                                      <tr key={idx} className={`${isBest ? 'bg-green-50' : isWorst ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                                        <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
+                                        <td className="px-3 py-2 text-slate-600 max-w-[200px] truncate" title={wp.productName}>{wp.productName}</td>
+                                        <td className="px-3 py-2 text-right text-slate-600">{wp.catalogPrice?.toFixed(2) ?? '—'} zł</td>
+                                        <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
+                                        <td className="px-3 py-2 text-center">
+                                          {wp.stock != null ? (
+                                            <span className={`px-1.5 py-0.5 rounded ${wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                              {wp.stock > 0 ? `${wp.stock} szt.` : 'Brak'}
+                                            </span>
+                                          ) : '—'}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                          {wp.url && (
+                                            <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                                              <ExternalLink className="w-3.5 h-3.5" />
+                                            </a>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
                       {dm.description && (
                         <div className="px-5 pb-4">
                           <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
