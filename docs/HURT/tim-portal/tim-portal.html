@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TIM.pl — Матеріали для кошторису</title>
+<style>
+:root{--bg:#f0ebe5;--s:#fff;--s2:#f8f5f1;--b:#e4ded6;--b2:#ece7e0;--t:#1a1714;--t2:#6b6259;--t3:#a09688;--a:#bf4316;--ah:#9c3712;--al:rgba(191,67,22,.07);--ok:#2a7a2a;--okl:#eef8ee;--hd:#1a1714;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--t);min-height:100vh;font-size:13px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d0c8be;border-radius:4px}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}button{font-family:inherit}
+
+.hdr{background:var(--hd);color:#fff;height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;position:sticky;top:0;z-index:100}
+.hdr-brand{display:flex;align-items:center;gap:8px;cursor:pointer}
+.hdr-logo{width:26px;height:26px;border-radius:5px;background:var(--a);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800}
+.hdr-title{font-size:12.5px;font-weight:700}.hdr-sub{font-size:8px;color:#7a756e}
+.hdr-right{display:flex;align-items:center;gap:5px}
+.auth-ind{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:5px;font-size:10.5px;cursor:pointer;transition:background .15s}
+.auth-ind:hover{background:rgba(255,255,255,.08)}
+.auth-dot{width:7px;height:7px;border-radius:50%}.auth-dot.off{background:#666}.auth-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80}
+.auth-name{color:#ccc;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtn{background:rgba(255,255,255,.06);border:none;border-radius:5px;padding:5px 9px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;transition:background .15s}
+.hbtn:hover{background:rgba(255,255,255,.12)}.hbtn.has{background:var(--a)}
+.badge{background:#fff;color:var(--a);border-radius:10px;padding:0 5px;font-size:9.5px;font-weight:700}
+
+.tabs{display:flex;background:var(--s);border-bottom:1px solid var(--b)}
+.tab{padding:8px 16px;font-size:11.5px;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s}
+.tab:hover{color:var(--t2)}.tab.act{color:var(--a);border-bottom-color:var(--a)}
+.tab-content{display:none}.tab-content.act{display:flex;flex-direction:column}
+
+.banner{padding:7px 14px;font-size:10.5px;border-bottom:1px solid}
+.banner-ok{background:var(--okl);border-color:#c3e6c3;color:var(--ok)}
+.banner-err{background:#fef4e8;border-color:#f8d89a;color:#7a5500}
+.banner code{background:rgba(255,255,255,.5);padding:1px 4px;border-radius:3px;font-family:monospace;font-size:9.5px}
+
+.layout{display:flex;flex:1;min-height:0}
+.side{width:240px;flex-shrink:0;background:var(--s);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden}
+.side-head{padding:8px 11px;border-bottom:1px solid var(--b2);font-size:8.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px}
+.side-body{flex:1;overflow-y:auto;padding:2px 0}
+.cat{display:flex;align-items:center;gap:3px;padding:4px 6px;cursor:pointer;font-size:11px;border-radius:4px;margin:1px 3px;color:#444;transition:background .1s;user-select:none}
+.cat:hover{background:var(--s2)}.cat.act{background:var(--al);color:var(--a);font-weight:600}
+.cat-ch{display:inline-flex;transition:transform .15s;opacity:.35;width:12px;flex-shrink:0;font-size:10px}
+.cat-ch.open{transform:rotate(90deg)}
+.cat-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-kids{display:none}.cat-kids.open{display:block}
+
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.sbar{padding:7px 12px;background:var(--s);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:7px;position:sticky;top:0;z-index:10}
+.swrap{flex:1;max-width:400px;display:flex;align-items:center;background:var(--s2);border-radius:5px;padding:0 8px;border:1px solid var(--b);transition:border-color .15s}
+.swrap:focus-within{border-color:var(--a)}
+.sinp{flex:1;border:none;background:transparent;padding:6px 7px;font-size:11.5px;outline:none;color:var(--t);font-family:inherit}
+.sinp::placeholder{color:#bbb}
+.sclr{background:none;border:none;cursor:pointer;color:#ccc;padding:2px;display:none}.sclr.show{display:block}
+.vtog{display:flex;gap:2px;background:var(--s2);border-radius:3px;padding:2px}
+.vbtn{padding:3px 5px;border:none;border-radius:2px;cursor:pointer;background:transparent;color:var(--t3);font-size:10px;transition:all .12s}
+.vbtn.act{background:var(--s);color:var(--a)}
+.sinfo{font-size:10px;color:var(--t3);white-space:nowrap}
+.src-tag{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600}
+.src-personal{background:#e8f5e9;color:#2e7d32}.src-public{background:#fff3e0;color:#e65100}
+
+.content{flex:1;padding:12px}
+.land{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:350px;text-align:center;padding:20px}
+.land h2{font-size:16px;font-weight:700;margin:8px 0 4px}.land p{font-size:11.5px;color:var(--t2);max-width:340px;line-height:1.5}
+.land-cats{margin-top:16px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:500px}
+.land-cat{background:var(--s);border:1px solid var(--b);border-radius:4px;padding:3px 9px;font-size:10.5px;cursor:pointer;color:#444;transition:all .12s;font-family:inherit}
+.land-cat:hover{border-color:var(--a);color:var(--a)}
+.msg{text-align:center;padding:30px;color:var(--t3);font-size:12px}.msg.err{color:var(--a)}
+
+.phead{margin-bottom:8px;display:flex;align-items:center;gap:7px}.phead h3{font-size:13.5px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:8px}
+.listv{display:flex;flex-direction:column;gap:4px}
+
+.card{background:var(--s);border-radius:var(--r);border:1px solid var(--b);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.card:hover{border-color:var(--a);box-shadow:0 3px 10px rgba(191,67,22,.06)}
+.card-img{height:115px;background:var(--s2);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--b2);position:relative}
+.card-img img{max-width:78%;max-height:78%;object-fit:contain}
+.card-stock{position:absolute;top:4px;right:4px;font-size:8px;padding:1px 5px;border-radius:3px;font-weight:600}
+.stock-green{background:#e8f5e9;color:#2e7d32}.stock-yellow{background:#fff8e1;color:#f9a825}.stock-red{background:#fce4ec;color:#c62828}
+.card-body{padding:6px 8px;flex:1;display:flex;flex-direction:column;gap:2px}
+.card-sku{font-size:8px;color:var(--t3);font-family:monospace;letter-spacing:.3px}
+.card-name{font-size:10.5px;font-weight:500;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;min-height:36px}
+.card-foot{margin-top:auto;padding-top:4px;border-top:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between}
+.card-price{font-size:13px;font-weight:700;color:var(--a)}.card-price small{font-size:9px;font-weight:400;color:var(--t3)}
+.card-price.empty{font-size:10px;color:#ccc}
+.card-old{font-size:9px;color:var(--t3);text-decoration:line-through}
+
+.cardl{background:var(--s);border-radius:5px;border:1px solid var(--b);padding:5px 8px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:border-color .12s}
+.cardl:hover{border-color:var(--a)}
+.cardl-img{width:36px;height:36px;border-radius:3px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.cardl-img img{max-width:80%;max-height:80%;object-fit:contain}
+.cardl-body{flex:1;min-width:0}.cardl-name{font-size:10.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cardl-meta{font-size:9px;color:var(--t3);font-family:monospace}
+.cardl-price{font-size:12px;font-weight:700;color:var(--a);flex-shrink:0}
+.btn-add{background:var(--a);color:#fff;border:none;border-radius:3px;padding:3px 5px;cursor:pointer;display:flex;align-items:center;font-size:10px;font-weight:600;transition:background .12s;flex-shrink:0}
+.btn-add:hover{background:var(--ah)}
+
+.pgn{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:12px;padding-bottom:8px}
+.pg-btn{padding:4px 10px;border:1px solid var(--b);border-radius:3px;background:var(--s);cursor:pointer;font-size:10.5px;font-family:inherit}
+.pg-btn:hover:not(:disabled){border-color:var(--a)}.pg-btn:disabled{opacity:.35;cursor:default}
+.pg-info{font-size:10.5px;color:var(--t3)}
+
+/* Settings */
+.settings-wrap{flex:1;padding:24px;overflow-y:auto}
+.set-card{background:var(--s);border-radius:10px;border:1px solid var(--b);max-width:480px;margin:0 auto;overflow:hidden}
+.set-head{padding:14px 18px;border-bottom:1px solid var(--b2);display:flex;align-items:center;gap:9px}
+.set-head h3{font-size:14px;font-weight:700}.set-head p{font-size:11px;color:var(--t2);margin-top:1px}
+.set-body{padding:18px}
+.set-field{margin-bottom:12px}
+.set-label{display:block;font-size:10.5px;font-weight:600;color:var(--t2);margin-bottom:3px}
+.set-input{width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:5px;font-size:12.5px;outline:none;font-family:inherit;background:var(--s2)}
+.set-input:focus{border-color:var(--a);background:#fff}
+.set-hint{font-size:9.5px;color:var(--t3);margin-top:2px}
+.set-btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s}
+.set-btn-primary{background:var(--a);color:#fff}.set-btn-primary:hover{background:var(--ah)}
+.set-btn-danger{background:#fff;color:#c44;border:1px solid #ecc}.set-btn-danger:hover{background:#fef5f5}
+.set-btn-outline{background:#fff;color:var(--t2);border:1px solid var(--b)}.set-btn-outline:hover{background:var(--s2)}
+.set-btn:disabled{opacity:.5;cursor:default}
+.set-status{margin-top:12px;padding:9px 11px;border-radius:6px;font-size:11px;line-height:1.5}
+.set-status-ok{background:var(--okl);border:1px solid #c3e6c3;color:var(--ok)}
+.set-status-err{background:#fef4e8;border:1px solid #f8d89a;color:#7a5500}
+.set-status-info{background:#f0f4ff;border:1px solid #c8d6f0;color:#3355aa}
+.set-divider{height:1px;background:var(--b);margin:16px 0}
+.set-connected{display:flex;align-items:center;gap:9px;padding:12px;background:var(--okl);border-radius:7px;margin-bottom:12px}
+.set-connected-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.set-connected-info b{font-size:12.5px}.set-connected-info span{display:block;font-size:10px;color:#555;margin-top:1px}
+.diag{margin-top:12px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:9px 11px;font-family:monospace;font-size:9.5px;white-space:pre-wrap;max-height:280px;overflow-y:auto;color:var(--t2)}
+
+/* Modal */
+.mo{position:fixed;inset:0;z-index:1000;background:rgba(22,18,14,.4);display:flex;justify-content:center;align-items:flex-start;padding:20px 10px;overflow-y:auto;backdrop-filter:blur(2px)}
+.modal{background:var(--s2);border-radius:10px;max-width:600px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.12);overflow:hidden}
+.mo-head{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--b2)}
+.mo-sku{font-size:9px;color:var(--t3);font-family:monospace}
+.mo-x{background:none;border:none;cursor:pointer;color:var(--t3);padding:2px;font-size:14px}
+.mo-content{display:flex;flex-wrap:wrap}
+.mo-img{width:210px;min-height:160px;background:var(--s2);display:flex;align-items:center;justify-content:center}
+.mo-img img{max-width:84%;max-height:170px;object-fit:contain}
+.mo-info{flex:1;padding:10px 14px;min-width:220px}
+.mo-name{font-size:13.5px;font-weight:600;line-height:1.3;margin-bottom:3px}
+.mo-mfr{font-size:10.5px;color:var(--t2)}.mo-ref{font-size:9.5px;color:var(--t3);margin-top:1px}
+.mo-pbox{margin:8px 0 5px;padding:7px 10px;background:var(--s);border-radius:5px;border:1px solid var(--b2)}
+.mo-plbl{font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px}
+.mo-pval{font-size:18px;font-weight:700;color:var(--a)}.mo-pval small{font-size:11px;font-weight:400}
+.mo-pold{font-size:10px;color:var(--t3);text-decoration:line-through;margin-top:1px}
+.mo-badges{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+.mb{padding:2px 5px;background:var(--s2);border-radius:3px;font-size:8.5px;color:var(--t2)}.mb b{font-weight:600;color:var(--t)}
+.mo-bc{font-size:9.5px;color:var(--t3);margin-bottom:6px}
+.btn-add-f{width:100%;padding:7px;background:var(--a);color:#fff;border:none;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px}
+.btn-add-f:hover{background:var(--ah)}
+.mo-attrs{padding:2px 12px 12px}.mo-attrs-t{font-size:10.5px;font-weight:600;color:var(--t2);margin-bottom:3px}
+.attrs-tbl{background:var(--s);border-radius:4px;border:1px solid var(--b2);overflow:hidden;max-height:250px;overflow-y:auto}
+.arow{display:flex;padding:3px 8px;font-size:9.5px;border-bottom:1px solid #f3efe9}.arow:last-child{border-bottom:none}.arow:nth-child(even){background:#fdfbf8}
+.albl{width:42%;color:var(--t2);flex-shrink:0}.aval{color:var(--t);font-weight:500}
+.mo-source{text-align:right;padding:3px 12px 7px;font-size:8.5px;color:var(--t3)}
+
+/* Estimate */
+.eo{position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:998}
+.ep{position:fixed;top:0;right:0;bottom:0;width:320px;max-width:90vw;background:var(--s2);box-shadow:-6px 0 24px rgba(0,0,0,.1);z-index:999;display:flex;flex-direction:column}
+.ep-head{padding:10px 12px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between}
+.ep-title{font-size:13px;font-weight:700}
+.ep-body{flex:1;overflow-y:auto;padding:6px 8px}
+.ep-empty{text-align:center;padding:24px;color:var(--t3);font-size:11px;line-height:1.6}
+.ei{background:var(--s);border-radius:5px;border:1px solid var(--b2);padding:5px 7px;margin-bottom:3px}
+.ei-top{display:flex;gap:4px;margin-bottom:2px}.ei-img{width:26px;height:26px;object-fit:contain;border-radius:2px;background:var(--s2)}
+.ei-info{flex:1;min-width:0}.ei-name{font-size:9.5px;font-weight:500;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ei-sku{font-size:8px;color:var(--t3);font-family:monospace}
+.ei-bot{display:flex;align-items:center;justify-content:space-between}
+.eq{display:flex;align-items:center;gap:2px}.eq-btn{width:20px;height:20px;border-radius:2px;border:1px solid var(--b);background:var(--s);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
+.eq-inp{width:32px;text-align:center;border:1px solid var(--b);border-radius:2px;padding:2px;font-size:10.5px;font-weight:600;outline:none;font-family:inherit}
+.ei-price{font-size:10.5px;font-weight:600;color:var(--a)}
+.ei-del{background:none;border:none;cursor:pointer;color:#c44;opacity:.4;padding:2px;font-size:11px}.ei-del:hover{opacity:1}
+.ep-foot{padding:8px 12px;border-top:2px solid var(--a);background:var(--s)}
+.ep-tr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ep-tl{font-size:11.5px;color:var(--t2)}.ep-tv{font-size:16px;font-weight:700;color:var(--a)}
+.btn-exp{width:100%;padding:7px;background:var(--hd);color:#fff;border:none;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@media(max-width:768px){.side{display:none}.mo-content{flex-direction:column}.mo-img{width:100%;min-height:120px}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-brand" onclick="switchTab('catalog')">
+    <div class="hdr-logo">TIM</div>
+    <div><div class="hdr-title">Матеріали</div><div class="hdr-sub">TIM.pl</div></div>
+  </div>
+  <div class="hdr-right">
+    <div class="auth-ind" onclick="switchTab('settings')">
+      <span class="auth-dot off" id="authDot"></span>
+      <span class="auth-name" id="authName">Не підключено</span>
+    </div>
+    <button class="hbtn" id="btnEst" onclick="toggleEst()">🧾 <span class="badge" id="estBadge" style="display:none">0</span></button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab act" data-tab="catalog" onclick="switchTab('catalog')">📦 Каталог</div>
+  <div class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Інтеграція</div>
+</div>
+<div id="banner" style="display:none"></div>
+
+<!-- CATALOG -->
+<div class="tab-content act" id="tc-catalog" style="height:calc(100vh - 46px - 35px)">
+  <div class="layout" style="height:100%">
+    <aside class="side"><div class="side-head">Категорії</div><div class="side-body" id="catTree"><div class="msg">Завантаження...</div></div></aside>
+    <div class="main">
+      <div class="sbar">
+        <div class="swrap">
+          <span style="color:var(--t3)">🔍</span>
+          <input class="sinp" id="sInp" placeholder="Пошук..." onkeydown="if(event.key==='Enter')doSearch()">
+          <button class="sclr" id="sClr" onclick="clearSearch()">✕</button>
+        </div>
+        <div class="vtog"><button class="vbtn act" id="vGrid" onclick="setView('grid')">▦</button><button class="vbtn" id="vList" onclick="setView('list')">☰</button></div>
+        <span class="sinfo" id="sInfo"></span>
+        <span class="src-tag" id="srcTag" style="display:none"></span>
+      </div>
+      <div class="content" id="content">
+        <div class="land"><div style="font-size:30px;opacity:.4;margin-bottom:4px">📦</div><h2>Каталог TIM.pl</h2><p>Оберіть категорію або шукайте. Для ваших цін → «Інтеграція».</p><div id="landCats" class="land-cats"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="tab-content" id="tc-settings" style="height:calc(100vh - 46px - 35px)">
+  <div class="settings-wrap">
+    <div class="set-card">
+      <div class="set-head"><div><h3>⚙️ Інтеграція з TIM.pl</h3><p>Увійдіть для персональних цін</p></div></div>
+      <div class="set-body">
+        <div id="setConnected" style="display:none">
+          <div class="set-connected"><span class="set-connected-dot"></span><div class="set-connected-info"><b id="setConnUser"></b><span id="setConnInfo"></span></div></div>
+          <button class="set-btn set-btn-outline" onclick="runDiag()" style="margin-bottom:6px">🔍 Діагностика</button>
+          <button class="set-btn set-btn-danger" onclick="doLogout()">Вийти</button>
+          <div id="diagBox" class="diag" style="display:none"></div>
+        </div>
+        <div id="setForm">
+          <div class="set-status set-status-info" style="margin-bottom:12px">ℹ️ Без логіну — загальні ціни. Увійдіть для <b>ваших умов</b>.</div>
+          <div class="set-field"><label class="set-label">Email / Логін TIM.pl</label><input class="set-input" id="setUser" type="text" placeholder="your@email.com" autocomplete="username"></div>
+          <div class="set-field"><label class="set-label">Пароль</label><input class="set-input" id="setPass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><div class="set-hint">Передається тільки на TIM.pl через локальний проксі</div></div>
+          <button class="set-btn set-btn-primary" id="setLoginBtn" onclick="doLogin()">🔑 Увійти</button>
+          <div id="setStatus" style="display:none"></div>
+        </div>
+        <div class="set-divider"></div>
+        <div style="font-size:10px;color:var(--t3);line-height:1.5">
+          <b>Як працює:</b> Проксі логіниться на TIM.pl → отримує session cookies → запитує ціни через GraphQL API → повертає ваші персональні ціни. Сесія зберігається назавжди, оновлюється автоматично.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="mo" id="modal" style="display:none" onclick="closeMo()"><div class="modal" onclick="event.stopPropagation()">
+  <div class="mo-head"><span class="mo-sku" id="moSku"></span><button class="mo-x" onclick="closeMo()">✕</button></div>
+  <div class="mo-content">
+    <div class="mo-img" id="moImg">📦</div>
+    <div class="mo-info"><div class="mo-name" id="moName"></div><div class="mo-mfr" id="moMfr"></div><div class="mo-ref" id="moRef"></div>
+      <div class="mo-pbox"><div class="mo-plbl" id="moPLbl">ЦІНА NETTO</div><div class="mo-pval" id="moPrice"></div><div class="mo-pold" id="moPOld" style="display:none"></div></div>
+      <div class="mo-badges" id="moBadges"></div><div class="mo-bc" id="moBc"></div>
+      <button class="btn-add-f" id="moAddBtn">+ Додати до кошторису</button>
+    </div>
+  </div>
+  <div class="mo-attrs" id="moAttrs" style="display:none"><div class="mo-attrs-t">Характеристики</div><div class="attrs-tbl" id="moAttrsTbl"></div></div>
+  <div class="mo-source" id="moSrc"></div>
+  <div class="msg" id="moLoad" style="display:none">⏳ Завантаження...</div>
+  <div class="msg err" id="moErr" style="display:none"></div>
+</div></div>
+
+<!-- Estimate -->
+<div class="eo" id="estO" style="display:none" onclick="toggleEst()"></div>
+<div class="ep" id="estP" style="display:none">
+  <div class="ep-head"><span class="ep-title">🧾 Кошторис (<span id="estCnt">0</span>)</span><button class="mo-x" onclick="toggleEst()">✕</button></div>
+  <div class="ep-body" id="estBody"><div class="ep-empty">Порожній</div></div>
+  <div class="ep-foot" id="estFoot" style="display:none"><div class="ep-tr"><span class="ep-tl">Разом netto:</span><span class="ep-tv" id="estTotal">0.00 zł</span></div><button class="btn-exp" onclick="exportCSV()">📥 Експорт CSV</button></div>
+</div>
+
+<script>
+const P='http://localhost:3001';
+let allCats=[],selCat=null,products=[],curPage=1,totPages=0,viewMode='grid',estimate=[];
+let curCatName='',sid=localStorage.getItem('tim_sid')||'',authUser=localStorage.getItem('tim_user')||'';
+const $=id=>document.getElementById(id);
+const esc=s=>{if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML};
+const pp=p=>parseFloat(String(p||'0').replace(',','.').replace(/[^\d.]/g,''))||0;
+const fmt=n=>n!=null?parseFloat(n).toFixed(2)+' zł':'—';
+
+function apiUrl(path){const sep=path.includes('?')?'&':'?';return P+path+(sid?sep+'sid='+sid:'')}
+async function api(path){const r=await fetch(apiUrl(path));if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+
+function switchTab(n){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('act',t.dataset.tab===n));document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('act',t.id==='tc-'+n))}
+function updateAuth(){
+  if(sid&&authUser){$('authDot').className='auth-dot on';$('authName').textContent=authUser;$('setConnected').style.display='block';$('setForm').style.display='none';$('setConnUser').textContent=authUser;$('setConnInfo').textContent='Сесія активна'}
+  else{$('authDot').className='auth-dot off';$('authName').textContent='Не підключено';$('setConnected').style.display='none';$('setForm').style.display='block'}
+}
+function showSrc(src){const t=$('srcTag');if(src==='personal'){t.className='src-tag src-personal';t.textContent='● Ваші ціни';t.style.display='inline'}else if(src==='public'){t.className='src-tag src-public';t.textContent='○ Загальні';t.style.display='inline'}else t.style.display='none'}
+
+// Login
+async function doLogin(){
+  const u=$('setUser').value.trim(),p=$('setPass').value;
+  if(!u||!p)return showMsg('Введіть логін і пароль','err');
+  const b=$('setLoginBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span> Входжу...';showMsg('','');
+  try{
+    const r=await fetch(P+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+    if(d.success&&d.sid){
+      sid=d.sid;authUser=d.username;localStorage.setItem('tim_sid',sid);localStorage.setItem('tim_user',authUser);updateAuth();
+      let m='✓ Підключено!';
+      if(d.gqlEnabled)m+=' GraphQL працює — ви бачите персональні ціни.';
+      if(d.testPrice!=null)m+='<br>Тест: SKU 08602 → <b>'+d.testPrice+' zł</b> (ваша ціна)';
+      showMsg(m,'ok');loadCategories();
+    }else showMsg('✗ '+(d.error||'Помилка'),'err');
+  }catch(e){showMsg('✗ '+e.message,'err')}
+  b.disabled=false;b.innerHTML='🔑 Увійти';
+}
+async function doLogout(){try{await fetch(P+'/api/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sid})})}catch(e){}
+  sid='';authUser='';localStorage.removeItem('tim_sid');localStorage.removeItem('tim_user');updateAuth();$('setPass').value='';$('diagBox').style.display='none';loadCategories()}
+async function runDiag(){const el=$('diagBox');el.style.display='block';el.textContent='Діагностика...\n';
+  try{const d=await api('/api/debug-auth?sku=0001-00001-08602');el.textContent=JSON.stringify(d,null,2)}catch(e){el.textContent='Помилка: '+e.message}}
+function showMsg(m,t){const el=$('setStatus');if(!m){el.style.display='none';return}el.style.display='block';el.className='set-status set-status-'+(t==='ok'?'ok':t==='err'?'err':'info');el.innerHTML=m}
+
+// Init
+async function init(){
+  try{const r=await fetch(P);const d=await r.json();if(d.status==='ok'){showBanner('✓ Проксі v6',true);setTimeout(()=>$('banner').style.display='none',1800)}}
+  catch(e){showBanner('⚠ Проксі не запущений. <code>node server.js</code>',false);return}
+  if(sid){try{const s=await api('/api/session');if(!s.authenticated){sid='';authUser='';localStorage.removeItem('tim_sid');localStorage.removeItem('tim_user')}}catch(e){sid='';authUser=''}}
+  updateAuth();loadCategories()}
+function showBanner(h,ok){$('banner').innerHTML=h;$('banner').className='banner '+(ok?'banner-ok':'banner-err');$('banner').style.display='block'}
+
+// Categories
+async function loadCategories(){try{const d=await api('/api/categories');allCats=d.categories||[];renderCats();renderLandCats()}catch(e){$('catTree').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}}
+function renderCats(){const el=$('catTree');if(!allCats.length){el.innerHTML='<div class="msg">—</div>';return}el.innerHTML='';allCats.forEach(c=>{const n=buildCat(c,0);if(n)el.appendChild(n)})}
+function buildCat(c,d){if(!c?.name)return null;const w=document.createElement('div');const subs=(c.subcategories||[]).filter(s=>s?.name);
+  const row=document.createElement('div');row.className='cat';row.style.paddingLeft=(4+d*12)+'px';
+  row.innerHTML=(subs.length?'<span class="cat-ch">›</span>':'<span style="width:12px"></span>')+'<span class="cat-lbl" title="'+esc(c.name)+'">'+esc(c.name)+'</span>';
+  const kids=document.createElement('div');kids.className='cat-kids';
+  row.onclick=e=>{e.stopPropagation();doSelCat(c);if(subs.length){const o=kids.classList.toggle('open');const ch=row.querySelector('.cat-ch');if(ch)ch.classList.toggle('open',o)}};
+  w.appendChild(row);if(subs.length){subs.forEach(s=>{const n=buildCat(s,d+1);if(n)kids.appendChild(n)});w.appendChild(kids)}return w}
+function doSelCat(c){selCat=c;curCatName=c.name||'';curPage=1;$('sInp').value='';$('sClr').classList.remove('show');
+  document.querySelectorAll('.cat').forEach(n=>n.classList.remove('act'));document.querySelectorAll('.cat-lbl').forEach(n=>{if(n.textContent===c.name)n.parentElement.classList.add('act')});
+  switchTab('catalog');loadProducts()}
+function renderLandCats(){const el=$('landCats');if(!el||!allCats.length)return;el.innerHTML='';allCats.slice(0,12).forEach(c=>{const b=document.createElement('button');b.className='land-cat';b.textContent=c.name;b.onclick=()=>doSelCat(c);el.appendChild(b)})}
+
+// Products
+async function loadProducts(){const ct=$('content');ct.innerHTML='<div class="msg">⏳</div>';$('sInfo').textContent='';showSrc('');
+  try{const d=await api('/api/products?cat='+encodeURIComponent(selCat.slug||'')+'&p='+curPage);
+    products=d.products||[];totPages=d.totalPages||1;$('sInfo').textContent=(d.totalProducts||products.length)+' шт';showSrc(d.source);renderProducts()}
+  catch(e){ct.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}}
+
+function renderProducts(){const ct=$('content');if(!products.length){ct.innerHTML='<div class="msg">Порожньо</div>';return}
+  let h='<div class="phead"><h3>'+esc(curCatName)+'</h3></div>';
+  h+='<div class="'+(viewMode==='grid'?'grid':'listv')+'">';
+  products.forEach((p,i)=>{h+=viewMode==='grid'?gridCard(p,i):listCard(p,i)});h+='</div>';
+  if(totPages>1)h+='<div class="pgn"><button class="pg-btn" onclick="chgPage(-1)" '+(curPage<=1?'disabled':'')+'>←</button><span class="pg-info">'+curPage+'/'+totPages+'</span><button class="pg-btn" onclick="chgPage(1)" '+(curPage>=totPages?'disabled':'')+'>→</button></div>';
+  ct.innerHTML=h}
+
+function gridCard(p,i){
+  const img=p.image?'<img src="'+esc(p.image)+'" onerror="this.outerHTML=\'📦\'">':'📦';
+  const pr=p.price!=null?esc(parseFloat(p.price).toFixed(2))+' <small>zł</small>':'';
+  const old=p.publicPrice&&p.publicPrice!==p.price?'<div class="card-old">'+parseFloat(p.publicPrice).toFixed(2)+' zł</div>':'';
+  const stockHtml=p.stockColor?'<span class="card-stock stock-'+esc(p.stockColor==='GREEN'?'green':p.stockColor==='YELLOW'?'yellow':'red')+'">'+esc(p.stock||'')+' '+(p.unit||'')+'</span>':'';
+  return '<div class="card" onclick="openByIdx('+i+')"><div class="card-img">'+img+stockHtml+'</div><div class="card-body">'
+    +'<div class="card-sku">'+esc(p.sku)+'</div><div class="card-name">'+esc(p.name)+'</div>'
+    +'<div class="card-foot">'+(pr?'<div><div class="card-price">'+pr+'</div>'+old+'</div>':'<div class="card-price empty">—</div>')
+    +'<button class="btn-add" onclick="event.stopPropagation();addEstIdx('+i+')">+</button></div></div></div>'}
+
+function listCard(p,i){const img=p.image?'<img src="'+esc(p.image)+'">':'';
+  return '<div class="cardl" onclick="openByIdx('+i+')"><div class="cardl-img">'+img+'</div><div class="cardl-body"><div class="cardl-name">'+esc(p.name)+'</div><div class="cardl-meta">'+esc(p.sku)+'</div></div>'
+    +(p.price!=null?'<div class="cardl-price">'+parseFloat(p.price).toFixed(2)+' zł</div>':'')+'<button class="btn-add" onclick="event.stopPropagation();addEstIdx('+i+')">+</button></div>'}
+
+function openByIdx(i){const p=products[i];if(p)openProd(p.url,p.sku)}
+function addEstIdx(i){const p=products[i];if(p)addEst(p.sku,p.name,p.price,p.manufacturer||'',p.image||'')}
+function chgPage(d){curPage+=d;loadProducts()}
+
+function doSearch(){const q=$('sInp').value.trim();if(!q)return;$('sClr').classList.add('show');const ct=$('content');ct.innerHTML='<div class="msg">🔍 «'+esc(q)+'»...</div>';$('sInfo').textContent='';showSrc('');
+  api('/api/search?q='+encodeURIComponent(q)).then(d=>{products=d.products||[];curCatName='Пошук: '+q;totPages=0;$('sInfo').textContent=(d.total||products.length)+' шт';showSrc(d.source);renderProducts()}).catch(e=>{ct.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'})}
+function clearSearch(){$('sInp').value='';$('sClr').classList.remove('show');if(selCat)loadProducts()}
+function setView(m){viewMode=m;$('vGrid').classList.toggle('act',m==='grid');$('vList').classList.toggle('act',m==='list');if(products.length)renderProducts()}
+
+// Modal
+async function openProd(url,sku){$('modal').style.display='flex';$('moLoad').style.display='block';$('moErr').style.display='none';$('moAttrs').style.display='none';
+  $('moName').textContent='';$('moMfr').textContent='';$('moRef').textContent='';$('moPrice').innerHTML='';$('moPOld').style.display='none';$('moBadges').innerHTML='';$('moBc').textContent='';
+  $('moSku').textContent=sku?'SKU: '+sku:'';$('moImg').innerHTML='📦';$('moSrc').textContent='';
+  try{let params=url?'url='+encodeURIComponent(url):'';if(sku)params+=(params?'&':'')+'sku='+encodeURIComponent(sku);
+    const d=await api('/api/product?'+params);$('moLoad').style.display='none';const p=d.product;
+    if(!p){$('moErr').textContent='Не знайдено';$('moErr').style.display='block';return}
+    $('moSku').textContent='SKU: '+(p.sku||sku)+(p.ean?' · EAN: '+p.ean:'');
+    $('moName').textContent=p.name||'';$('moMfr').textContent=p.manufacturer?'Виробник: '+p.manufacturer:'';$('moRef').textContent=p.ref_num?'Ref: '+p.ref_num:'';
+    if(p.image)$('moImg').innerHTML='<img src="'+esc(p.image)+'" onerror="this.outerHTML=\'📦\'">';
+    const isPers=d.source==='personal';
+    $('moPLbl').textContent=isPers?'ВАША ЦІНА NETTO':'ЦІНА NETTO';
+    $('moPrice').innerHTML=p.price!=null?esc(parseFloat(p.price).toFixed(2))+' <small>zł</small>':'—';
+    if(isPers&&p.publicPrice&&p.publicPrice!==p.price){$('moPOld').textContent='Загальна: '+parseFloat(p.publicPrice).toFixed(2)+' zł';$('moPOld').style.display='block'}
+    let badges='';
+    if(p.stock_qty!=null)badges+='<span class="mb">Склад: <b>'+p.stock_qty+' '+(p.unit||'шт')+'</b></span>';
+    if(p.shippingText)badges+='<span class="mb">🚚 '+esc(p.shippingText)+'</span>';
+    if(p.series)badges+='<span class="mb">Серія: <b>'+esc(p.series)+'</b></span>';
+    if(p.rating)badges+='<span class="mb">⭐ '+p.rating+(p.reviewCount?' ('+p.reviewCount+')':'')+'</span>';
+    $('moBadges').innerHTML=badges;if(p.breadcrumb)$('moBc').textContent=p.breadcrumb;
+    if(p.attributes?.length){$('moAttrs').style.display='block';$('moAttrsTbl').innerHTML=p.attributes.map(a=>'<div class="arow"><div class="albl">'+esc(a.label)+'</div><div class="aval">'+esc(a.value)+'</div></div>').join('')}
+    $('moSrc').textContent=isPers?'Дані: GraphQL (персональні ціни)':'Дані: публічний каталог';
+    $('moAddBtn').onclick=()=>{addEst(p.sku||sku,p.name,p.price,p.manufacturer,p.image);closeMo()};
+  }catch(e){$('moLoad').style.display='none';$('moErr').textContent=e.message;$('moErr').style.display='block'}}
+function closeMo(){$('modal').style.display='none'}
+
+// Estimate
+function addEst(sku,name,price,mfr,img){if(!sku)return;const ex=estimate.find(i=>i.sku===sku);if(ex)ex.qty++;else estimate.push({sku,name:name||'',price:pp(price),mfr:mfr||'',img:img||'',qty:1});renderEst();$('btnEst').classList.add('has')}
+function remEst(sku){estimate=estimate.filter(i=>i.sku!==sku);renderEst()}
+function setQty(sku,q){if(q<1)return remEst(sku);const i=estimate.find(x=>x.sku===sku);if(i)i.qty=q;renderEst()}
+function renderEst(){const bd=$('estBody'),ft=$('estFoot'),bg=$('estBadge');$('estCnt').textContent=estimate.length;
+  if(!estimate.length){bd.innerHTML='<div class="ep-empty">Порожній</div>';ft.style.display='none';bg.style.display='none';$('btnEst').classList.remove('has');return}
+  bg.textContent=estimate.length;bg.style.display='inline';let h='',total=0;
+  estimate.forEach(i=>{const line=i.price*i.qty;total+=line;
+    h+='<div class="ei"><div class="ei-top">'+(i.img?'<img class="ei-img" src="'+esc(i.img)+'" onerror="this.style.display=\'none\'">':'')
+      +'<div class="ei-info"><div class="ei-name">'+esc(i.name)+'</div><div class="ei-sku">'+esc(i.sku)+'</div></div></div>'
+      +'<div class="ei-bot"><div class="eq"><button class="eq-btn" onclick="setQty(\''+esc(i.sku)+'\','+(i.qty-1)+')">−</button>'
+      +'<input class="eq-inp" type="number" value="'+i.qty+'" onchange="setQty(\''+esc(i.sku)+'\',parseInt(this.value)||0)">'
+      +'<button class="eq-btn" onclick="setQty(\''+esc(i.sku)+'\','+(i.qty+1)+')">+</button></div>'
+      +'<div style="display:flex;align-items:center;gap:4px">'+(i.price?'<span class="ei-price">'+line.toFixed(2)+'</span>':'')
+      +'<button class="ei-del" onclick="remEst(\''+esc(i.sku)+'\')">🗑</button></div></div></div>'});
+  bd.innerHTML=h;ft.style.display='block';$('estTotal').textContent=total.toFixed(2)+' zł'}
+function toggleEst(){const v=$('estP').style.display!=='none';$('estP').style.display=v?'none':'flex';$('estO').style.display=v?'none':'block'}
+function exportCSV(){const rows=['SKU;Назва;Виробник;К-сть;Ціна;Сума'];estimate.forEach(i=>rows.push([i.sku,'"'+i.name+'"',i.mfr,i.qty,i.price.toFixed(2),(i.price*i.qty).toFixed(2)].join(';')));
+  rows.push(['','','','','РАЗОМ:',estimate.reduce((s,i)=>s+i.price*i.qty,0).toFixed(2)].join(';'));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'}));a.download='koshtorys_'+new Date().toISOString().slice(0,10)+'.csv';a.click()}
+$('sInp').addEventListener('input',function(){$('sClr').classList.toggle('show',this.value.length>0)});
+init();
+</script>
+</body>
+</html>

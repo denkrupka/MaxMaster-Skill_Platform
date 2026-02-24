@@ -332,11 +332,9 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
   // Navigation
   const [navStack, setNavStack] = useState<Array<{ slug: string; name: string }>>([]);
   const [items, setItems] = useState<RamirentItem[]>([]);
-  const [browseType, setBrowseType] = useState<'category' | 'group'>('category');
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
   const [browseTitle, setBrowseTitle] = useState('');
-  const [groupDetail, setGroupDetail] = useState<RamirentGroupDetail | null>(null);
 
   const [search, setSearch] = useState('');
   const [searchResult, setSearchResult] = useState<RamirentItem[] | null>(null);
@@ -359,28 +357,16 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
   const browse = useCallback((slug: string) => {
     setBrowseLoading(true);
     setBrowseError(null);
-    setGroupDetail(null);
     ramirentProxy('browse', { integrationId, slug })
       .then(data => {
         if (data.type === 'group') {
-          const group = data.group;
-          // If group has NO models (single product) — auto-open detail modal
-          if (!group?.models || group.models.length === 0) {
-            setDetailSlug(slug);
-            setBrowseType('group');
-            setGroupDetail(group);
-            setItems([]);
-            setBrowseTitle(group?.title || '');
-          } else {
-            // Group with models — show models grid
-            setBrowseType('group');
-            setGroupDetail(group);
-            setItems(group.models || []);
-            setBrowseTitle(group.title || '');
-          }
+          // Product page — don't navigate, just open detail modal and revert nav stack
+          setNavStack(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
+          setDetailSlug(slug);
+          setBrowseLoading(false);
+          return;
         } else {
-          // Category page
-          setBrowseType('category');
+          // Category page — navigate normally
           setItems(data.items || []);
           setBrowseTitle(data.title || '');
         }
@@ -525,30 +511,6 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
           </div>
         )}
 
-        {/* Group detail bar (when browsing a group page) */}
-        {groupDetail && !searchResult && browseType === 'group' && (
-          <div className="px-4 py-3 border-b border-slate-200 bg-blue-50">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800">{groupDetail.title}</h3>
-                {groupDetail.description && <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{groupDetail.description}</p>}
-              </div>
-              <div className="flex items-center gap-3">
-                {groupDetail.priceBrutto != null && (
-                  <span className="text-sm font-bold text-blue-600">
-                    od {groupDetail.priceBrutto.toFixed(2)} zł/{groupDetail.priceUnit || 'Dzień'}
-                  </span>
-                )}
-                <button
-                  onClick={() => setDetailSlug(navStack[navStack.length - 1]?.slug || null)}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Szczegóły
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Content area */}
         <div className="flex-1 overflow-y-auto p-4">
@@ -600,40 +562,7 @@ export const RamirentIntegrator: React.FC<Props> = ({ integrationId, onAddToOwnC
               )}
             </>
           ) : items.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 text-sm">
-              {browseType === 'group' ? (
-                <div>
-                  <Package className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-                  <p>Kliknij «Szczegóły» aby zobaczyć informacje o produkcie.</p>
-                </div>
-              ) : 'Brak podkategorii.'}
-            </div>
-          ) : browseType === 'group' && groupDetail?.models && groupDetail.models.length > 0 ? (
-            // Models grid
-            <>
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Modele ({groupDetail.models.length})</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {groupDetail.models.map((model, i) => (
-                  <div
-                    key={model.code || i}
-                    onClick={() => { if (model.slug) setDetailSlug(model.slug); }}
-                    className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
-                  >
-                    <div className="h-28 bg-slate-50 flex items-center justify-center border-b border-slate-100">
-                      {model.image ? (
-                        <img src={model.image} alt="" className="max-w-[85%] max-h-24 object-contain" />
-                      ) : (
-                        <Package className="w-10 h-10 text-slate-200" />
-                      )}
-                    </div>
-                    <div className="p-2.5">
-                      <div className="text-xs font-medium text-slate-800 line-clamp-2">{model.name}</div>
-                      {model.badge && <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded mt-1 inline-block">{model.badge}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className="text-center py-12 text-slate-400 text-sm">Brak podkategorii.</div>
           ) : (
             // Category items grid
             <>

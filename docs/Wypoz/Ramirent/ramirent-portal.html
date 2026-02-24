@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramirent.pl — Wynajem sprzętu · Kosztorys</title>
+<style>
+:root{--bg:#f0f2f5;--s:#fff;--s2:#f6f7fa;--b:#e2e5eb;--b2:#ebedf2;--t:#1a1d23;--t2:#5a6070;--t3:#9098a8;--a:#e85d04;--ah:#cc4e00;--al:rgba(232,93,4,.07);--ok:#1a8a3a;--okl:#edf8f0;--hd:#1b2536;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--t);min-height:100vh;font-size:13px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#c5cad4;border-radius:4px}
+button{font-family:inherit;cursor:pointer}
+
+.hdr{background:var(--hd);color:#fff;height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:sticky;top:0;z-index:100}
+.hdr-brand{display:flex;align-items:center;gap:8px;cursor:pointer}
+.hdr-logo{width:28px;height:28px;border-radius:6px;background:var(--a);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;letter-spacing:-.3px}
+.hdr-title{font-size:13px;font-weight:700}.hdr-sub{font-size:8.5px;color:#8896a8}
+.hdr-right{display:flex;align-items:center;gap:6px}
+.auth-ind{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:5px;font-size:10.5px;cursor:pointer;transition:background .15s}
+.auth-ind:hover{background:rgba(255,255,255,.08)}
+.auth-dot{width:7px;height:7px;border-radius:50%}.auth-dot.off{background:#556}.auth-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80}
+.auth-name{color:#ccc;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtn{background:rgba(255,255,255,.06);border:none;border-radius:5px;padding:5px 10px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;transition:background .15s}
+.hbtn:hover{background:rgba(255,255,255,.12)}.hbtn.has{background:var(--a)}
+.badge{background:#fff;color:var(--a);border-radius:10px;padding:0 5px;font-size:9.5px;font-weight:700}
+
+.tabs{display:flex;background:var(--s);border-bottom:1px solid var(--b)}
+.tab{padding:9px 18px;font-size:11.5px;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s}
+.tab:hover{color:var(--t2)}.tab.act{color:var(--a);border-bottom-color:var(--a)}
+.tab-content{display:none}.tab-content.act{display:block}
+
+.banner{padding:7px 14px;font-size:10.5px;border-bottom:1px solid}
+.banner-ok{background:var(--okl);border-color:#c3e6c3;color:var(--ok)}
+.banner-err{background:#fef4e8;border-color:#f8d89a;color:#7a5500}
+
+.main-wrap{display:flex;flex-direction:column;height:calc(100vh - 48px - 37px)}
+.toolbar{padding:8px 14px;background:var(--s);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:8px}
+.bc{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--t3);flex:1;flex-wrap:wrap}
+.bc-item{cursor:pointer;color:var(--a);text-decoration:none;font-weight:500}.bc-item:hover{text-decoration:underline}
+.bc-sep{color:var(--t3)}.bc-cur{color:var(--t);font-weight:600}
+.content{flex:1;overflow-y:auto;padding:14px}
+.content-title{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.cat-tile{background:var(--s);border:1px solid var(--b);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:border-color .12s,box-shadow .12s;display:flex;flex-direction:column}
+.cat-tile:hover{border-color:var(--a);box-shadow:0 3px 12px rgba(232,93,4,.08)}
+.cat-tile-img{height:90px;background:var(--s2);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--b2);overflow:hidden}
+.cat-tile-img img{max-width:80%;max-height:70%;object-fit:contain}
+.cat-tile-body{padding:7px 9px;flex:1;display:flex;align-items:center}
+.cat-tile-name{font-size:11px;font-weight:600;line-height:1.3;color:var(--t)}
+
+.group-layout{display:flex;gap:16px;flex-wrap:wrap}
+.group-gallery{width:320px;flex-shrink:0;background:var(--s);border-radius:var(--r);border:1px solid var(--b);overflow:hidden}
+.group-gallery img{width:100%;height:220px;object-fit:contain;background:var(--s2)}
+.group-thumbs{display:flex;gap:3px;padding:4px;overflow-x:auto}
+.group-thumb{width:48px;height:36px;border-radius:3px;border:1px solid var(--b2);object-fit:contain;cursor:pointer;background:var(--s2)}
+.group-thumb.act{border-color:var(--a)}
+.group-info{flex:1;min-width:260px}
+.group-title{font-size:17px;font-weight:700;line-height:1.3;margin-bottom:2px}
+.group-code{font-size:10px;color:var(--t3);font-family:monospace;margin-bottom:8px}
+.group-desc{font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:10px;max-height:80px;overflow:hidden}
+
+.price-box{background:var(--s);border:2px solid var(--a);border-radius:var(--r);padding:12px;margin-bottom:10px}
+.price-row{display:flex;align-items:baseline;gap:6px}
+.price-brutto{font-size:22px;font-weight:800;color:var(--a)}
+.price-unit{font-size:12px;color:var(--t2);font-weight:600}
+.price-netto{font-size:11.5px;color:var(--t2);margin-top:1px}
+.price-type{font-size:9.5px;color:var(--t3);margin-top:3px}
+.price-contact{background:#fef4e8;border:2px solid #f0c060;border-radius:var(--r);padding:14px;text-align:center;margin-bottom:10px}
+.price-contact-icon{font-size:22px;margin-bottom:4px}
+.price-contact-text{font-size:12px;font-weight:600;color:#7a5500}
+.price-contact-sub{font-size:10px;color:#a08040;margin-top:2px}
+
+.avail-box{display:flex;align-items:center;gap:6px;padding:6px 9px;background:var(--s2);border-radius:5px;margin-bottom:8px;font-size:11px}
+.avail-dot{width:8px;height:8px;border-radius:50%}
+.avail-dot.green{background:#4caf50}.avail-dot.red{background:#f44336}.avail-dot.gray{background:#bbb}
+
+.info-badges{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+.ib{padding:3px 7px;background:var(--s2);border-radius:4px;font-size:9.5px;color:var(--t2)}.ib b{font-weight:600;color:var(--t)}
+
+.models-title{font-size:12px;font-weight:700;margin:14px 0 6px;color:var(--t2)}
+.models-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.model-card{background:var(--s);border:1px solid var(--b);border-radius:6px;padding:5px;display:flex;align-items:center;gap:6px;transition:border-color .12s}
+.model-img{width:42px;height:32px;border-radius:3px;background:var(--s2);object-fit:contain;flex-shrink:0}
+.model-name{font-size:10px;font-weight:500;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.model-badge{font-size:7.5px;padding:1px 4px;border-radius:2px;font-weight:700;display:inline-block}
+.model-badge.rg{background:#d4edda;color:#155724}.model-badge.pm{background:#e8daef;color:#6c3483}
+.model-code{font-size:8px;color:var(--t3);font-family:monospace}
+
+.btn-add-est{width:100%;padding:8px;background:var(--a);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:4px;transition:background .12s}
+.btn-add-est:hover{background:var(--ah)}
+.btn-inquiry{width:100%;padding:8px;background:var(--hd);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;margin-top:4px}
+
+.eo{position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:998}
+.ep{position:fixed;top:0;right:0;bottom:0;width:330px;max-width:90vw;background:var(--s2);box-shadow:-6px 0 24px rgba(0,0,0,.1);z-index:999;display:flex;flex-direction:column}
+.ep-head{padding:10px 12px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between}
+.ep-title{font-size:13px;font-weight:700}.mo-x{background:none;border:none;cursor:pointer;color:var(--t3);padding:2px;font-size:14px}
+.ep-body{flex:1;overflow-y:auto;padding:6px 8px}
+.ep-empty{text-align:center;padding:24px;color:var(--t3);font-size:11px}
+.ei{background:var(--s);border-radius:5px;border:1px solid var(--b2);padding:6px 8px;margin-bottom:3px}
+.ei-name{font-size:10px;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ei-code{font-size:8px;color:var(--t3);font-family:monospace}
+.ei-bot{display:flex;align-items:center;justify-content:space-between;margin-top:3px}
+.eq{display:flex;align-items:center;gap:2px}.eq-btn{width:20px;height:20px;border-radius:2px;border:1px solid var(--b);background:var(--s);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
+.eq-inp{width:32px;text-align:center;border:1px solid var(--b);border-radius:2px;padding:2px;font-size:10.5px;font-weight:600;outline:none;font-family:inherit}
+.ei-price{font-size:10.5px;font-weight:600;color:var(--a)}
+.ei-del{background:none;border:none;cursor:pointer;color:#c44;opacity:.4;padding:2px;font-size:11px}.ei-del:hover{opacity:1}
+.ep-foot{padding:8px 12px;border-top:2px solid var(--a);background:var(--s)}
+.ep-tr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ep-tl{font-size:11.5px;color:var(--t2)}.ep-tv{font-size:16px;font-weight:700;color:var(--a)}
+.btn-exp{width:100%;padding:7px;background:var(--hd);color:#fff;border:none;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer}
+
+.settings-wrap{padding:24px;overflow-y:auto;height:calc(100vh - 48px - 37px)}
+.set-card{background:var(--s);border-radius:10px;border:1px solid var(--b);max-width:480px;margin:0 auto;overflow:hidden}
+.set-head{padding:14px 18px;border-bottom:1px solid var(--b2)}.set-head h3{font-size:14px;font-weight:700}.set-head p{font-size:11px;color:var(--t2);margin-top:1px}
+.set-body{padding:18px}
+.set-field{margin-bottom:12px}
+.set-label{display:block;font-size:10.5px;font-weight:600;color:var(--t2);margin-bottom:3px}
+.set-input{width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:5px;font-size:12.5px;outline:none;font-family:inherit;background:var(--s2)}
+.set-input:focus{border-color:var(--a);background:#fff}
+.set-hint{font-size:9.5px;color:var(--t3);margin-top:2px}
+.set-btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
+.set-btn-primary{background:var(--a);color:#fff}.set-btn-primary:hover{background:var(--ah)}
+.set-btn-danger{background:#fff;color:#c44;border:1px solid #ecc}.set-btn-danger:hover{background:#fef5f5}
+.set-btn-outline{background:#fff;color:var(--t2);border:1px solid var(--b)}.set-btn-outline:hover{background:var(--s2)}
+.set-btn:disabled{opacity:.5;cursor:default}
+.set-status{margin-top:12px;padding:9px 11px;border-radius:6px;font-size:11px}
+.set-status-ok{background:var(--okl);border:1px solid #c3e6c3;color:var(--ok)}
+.set-status-err{background:#fef4e8;border:1px solid #f8d89a;color:#7a5500}
+.set-status-info{background:#f0f4ff;border:1px solid #c8d6f0;color:#3355aa}
+.set-connected{display:flex;align-items:center;gap:9px;padding:12px;background:var(--okl);border-radius:7px;margin-bottom:12px}
+.set-connected-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.set-divider{height:1px;background:var(--b);margin:16px 0}
+.diag{margin-top:12px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:9px 11px;font-family:monospace;font-size:9.5px;white-space:pre-wrap;max-height:250px;overflow-y:auto;color:var(--t2)}
+
+.land{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:350px;text-align:center;padding:20px}
+.land h2{font-size:16px;font-weight:700;margin:8px 0 4px}.land p{font-size:11.5px;color:var(--t2);max-width:360px;line-height:1.5}
+.msg{text-align:center;padding:30px;color:var(--t3);font-size:12px}.msg.err{color:var(--a)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@media(max-width:768px){.group-layout{flex-direction:column}.group-gallery{width:100%}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-brand" onclick="goHome()">
+    <div class="hdr-logo">RAM</div>
+    <div><div class="hdr-title">Wynajem sprzętu</div><div class="hdr-sub">Ramirent.pl</div></div>
+  </div>
+  <div class="hdr-right">
+    <div class="auth-ind" onclick="switchTab('settings')"><span class="auth-dot off" id="authDot"></span><span class="auth-name" id="authName">Nie połączono</span></div>
+    <button class="hbtn" id="btnEst" onclick="toggleEst()">🧾 <span class="badge" id="estBadge" style="display:none">0</span></button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab act" data-tab="catalog" onclick="switchTab('catalog')">🏗️ Katalog</div>
+  <div class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Integracja</div>
+</div>
+<div id="banner" style="display:none"></div>
+
+<div class="tab-content act" id="tc-catalog">
+  <div class="main-wrap">
+    <div class="toolbar"><div class="bc" id="breadcrumb"><span class="bc-cur">🏠 Katalog</span></div></div>
+    <div class="content" id="content"><div class="land"><div style="font-size:36px;opacity:.4">🏗️</div><h2>Katalog Ramirent.pl</h2><p>Wynajem sprzętu budowlanego. Wybierz kategorię, aby przeglądać ofertę.</p></div></div>
+  </div>
+</div>
+
+<div class="tab-content" id="tc-settings">
+  <div class="settings-wrap"><div class="set-card">
+    <div class="set-head"><h3>⚙️ Integracja z Ramirent.pl</h3><p>Zaloguj się, aby zobaczyć indywidualne ceny i dostępność</p></div>
+    <div class="set-body">
+      <div id="setConnected" style="display:none">
+        <div class="set-connected"><span class="set-connected-dot"></span><div><b id="setConnUser"></b><br><span style="font-size:10px;color:#555" id="setConnInfo"></span></div></div>
+        <button class="set-btn set-btn-outline" onclick="runDiag()" style="margin-bottom:6px">🔍 Diagnostyka</button>
+        <button class="set-btn set-btn-danger" onclick="doLogout()">Wyloguj</button>
+        <div id="diagBox" class="diag" style="display:none"></div>
+      </div>
+      <div id="setForm">
+        <div class="set-status set-status-info" style="margin-bottom:12px">ℹ️ Bez logowania — ceny katalogowe. Zaloguj się, aby zobaczyć <b>indywidualne warunki</b>.</div>
+        <div class="set-field"><label class="set-label">Email Ramirent</label><input class="set-input" id="setUser" type="email" placeholder="twoj@email.com"></div>
+        <div class="set-field"><label class="set-label">Hasło</label><input class="set-input" id="setPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"><div class="set-hint">Przesyłane wyłącznie do Ramirent przez lokalne proxy</div></div>
+        <button class="set-btn set-btn-primary" id="setLoginBtn" onclick="doLogin()">🔑 Zaloguj</button>
+        <div id="setStatus" style="display:none"></div>
+      </div>
+      <div class="set-divider"></div>
+      <div style="font-size:10px;color:var(--t3);line-height:1.5">
+        <b>Jak to działa:</b> Proxy loguje się na Ramirent.pl, zapisuje sesję i parsuje strony.<br>
+        <b>Ceny:</b> Niektóre pozycje mają cenę za dobę (netto/brutto), a niektóre — „skontaktuj się z oddziałem". Oba warianty są wyświetlane.
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- Kosztorys -->
+<div class="eo" id="estO" style="display:none" onclick="toggleEst()"></div>
+<div class="ep" id="estP" style="display:none">
+  <div class="ep-head"><span class="ep-title">🧾 Kosztorys (<span id="estCnt">0</span>)</span><button class="mo-x" onclick="toggleEst()">✕</button></div>
+  <div class="ep-body" id="estBody"><div class="ep-empty">Pusty kosztorys</div></div>
+  <div class="ep-foot" id="estFoot" style="display:none">
+    <div class="ep-tr"><span class="ep-tl">Razem netto/dobę:</span><span class="ep-tv" id="estTotal">0,00 zł</span></div>
+    <div style="font-size:9px;color:var(--t3);margin-bottom:6px">* pozycje bez ceny nie są uwzględnione</div>
+    <button class="btn-exp" onclick="exportCSV()">📥 Eksport CSV</button>
+  </div>
+</div>
+
+<script>
+const P='http://localhost:3003';
+let sid=localStorage.getItem('rami_sid')||'',authUser=localStorage.getItem('rami_user')||'';
+let navStack=[],estimate=[];
+const $=id=>document.getElementById(id);
+const esc=s=>{if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML};
+function apiUrl(p){const sep=p.includes('?')?'&':'?';return P+p+(sid?sep+'sid='+sid:'')}
+async function api(p){const r=await fetch(apiUrl(p));if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+
+function switchTab(n){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('act',t.dataset.tab===n));document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('act',t.id==='tc-'+n))}
+function updateAuth(){
+  if(sid&&authUser){$('authDot').className='auth-dot on';$('authName').textContent=authUser;$('setConnected').style.display='block';$('setForm').style.display='none';$('setConnUser').textContent=authUser}
+  else{$('authDot').className='auth-dot off';$('authName').textContent='Nie połączono';$('setConnected').style.display='none';$('setForm').style.display='block'}
+}
+
+// ═══ NAWIGACJA ═══
+function goHome(){navStack=[];switchTab('catalog');loadCategories()}
+function navigate(slug,name){navStack.push({slug,name});loadPage(slug)}
+function goBack(idx){navStack=navStack.slice(0,idx+1);loadPage(navStack[idx].slug)}
+
+function renderBreadcrumb(){
+  const bc=$('breadcrumb');
+  let h='<span class="bc-item" onclick="goHome()">🏠</span>';
+  navStack.forEach((n,i)=>{
+    h+='<span class="bc-sep">›</span>';
+    if(i<navStack.length-1) h+='<span class="bc-item" onclick="goBack('+i+')">'+esc(n.name)+'</span>';
+    else h+='<span class="bc-cur">'+esc(n.name)+'</span>';
+  });
+  bc.innerHTML=h;
+}
+
+async function loadCategories(){
+  renderBreadcrumb();
+  const ct=$('content');ct.innerHTML='<div class="msg">⏳ Ładowanie kategorii...</div>';
+  try{
+    const d=await api('/api/categories');
+    const cats=d.categories||[];
+    let h='<div class="content-title">🏗️ Kategorie sprzętu</div><div class="cat-grid">';
+    cats.forEach(c=>{
+      const img=c.image?'<img src="'+esc(c.image)+'" onerror="this.style.display=\'none\'">':'🏗️';
+      h+='<div class="cat-tile" onclick="navigate(\''+esc(c.slug)+'\',\''+esc(c.name)+'\')">'
+        +'<div class="cat-tile-img">'+img+'</div>'
+        +'<div class="cat-tile-body"><div class="cat-tile-name">'+esc(c.name)+'</div></div></div>';
+    });
+    h+='</div>';ct.innerHTML=h;
+  }catch(e){ct.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}
+}
+
+async function loadPage(slug){
+  renderBreadcrumb();
+  const ct=$('content');ct.innerHTML='<div class="msg">⏳</div>';
+  try{
+    const d=await api('/api/browse?slug='+encodeURIComponent(slug));
+    if(d.type==='category') renderCategory(d);
+    else if(d.type==='group') renderGroup(d.group);
+    else ct.innerHTML='<div class="msg">Nieznany typ strony</div>';
+  }catch(e){ct.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}
+}
+
+function renderCategory(d){
+  const ct=$('content');
+  const items=d.items||[];
+  if(!items.length){ct.innerHTML='<div class="msg">Pusta kategoria</div>';return}
+  let h='<div class="content-title">'+esc(d.title||'')+'</div><div class="cat-grid">';
+  items.forEach(c=>{
+    const img=c.image?'<img src="'+esc(c.image)+'" onerror="this.style.display=\'none\'">':'📦';
+    h+='<div class="cat-tile" onclick="navigate(\''+esc(c.slug)+'\',\''+esc(c.name)+'\')">'
+      +'<div class="cat-tile-img">'+img+'</div>'
+      +'<div class="cat-tile-body"><div class="cat-tile-name">'+esc(c.name)+'</div></div></div>';
+  });
+  h+='</div>';ct.innerHTML=h;
+}
+
+function renderGroup(g){
+  const ct=$('content');
+  if(!g||!g.title){ct.innerHTML='<div class="msg">Nie znaleziono</div>';return}
+
+  let h='<div class="group-layout">';
+
+  // Galeria
+  const imgs=g.images||[];
+  const mainImg=g.image||(imgs[0]||'');
+  h+='<div class="group-gallery">';
+  if(mainImg) h+='<img id="groupMainImg" src="'+esc(mainImg)+'" onerror="this.style.display=\'none\'">';
+  if(imgs.length>1){
+    h+='<div class="group-thumbs">';
+    imgs.forEach((im,i)=>{h+='<img class="group-thumb'+(i===0?' act':'')+'" src="'+esc(im)+'" onclick="document.getElementById(\'groupMainImg\').src=this.src;document.querySelectorAll(\'.group-thumb\').forEach(t=>t.classList.remove(\'act\'));this.classList.add(\'act\')">'});
+    h+='</div>';
+  }
+  h+='</div>';
+
+  // Info
+  h+='<div class="group-info">';
+  h+='<div class="group-title">'+esc(g.title)+'</div>';
+  if(g.code) h+='<div class="group-code">Kod: '+esc(g.code)+'</div>';
+  if(g.brand) h+='<div style="font-size:10.5px;color:var(--t2);margin-bottom:6px">Marka: <b>'+esc(g.brand)+'</b></div>';
+
+  // Cena lub Kontakt
+  if(g.contactOnly || (!g.priceBrutto && !g.priceNetto)){
+    h+='<div class="price-contact"><div class="price-contact-icon">📞</div>'
+      +'<div class="price-contact-text">Cena na zapytanie</div>'
+      +'<div class="price-contact-sub">Skontaktuj się z oddziałem, aby uzyskać cenę wynajmu</div></div>';
+  } else {
+    h+='<div class="price-box"><div class="price-row">';
+    h+='<span class="price-brutto">'+(g.priceBrutto?g.priceBrutto.toFixed(2).replace('.',','):'—')+' zł</span>';
+    h+='<span class="price-unit">/ '+esc(g.priceUnit||'Dzień')+'</span></div>';
+    if(g.priceNetto) h+='<div class="price-netto">'+g.priceNetto.toFixed(2).replace('.',',')+' zł netto</div>';
+    if(g.priceType) h+='<div class="price-type">'+esc(g.priceType)+' cena wynajmu</div>';
+    h+='</div>';
+  }
+
+  // Dostępność
+  if(g.available||g.place){
+    const dotCls=g.available&&g.available.toLowerCase().includes('dostępne')?'green':(g.available&&g.available.toLowerCase().includes('niedostępne')?'red':'gray');
+    h+='<div class="avail-box"><span class="avail-dot '+dotCls+'"></span>';
+    if(g.available) h+='<span style="font-weight:600">'+esc(g.available)+'</span>';
+    else h+='<span style="font-weight:600;color:#c44">Nie wybrano oddziału</span>';
+    if(g.place) h+=' <span style="color:var(--t3)">· '+esc(g.place)+'</span>';
+    h+='</div>';
+  }
+
+  // Znaczniki
+  let badges='';
+  if(g.ramiCasco) badges+='<span class="ib">🛡️ RamiCasco <b>'+esc(g.ramiCasco)+'</b></span>';
+  if(g.billing) badges+='<span class="ib">📋 '+esc(g.billing)+'</span>';
+  if(g.days) badges+='<span class="ib">📅 Min. <b>'+g.days+' '+(g.days===1?'dzień':'dni')+'</b></span>';
+  if(badges) h+='<div class="info-badges">'+badges+'</div>';
+
+  if(g.description) h+='<div class="group-desc">'+esc(g.description)+'</div>';
+
+  // Dodaj do kosztorysu
+  const hasPrice=g.priceBrutto||g.priceNetto;
+  h+='<button class="btn-add-est" onclick="addEst(\''+esc(g.code||g.title)+'\',\''+esc(g.title)+'\','+(g.priceNetto||0)+','+(g.priceBrutto||0)+',\''+esc(g.priceUnit||'Dzień')+'\',\''+esc(mainImg)+'\','+(!hasPrice)+')">+ Dodaj do kosztorysu</button>';
+  if(!hasPrice) h+='<button class="btn-inquiry" onclick="window.open(\'https://ramirent.pl'+esc(navStack[navStack.length-1]?.slug||'')+'\',\'_blank\')">📞 Zapytaj o cenę na Ramirent.pl</button>';
+
+  h+='</div></div>'; // end group-layout
+
+  // Modele — tylko wyświetlanie, BEZ nawigacji
+  if(g.models&&g.models.length){
+    h+='<div class="models-title">🔧 Modele ('+g.models.length+')</div><div class="models-grid">';
+    g.models.forEach(m=>{
+      const img=m.image?'<img class="model-img" src="'+esc(m.image)+'" onerror="this.style.display=\'none\'">':'';
+      let badge='';
+      if(m.badge==='RamiGreen') badge='<span class="model-badge rg">🌿 RamiGreen</span>';
+      else if(m.badge==='Premium') badge='<span class="model-badge pm">⭐ Premium</span>';
+      h+='<div class="model-card">'+img+'<div><div class="model-name">'+esc(m.name)+'</div>'+badge+'<div class="model-code">'+esc(m.code)+'</div></div></div>';
+    });
+    h+='</div>';
+  }
+
+  // Powiązane
+  if(g.related&&g.related.length){
+    h+='<div class="models-title">🔗 Powiązany sprzęt</div><div class="cat-grid" style="margin-top:4px">';
+    g.related.forEach(r=>{
+      const img=r.image?'<img src="'+esc(r.image)+'" onerror="this.style.display=\'none\'">':'';
+      h+='<div class="cat-tile" onclick="navigate(\''+esc(r.slug)+'\',\''+esc(r.name)+'\')">'
+        +'<div class="cat-tile-img">'+img+'</div><div class="cat-tile-body"><div class="cat-tile-name">'+esc(r.name)+'</div></div></div>';
+    });
+    h+='</div>';
+  }
+
+  ct.innerHTML=h;
+}
+
+// ═══ KOSZTORYS ═══
+function addEst(code,name,priceNet,priceBr,unit,img,noPrice){
+  if(!code)return;
+  const ex=estimate.find(i=>i.code===code);
+  if(ex){ex.qty++;renderEst();return}
+  estimate.push({code,name,priceNet:parseFloat(priceNet)||0,priceBr:parseFloat(priceBr)||0,unit:unit||'Dzień',img:img||'',noPrice:!!noPrice,qty:1});
+  renderEst();$('btnEst').classList.add('has');
+}
+function remEst(code){estimate=estimate.filter(i=>i.code!==code);renderEst()}
+function setQty(code,q){if(q<1)return remEst(code);const i=estimate.find(x=>x.code===code);if(i)i.qty=q;renderEst()}
+function renderEst(){
+  const bd=$('estBody'),ft=$('estFoot'),bg=$('estBadge');$('estCnt').textContent=estimate.length;
+  if(!estimate.length){bd.innerHTML='<div class="ep-empty">Pusty kosztorys</div>';ft.style.display='none';bg.style.display='none';$('btnEst').classList.remove('has');return}
+  bg.textContent=estimate.length;bg.style.display='inline';let h='',total=0;
+  estimate.forEach(i=>{
+    const line=i.priceNet*i.qty;if(!i.noPrice)total+=line;
+    h+='<div class="ei"><div class="ei-name">'+esc(i.name)+'</div><div class="ei-code">'+esc(i.code)+'</div>'
+      +'<div class="ei-bot"><div class="eq"><button class="eq-btn" onclick="setQty(\''+esc(i.code)+'\','+(i.qty-1)+')">−</button>'
+      +'<input class="eq-inp" type="number" value="'+i.qty+'" onchange="setQty(\''+esc(i.code)+'\',parseInt(this.value)||0)">'
+      +'<button class="eq-btn" onclick="setQty(\''+esc(i.code)+'\','+(i.qty+1)+')">+</button></div>'
+      +'<div style="display:flex;align-items:center;gap:4px">'
+      +(i.noPrice?'<span style="font-size:9px;color:#a08040">📞 Zapytaj</span>':'<span class="ei-price">'+line.toFixed(2).replace('.',',')+' zł/'+esc(i.unit)+'</span>')
+      +'<button class="ei-del" onclick="remEst(\''+esc(i.code)+'\')">🗑</button></div></div></div>';
+  });
+  bd.innerHTML=h;ft.style.display='block';$('estTotal').textContent=total.toFixed(2).replace('.',',')+' zł';
+}
+function toggleEst(){const v=$('estP').style.display!=='none';$('estP').style.display=v?'none':'flex';$('estO').style.display=v?'none':'block'}
+function exportCSV(){
+  const rows=['Kod;Nazwa;Ilość;Cena netto/dobę;Cena brutto/dobę;Suma netto;Uwaga'];
+  estimate.forEach(i=>{
+    const note=i.noPrice?'Cena na zapytanie':'';
+    rows.push([i.code,'"'+i.name+'"',i.qty,i.priceNet.toFixed(2),i.priceBr.toFixed(2),(i.priceNet*i.qty).toFixed(2),note].join(';'));
+  });
+  rows.push(['','','','','Razem netto/dobę:',estimate.reduce((s,i)=>s+(i.noPrice?0:i.priceNet*i.qty),0).toFixed(2),''].join(';'));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'}));
+  a.download='ramirent_kosztorys_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
+// ═══ LOGOWANIE ═══
+async function doLogin(){
+  const u=$('setUser').value.trim(),p=$('setPass').value;if(!u||!p)return showMsg('Wprowadź dane','err');
+  const b=$('setLoginBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span> Logowanie...';showMsg('','');
+  try{
+    const r=await fetch(P+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:u,password:p})});
+    const d=await r.json();
+    if(d.success){
+      sid=d.sid;authUser=d.email||u;localStorage.setItem('rami_sid',sid);localStorage.setItem('rami_user',authUser);
+      updateAuth();$('setConnInfo').textContent='ID: '+d.clientId+' · '+d.clientType;
+      showMsg('✓ Połączono!','ok');loadCategories();
+    } else showMsg('✗ '+(d.error||'Błąd logowania'),'err');
+  }catch(e){showMsg('✗ '+e.message,'err')}
+  b.disabled=false;b.innerHTML='🔑 Zaloguj';
+}
+async function doLogout(){try{await fetch(P+'/api/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sid})})}catch(e){}
+  sid='';authUser='';localStorage.removeItem('rami_sid');localStorage.removeItem('rami_user');updateAuth();$('setPass').value='';$('diagBox').style.display='none'}
+async function runDiag(){const el=$('diagBox');el.style.display='block';el.textContent='...';try{const d=await api('/api/debug');el.textContent=JSON.stringify(d,null,2)}catch(e){el.textContent='Błąd: '+e.message}}
+function showMsg(m,t){const el=$('setStatus');if(!m){el.style.display='none';return}el.style.display='block';el.className='set-status set-status-'+(t==='ok'?'ok':t==='err'?'err':'info');el.innerHTML=m}
+function showBanner(h,ok){$('banner').innerHTML=h;$('banner').className='banner '+(ok?'banner-ok':'banner-err');$('banner').style.display='block'}
+
+async function init(){
+  try{const r=await fetch(P);const d=await r.json();if(d.status==='ok'){showBanner('✓ Ramirent Proxy v1 — połączono',true);setTimeout(()=>$('banner').style.display='none',1800)}}
+  catch(e){showBanner('⚠ Proxy nie uruchomione. <code>node ramirent-server.js</code> (port 3003)',false);return}
+  if(sid){try{const s=await api('/api/session');if(!s.authenticated){sid='';authUser='';localStorage.removeItem('rami_sid');localStorage.removeItem('rami_user')}else{$('setConnInfo').textContent='ID: '+s.clientId+' · '+(s.clientType||'')}}catch(e){sid='';authUser=''}}
+  updateAuth();loadCategories();
+}
+init();
+</script>
+</body>
+</html>

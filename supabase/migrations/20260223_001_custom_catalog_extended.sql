@@ -30,7 +30,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.kosztorys_materials
       ADD CONSTRAINT kosztorys_materials_source_wholesaler_check
-      CHECK (source_wholesaler IN ('tim', 'oninen') OR source_wholesaler IS NULL);
+      CHECK (source_wholesaler IN ('tim', 'oninen', 'atut-rental', 'ramirent', 'speckable') OR source_wholesaler IS NULL);
   END IF;
 END $$;
 

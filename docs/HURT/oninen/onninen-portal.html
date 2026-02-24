@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Onninen.pl — Матеріали для кошторису</title>
+<style>
+:root{--bg:#f0ebe5;--s:#fff;--s2:#f8f5f1;--b:#e4ded6;--b2:#ece7e0;--t:#1a1714;--t2:#6b6259;--t3:#a09688;--a:#d35400;--ah:#b34700;--al:rgba(211,84,0,.07);--ok:#2a7a2a;--okl:#eef8ee;--hd:#1e293b;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--t);min-height:100vh;font-size:13px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#d0c8be;border-radius:4px}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}button{font-family:inherit}
+
+.hdr{background:var(--hd);color:#fff;height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;position:sticky;top:0;z-index:100}
+.hdr-brand{display:flex;align-items:center;gap:8px;cursor:pointer}
+.hdr-logo{width:26px;height:26px;border-radius:5px;background:var(--a);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;letter-spacing:-.3px}
+.hdr-title{font-size:12.5px;font-weight:700}.hdr-sub{font-size:8px;color:#8896a8}
+.hdr-right{display:flex;align-items:center;gap:5px}
+.auth-ind{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:5px;font-size:10.5px;cursor:pointer;transition:background .15s}
+.auth-ind:hover{background:rgba(255,255,255,.08)}
+.auth-dot{width:7px;height:7px;border-radius:50%}.auth-dot.off{background:#556}.auth-dot.on{background:#4ade80;box-shadow:0 0 6px #4ade80}
+.auth-name{color:#ccc;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtn{background:rgba(255,255,255,.06);border:none;border-radius:5px;padding:5px 9px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;transition:background .15s}
+.hbtn:hover{background:rgba(255,255,255,.12)}.hbtn.has{background:var(--a)}
+.badge{background:#fff;color:var(--a);border-radius:10px;padding:0 5px;font-size:9.5px;font-weight:700}
+
+.tabs{display:flex;background:var(--s);border-bottom:1px solid var(--b)}
+.tab{padding:8px 16px;font-size:11.5px;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s}
+.tab:hover{color:var(--t2)}.tab.act{color:var(--a);border-bottom-color:var(--a)}
+.tab-content{display:none}.tab-content.act{display:flex;flex-direction:column}
+
+.banner{padding:7px 14px;font-size:10.5px;border-bottom:1px solid}
+.banner-ok{background:var(--okl);border-color:#c3e6c3;color:var(--ok)}
+.banner-err{background:#fef4e8;border-color:#f8d89a;color:#7a5500}
+.banner code{background:rgba(255,255,255,.5);padding:1px 4px;border-radius:3px;font-family:monospace;font-size:9.5px}
+
+.layout{display:flex;flex:1;min-height:0}
+.side{width:240px;flex-shrink:0;background:var(--s);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden}
+.side-head{padding:8px 11px;border-bottom:1px solid var(--b2);font-size:8.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px}
+.side-body{flex:1;overflow-y:auto;padding:2px 0}
+.cat{display:flex;align-items:center;gap:3px;padding:4px 6px;cursor:pointer;font-size:11px;border-radius:4px;margin:1px 3px;color:#444;transition:background .1s;user-select:none}
+.cat:hover{background:var(--s2)}.cat.act{background:var(--al);color:var(--a);font-weight:600}
+.cat-ch{display:inline-flex;transition:transform .15s;opacity:.35;width:12px;flex-shrink:0;font-size:10px}
+.cat-ch.open{transform:rotate(90deg)}.cat-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.cat-cnt{font-size:8.5px;color:var(--t3);flex-shrink:0}
+.cat-kids{display:none}.cat-kids.open{display:block}
+
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.sbar{padding:7px 12px;background:var(--s);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:7px;position:sticky;top:0;z-index:10}
+.swrap{flex:1;max-width:400px;display:flex;align-items:center;background:var(--s2);border-radius:5px;padding:0 8px;border:1px solid var(--b);transition:border-color .15s}
+.swrap:focus-within{border-color:var(--a)}
+.sinp{flex:1;border:none;background:transparent;padding:6px 7px;font-size:11.5px;outline:none;color:var(--t);font-family:inherit}
+.sinp::placeholder{color:#bbb}
+.sclr{background:none;border:none;cursor:pointer;color:#ccc;padding:2px;display:none}.sclr.show{display:block}
+.vtog{display:flex;gap:2px;background:var(--s2);border-radius:3px;padding:2px}
+.vbtn{padding:3px 5px;border:none;border-radius:2px;cursor:pointer;background:transparent;color:var(--t3);font-size:10px;transition:all .12s}
+.vbtn.act{background:var(--s);color:var(--a)}
+.sinfo{font-size:10px;color:var(--t3);white-space:nowrap}
+.src-tag{font-size:9px;padding:2px 6px;border-radius:3px;font-weight:600}
+.src-personal{background:#e8f5e9;color:#2e7d32}.src-public{background:#fff3e0;color:#e65100}
+
+.content{flex:1;padding:12px}
+.land{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:350px;text-align:center;padding:20px}
+.land h2{font-size:16px;font-weight:700;margin:8px 0 4px}.land p{font-size:11.5px;color:var(--t2);max-width:340px;line-height:1.5}
+.land-cats{margin-top:16px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:500px}
+.land-cat{background:var(--s);border:1px solid var(--b);border-radius:4px;padding:3px 9px;font-size:10.5px;cursor:pointer;color:#444;transition:all .12s;font-family:inherit}
+.land-cat:hover{border-color:var(--a);color:var(--a)}
+.msg{text-align:center;padding:30px;color:var(--t3);font-size:12px}.msg.err{color:var(--a)}
+
+.phead{margin-bottom:8px}.phead h3{font-size:13.5px;font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:8px}
+.listv{display:flex;flex-direction:column;gap:4px}
+
+.card{background:var(--s);border-radius:var(--r);border:1px solid var(--b);overflow:hidden;display:flex;flex-direction:column;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.card:hover{border-color:var(--a);box-shadow:0 3px 10px rgba(211,84,0,.06)}
+.card-img{height:105px;background:var(--s2);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--b2);position:relative}
+.card-img img{max-width:75%;max-height:75%;object-fit:contain}
+.card-stock{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%}
+.dot-1{background:#4caf50}.dot-2{background:#ff9800}.dot-3{background:#f44336}
+.card-body{padding:5px 7px;flex:1;display:flex;flex-direction:column;gap:1px}
+.card-sku{font-size:7.5px;color:var(--t3);font-family:monospace;letter-spacing:.3px}
+.card-brand{font-size:8px;color:var(--a);font-weight:600}
+.card-name{font-size:10px;font-weight:500;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:24px}
+.card-foot{margin-top:auto;padding-top:3px;border-top:1px solid var(--b2);display:flex;align-items:flex-end;justify-content:space-between}
+.card-price{font-size:12.5px;font-weight:700;color:var(--a)}.card-price small{font-size:8.5px;font-weight:400;color:var(--t3)}
+.card-price.empty{font-size:10px;color:#ccc}
+.card-old{font-size:8px;color:var(--t3);text-decoration:line-through}
+.card-disc{font-size:8px;color:#fff;background:var(--ok);border-radius:2px;padding:0 3px;font-weight:700}
+.btn-add{background:var(--a);color:#fff;border:none;border-radius:3px;padding:3px 5px;cursor:pointer;font-size:10px;font-weight:600;transition:background .12s;flex-shrink:0}
+.btn-add:hover{background:var(--ah)}
+
+.cardl{background:var(--s);border-radius:5px;border:1px solid var(--b);padding:5px 8px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:border-color .12s}
+.cardl:hover{border-color:var(--a)}
+.cardl-img{width:36px;height:36px;border-radius:3px;background:var(--s2);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.cardl-img img{max-width:80%;max-height:80%;object-fit:contain}
+.cardl-body{flex:1;min-width:0}.cardl-name{font-size:10.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cardl-meta{font-size:9px;color:var(--t3);font-family:monospace}
+.cardl-price{font-size:12px;font-weight:700;color:var(--a);flex-shrink:0}
+
+.pgn{display:flex;justify-content:center;align-items:center;gap:6px;margin-top:12px;padding-bottom:8px}
+.pg-btn{padding:4px 10px;border:1px solid var(--b);border-radius:3px;background:var(--s);cursor:pointer;font-size:10.5px;font-family:inherit}
+.pg-btn:hover:not(:disabled){border-color:var(--a)}.pg-btn:disabled{opacity:.35;cursor:default}
+.pg-info{font-size:10.5px;color:var(--t3)}
+
+/* Settings */
+.settings-wrap{flex:1;padding:24px;overflow-y:auto}
+.set-card{background:var(--s);border-radius:10px;border:1px solid var(--b);max-width:480px;margin:0 auto;overflow:hidden}
+.set-head{padding:14px 18px;border-bottom:1px solid var(--b2)}
+.set-head h3{font-size:14px;font-weight:700}.set-head p{font-size:11px;color:var(--t2);margin-top:1px}
+.set-body{padding:18px}
+.set-field{margin-bottom:12px}
+.set-label{display:block;font-size:10.5px;font-weight:600;color:var(--t2);margin-bottom:3px}
+.set-input{width:100%;padding:8px 10px;border:1px solid var(--b);border-radius:5px;font-size:12.5px;outline:none;font-family:inherit;background:var(--s2)}
+.set-input:focus{border-color:var(--a);background:#fff}
+.set-hint{font-size:9.5px;color:var(--t3);margin-top:2px}
+.set-btn{width:100%;padding:10px;border:none;border-radius:6px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;transition:background .15s}
+.set-btn-primary{background:var(--a);color:#fff}.set-btn-primary:hover{background:var(--ah)}
+.set-btn-danger{background:#fff;color:#c44;border:1px solid #ecc}.set-btn-danger:hover{background:#fef5f5}
+.set-btn-outline{background:#fff;color:var(--t2);border:1px solid var(--b)}.set-btn-outline:hover{background:var(--s2)}
+.set-btn:disabled{opacity:.5;cursor:default}
+.set-status{margin-top:12px;padding:9px 11px;border-radius:6px;font-size:11px;line-height:1.5}
+.set-status-ok{background:var(--okl);border:1px solid #c3e6c3;color:var(--ok)}
+.set-status-err{background:#fef4e8;border:1px solid #f8d89a;color:#7a5500}
+.set-status-info{background:#f0f4ff;border:1px solid #c8d6f0;color:#3355aa}
+.set-divider{height:1px;background:var(--b);margin:16px 0}
+.set-connected{display:flex;align-items:center;gap:9px;padding:12px;background:var(--okl);border-radius:7px;margin-bottom:12px}
+.set-connected-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex-shrink:0}
+.set-connected-info b{font-size:12.5px}.set-connected-info span{display:block;font-size:10px;color:#555;margin-top:1px}
+.diag{margin-top:12px;background:var(--s2);border:1px solid var(--b2);border-radius:6px;padding:9px 11px;font-family:monospace;font-size:9.5px;white-space:pre-wrap;max-height:280px;overflow-y:auto;color:var(--t2)}
+.set-warn{background:#fff3e0;border:1px solid #f8d89a;border-radius:6px;padding:8px 10px;font-size:10.5px;color:#7a5500;margin-bottom:12px}
+
+/* 2FA */
+.tfa-box{background:#f0f4ff;border:1px solid #c8d6f0;border-radius:8px;padding:14px;margin-bottom:12px}
+.tfa-title{font-size:13px;font-weight:700;color:#334;margin-bottom:2px;display:flex;align-items:center;gap:5px}
+.tfa-desc{font-size:10.5px;color:#556;margin-bottom:10px}
+.tfa-code-wrap{display:flex;gap:5px;justify-content:center;margin-bottom:10px}
+.tfa-digit{width:36px;height:42px;text-align:center;font-size:18px;font-weight:700;border:2px solid #c8d6f0;border-radius:6px;outline:none;font-family:monospace;background:#fff;color:var(--t);transition:border-color .15s}
+.tfa-digit:focus{border-color:var(--a)}
+.tfa-actions{display:flex;gap:6px}
+.tfa-actions .set-btn{flex:1}
+.tfa-resend{text-align:center;margin-top:6px}
+.tfa-resend-btn{background:none;border:none;color:var(--a);cursor:pointer;font-size:10.5px;font-family:inherit;text-decoration:underline}
+.tfa-resend-btn:disabled{color:var(--t3);cursor:default;text-decoration:none}
+.tfa-err{color:#c44;font-size:10.5px;text-align:center;margin-top:4px}
+.tfa-back{background:none;border:none;color:var(--t3);cursor:pointer;font-size:10.5px;font-family:inherit;margin-top:6px;text-align:center;display:block;width:100%}
+.tfa-back:hover{color:var(--t)}
+
+/* Modal */
+.mo{position:fixed;inset:0;z-index:1000;background:rgba(22,18,14,.4);display:flex;justify-content:center;align-items:flex-start;padding:20px 10px;overflow-y:auto;backdrop-filter:blur(2px)}
+.modal{background:var(--s2);border-radius:10px;max-width:620px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.12);overflow:hidden}
+.mo-head{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--b2)}
+.mo-sku{font-size:9px;color:var(--t3);font-family:monospace}
+.mo-x{background:none;border:none;cursor:pointer;color:var(--t3);padding:2px;font-size:14px}
+.mo-content{display:flex;flex-wrap:wrap}
+.mo-img{width:210px;min-height:160px;background:var(--s2);display:flex;align-items:center;justify-content:center}
+.mo-img img{max-width:84%;max-height:170px;object-fit:contain}
+.mo-info{flex:1;padding:10px 14px;min-width:220px}
+.mo-name{font-size:13.5px;font-weight:600;line-height:1.3;margin-bottom:3px}
+.mo-mfr{font-size:10.5px;color:var(--t2)}.mo-ref{font-size:9.5px;color:var(--t3);margin-top:1px}
+.mo-pbox{margin:8px 0 5px;padding:7px 10px;background:var(--s);border-radius:5px;border:1px solid var(--b2)}
+.mo-plbl{font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px}
+.mo-pval{font-size:18px;font-weight:700;color:var(--a)}.mo-pval small{font-size:11px;font-weight:400}
+.mo-pold{font-size:10px;color:var(--t3);text-decoration:line-through;margin-top:1px}
+.mo-tiers{margin:6px 0;font-size:9.5px;color:var(--t2)}
+.mo-tier{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed var(--b2)}
+.mo-badges{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+.mb{padding:2px 5px;background:var(--s2);border-radius:3px;font-size:8.5px;color:var(--t2)}.mb b{font-weight:600;color:var(--t)}
+.mo-bc{font-size:9.5px;color:var(--t3);margin-bottom:6px}
+.btn-add-f{width:100%;padding:7px;background:var(--a);color:#fff;border:none;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px}
+.btn-add-f:hover{background:var(--ah)}
+.mo-variants{padding:6px 12px}
+.mo-vars-title{font-size:10.5px;font-weight:600;color:var(--t2);margin-bottom:3px}
+.mo-var{display:inline-block;padding:3px 8px;margin:2px;border-radius:4px;border:1px solid var(--b);font-size:10px;cursor:pointer;transition:all .12s}
+.mo-var:hover{border-color:var(--a)}.mo-var.act{background:var(--al);border-color:var(--a);color:var(--a);font-weight:600}
+.mo-source{text-align:right;padding:3px 12px 7px;font-size:8.5px;color:var(--t3)}
+
+/* Estimate panel */
+.eo{position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:998}
+.ep{position:fixed;top:0;right:0;bottom:0;width:320px;max-width:90vw;background:var(--s2);box-shadow:-6px 0 24px rgba(0,0,0,.1);z-index:999;display:flex;flex-direction:column}
+.ep-head{padding:10px 12px;border-bottom:1px solid var(--b2);display:flex;align-items:center;justify-content:space-between}
+.ep-title{font-size:13px;font-weight:700}
+.ep-body{flex:1;overflow-y:auto;padding:6px 8px}
+.ep-empty{text-align:center;padding:24px;color:var(--t3);font-size:11px}
+.ei{background:var(--s);border-radius:5px;border:1px solid var(--b2);padding:5px 7px;margin-bottom:3px}
+.ei-top{display:flex;gap:4px;margin-bottom:2px}.ei-img{width:26px;height:26px;object-fit:contain;border-radius:2px;background:var(--s2)}
+.ei-info{flex:1;min-width:0}.ei-name{font-size:9.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ei-sku{font-size:8px;color:var(--t3);font-family:monospace}
+.ei-bot{display:flex;align-items:center;justify-content:space-between}
+.eq{display:flex;align-items:center;gap:2px}.eq-btn{width:20px;height:20px;border-radius:2px;border:1px solid var(--b);background:var(--s);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
+.eq-inp{width:32px;text-align:center;border:1px solid var(--b);border-radius:2px;padding:2px;font-size:10.5px;font-weight:600;outline:none;font-family:inherit}
+.ei-price{font-size:10.5px;font-weight:600;color:var(--a)}
+.ei-del{background:none;border:none;cursor:pointer;color:#c44;opacity:.4;padding:2px;font-size:11px}.ei-del:hover{opacity:1}
+.ep-foot{padding:8px 12px;border-top:2px solid var(--a);background:var(--s)}
+.ep-tr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ep-tl{font-size:11.5px;color:var(--t2)}.ep-tv{font-size:16px;font-weight:700;color:var(--a)}
+.btn-exp{width:100%;padding:7px;background:var(--hd);color:#fff;border:none;border-radius:5px;font-size:11.5px;font-weight:600;cursor:pointer}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+@media(max-width:768px){.side{display:none}.mo-content{flex-direction:column}.mo-img{width:100%;min-height:120px}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-brand" onclick="switchTab('catalog')">
+    <div class="hdr-logo">ONN</div>
+    <div><div class="hdr-title">Матеріали</div><div class="hdr-sub">Onninen.pl</div></div>
+  </div>
+  <div class="hdr-right">
+    <div class="auth-ind" onclick="switchTab('settings')"><span class="auth-dot off" id="authDot"></span><span class="auth-name" id="authName">Не підключено</span></div>
+    <button class="hbtn" id="btnEst" onclick="toggleEst()">🧾 <span class="badge" id="estBadge" style="display:none">0</span></button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab act" data-tab="catalog" onclick="switchTab('catalog')">📦 Каталог</div>
+  <div class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Інтеграція</div>
+</div>
+<div id="banner" style="display:none"></div>
+
+<div class="tab-content act" id="tc-catalog" style="height:calc(100vh - 46px - 35px)">
+  <div class="layout" style="height:100%">
+    <aside class="side"><div class="side-head">Категорії</div><div class="side-body" id="catTree"><div class="msg">Завантаження...</div></div></aside>
+    <div class="main">
+      <div class="sbar">
+        <div class="swrap"><span style="color:var(--t3)">🔍</span><input class="sinp" id="sInp" placeholder="Пошук..." onkeydown="if(event.key==='Enter')doSearch()"><button class="sclr" id="sClr" onclick="clearSearch()">✕</button></div>
+        <div class="vtog"><button class="vbtn act" id="vGrid" onclick="setView('grid')">▦</button><button class="vbtn" id="vList" onclick="setView('list')">☰</button></div>
+        <span class="sinfo" id="sInfo"></span>
+        <span class="src-tag" id="srcTag" style="display:none"></span>
+      </div>
+      <div class="content" id="content"><div class="land"><div style="font-size:30px;opacity:.4">📦</div><h2>Каталог Onninen.pl</h2><p>Оберіть категорію або шукайте. Для ваших цін → «Інтеграція».</p><div id="landCats" class="land-cats"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-content" id="tc-settings" style="height:calc(100vh - 46px - 35px)">
+  <div class="settings-wrap"><div class="set-card">
+    <div class="set-head"><h3>⚙️ Інтеграція з Onninen.pl</h3><p>Увійдіть для персональних цін</p></div>
+    <div class="set-body">
+
+      <!-- Connected state -->
+      <div id="setConnected" style="display:none">
+        <div id="setWarn" class="set-warn" style="display:none"></div>
+        <div class="set-connected"><span class="set-connected-dot"></span><div class="set-connected-info"><b id="setConnUser"></b><span id="setConnInfo"></span></div></div>
+        <button class="set-btn set-btn-outline" onclick="runDiag()" style="margin-bottom:6px">🔍 Діагностика</button>
+        <button class="set-btn set-btn-danger" onclick="doLogout()">Вийти</button>
+        <div id="diagBox" class="diag" style="display:none"></div>
+      </div>
+
+      <!-- Login form -->
+      <div id="setForm">
+        <div class="set-status set-status-info" style="margin-bottom:12px">ℹ️ Без логіну — загальні ціни. Увійдіть для <b>ваших умов</b>.</div>
+
+        <!-- Step 1: credentials -->
+        <div id="loginStep1">
+          <div class="set-field"><label class="set-label">Email / Логін Onninen</label><input class="set-input" id="setUser" type="text" placeholder="your@email.com"></div>
+          <div class="set-field"><label class="set-label">Пароль</label><input class="set-input" id="setPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"><div class="set-hint">Передається тільки на Onninen через локальний проксі</div></div>
+          <button class="set-btn set-btn-primary" id="setLoginBtn" onclick="doLogin()">🔑 Увійти</button>
+        </div>
+
+        <!-- Step 2: 2FA SMS code -->
+        <div id="loginStep2" style="display:none">
+          <div class="tfa-box">
+            <div class="tfa-title">📱 SMS-код підтвердження</div>
+            <div class="tfa-desc" id="tfaDesc">Введіть 6-значний код з SMS</div>
+            <div class="tfa-code-wrap" id="tfaCodeWrap"></div>
+            <div class="tfa-actions">
+              <button class="set-btn set-btn-primary" id="tfaSubmitBtn" onclick="submit2fa()">✓ Підтвердити</button>
+            </div>
+            <div class="tfa-err" id="tfaErr" style="display:none"></div>
+            <div class="tfa-resend">
+              <button class="tfa-resend-btn" id="tfaResendBtn" onclick="resend2fa()">Надіслати SMS ще раз</button>
+              <span id="tfaTimer" style="font-size:10px;color:var(--t3)"></span>
+            </div>
+            <button class="tfa-back" onclick="back2login()">← Назад до логіну</button>
+          </div>
+        </div>
+
+        <div id="setStatus" style="display:none"></div>
+      </div>
+
+      <div class="set-divider"></div>
+      <div style="font-size:10px;color:var(--t3);line-height:1.5">
+        <b>Як працює:</b> Проксі логіниться на Onninen → зберігає cookies → всі запити повертають персональні ціни. Сесія оновлюється автоматично.
+        <br><b>2FA:</b> Якщо у вас увімкнена SMS-верифікація — введіть код. З прапорцем «запам'ятати пристрій» повторний код не потрібен.
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- Modal -->
+<div class="mo" id="modal" style="display:none" onclick="closeMo()"><div class="modal" onclick="event.stopPropagation()">
+  <div class="mo-head"><span class="mo-sku" id="moSku"></span><button class="mo-x" onclick="closeMo()">✕</button></div>
+  <div class="mo-content">
+    <div class="mo-img" id="moImg">📦</div>
+    <div class="mo-info"><div class="mo-name" id="moName"></div><div class="mo-mfr" id="moMfr"></div><div class="mo-ref" id="moRef"></div>
+      <div class="mo-pbox"><div class="mo-plbl" id="moPLbl">ЦІНА NETTO</div><div class="mo-pval" id="moPrice"></div><div class="mo-pold" id="moPOld" style="display:none"></div></div>
+      <div class="mo-tiers" id="moTiers" style="display:none"></div>
+      <div class="mo-badges" id="moBadges"></div><div class="mo-bc" id="moBc"></div>
+      <button class="btn-add-f" id="moAddBtn">+ Додати до кошторису</button>
+    </div>
+  </div>
+  <div class="mo-variants" id="moVars" style="display:none"><div class="mo-vars-title">Варіанти</div><div id="moVarsList"></div></div>
+  <div class="mo-source" id="moSrc"></div>
+  <div class="msg" id="moLoad" style="display:none">⏳</div>
+  <div class="msg err" id="moErr" style="display:none"></div>
+</div></div>
+
+<div class="eo" id="estO" style="display:none" onclick="toggleEst()"></div>
+<div class="ep" id="estP" style="display:none">
+  <div class="ep-head"><span class="ep-title">🧾 Кошторис (<span id="estCnt">0</span>)</span><button class="mo-x" onclick="toggleEst()">✕</button></div>
+  <div class="ep-body" id="estBody"><div class="ep-empty">Порожній</div></div>
+  <div class="ep-foot" id="estFoot" style="display:none"><div class="ep-tr"><span class="ep-tl">Разом netto:</span><span class="ep-tv" id="estTotal">0.00 zł</span></div><button class="btn-exp" onclick="exportCSV()">📥 Експорт CSV</button></div>
+</div>
+
+<script>
+const P='http://localhost:3002';
+let allCats=[],selCat=null,products=[],curPage=0,lastPage=0,totalProd=0,viewMode='grid',estimate=[];
+let curTitle='',sid=localStorage.getItem('onn_sid')||'',authUser=localStorage.getItem('onn_user')||'';
+let tfaTempId=null,tfaTimerInt=null;
+const $=id=>document.getElementById(id);
+const esc=s=>{if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML};
+
+function apiUrl(p){const sep=p.includes('?')?'&':'?';return P+p+(sid?sep+'sid='+sid:'')}
+async function api(p){const r=await fetch(apiUrl(p));if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+
+function switchTab(n){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('act',t.dataset.tab===n));document.querySelectorAll('.tab-content').forEach(t=>t.classList.toggle('act',t.id==='tc-'+n))}
+
+function updateAuth(){
+  if(sid&&authUser){$('authDot').className='auth-dot on';$('authName').textContent=authUser;$('setConnected').style.display='block';$('setForm').style.display='none';$('setConnUser').textContent=authUser}
+  else{$('authDot').className='auth-dot off';$('authName').textContent='Не підключено';$('setConnected').style.display='none';$('setForm').style.display='block';showStep1()}
+}
+function showSrc(src){const t=$('srcTag');if(src==='personal'){t.className='src-tag src-personal';t.textContent='● Ваші ціни';t.style.display='inline'}else if(src==='public'){t.className='src-tag src-public';t.textContent='○ Загальні';t.style.display='inline'}else t.style.display='none'}
+
+// ═══ LOGIN FLOW ═══
+
+function showStep1(){$('loginStep1').style.display='block';$('loginStep2').style.display='none';if(tfaTimerInt){clearInterval(tfaTimerInt);tfaTimerInt=null}}
+function showStep2(codeLen,msg){
+  $('loginStep1').style.display='none';$('loginStep2').style.display='block';
+  $('tfaDesc').textContent=msg||'Введіть '+codeLen+'-значний код з SMS';
+  $('tfaErr').style.display='none';
+  // Build digit inputs
+  const wrap=$('tfaCodeWrap');wrap.innerHTML='';
+  for(let i=0;i<(codeLen||6);i++){
+    const inp=document.createElement('input');inp.className='tfa-digit';inp.type='text';inp.maxLength=1;
+    inp.inputMode='numeric';inp.autocomplete='one-time-code';inp.dataset.idx=i;
+    inp.addEventListener('input',function(){
+      this.value=this.value.replace(/\D/g,'');
+      if(this.value&&this.nextElementSibling)this.nextElementSibling.focus();
+      // Auto-submit when all filled
+      const digits=wrap.querySelectorAll('.tfa-digit');
+      const code=[...digits].map(d=>d.value).join('');
+      if(code.length===codeLen)submit2fa();
+    });
+    inp.addEventListener('keydown',function(e){
+      if(e.key==='Backspace'&&!this.value&&this.previousElementSibling){this.previousElementSibling.focus();this.previousElementSibling.value=''}
+    });
+    // Handle paste of full code
+    inp.addEventListener('paste',function(e){
+      e.preventDefault();
+      const pasted=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+      const digits=wrap.querySelectorAll('.tfa-digit');
+      for(let j=0;j<digits.length&&j<pasted.length;j++)digits[j].value=pasted[j];
+      if(pasted.length>=codeLen)submit2fa();
+    });
+    wrap.appendChild(inp);
+  }
+  wrap.querySelector('.tfa-digit')?.focus();
+}
+
+function getCode(){return [...$('tfaCodeWrap').querySelectorAll('.tfa-digit')].map(d=>d.value).join('')}
+
+function startResendTimer(sec){
+  const btn=$('tfaResendBtn'),timer=$('tfaTimer');
+  btn.disabled=true;let left=sec||120;
+  timer.textContent='('+left+'с)';
+  if(tfaTimerInt)clearInterval(tfaTimerInt);
+  tfaTimerInt=setInterval(()=>{left--;timer.textContent=left>0?'('+left+'с)':'';if(left<=0){clearInterval(tfaTimerInt);tfaTimerInt=null;btn.disabled=false}},1000);
+}
+
+async function doLogin(){
+  const u=$('setUser').value.trim(),p=$('setPass').value;if(!u||!p)return showMsg('Введіть дані','err');
+  const b=$('setLoginBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span> Входжу...';showMsg('','');
+  try{
+    const r=await fetch(P+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json();
+
+    // Case A: success (no 2FA)
+    if(d.success&&d.sid){
+      loginSuccess(d);
+    }
+    // Case B: 2FA required
+    else if(d.needs2fa){
+      tfaTempId=d.tempId;
+      showStep2(d.codeLength||6,d.message);
+      startResendTimer(d.wait||120);
+      showMsg('📱 Перевірте SMS','info');
+    }
+    // Case C: error
+    else{showMsg('✗ '+(d.error||'Помилка'),'err')}
+  }catch(e){showMsg('✗ '+e.message,'err')}
+  b.disabled=false;b.innerHTML='🔑 Увійти';
+}
+
+async function submit2fa(){
+  const code=getCode();if(code.length<6)return;
+  const b=$('tfaSubmitBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span>';$('tfaErr').style.display='none';
+  try{
+    const r=await fetch(P+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tempId:tfaTempId,code2fa:code})});
+    const d=await r.json();
+
+    if(d.success&&d.sid){
+      loginSuccess(d);
+    }else if(d.needs2fa&&d.error){
+      // Wrong code — show error, let user retry
+      $('tfaErr').textContent='✗ '+d.error;$('tfaErr').style.display='block';
+      // Clear inputs
+      $('tfaCodeWrap').querySelectorAll('.tfa-digit').forEach(d=>{d.value=''});
+      $('tfaCodeWrap').querySelector('.tfa-digit')?.focus();
+    }else{
+      $('tfaErr').textContent='✗ '+(d.error||'Помилка');$('tfaErr').style.display='block';
+    }
+  }catch(e){$('tfaErr').textContent='✗ '+e.message;$('tfaErr').style.display='block'}
+  b.disabled=false;b.innerHTML='✓ Підтвердити';
+}
+
+async function resend2fa(){
+  if(!tfaTempId)return;$('tfaResendBtn').disabled=true;
+  try{
+    const r=await fetch(P+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tempId:tfaTempId,resend:true})});
+    const d=await r.json();
+    startResendTimer(d.wait||120);
+    showMsg(d.message||'SMS надіслано','info');
+  }catch(e){showMsg('✗ '+e.message,'err')}
+}
+
+function back2login(){showStep1();tfaTempId=null;showMsg('','');$('setUser').focus()}
+
+function loginSuccess(d){
+  sid=d.sid;authUser=d.customer||d.user;localStorage.setItem('onn_sid',sid);localStorage.setItem('onn_user',authUser);
+  updateAuth();showStep1();
+  $('setConnInfo').textContent=(d.customer||'')+' · '+(d.priceType||'');
+  if(d.warning){$('setWarn').textContent='⚠️ '+d.warning;$('setWarn').style.display='block'}
+  showMsg('✓ Підключено! '+d.customer,'ok');
+  loadCategories();
+}
+
+async function doLogout(){try{await fetch(P+'/api/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sid})})}catch(e){}
+  sid='';authUser='';localStorage.removeItem('onn_sid');localStorage.removeItem('onn_user');updateAuth();$('setPass').value='';$('diagBox').style.display='none';$('setWarn').style.display='none';loadCategories()}
+async function runDiag(){const el=$('diagBox');el.style.display='block';el.textContent='...';try{const d=await api('/api/debug');el.textContent=JSON.stringify(d,null,2)}catch(e){el.textContent='Error: '+e.message}}
+function showMsg(m,t){const el=$('setStatus');if(!m){el.style.display='none';return}el.style.display='block';el.className='set-status set-status-'+(t==='ok'?'ok':t==='err'?'err':'info');el.innerHTML=m}
+
+async function init(){
+  try{const r=await fetch(P);const d=await r.json();if(d.status==='ok'){showBanner('✓ Onninen Proxy v2',true);setTimeout(()=>$('banner').style.display='none',1800)}}
+  catch(e){showBanner('⚠ Проксі не запущений. <code>node server.js</code> (порт 3002)',false);return}
+  if(sid){try{const s=await api('/api/session');if(!s.authenticated){sid='';authUser='';localStorage.removeItem('onn_sid');localStorage.removeItem('onn_user')}else{$('setConnInfo').textContent=(s.customer||'')+' · '+(s.priceType||'')}}catch(e){sid='';authUser=''}}
+  updateAuth();loadCategories()}
+function showBanner(h,ok){$('banner').innerHTML=h;$('banner').className='banner '+(ok?'banner-ok':'banner-err');$('banner').style.display='block'}
+
+async function loadCategories(){try{const d=await api('/api/categories');allCats=d.categories||[];renderCats();renderLandCats()}catch(e){$('catTree').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}}
+function renderCats(){const el=$('catTree');if(!allCats.length){el.innerHTML='<div class="msg">—</div>';return}el.innerHTML='';allCats.forEach(c=>{const n=buildCat(c,0);if(n)el.appendChild(n)})}
+function buildCat(c,d){if(!c?.name)return null;const w=document.createElement('div');const subs=(c.children||[]).filter(s=>s?.name);
+  const row=document.createElement('div');row.className='cat';row.style.paddingLeft=(4+d*12)+'px';
+  row.innerHTML=(subs.length?'<span class="cat-ch">›</span>':'<span style="width:12px"></span>')+'<span class="cat-lbl" title="'+esc(c.name)+'">'+esc(c.name)+'</span>'+(c.size?'<span class="cat-cnt">'+c.size+'</span>':'');
+  const kids=document.createElement('div');kids.className='cat-kids';
+  row.onclick=e=>{e.stopPropagation();doSelCat(c);if(subs.length){kids.classList.toggle('open');const ch=row.querySelector('.cat-ch');if(ch)ch.classList.toggle('open')}};
+  w.appendChild(row);if(subs.length){subs.forEach(s=>{const n=buildCat(s,d+1);if(n)kids.appendChild(n)});w.appendChild(kids)}return w}
+function doSelCat(c){selCat=c;curTitle=c.name||'';curPage=0;$('sInp').value='';$('sClr').classList.remove('show');
+  document.querySelectorAll('.cat').forEach(n=>n.classList.remove('act'));document.querySelectorAll('.cat-lbl').forEach(n=>{if(n.textContent===c.name)n.parentElement.classList.add('act')});
+  switchTab('catalog');loadProducts()}
+function renderLandCats(){const el=$('landCats');if(!el||!allCats.length)return;el.innerHTML='';allCats.forEach(c=>{const b=document.createElement('button');b.className='land-cat';b.textContent=c.name;b.onclick=()=>doSelCat(c);el.appendChild(b)})}
+
+async function loadProducts(){const ct=$('content');ct.innerHTML='<div class="msg">⏳</div>';$('sInfo').textContent='';showSrc('');
+  try{const d=await api('/api/products?cat='+encodeURIComponent(selCat.slug||'')+'&page='+curPage);
+    products=d.products||[];lastPage=d.lastPage||0;totalProd=d.total||0;
+    $('sInfo').textContent=totalProd+' шт';showSrc(d.source);renderProducts()}
+  catch(e){ct.innerHTML='<div class="msg err">'+esc(e.message)+'</div>'}}
+
+function renderProducts(){const ct=$('content');if(!products.length){ct.innerHTML='<div class="msg">Порожньо</div>';return}
+  let h='<div class="phead"><h3>'+esc(curTitle)+'</h3></div><div class="'+(viewMode==='grid'?'grid':'listv')+'">';
+  products.forEach((p,i)=>{h+=viewMode==='grid'?gridCard(p,i):listCard(p,i)});h+='</div>';
+  if(lastPage>0)h+='<div class="pgn"><button class="pg-btn" onclick="chgPage(-1)" '+(curPage<=0?'disabled':'')+'>←</button><span class="pg-info">'+(curPage+1)+'/'+(lastPage+1)+'</span><button class="pg-btn" onclick="chgPage(1)" '+(curPage>=lastPage?'disabled':'')+'>→</button></div>';
+  ct.innerHTML=h}
+
+function gridCard(p,i){
+  const img=p.image?'<img src="'+esc(p.image)+'" onerror="this.outerHTML=\'📦\'">':'📦';
+  const dot=p.dotStatus?'<span class="card-stock dot-'+p.dotStatus+'"></span>':'';
+  const pr=p.priceEnd!=null?esc(p.priceEnd.toFixed(2))+' <small>zł/'+esc(p.unit||'шт')+'</small>':'';
+  const old=p.priceCatalog&&p.priceCatalog!==p.priceEnd?'<div class="card-old">'+p.priceCatalog.toFixed(2)+'</div>':'';
+  const disc=p.discount?'<span class="card-disc">-'+p.discount+'%</span>':'';
+  return '<div class="card" onclick="openByIdx('+i+')"><div class="card-img">'+img+dot+'</div><div class="card-body">'
+    +'<div class="card-sku">'+esc(p.index||p.catalogIndex)+'</div>'
+    +(p.brand?'<div class="card-brand">'+esc(p.brand)+'</div>':'')
+    +'<div class="card-name">'+esc(p.name)+'</div>'
+    +'<div class="card-foot">'+(pr?'<div><div class="card-price">'+pr+'</div>'+old+'</div>'+disc:'<div class="card-price empty">—</div>')
+    +'<button class="btn-add" onclick="event.stopPropagation();addEstIdx('+i+')">+</button></div></div></div>'}
+
+function listCard(p,i){const img=p.image?'<img src="'+esc(p.image)+'">':'';
+  return '<div class="cardl" onclick="openByIdx('+i+')"><div class="cardl-img">'+img+'</div><div class="cardl-body"><div class="cardl-name">'+esc(p.name)+'</div><div class="cardl-meta">'+esc(p.index)+' · '+esc(p.brand)+'</div></div>'
+    +(p.priceEnd!=null?'<div class="cardl-price">'+p.priceEnd.toFixed(2)+' zł</div>':'')+'<button class="btn-add" onclick="event.stopPropagation();addEstIdx('+i+')">+</button></div>'}
+
+function openByIdx(i){const p=products[i];if(p)openProd(p.slug)}
+function addEstIdx(i){const p=products[i];if(p)addEst(p.index||p.catalogIndex,p.name,p.priceEnd,p.brand,p.image,p.unit)}
+function chgPage(d){curPage+=d;loadProducts()}
+
+function doSearch(){const q=$('sInp').value.trim();if(!q)return;$('sClr').classList.add('show');$('content').innerHTML='<div class="msg">🔍 «'+esc(q)+'»...</div>';$('sInfo').textContent='';showSrc('');
+  api('/api/search?q='+encodeURIComponent(q)).then(d=>{products=d.products||[];curTitle='Пошук: '+q;lastPage=d.lastPage||0;totalProd=d.total||0;$('sInfo').textContent=totalProd+' шт';renderProducts()}).catch(e=>{$('content').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'})}
+function clearSearch(){$('sInp').value='';$('sClr').classList.remove('show');if(selCat)loadProducts()}
+function setView(m){viewMode=m;$('vGrid').classList.toggle('act',m==='grid');$('vList').classList.toggle('act',m==='list');if(products.length)renderProducts()}
+
+async function openProd(slug){$('modal').style.display='flex';$('moLoad').style.display='block';$('moErr').style.display='none';$('moVars').style.display='none';$('moTiers').style.display='none';
+  $('moName').textContent='';$('moMfr').textContent='';$('moRef').textContent='';$('moPrice').innerHTML='';$('moPOld').style.display='none';$('moBadges').innerHTML='';$('moBc').textContent='';
+  $('moSku').textContent='';$('moImg').innerHTML='📦';$('moSrc').textContent='';
+  try{const d=await api('/api/product?slug='+encodeURIComponent(slug));$('moLoad').style.display='none';const p=d.product;
+    if(!p?.name){$('moErr').textContent='Не знайдено';$('moErr').style.display='block';return}
+    $('moSku').textContent=(p.index||'')+' · '+(p.catalogIndex||'');
+    $('moName').textContent=p.name;$('moMfr').textContent=p.brand?'Бренд: '+p.brand:'';$('moRef').textContent=p.series?'Серія: '+p.series:'';
+    if(p.image)$('moImg').innerHTML='<img src="'+esc(p.image)+'" onerror="this.outerHTML=\'📦\'">';
+    const isPers=d.source==='personal';
+    $('moPLbl').textContent=isPers?'ВАША ЦІНА NETTO':'ЦІНА NETTO';
+    $('moPrice').innerHTML=p.priceEnd!=null?p.priceEnd.toFixed(2)+' <small>zł/'+(p.unit||'шт')+'</small>':'—';
+    if(p.priceCatalog&&p.priceCatalog!==p.priceEnd){$('moPOld').textContent='Каталог: '+p.priceCatalog.toFixed(2)+' zł';$('moPOld').style.display='block'}
+    if(p.priceTiers?.length>1){$('moTiers').style.display='block';$('moTiers').innerHTML='<b>Ціни за кількістю:</b>'+p.priceTiers.map(t=>'<div class="mo-tier"><span>від '+t.quantity+' '+(p.unit||'шт')+'</span><span><b>'+t.priceEnd.toFixed(2)+' zł</b> (-'+t.discount+'%)</span></div>').join('')}
+    let badges='';
+    if(p.stock)badges+='<span class="mb">Склад: <b>'+p.stock+' '+(p.unit||'')+'</b></span>';
+    if(p.delivery)badges+='<span class="mb">🚚 '+esc(p.delivery.delivery||'')+'</span>';
+    if(p.minQty>1)badges+='<span class="mb">Мін: <b>'+p.minQty+'</b></span>';
+    if(p.rating)badges+='<span class="mb">⭐ '+p.rating+'</span>';
+    $('moBadges').innerHTML=badges;if(p.breadcrumb)$('moBc').textContent=p.breadcrumb;
+    if(p.variants?.length>1){$('moVars').style.display='block';$('moVarsList').innerHTML=p.variants.map(v=>'<span class="mo-var'+(v.active?' act':'')+'" onclick="openProd(\''+esc(v.slug)+'\')">'+esc(v.name)+'</span>').join('')}
+    $('moSrc').textContent=isPers?'Ціни: персональні':'Ціни: загальні';
+    $('moAddBtn').onclick=()=>{addEst(p.index||p.catalogIndex,p.name,p.priceEnd,p.brand,p.image,p.unit);closeMo()};
+  }catch(e){$('moLoad').style.display='none';$('moErr').textContent=e.message;$('moErr').style.display='block'}}
+function closeMo(){$('modal').style.display='none'}
+
+function addEst(sku,name,price,brand,img,unit){if(!sku)return;const ex=estimate.find(i=>i.sku===sku);if(ex)ex.qty++;else estimate.push({sku,name:name||'',price:parseFloat(price)||0,brand:brand||'',img:img||'',unit:unit||'шт',qty:1});renderEst();$('btnEst').classList.add('has')}
+function remEst(sku){estimate=estimate.filter(i=>i.sku!==sku);renderEst()}
+function setQty(sku,q){if(q<1)return remEst(sku);const i=estimate.find(x=>x.sku===sku);if(i)i.qty=q;renderEst()}
+function renderEst(){const bd=$('estBody'),ft=$('estFoot'),bg=$('estBadge');$('estCnt').textContent=estimate.length;
+  if(!estimate.length){bd.innerHTML='<div class="ep-empty">Порожній</div>';ft.style.display='none';bg.style.display='none';$('btnEst').classList.remove('has');return}
+  bg.textContent=estimate.length;bg.style.display='inline';let h='',total=0;
+  estimate.forEach(i=>{const line=i.price*i.qty;total+=line;
+    h+='<div class="ei"><div class="ei-top">'+(i.img?'<img class="ei-img" src="'+esc(i.img)+'" onerror="this.style.display=\'none\'">':'')
+      +'<div class="ei-info"><div class="ei-name">'+esc(i.name)+'</div><div class="ei-sku">'+esc(i.sku)+'</div></div></div>'
+      +'<div class="ei-bot"><div class="eq"><button class="eq-btn" onclick="setQty(\''+esc(i.sku)+'\','+(i.qty-1)+')">−</button>'
+      +'<input class="eq-inp" type="number" value="'+i.qty+'" onchange="setQty(\''+esc(i.sku)+'\',parseInt(this.value)||0)">'
+      +'<button class="eq-btn" onclick="setQty(\''+esc(i.sku)+'\','+(i.qty+1)+')">+</button></div>'
+      +'<div style="display:flex;align-items:center;gap:4px">'+(i.price?'<span class="ei-price">'+line.toFixed(2)+'</span>':'')
+      +'<button class="ei-del" onclick="remEst(\''+esc(i.sku)+'\')">🗑</button></div></div></div>'});
+  bd.innerHTML=h;ft.style.display='block';$('estTotal').textContent=total.toFixed(2)+' zł'}
+function toggleEst(){const v=$('estP').style.display!=='none';$('estP').style.display=v?'none':'flex';$('estO').style.display=v?'none':'block'}
+function exportCSV(){const rows=['Індекс;Назва;Бренд;К-сть;Од.;Ціна;Сума'];estimate.forEach(i=>rows.push([i.sku,'"'+i.name+'"',i.brand,i.qty,i.unit,i.price.toFixed(2),(i.price*i.qty).toFixed(2)].join(';')));
+  rows.push(['','','','','','РАЗОМ:',estimate.reduce((s,i)=>s+i.price*i.qty,0).toFixed(2)].join(';'));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'}));a.download='onninen_koshtorys_'+new Date().toISOString().slice(0,10)+'.csv';a.click()}
+$('sInp').addEventListener('input',function(){$('sClr').classList.toggle('show',this.value.length>0)});
+init();
+</script>
+</body>
+</html>

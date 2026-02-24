@@ -722,91 +722,20 @@ serve(async (req) => {
 
       // ═══ CATEGORIES ═══
       case 'categories': {
-        const { integrationId } = body
-        let jar: CookieJar = {}
-
-        if (integrationId) {
-          try {
-            const session = await getIntegrationSession(supabaseAdmin, integrationId)
-            jar = session.jar
-          } catch { /* anonymous */ }
-        }
-
-        // Fetch the root list page for categories
-        let html: string
-        try {
-          html = await fetchPage('/', jar)
-        } catch (fetchErr: any) {
-          // If site blocks us (403/WAF), return static categories so UI doesn't break
-          console.log('[categories] fetchPage failed:', fetchErr.message, '— using static fallback')
-          const staticCategories = [
-            { name: 'Osprzęt elektryczny', slug: '/pl/list/osprzet-elektryczny', image: '', subcategories: [] },
-            { name: 'Kable i przewody', slug: '/pl/list/kable-i-przewody', image: '', subcategories: [] },
-            { name: 'Rozdzielnice', slug: '/pl/list/rozdzielnice', image: '', subcategories: [] },
-            { name: 'Oświetlenie', slug: '/pl/list/oswietlenie', image: '', subcategories: [] },
-            { name: 'Aparatura modułowa', slug: '/pl/list/aparatura-modulowa', image: '', subcategories: [] },
-            { name: 'Automatyka', slug: '/pl/list/automatyka', image: '', subcategories: [] },
-            { name: 'Narzędzia', slug: '/pl/list/narzedzia', image: '', subcategories: [] },
-            { name: 'Systemy instalacyjne', slug: '/pl/list/systemy-instalacyjne', image: '', subcategories: [] },
-          ]
-          return json({ categories: staticCategories, total: staticCategories.length, fallback: true })
-        }
-
-        // Parse category links href="/pl/list/..."
-        const catBySlug = new Map<string, { slug: string; name: string; image: string }>()
-        const catLinkRe = /<a[^>]*href="(\/pl\/list\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
-        let catLink: RegExpExecArray | null
-        while ((catLink = catLinkRe.exec(html)) !== null) {
-          const slug = catLink[1]
-          const inner = catLink[2]
-          const nameSpan = inner.match(/<[^>]*class="[^"]*name[^"]*"[^>]*>([^<]*)<\/[^>]*>/i)
-          let name = nameSpan ? nameSpan[1].trim() : stripHtml(inner).split('\n')[0].trim()
-          if (!name || name.length < 2 || name.length > 120) continue
-          const imgMatch = inner.match(/<img[^>]*(?:src|data-src)="([^"]*)"[^>]*>/i)
-          const image = imgMatch ? absUrl(imgMatch[1]) : ''
-          const existing = catBySlug.get(slug)
-          if (!existing || (!existing.image && image)) {
-            catBySlug.set(slug, { slug, name, image })
-          }
-        }
-
-        // Build 3-level tree
-        const allCats = Array.from(catBySlug.values())
-        const mainCats: Array<{ slug: string; name: string; image: string }> = []
-        const subMap: Record<string, Array<{ slug: string; name: string; image: string }>> = {}
-        const ssubMap: Record<string, Array<{ slug: string; name: string; image: string }>> = {}
-
-        for (const c of allCats) {
-          const parts = c.slug.split('/').filter(Boolean)
-          if (parts.length === 3) {
-            // Top-level: /pl/list/xxx
-            if (!mainCats.find(m => m.slug === c.slug)) mainCats.push(c)
-          } else if (parts.length === 4) {
-            // Sub-level: /pl/list/xxx/yyy
-            const parent = '/' + parts.slice(0, 3).join('/')
-            if (!subMap[parent]) subMap[parent] = []
-            if (!subMap[parent].find(s => s.slug === c.slug)) subMap[parent].push(c)
-          } else if (parts.length === 5) {
-            // Sub-sub-level: /pl/list/xxx/yyy/zzz
-            const parent = '/' + parts.slice(0, 4).join('/')
-            if (!ssubMap[parent]) ssubMap[parent] = []
-            if (!ssubMap[parent].find(s => s.slug === c.slug)) ssubMap[parent].push(c)
-          }
-        }
-
-        const tree = mainCats.map(c => ({
-          name: c.name,
-          slug: c.slug,
-          image: c.image,
-          subcategories: (subMap[c.slug] || []).map(s => ({
-            name: s.name,
-            slug: s.slug,
-            image: s.image,
-            subcategories: ssubMap[s.slug] || [],
-          })),
-        }))
-
-        return json({ categories: tree, total: tree.length })
+        // Return static categories instantly — fetching the 2.5MB homepage via
+        // ScraperAPI is too slow (30-80s) and unreliable. Categories rarely change.
+        // When user clicks a category, subcategories come from the products response.
+        const staticCategories = [
+          { name: 'Osprzęt elektryczny', slug: '/pl/list/osprzet-elektryczny', image: '', subcategories: [] },
+          { name: 'Kable i przewody', slug: '/pl/list/kable-i-przewody', image: '', subcategories: [] },
+          { name: 'Rozdzielnice', slug: '/pl/list/rozdzielnice', image: '', subcategories: [] },
+          { name: 'Oświetlenie', slug: '/pl/list/oswietlenie', image: '', subcategories: [] },
+          { name: 'Aparatura modułowa', slug: '/pl/list/aparatura-modulowa', image: '', subcategories: [] },
+          { name: 'Automatyka', slug: '/pl/list/automatyka', image: '', subcategories: [] },
+          { name: 'Narzędzia', slug: '/pl/list/narzedzia', image: '', subcategories: [] },
+          { name: 'Systemy instalacyjne', slug: '/pl/list/systemy-instalacyjne', image: '', subcategories: [] },
+        ]
+        return json({ categories: staticCategories, total: staticCategories.length })
       }
 
       // ═══ PRODUCTS ═══

@@ -1,0 +1,17 @@
+{
+  "name": "hurtownie-proxy",
+  "version": "1.0.0",
+  "description": "Onninen.pl + Ramirent.pl + AtutRental.com.pl proxies",
+  "scripts": {
+    "onninen": "node server.js",
+    "ramirent": "node ramirent-server.js",
+    "atut": "node atut-server.js",
+    "start": "node server.js & node ramirent-server.js & node atut-server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0",
+    "cheerio": "^1.0.0"
+  }
+}

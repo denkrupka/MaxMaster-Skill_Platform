@@ -1,0 +1,35 @@
+.b-status-column-cell, .b-complexity-column-cell {
+    font-size : 0.8em;
+}
+
+.b-status-column-cell i::before, .b-complexity-column-cell i::before {
+    margin-inline-end : .5em;
+}
+
+.Started {
+    color : #bbb;
+}
+
+.Late {
+    color : #ff5722;
+}
+
+.Completed {
+    color : #34d844;
+}
+
+.Easy {
+    color : #69db7c;
+}
+
+.Normal {
+    color : #fdd835;
+}
+
+.Hard {
+    color : #ffa94d;
+}
+
+.b-resource-grid.b-outer {
+    margin-top : 1em !important; /* To override default demo styling */
+}

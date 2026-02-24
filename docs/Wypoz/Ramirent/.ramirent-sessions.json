@@ -1,0 +1,17 @@
+{
+  "122ca2f927d63db6336f69b5f6114dfe": {
+    "email": "biuro@maxmaster.info",
+    "password": "FUCK00den00kazap",
+    "clientId": 14035,
+    "clientLogin": "biuro@maxmaster.info",
+    "clientType": "new",
+    "loginTime": 1771841953235,
+    "lastUsed": 1771844002990,
+    "lastRefresh": 1771843086167,
+    "_cookies": {
+      "PHPSESSID": "q5uofd3l3t70f7qqm7tlg8842d",
+      "sessionTemp": "02ab79503cc85c04efaf02646fe0336ab75a5aec930bbb2483bcf4c5be24e2f4559aee1379d94147310d6aea13e822cf4a86bebe7875a4f15c9f410f8ee01009cdcddf917bf880470ddcb85d4dfa0122c8f843f41b1342f7e1137b243d2a789a61be1ebfa211ff1ba15aa7467fbf5712a93d0cd13b141d55fe2ec40d",
+      "loginAccount": "7cd9751aa45f0bc7eb657d9d7769c87bfc61143fb592958cfc9197ec9ec26cda571904a25629adf37a3206bb6766ef44acb0ff3411b459d06bad8708a0aec8007bd79ee748fbb184cbce08b17a1846a0a81442b4ebf0f70756f643d8ff1232d959a2041d459b1f92fef931491d882f1fbf0116662ef0f17f1b5b7cb8"
+    }
+  }
+}
