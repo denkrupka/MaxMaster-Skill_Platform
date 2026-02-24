@@ -171,19 +171,26 @@ const GroupDetail: React.FC<{
                 </>
               ) : (
                 <>
-                  {detail.priceBrutto != null && (
+                  {detail.priceNetto != null ? (
+                    <>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu netto</div>
+                      <div className="text-xl font-bold text-blue-600">
+                        {detail.priceNetto.toFixed(2)} <span className="text-sm font-normal">zł / {detail.priceUnit || 'Dzień'}</span>
+                      </div>
+                      {detail.priceBrutto != null && (
+                        <div className="mt-1 text-xs text-slate-400">
+                          Brutto: {detail.priceBrutto.toFixed(2)} zł / {detail.priceUnit || 'Dzień'}
+                        </div>
+                      )}
+                    </>
+                  ) : detail.priceBrutto != null ? (
                     <>
                       <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena wynajmu brutto</div>
                       <div className="text-xl font-bold text-blue-600">
                         {detail.priceBrutto.toFixed(2)} <span className="text-sm font-normal">zł / {detail.priceUnit || 'Dzień'}</span>
                       </div>
                     </>
-                  )}
-                  {detail.priceNetto != null && (
-                    <div className="mt-1 text-xs text-slate-400">
-                      Netto: {detail.priceNetto.toFixed(2)} zł / {detail.priceUnit || 'Dzień'}
-                    </div>
-                  )}
+                  ) : null}
                 </>
               )}
             </div>
