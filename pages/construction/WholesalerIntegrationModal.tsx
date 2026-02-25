@@ -145,6 +145,21 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
         return;
       }
 
+      // For Speckable, validate that the session actually provides netto prices
+      if (authModal.wholesalerId === 'speckable' && data.integrationId) {
+        try {
+          const validation = await supabase.functions.invoke('speckable-proxy', {
+            body: { action: 'validate-session', integrationId: data.integrationId },
+          });
+          const vData = typeof validation.data === 'string' ? JSON.parse(validation.data) : validation.data;
+          if (vData && !vData.valid) {
+            setAuthError('Logowanie powiodło się, ale nie udało się uzyskać cen netto. Sprawdź uprawnienia konta.');
+            setAuthLoading(false);
+            return;
+          }
+        } catch { /* validation optional — don't block login */ }
+      }
+
       setAuthSuccess(`Połączono z ${authModal.wholesalerName} jako ${data.username || username}`);
       onIntegrationChange();
 

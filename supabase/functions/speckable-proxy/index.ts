@@ -79,27 +79,34 @@ function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<st
 }
 
 // Fetch a page via ScraperAPI (bypasses Cloudflare from any IP)
-async function viaScraperAPI(url: string, method = 'GET', postBody?: string): Promise<{ status: number; body: string }> {
+async function viaScraperAPI(url: string, method = 'GET', postBody?: string, cookies?: string): Promise<{ status: number; body: string }> {
   if (method === 'GET') {
+    // Always use query-param API for GET (JSON API returns 404 for GET)
     const params = new URLSearchParams({
       api_key: SCRAPER_API_KEY,
       url,
     })
+    // Pass cookies via ScraperAPI's header_ prefix
+    if (cookies) {
+      params.set('header_Cookie', cookies)
+    }
     const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
       headers: { 'Accept-Language': 'pl-PL,pl;q=0.9' },
     })
     return { status: resp.status, body: await resp.text() }
   } else {
     // POST via ScraperAPI JSON API
+    const postHeaders: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept-Language': 'pl-PL,pl;q=0.9',
+    }
+    if (cookies) postHeaders['Cookie'] = cookies
     const payload = {
       apiKey: SCRAPER_API_KEY,
       url,
       method: 'POST',
       body: postBody || '',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept-Language': 'pl-PL,pl;q=0.9',
-      },
+      headers: postHeaders,
     }
     const resp = await fetch('https://api.scraperapi.com/', {
       method: 'POST',
@@ -124,8 +131,9 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
   // Strategy 1: Try ScraperAPI first (if configured)
   if (SCRAPER_API_KEY) {
     try {
-      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}`)
-      const r = await viaScraperAPI(fullUrl, 'GET')
+      const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
+      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}`)
+      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr)
       console.log(`[fetchPage] ScraperAPI → ${r.status}, ${r.body.length} bytes`)
       if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
         // Verify it's not a Cloudflare challenge page
@@ -184,7 +192,8 @@ async function postForm(url: string, body: string, jar: CookieJar, referer?: str
   const fullUrl = url.startsWith('http') ? url : BASE + url
 
   if (SCRAPER_API_KEY) {
-    const r = await viaScraperAPI(fullUrl, 'POST', body)
+    const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
+    const r = await viaScraperAPI(fullUrl, 'POST', body, cookieStr)
     console.log(`[postForm] ScraperAPI POST ${fullUrl} → ${r.status}, ${r.body.length} bytes`)
     return r.body
   }
@@ -373,11 +382,7 @@ function parseListPage(html: string, requestedPath: string): any {
     }
   }
 
-  if (products.length > 0) {
-    return { title, breadcrumb, items: products, hasProducts: true }
-  }
-
-  // Categories: links with href="/pl/list/..."
+  // Always parse categories (even when products exist — needed for tree navigation)
   const catBySlug = new Map<string, { slug: string; name: string; image: string; price: string }>()
   const catLinkRe = /<a[^>]*href="(\/pl\/list\/[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
   let catLink: RegExpExecArray | null
@@ -398,22 +403,25 @@ function parseListPage(html: string, requestedPath: string): any {
   }
   let categories = Array.from(catBySlug.values())
 
-  // Filter by level
-  if (categories.length > 30) {
-    if (isRoot) {
-      const topLevel = categories.filter(c => c.slug.split('/').filter(Boolean).length === 3)
-      if (topLevel.length > 0) {
-        return { title: title || 'Katalog produktów', breadcrumb, items: topLevel, hasProducts: false }
-      }
-    } else {
-      const children = categories.filter(c => c.slug.startsWith(norm + '/') && c.slug !== norm + '/')
-      if (children.length > 0) {
-        return { title, breadcrumb, items: children, hasProducts: false }
-      }
-    }
+  // Filter categories: only show DIRECT children of current path (not all descendants)
+  let filteredCategories: typeof categories = []
+  const parentDepth = norm.split('/').filter(Boolean).length  // e.g. /pl/list/kable-i-przewody → 3
+  if (isRoot) {
+    const topLevel = categories.filter(c => c.slug.split('/').filter(Boolean).length === 3)
+    filteredCategories = topLevel
+  } else {
+    filteredCategories = categories.filter(c => {
+      if (!c.slug.startsWith(norm + '/') || c.slug === norm + '/') return false
+      // Only direct children: exactly one more path segment than parent
+      return c.slug.split('/').filter(Boolean).length === parentDepth + 1
+    })
   }
 
-  return { title, breadcrumb, items: categories, hasProducts: false }
+  if (products.length > 0) {
+    return { title, breadcrumb, items: products, hasProducts: true, categories: filteredCategories }
+  }
+
+  return { title, breadcrumb, items: filteredCategories, hasProducts: false, categories: [] }
 }
 
 function parseProductPage(html: string): any {
@@ -587,16 +595,115 @@ function parseProductPage(html: string): any {
 // ═══ SESSION MANAGEMENT ═══
 const SESSION_FRESH_MS = 30 * 60 * 1000
 
-async function doLogin(username: string, password: string, jar: CookieJar): Promise<boolean> {
-  // Try real login first, fallback to credential-save mode if site blocks us
-  try {
-    // Step 0: Visit homepage first to get initial session cookies
-    try {
-      await fetchPage('/', jar)
-    } catch { /* ok if homepage fails */ }
+// ═══ ScraperAPI with keep_headers — extracts Set-Cookie for login flow ═══
+function splitHttpResponse(raw: string): { headerStr: string; body: string } {
+  // ScraperAPI keep_headers returns: "HTTP/1.1 200 OK\r\nHeader: val\r\n\r\n<body>"
+  let idx = raw.indexOf('\r\n\r\n')
+  if (idx !== -1 && idx < 4000) return { headerStr: raw.substring(0, idx), body: raw.substring(idx + 4) }
+  idx = raw.indexOf('\n\n')
+  if (idx !== -1 && idx < 4000) return { headerStr: raw.substring(0, idx), body: raw.substring(idx + 2) }
+  return { headerStr: '', body: raw }
+}
 
-    // Step 1: Fetch login page to get CSRF token
-    const loginHtml = await fetchPage('/pl/login', jar)
+function extractSetCookiesFromRaw(headerStr: string, jar: CookieJar): void {
+  for (const line of headerStr.split(/\r?\n/)) {
+    const m = line.match(/^set-cookie:\s*(.+)/i)
+    if (m) {
+      const parts = m[1].split(';')[0].split('=')
+      const name = parts[0].trim()
+      const value = parts.slice(1).join('=').trim()
+      if (name && !name.startsWith('__cf')) jar[name] = value
+    }
+  }
+}
+
+async function scraperAPIGetWithCookies(url: string, jar: CookieJar): Promise<string> {
+  const fullUrl = url.startsWith('http') ? url : BASE + url
+  const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
+
+  // Use query-param API with keep_headers=true (JSON API doesn't support it)
+  const params = new URLSearchParams({
+    api_key: SCRAPER_API_KEY,
+    url: fullUrl,
+    keep_headers: 'true',
+  })
+  // Pass cookies via ScraperAPI header_ prefix
+  const fetchHeaders: Record<string, string> = { 'Accept-Language': 'pl-PL,pl;q=0.9' }
+  if (cookieStr) {
+    params.set('header_Cookie', cookieStr)
+  }
+
+  const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
+    headers: fetchHeaders,
+  })
+  const raw = await resp.text()
+  console.log(`[scraperGET] ${fullUrl} → HTTP ${resp.status}, rawLen=${raw.length}, first100=${raw.substring(0, 100).replace(/\n/g, '\\n')}`)
+
+  const { headerStr, body } = splitHttpResponse(raw)
+
+  if (headerStr && headerStr.includes(':')) {
+    extractSetCookiesFromRaw(headerStr, jar)
+    console.log(`[scraperGET] Headers parsed, cookies=[${Object.keys(jar).join(',')}], bodyLen=${body.length}`)
+    return body
+  }
+
+  // keep_headers might not have separated — try to extract cookies from ScraperAPI response headers directly
+  const scRaw = resp.headers.get('set-cookie') || ''
+  if (scRaw) {
+    console.log(`[scraperGET] ScraperAPI resp set-cookie: ${scRaw.substring(0, 200)}`)
+    parseCookiesFromHeaders(resp.headers, jar)
+  }
+
+  console.log(`[scraperGET] No header split found, returning raw as body, cookies=[${Object.keys(jar).join(',')}]`)
+  return raw
+}
+
+async function scraperAPIPostWithCookies(url: string, formBody: string, jar: CookieJar): Promise<string> {
+  const fullUrl = url.startsWith('http') ? url : BASE + url
+  const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
+
+  const hdrs: Record<string, string> = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept-Language': 'pl-PL,pl;q=0.9',
+    'Referer': BASE + '/pl/login',
+  }
+  if (cookieStr) hdrs['Cookie'] = cookieStr
+
+  const payload = {
+    apiKey: SCRAPER_API_KEY,
+    url: fullUrl,
+    method: 'POST',
+    body: formBody,
+    headers: hdrs,
+  }
+
+  const resp = await fetch('https://api.scraperapi.com/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const raw = await resp.text()
+  console.log(`[scraperPOST] ${fullUrl} → HTTP ${resp.status}, rawLen=${raw.length}, first100=${raw.substring(0, 100).replace(/\n/g, '\\n')}`)
+
+  // Try to extract cookies from ScraperAPI response headers
+  parseCookiesFromHeaders(resp.headers, jar)
+
+  return raw
+}
+
+async function doLogin(username: string, password: string, jar: CookieJar): Promise<boolean> {
+  // Cloudflare blocks direct fetch from edge functions, so we use ScraperAPI
+  // with keep_headers=true to extract Set-Cookie and maintain session for CSRF.
+  try {
+    // Step 0: Visit homepage to get initial session cookies
+    try {
+      await scraperAPIGetWithCookies('/', jar)
+    } catch (e: any) {
+      console.log('[doLogin] Homepage fetch failed (ok):', e.message)
+    }
+
+    // Step 1: Fetch login page to get CSRF token + session cookie
+    const loginHtml = await scraperAPIGetWithCookies('/pl/login', jar)
 
     // Check if already logged in
     if (loginHtml.includes('/pl/logout') || loginHtml.includes('Wyloguj')) {
@@ -608,11 +715,13 @@ async function doLogin(username: string, password: string, jar: CookieJar): Prom
       || loginHtml.match(/value="([^"]+)"\s*name="login\[_token\]"/i)
       || loginHtml.match(/login\[_token\][^>]*value="([^"]+)"/i)
     if (!tokenMatch) {
-      throw new Error('CSRF_NOT_FOUND')
+      const title = (loginHtml.match(/<title>([^<]*)<\/title>/i) || [])[1] || ''
+      throw new Error(`Nie udało się pobrać formularza logowania (title: ${title}, len: ${loginHtml.length})`)
     }
     const token = tokenMatch[1]
+    console.log(`[doLogin] CSRF token found, cookies before POST: [${Object.keys(jar).join(',')}]`)
 
-    // Step 2: POST login form
+    // Step 2: POST login form with session cookies
     const formData = [
       `login[_token]=${encodeURIComponent(token)}`,
       `login[referer]=${encodeURIComponent(BASE + '/')}`,
@@ -620,14 +729,36 @@ async function doLogin(username: string, password: string, jar: CookieJar): Prom
       `login[password]=${encodeURIComponent(password)}`,
     ].join('&')
 
-    const responseHtml = await postForm('/pl/login', formData, jar, BASE + '/pl/login')
+    const responseHtml = await scraperAPIPostWithCookies('/pl/login', formData, jar)
 
     // Step 3: Verify success
-    if (responseHtml.includes('/pl/logout') || responseHtml.includes('Wyloguj') || responseHtml.includes('Moje konto')) {
+    const hasLogout = responseHtml.includes('/pl/logout') || responseHtml.includes('Wyloguj')
+    const hasAccount = responseHtml.includes('Moje konto') || responseHtml.includes('my-account')
+    const hasLoginForm = responseHtml.includes('login[_token]')
+    const cookieCount = Object.keys(jar).length
+
+    console.log(`[doLogin] Result: hasLogout=${hasLogout}, hasAccount=${hasAccount}, hasLoginForm=${hasLoginForm}, cookies=${cookieCount}, bodyLen=${responseHtml.length}`)
+    console.log(`[doLogin] Title: ${(responseHtml.match(/<title>([^<]*)<\/title>/i) || [])[1] || '(none)'}`)
+
+    if (hasLogout || hasAccount) {
       return true
     }
 
-    throw new Error('Niepoprawne dane logowania')
+    // Check for specific error messages in the response
+    if (responseHtml.includes('Nieprawidłowy') || responseHtml.includes('nieprawidłow') || responseHtml.includes('Invalid') || responseHtml.includes('Błędny')) {
+      throw new Error('Niepoprawny email lub hasło')
+    }
+
+    // If we have cookies and no login form, login might have succeeded (redirected to non-standard page)
+    if (cookieCount > 0 && !hasLoginForm) {
+      console.log('[doLogin] No explicit logout link but have cookies and no login form — assuming success')
+      return true
+    }
+
+    // Include diagnostic info in error
+    const titleSnippet = (responseHtml.match(/<title>([^<]*)<\/title>/i) || [])[1] || ''
+    const bodySnippet = responseHtml.substring(0, 500).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200)
+    throw new Error(`Logowanie nie powiodło się. [cookies:${cookieCount}, form:${hasLoginForm}, len:${responseHtml.length}, title:${titleSnippet}] ${bodySnippet}`)
   } catch (e: any) {
     console.log('[speckable] Login failed:', e.message)
     throw e
@@ -659,13 +790,6 @@ async function getIntegrationSession(
     .single()
 
   if (error || !integration) throw new Error('Integration not found')
-
-  // When using ScraperAPI, skip session management —
-  // ScraperAPI doesn't maintain cookies between requests,
-  // and the catalog is publicly accessible without login
-  if (SCRAPER_API_KEY) {
-    return { jar: {}, integration }
-  }
 
   const creds = integration.credentials || {}
   let jar: CookieJar = creds.cookies || {}
@@ -764,10 +888,16 @@ serve(async (req) => {
       // ═══ LOGIN ═══
       case 'login': {
         const { username, password, companyId, wholesalerId, wholesalerName, branza, existingIntegrationId } = body
-        if (!username || !password) return errorResponse('Username + password required')
+        if (!username || !password) return json({ success: false, error: 'Podaj login i hasło' })
 
         const jar: CookieJar = {}
-        await doLogin(username, password, jar)
+        try {
+          await doLogin(username, password, jar)
+        } catch (loginErr: any) {
+          // Return 200 with error field so Supabase client shows the actual message
+          // (not generic "Edge Function returned a non-2xx status code")
+          return json({ success: false, error: loginErr.message || 'Błąd logowania' })
+        }
 
         const credentialsData = {
           username,
@@ -777,28 +907,32 @@ serve(async (req) => {
         }
 
         let integrationId: string
-        if (existingIntegrationId) {
-          await supabaseAdmin
-            .from('wholesaler_integrations')
-            .update({ credentials: credentialsData, is_active: true })
-            .eq('id', existingIntegrationId)
-          integrationId = existingIntegrationId
-        } else {
-          const { data: inserted, error: insertErr } = await supabaseAdmin
-            .from('wholesaler_integrations')
-            .insert({
-              company_id: companyId,
-              wholesaler_id: wholesalerId,
-              wholesaler_name: wholesalerName,
-              branza,
-              credentials: credentialsData,
-              is_active: true,
-            })
-            .select('id')
-            .single()
+        try {
+          if (existingIntegrationId) {
+            await supabaseAdmin
+              .from('wholesaler_integrations')
+              .update({ credentials: credentialsData, is_active: true })
+              .eq('id', existingIntegrationId)
+            integrationId = existingIntegrationId
+          } else {
+            const { data: inserted, error: insertErr } = await supabaseAdmin
+              .from('wholesaler_integrations')
+              .insert({
+                company_id: companyId,
+                wholesaler_id: wholesalerId,
+                wholesaler_name: wholesalerName,
+                branza,
+                credentials: credentialsData,
+                is_active: true,
+              })
+              .select('id')
+              .single()
 
-          if (insertErr) throw new Error('Failed to save integration: ' + insertErr.message)
-          integrationId = inserted.id
+            if (insertErr) return json({ success: false, error: 'Nie udało się zapisać integracji: ' + insertErr.message })
+            integrationId = inserted.id
+          }
+        } catch (dbErr: any) {
+          return json({ success: false, error: 'Błąd zapisu: ' + (dbErr.message || dbErr) })
         }
 
         return json({
@@ -835,6 +969,23 @@ serve(async (req) => {
           })
         } catch {
           return json({ authenticated: false })
+        }
+      }
+
+      // ═══ VALIDATE SESSION ═══
+      case 'validate-session': {
+        const { integrationId } = body
+        if (!integrationId) return json({ valid: false })
+        try {
+          const { jar } = await getIntegrationSession(supabaseAdmin, integrationId)
+          if (Object.keys(jar).length === 0) return json({ valid: false, reason: 'no_cookies' })
+          // Fetch a test page and check for net prices / logged-in indicators
+          const testHtml = await fetchPage('/pl/list/narzedzia', jar)
+          const hasLogout = testHtml.includes('/pl/logout') || testHtml.includes('Wyloguj')
+          const hasNetPrices = testHtml.includes('price-net')
+          return json({ valid: hasLogout || hasNetPrices, hasLogout, hasNetPrices })
+        } catch (e: any) {
+          return json({ valid: false, error: e.message })
         }
       }
 
@@ -973,7 +1124,7 @@ serve(async (req) => {
                 const data = parseListPage(retryHtml, pagePath)
                 const ITEMS_PER_PAGE = 24
                 const retryHasMore = data.hasProducts && data.items.length >= ITEMS_PER_PAGE
-                return json({ products: data.hasProducts ? data.items : [], categories: data.hasProducts ? [] : data.items, page, totalPages: retryHasMore ? page + 1 : page, totalProducts: data.items.length, hasProducts: data.hasProducts, title: data.title })
+                return json({ products: data.hasProducts ? data.items : [], categories: data.hasProducts ? (data.categories || []) : data.items, page, totalPages: retryHasMore ? page + 1 : page, totalProducts: data.items.length, hasProducts: data.hasProducts, title: data.title })
               }
             } catch { /* ignore */ }
           }
@@ -984,7 +1135,7 @@ serve(async (req) => {
         const hasMore = data.hasProducts && data.items.length >= ITEMS_PER_PAGE
         return json({
           products: data.hasProducts ? data.items : [],
-          categories: data.hasProducts ? [] : data.items,
+          categories: data.hasProducts ? (data.categories || []) : data.items,
           page,
           totalPages: hasMore ? page + 1 : page,
           totalProducts: data.items.length,

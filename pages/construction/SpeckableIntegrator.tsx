@@ -237,7 +237,7 @@ const ProductDetail: React.FC<{
             const isTim = integ.wholesaler_id === 'tim';
             const isOnninen = integ.wholesaler_id === 'oninen';
             prices.push({
-              wholesaler: isTim ? 'TIM' : isOnninen ? 'Onninen' : 'Speckable',
+              wholesaler: integ.wholesaler_name || (isTim ? 'TIM' : isOnninen ? 'Onninen' : integ.wholesaler_id),
               catalogPrice: isTim ? (best.publicPrice ?? null) : isOnninen ? (best.priceCatalog ?? null) : (best.priceGross ?? null),
               purchasePrice: isTim ? (best.price ?? null) : isOnninen ? (best.priceEnd ?? null) : (best.priceNetto ?? null),
               stock: best.stock ?? null,
@@ -585,12 +585,22 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [connectionError, setConnectionError] = useState('');
   const [dynamicSubcats, setDynamicSubcats] = useState<Record<string, SpeckableCategory[]>>({});
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
 
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Client-side cache for product listings and product details (avoids re-fetching)
   const productsCache = useRef<Record<string, { products: SpeckableProduct[]; totalPages: number; totalProducts: number; hasProducts: boolean; categories: any[]; ts: number }>>({});
   const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+  // Check authentication status on mount
+  useEffect(() => {
+    if (!integrationId) { setAuthStatus('unauthenticated'); return; }
+    setAuthStatus('checking');
+    speckableProxy('session', { integrationId })
+      .then(r => setAuthStatus(r.authenticated ? 'authenticated' : 'unauthenticated'))
+      .catch(() => setAuthStatus('unauthenticated'));
+  }, [integrationId]);
 
   // Load categories
   useEffect(() => {
@@ -609,15 +619,17 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
     const cacheKey = `${selectedCat.slug}::${page}`;
     const cached = productsCache.current[cacheKey];
     if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      setProducts(cached.products);
+      if (cached.categories?.length > 0) {
+        setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: cached.categories }));
+        setProducts([]);  // Parent category: show subcats, not products
+      } else {
+        setProducts(cached.products);
+      }
       setTotalPages(cached.totalPages);
       setTotalCount(cached.totalProducts);
       setProdLoading(false);
       setProdError(null);
       setSearchResult(null);
-      if (!cached.hasProducts && cached.categories?.length > 0) {
-        setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: cached.categories }));
-      }
       return;
     }
     setProdLoading(true);
@@ -629,24 +641,29 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
           setProdLoading(false);
           return;
         }
-        setProducts(data.products || []);
+        const cats = data.categories || [];
+        const prods = data.products || [];
+        // Cache the result
+        productsCache.current[cacheKey] = {
+          products: prods,
+          totalPages: data.totalPages || 0,
+          totalProducts: data.totalProducts || 0,
+          hasProducts: data.hasProducts,
+          categories: cats,
+          ts: Date.now(),
+        };
+        // If category has subcategories → show subcats (parent category)
+        // If no subcategories → show products (leaf category)
+        if (cats.length > 0) {
+          setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: cats }));
+          setProducts([]);  // Clear products so subcategory tiles render
+        } else {
+          setProducts(prods);
+        }
         setTotalPages(data.totalPages || 0);
         setTotalCount(data.totalProducts || 0);
         setProdLoading(false);
         setSearchResult(null);
-        // Cache the result
-        productsCache.current[cacheKey] = {
-          products: data.products || [],
-          totalPages: data.totalPages || 0,
-          totalProducts: data.totalProducts || 0,
-          hasProducts: data.hasProducts,
-          categories: data.categories || [],
-          ts: Date.now(),
-        };
-        // Store subcategories when API returns categories instead of products
-        if (!data.hasProducts && data.categories && data.categories.length > 0) {
-          setDynamicSubcats(prev => ({ ...prev, [selectedCat.slug]: data.categories }));
-        }
       })
       .catch(e => { setProdError(e.message); setProdLoading(false); });
   }, [selectedCat, page, integrationId]);
@@ -688,6 +705,27 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
   const display = searchResult !== null ? searchResult : products;
   const isLoading = searchLoading || prodLoading;
   const hasContent = selectedCat || searchResult !== null;
+
+  if (authStatus === 'checking') {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+        <span className="text-sm text-slate-500">Sprawdzanie sesji Speckable...</span>
+      </div>
+    );
+  }
+
+  if (authStatus === 'unauthenticated') {
+    return (
+      <div className="text-center py-12">
+        <Package className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+        <h3 className="text-base font-semibold text-slate-700 mb-2">Wymagane logowanie do Speckable</h3>
+        <p className="text-sm text-slate-500 mb-4">
+          Aby przeglądać katalog i ceny netto, zaloguj się do konta Speckable w ustawieniach integracji.
+        </p>
+      </div>
+    );
+  }
 
   if (connectionError && categories.length === 0) {
     return (
@@ -808,7 +846,7 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
               <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
               <p className="text-sm text-red-600">{prodError}</p>
             </div>
-          ) : display.length === 0 && currentSubcats.length > 0 ? (
+          ) : currentSubcats.length > 0 && searchResult === null ? (
             <div>
               {selectedCat && (
                 <h3 className="text-base font-semibold text-slate-800 mb-3">{selectedCat.name}</h3>
