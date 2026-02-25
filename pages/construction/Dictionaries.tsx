@@ -228,12 +228,14 @@ export const DictionariesPage: React.FC = () => {
   const [expandedSystemCategories, setExpandedSystemCategories] = useState<Set<string>>(new Set());
   const [systemLabourDetail, setSystemLabourDetail] = useState<KosztorysSystemLabour | null>(null);
   const [systemLabourLoading, setSystemLabourLoading] = useState(false);
+  const [systemLabourLimit, setSystemLabourLimit] = useState(200);
 
   // ============ Robocizna — Katalog Własny ============
   const [ownLabours, setOwnLabours] = useState<KosztorysOwnLabour[]>([]);
   const [ownLabourCategories, setOwnLabourCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
   const [ownLabourSearch, setOwnLabourSearch] = useState('');
   const [selectedOwnLabourCategory, setSelectedOwnLabourCategory] = useState<string | null>(null);
+  const [ownLabourLimit, setOwnLabourLimit] = useState(200);
   const [expandedOwnLabourCategories, setExpandedOwnLabourCategories] = useState<Set<string>>(new Set());
   const [ownLabourDialog, setOwnLabourDialog] = useState(false);
   const [editingOwnLabour, setEditingOwnLabour] = useState<Partial<KosztorysOwnLabour> | null>(null);
@@ -2026,6 +2028,10 @@ export const DictionariesPage: React.FC = () => {
       return matchesSearch && matchesCat;
     }), [systemLabours, systemLabourSearch, selectedSystemCategory]);
 
+  // Reset render limits when filters change
+  useEffect(() => { setSystemLabourLimit(200); }, [systemLabourSearch, selectedSystemCategory]);
+  useEffect(() => { setOwnLabourLimit(200); }, [ownLabourSearch, selectedOwnLabourCategory]);
+
   const filteredOwnLabours = useMemo(() =>
     ownLabours.filter(l => {
       const matchesSearch = !ownLabourSearch ||
@@ -3548,7 +3554,7 @@ export const DictionariesPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredSystemLabours.slice(0, 200).map(l => (
+                  {filteredSystemLabours.slice(0, systemLabourLimit).map(l => (
                     <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSystemLabourDetail(l)}>
                       <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
                       <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
@@ -3568,9 +3574,12 @@ export const DictionariesPage: React.FC = () => {
                   {filteredSystemLabours.length === 0 && (
                     <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">Brak wyników</td></tr>
                   )}
-                  {filteredSystemLabours.length > 200 && (
-                    <tr><td colSpan={5} className="px-4 py-3 text-center text-xs text-slate-400">
-                      Pokazano 200 z {filteredSystemLabours.length} — użyj wyszukiwania lub wybierz kategorię
+                  {filteredSystemLabours.length > systemLabourLimit && (
+                    <tr><td colSpan={5} className="px-4 py-3 text-center">
+                      <button onClick={() => setSystemLabourLimit(prev => prev + 200)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                        Pokaż więcej ({systemLabourLimit} z {filteredSystemLabours.length})
+                      </button>
                     </td></tr>
                   )}
                 </tbody>
@@ -3817,7 +3826,7 @@ export const DictionariesPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100">
-                    {filteredOwnLabours.slice(0, 200).map(l => (
+                    {filteredOwnLabours.slice(0, ownLabourLimit).map(l => (
                       <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={async () => {
                         setEditingOwnLabour(l);
                         setAutoGenerateLabourCode(false);
@@ -3836,9 +3845,12 @@ export const DictionariesPage: React.FC = () => {
                         </td>
                       </tr>
                     ))}
-                    {filteredOwnLabours.length > 200 && (
-                      <tr><td colSpan={8} className="px-4 py-3 text-center text-xs text-slate-400">
-                        Pokazano 200 z {filteredOwnLabours.length} — użyj wyszukiwania lub wybierz kategorię
+                    {filteredOwnLabours.length > ownLabourLimit && (
+                      <tr><td colSpan={8} className="px-4 py-3 text-center">
+                        <button onClick={() => setOwnLabourLimit(prev => prev + 200)}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                          Pokaż więcej ({ownLabourLimit} z {filteredOwnLabours.length})
+                        </button>
                       </td></tr>
                     )}
                   </tbody>
