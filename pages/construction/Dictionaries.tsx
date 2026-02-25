@@ -484,7 +484,7 @@ export const DictionariesPage: React.FC = () => {
     if (!currentUser?.company_id) return;
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('base_rate')
         .eq('company_id', currentUser.company_id)
         .eq('status', 'active')
