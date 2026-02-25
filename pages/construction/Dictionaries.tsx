@@ -260,9 +260,15 @@ export const DictionariesPage: React.FC = () => {
   const [avgEmployeeRate, setAvgEmployeeRate] = useState<number | null>(null);
   const [manualHourlyRate, setManualHourlyRate] = useState<number>(0);
 
+  // ============ Linked items tracking for icon highlighting ============
+  const [laboursWithMats, setLaboursWithMats] = useState<Set<string>>(new Set());
+  const [laboursWithEquip, setLaboursWithEquip] = useState<Set<string>>(new Set());
+
   // ============ Full catalog pickers for labour modal ============
   const [labourMaterialPickerOpen, setLabourMaterialPickerOpen] = useState(false);
   const [labourEquipmentPickerOpen, setLabourEquipmentPickerOpen] = useState(false);
+  const [pickerMatSubTab, setPickerMatSubTab] = useState<string>('own');
+  const [pickerEqSubTab, setPickerEqSubTab] = useState<string>('own');
 
   // ============ Шаблонные задания ============
   const [templateTasks, setTemplateTasks] = useState<any[]>([]);
@@ -1043,7 +1049,22 @@ export const DictionariesPage: React.FC = () => {
         .order('category', { ascending: true })
         .order('name', { ascending: true });
       if (error) throw error;
-      setOwnLabours(data || []);
+      const labours = data || [];
+      setOwnLabours(labours);
+
+      // Load linked items flags for icon highlighting
+      if (labours.length > 0) {
+        const ids = labours.map(l => l.id);
+        const [matRes, eqRes] = await Promise.all([
+          supabase.from('kosztorys_own_labour_materials').select('labour_id').in('labour_id', ids),
+          supabase.from('kosztorys_own_labour_equipment').select('labour_id').in('labour_id', ids),
+        ]);
+        setLaboursWithMats(new Set((matRes.data || []).map(r => r.labour_id)));
+        setLaboursWithEquip(new Set((eqRes.data || []).map(r => r.labour_id)));
+      } else {
+        setLaboursWithMats(new Set());
+        setLaboursWithEquip(new Set());
+      }
     } catch (err) {
       console.error('Error loading own labours:', err);
       setOwnLabours([]);
@@ -1318,6 +1339,38 @@ export const DictionariesPage: React.FC = () => {
       equipment_quantity: 1,
       source_equipment_id: eq.id,
     }]);
+  };
+
+  // Wholesaler product → linked material
+  const handlePickWholesalerMaterial = (product: { name: string; sku: string; price?: number | null; catalogPrice?: number | null; url?: string; wholesaler: string }) => {
+    setOwnLabourMaterials(prev => [...prev, {
+      id: crypto.randomUUID(),
+      labour_id: editingOwnLabour?.id || '',
+      material_name: product.name,
+      material_price: product.price || product.catalogPrice || 0,
+      material_quantity: 1,
+      source_material_id: null,
+      source_wholesaler: product.wholesaler,
+      source_sku: product.sku,
+      source_url: product.url || null,
+    }]);
+    setLabourMaterialPickerOpen(false);
+  };
+
+  // Wholesaler product → linked equipment
+  const handlePickWholesalerEquipment = (product: { name: string; sku: string; price?: number | null; catalogPrice?: number | null; url?: string; wholesaler: string }) => {
+    setOwnLabourEquipment(prev => [...prev, {
+      id: crypto.randomUUID(),
+      labour_id: editingOwnLabour?.id || '',
+      equipment_name: product.name,
+      equipment_price: product.price || product.catalogPrice || 0,
+      equipment_quantity: 1,
+      source_equipment_id: null,
+      source_wholesaler: product.wholesaler,
+      source_sku: product.sku,
+      source_url: product.url || null,
+    }]);
+    setLabourEquipmentPickerOpen(false);
   };
 
   const handleSaveLinkedItems = async (labourId: string) => {
@@ -3776,8 +3829,8 @@ export const DictionariesPage: React.FC = () => {
                         <td className="px-3 py-2 text-xs text-slate-500">{l.unit || '—'}</td>
                         <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price ? `${l.price.toFixed(2)} zł` : '—'}</td>
                         <td className="px-3 py-2 text-xs text-slate-500 text-center">{String(l.time_hours || 0).padStart(2, '0')}:{String(l.time_minutes || 0).padStart(2, '0')}</td>
-                        <td className="px-3 py-2 text-center"><Package className={`w-3.5 h-3.5 inline-block ${l.materials && l.materials.length > 0 ? 'text-blue-500' : 'text-slate-200'}`} /></td>
-                        <td className="px-3 py-2 text-center"><Monitor className={`w-3.5 h-3.5 inline-block ${l.equipment && l.equipment.length > 0 ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                        <td className="px-3 py-2 text-center"><Package className={`w-3.5 h-3.5 inline-block ${laboursWithMats.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                        <td className="px-3 py-2 text-center"><Monitor className={`w-3.5 h-3.5 inline-block ${laboursWithEquip.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
                         <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
                           <button onClick={() => setDeleteOwnLabourConfirm({ id: l.id, name: l.name })} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                         </td>
@@ -3867,7 +3920,7 @@ export const DictionariesPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cena (sprzedaży)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cena jednostkowa</label>
                 <input type="number" step="0.01" min="0" value={editingOwnLabour.price || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, price: parseFloat(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="0.00 zł" />
               </div>
@@ -3908,7 +3961,7 @@ export const DictionariesPage: React.FC = () => {
                     </div>
                   ) : (
                     <div className="space-y-1.5">
-                      <div className="text-xs text-blue-600">Brak stawek pracowników — podaj ręcznie:</div>
+                      <div className="text-xs text-blue-600">Dla wyliczenia kosztu robocizny, podaj stawkę godzinową brutto.</div>
                       <div className="flex items-center gap-2">
                         <input type="number" step="0.01" min="0" value={manualHourlyRate || ''} onChange={e => setManualHourlyRate(parseFloat(e.target.value) || 0)}
                           className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
@@ -4091,31 +4144,77 @@ export const DictionariesPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Full catalog material picker overlay */}
+      {/* Full catalog material picker overlay with wholesaler tabs */}
       {labourMaterialPickerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => setLabourMaterialPickerOpen(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => { setLabourMaterialPickerOpen(false); setPickerMatSubTab('own'); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-[92vw] max-w-6xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Wybierz materiał z katalogu</h3>
-              <button onClick={() => setLabourMaterialPickerOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setLabourMaterialPickerOpen(false); setPickerMatSubTab('own'); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            {/* Sub-tabs */}
+            <div className="flex gap-1 bg-slate-100 p-1 mx-6 mt-3 rounded-lg w-fit">
+              <button onClick={() => setPickerMatSubTab('own')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition ${pickerMatSubTab === 'own' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                Własny katalog
+              </button>
+              {integrations.filter(i => i.is_active && i.branza !== 'sprzet').map(integ => (
+                <button key={integ.id} onClick={() => { setPickerMatSubTab(integ.wholesaler_id); if (!loadedTabs.current.has('materials')) loadTabData('materials' as any); }}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${pickerMatSubTab === integ.wholesaler_id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                  {integ.wholesaler_name}
+                </button>
+              ))}
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              {renderMaterialsTab({ onSelect: (m) => { handleAddLinkedMaterial(m); setLabourMaterialPickerOpen(false); } })}
+              {pickerMatSubTab === 'own' && renderMaterialsTab({ onSelect: (m) => { handleAddLinkedMaterial(m); setLabourMaterialPickerOpen(false); setPickerMatSubTab('own'); } })}
+              {pickerMatSubTab === 'tim' && (
+                <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id}
+                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
+              )}
+              {pickerMatSubTab === 'oninen' && (
+                <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id}
+                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
+              )}
+              {pickerMatSubTab === 'speckable' && (
+                <SpeckableIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'speckable')?.id}
+                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Full catalog equipment picker overlay */}
+      {/* Full catalog equipment picker overlay with wholesaler tabs */}
       {labourEquipmentPickerOpen && (
-        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => setLabourEquipmentPickerOpen(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => { setLabourEquipmentPickerOpen(false); setPickerEqSubTab('own'); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-[92vw] max-w-6xl max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Wybierz sprzęt z katalogu</h3>
-              <button onClick={() => setLabourEquipmentPickerOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+              <button onClick={() => { setLabourEquipmentPickerOpen(false); setPickerEqSubTab('own'); }} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            {/* Sub-tabs */}
+            <div className="flex gap-1 bg-slate-100 p-1 mx-6 mt-3 rounded-lg w-fit">
+              <button onClick={() => setPickerEqSubTab('own')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition ${pickerEqSubTab === 'own' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                Własny katalog
+              </button>
+              {integrations.filter(i => i.is_active && i.branza === 'sprzet').map(integ => (
+                <button key={integ.id} onClick={() => setPickerEqSubTab(integ.wholesaler_id)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${pickerEqSubTab === integ.wholesaler_id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}>
+                  {integ.wholesaler_name}
+                </button>
+              ))}
             </div>
             <div className="flex-1 overflow-y-auto p-4">
-              {renderEquipmentTab({ onSelect: (eq) => { handleAddLinkedEquipment(eq); setLabourEquipmentPickerOpen(false); } })}
+              {pickerEqSubTab === 'own' && renderEquipmentTab({ onSelect: (eq) => { handleAddLinkedEquipment(eq); setLabourEquipmentPickerOpen(false); setPickerEqSubTab('own'); } })}
+              {pickerEqSubTab === 'atut-rental' && (
+                <AtutIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'atut-rental' && i.is_active)?.id}
+                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do robocizny" />
+              )}
+              {pickerEqSubTab === 'ramirent' && (
+                <RamirentIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'ramirent' && i.is_active)?.id}
+                  onAddToOwnCatalog={(p) => handlePickWholesalerEquipment(p)} catalogButtonLabel="Przypisz do robocizny" />
+              )}
             </div>
           </div>
         </div>

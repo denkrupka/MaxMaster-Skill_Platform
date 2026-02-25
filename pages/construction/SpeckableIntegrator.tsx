@@ -50,6 +50,7 @@ interface Props {
   integrationId?: string;
   onSelectProduct?: (product: { name: string; price: number | null; sku: string; ean?: string; unit?: string }) => void;
   onAddToOwnCatalog?: (product: { name: string; sku: string; ean?: string; ref_num?: string; price?: number | null; catalogPrice?: number | null; image?: string; manufacturer?: string; unit?: string; description?: string; url?: string; wholesaler: string; category?: string }) => void;
+  catalogButtonLabel?: string;
 }
 
 // ═══ Helper: invoke speckable-proxy edge function ═══
@@ -142,7 +143,8 @@ const ProductDetail: React.FC<{
   onClose: () => void;
   onSelectProduct?: Props['onSelectProduct'];
   onAddToOwnCatalog?: Props['onAddToOwnCatalog'];
-}> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog }) => {
+  catalogButtonLabel?: string;
+}> = ({ product, integrationId, onClose, onSelectProduct, onAddToOwnCatalog, catalogButtonLabel }) => {
   const [detail, setDetail] = useState<SpeckableProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -420,7 +422,7 @@ const ProductDetail: React.FC<{
                 className="w-full py-2.5 mt-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Package className="w-4 h-4" />
-                Dodaj do katalogu Własnego
+                {catalogButtonLabel || 'Dodaj do katalogu Własnego'}
               </button>
             )}
           </div>
@@ -537,6 +539,7 @@ const ProductDetail: React.FC<{
           name={viewWholesalerProduct.name}
           onClose={() => setViewWholesalerProduct(null)}
           onAddToOwnCatalog={onAddToOwnCatalog}
+          catalogButtonLabel={catalogButtonLabel}
         />
       )}
     </div>
@@ -551,7 +554,8 @@ const WholesalerProductModal: React.FC<{
   name: string;
   onClose: () => void;
   onAddToOwnCatalog?: Props['onAddToOwnCatalog'];
-}> = ({ wholesalerId, integrationId, slug, name, onClose, onAddToOwnCatalog }) => {
+  catalogButtonLabel?: string;
+}> = ({ wholesalerId, integrationId, slug, name, onClose, onAddToOwnCatalog, catalogButtonLabel }) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -815,7 +819,7 @@ const WholesalerProductModal: React.FC<{
                 className="w-full py-2.5 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
               >
                 <Package className="w-4 h-4" />
-                Dodaj do katalogu Własnego
+                {catalogButtonLabel || 'Dodaj do katalogu Własnego'}
               </button>
             )}
           </div>
@@ -978,7 +982,7 @@ const ProductCardList: React.FC<{ p: SpeckableProduct; onClick: () => void }> = 
 );
 
 // ═══ MAIN COMPONENT ═══
-export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct, onAddToOwnCatalog }) => {
+export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectProduct, onAddToOwnCatalog, catalogButtonLabel }) => {
   const [categories, setCategories] = useState<SpeckableCategory[]>([]);
   const [catLoading, setCatLoading] = useState(true);
   const [selectedCat, setSelectedCat] = useState<SpeckableCategory | null>(null);
@@ -1348,6 +1352,7 @@ export const SpeckableIntegrator: React.FC<Props> = ({ integrationId, onSelectPr
           onClose={() => setDetailProduct(null)}
           onSelectProduct={onSelectProduct}
           onAddToOwnCatalog={onAddToOwnCatalog}
+          catalogButtonLabel={catalogButtonLabel}
         />
       )}
     </div>
