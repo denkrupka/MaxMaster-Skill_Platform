@@ -139,10 +139,8 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3, render = fals
   if (SCRAPER_API_KEY) {
     try {
       const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
-      // Enable JS rendering when cookies present (authenticated) to get personalized prices
-      const useRender = render || (!!cookieStr && (fullUrl.includes('/pl/list/') || fullUrl.includes('/pl/product/')))
-      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}${useRender ? ' [render=true]' : ''}`)
-      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr, useRender)
+      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}`)
+      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr)
       console.log(`[fetchPage] ScraperAPI → ${r.status}, ${r.body.length} bytes`)
       if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
         // Verify it's not a Cloudflare challenge page
