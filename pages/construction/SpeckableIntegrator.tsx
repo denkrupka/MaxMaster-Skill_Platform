@@ -559,11 +559,11 @@ const WholesalerProductModal: React.FC<{
   const wholesalerLabel = wholesalerId === 'tim' ? 'TIM S.A.' : wholesalerId === 'oninen' ? 'Onninen' : name;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto bg-black/70" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden relative" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
           <span className="text-sm font-semibold text-slate-700">Karta produktu — {wholesalerLabel}</span>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"><X className="w-4 h-4" /></button>
         </div>
 
         {loading ? (
@@ -627,16 +627,20 @@ const WholesalerProductModal: React.FC<{
             </div>
 
             {/* Description */}
-            {(data.description || data.descriptionHtml) && (
-              <div className="mt-4 pt-3 border-t border-slate-100">
-                <h4 className="text-xs font-semibold text-slate-600 mb-1">Opis</h4>
-                {data.descriptionHtml ? (
-                  <div className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: data.descriptionHtml }} />
-                ) : (
-                  <p className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto">{data.description}</p>
-                )}
-              </div>
-            )}
+            {(data.description || data.descriptionHtml) && (() => {
+              const desc = data.descriptionHtml || data.description || '';
+              const hasHtml = /<[a-z][\s\S]*>/i.test(desc);
+              return (
+                <div className="mt-4 pt-3 border-t border-slate-100">
+                  <h4 className="text-xs font-semibold text-slate-600 mb-1">Opis</h4>
+                  {hasHtml ? (
+                    <div className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto prose prose-xs" dangerouslySetInnerHTML={{ __html: desc }} />
+                  ) : (
+                    <p className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto">{desc}</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ) : null}
       </div>

@@ -79,7 +79,7 @@ function makeHeaders(jar?: CookieJar, extra?: Record<string, string>): Record<st
 }
 
 // Fetch a page via ScraperAPI (bypasses Cloudflare from any IP)
-async function viaScraperAPI(url: string, method = 'GET', postBody?: string, cookies?: string): Promise<{ status: number; body: string }> {
+async function viaScraperAPI(url: string, method = 'GET', postBody?: string, cookies?: string, render = false): Promise<{ status: number; body: string }> {
   if (method === 'GET') {
     // Always use query-param API for GET (JSON API returns 404 for GET)
     const params = new URLSearchParams({
@@ -89,6 +89,11 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string, coo
     // Pass cookies via ScraperAPI's header_ prefix
     if (cookies) {
       params.set('header_Cookie', cookies)
+    }
+    // Enable JS rendering for authenticated pages to get personalized prices
+    if (render) {
+      params.set('render', 'true')
+      params.set('wait_for_selector', '.price-net')
     }
     const resp = await fetch('https://api.scraperapi.com?' + params.toString(), {
       headers: { 'Accept-Language': 'pl-PL,pl;q=0.9' },
@@ -117,14 +122,16 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string, coo
   }
 }
 
-async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<string> {
+async function fetchPage(url: string, jar: CookieJar, retries = 3, render = false): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
+  // When rendering JS, use a separate cache key to avoid mixing cached non-rendered HTML
+  const cacheKey = render ? fullUrl + '::rendered' : fullUrl
   const errors: string[] = []
 
   // Check cache first
-  const cached = getCachedPage(fullUrl)
+  const cached = getCachedPage(cacheKey)
   if (cached) {
-    console.log(`[fetchPage] Cache HIT for ${fullUrl} (${cached.length} bytes)`)
+    console.log(`[fetchPage] Cache HIT for ${cacheKey} (${cached.length} bytes)`)
     return cached
   }
 
@@ -132,13 +139,15 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
   if (SCRAPER_API_KEY) {
     try {
       const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
-      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}`)
-      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr)
+      // Enable JS rendering when cookies present (authenticated) to get personalized prices
+      const useRender = render || (!!cookieStr && (fullUrl.includes('/pl/list/') || fullUrl.includes('/pl/product/')))
+      console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}${useRender ? ' [render=true]' : ''}`)
+      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr, useRender)
       console.log(`[fetchPage] ScraperAPI → ${r.status}, ${r.body.length} bytes`)
       if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
         // Verify it's not a Cloudflare challenge page
         if (!r.body.includes('cf-browser-verification') && !r.body.includes('challenge-platform')) {
-          setCachedPage(fullUrl, r.body)
+          setCachedPage(cacheKey, r.body)
           return r.body
         }
         errors.push(`ScraperAPI: Cloudflare challenge (${r.body.length}b)`)
@@ -174,7 +183,7 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3): Promise<stri
           errors.push(`Direct[${attempt + 1}]: Cloudflare challenge`)
           continue
         }
-        setCachedPage(fullUrl, body)
+        setCachedPage(cacheKey, body)
         return body
       }
       errors.push(`Direct[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)
