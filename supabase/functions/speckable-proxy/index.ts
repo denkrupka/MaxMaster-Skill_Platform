@@ -1199,6 +1199,7 @@ serve(async (req) => {
         if (!slug) return errorResponse('Missing slug')
 
         let jar: CookieJar = {}
+        const hasAuth = !!integrationId
         if (integrationId) {
           try {
             const session = await getIntegrationSession(supabaseAdmin, integrationId)
@@ -1209,11 +1210,25 @@ serve(async (req) => {
         const productPath = slug.startsWith('/') ? slug : '/pl/product/' + slug
         let html: string
         try {
-          html = await fetchPage(productPath, jar)
+          // Use JS rendering when authenticated to get netto prices (rendered client-side)
+          html = await fetchPage(productPath, jar, 3, hasAuth && Object.keys(jar).length > 0)
         } catch (fetchErr: any) {
           console.log('[product] fetchPage failed:', fetchErr.message)
           return json({ product: null, error: `Strona Speckable.pl jest tymczasowo niedostępna. (${fetchErr.message})` })
         }
+
+        // Re-login if session expired during fetch
+        if (html.includes('login[_token]') && !html.includes('/pl/logout') && integrationId) {
+          try {
+            const { data: integ } = await supabaseAdmin.from('wholesaler_integrations').select('*').eq('id', integrationId).single()
+            if (integ?.credentials?.username && integ?.credentials?.password) {
+              await doLogin(integ.credentials.username, integ.credentials.password, jar)
+              await supabaseAdmin.from('wholesaler_integrations').update({ credentials: { ...integ.credentials, cookies: jar, last_refresh: new Date().toISOString() } }).eq('id', integrationId)
+              html = await fetchPage(productPath, jar, 3, true)
+            }
+          } catch { /* ignore */ }
+        }
+
         const p = parseProductPage(html)
 
         const product = {

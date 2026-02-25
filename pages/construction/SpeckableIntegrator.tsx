@@ -707,15 +707,18 @@ const WholesalerProductModal: React.FC<{
   const category = data.category || data.breadcrumb || '';
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <>
+    <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[80] overflow-y-auto" onClick={onClose}>
+     <div className="flex items-start justify-center min-h-full pt-8 pb-8 px-4">
       <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
             <span className="text-xs text-slate-400 font-mono">SKU: {sku}{ean ? ` · EAN: ${ean}` : ''}</span>
+            <span className="text-xs font-medium text-slate-500">{wholesalerLabel}</span>
           </div>
-          <span className="text-xs font-medium text-slate-500">{wholesalerLabel}</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex flex-wrap">
@@ -915,7 +918,9 @@ const WholesalerProductModal: React.FC<{
           </div>
         )}
       </div>
+     </div>
     </div>
+    </>
   );
 };
 
