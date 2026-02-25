@@ -1841,6 +1841,80 @@ export interface KosztorysWorkType {
   unit?: UnitMeasure;
 }
 
+// Системный каталог робочизны (из Excel, read-only)
+export interface KosztorysSystemLabour {
+  id: string;
+  source_id: number;
+  code: string;
+  name: string;
+  unit: string;
+  description?: string;
+  comments?: string;
+  pkwiu?: string;
+  price_unit?: number;
+  category_id?: number;
+  category_name?: string;
+  category_number?: string;
+  category_path?: string;
+  tags?: string;
+  is_active: boolean;
+}
+
+export interface KosztorysSystemLabourCategory {
+  id: string;
+  name: string;
+  number?: string;
+  path?: string;
+  parent_id?: string;
+  sort_order: number;
+  depth: number;
+}
+
+// Собственный каталог робочизны (per company)
+export interface KosztorysOwnLabour {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  unit?: string;
+  price?: number;
+  time_hours: number;
+  time_minutes: number;
+  cost_type: 'rg' | 'ryczalt';
+  cost_ryczalt?: number;
+  is_active: boolean;
+  description?: string;
+  category?: string;
+  created_at: string;
+  updated_at: string;
+  materials?: KosztorysOwnLabourMaterial[];
+  equipment?: KosztorysOwnLabourEquipment[];
+}
+
+export interface KosztorysOwnLabourMaterial {
+  id: string;
+  labour_id: string;
+  material_name: string;
+  material_price?: number;
+  material_quantity: number;
+  source_material_id?: string;
+  source_wholesaler?: string;
+  source_sku?: string;
+  source_url?: string;
+}
+
+export interface KosztorysOwnLabourEquipment {
+  id: string;
+  labour_id: string;
+  equipment_name: string;
+  equipment_price?: number;
+  equipment_quantity: number;
+  source_equipment_id?: string;
+  source_wholesaler?: string;
+  source_sku?: string;
+  source_url?: string;
+}
+
 // Справочник материалов
 export interface KosztorysMaterial {
   id: string;

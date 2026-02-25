@@ -22,6 +22,11 @@ import type {
   KosztorysFormWorkTypeDB,
   KosztorysWorkTypeRecord,
   WholesalerIntegration,
+  KosztorysSystemLabour,
+  KosztorysSystemLabourCategory,
+  KosztorysOwnLabour,
+  KosztorysOwnLabourMaterial,
+  KosztorysOwnLabourEquipment,
 } from '../../types';
 import { WholesalerIntegrationModal } from './WholesalerIntegrationModal';
 import { TIMIntegrator } from './TIMIntegrator';
@@ -66,6 +71,24 @@ const WORK_CATEGORIES = [
   { value: 'ZEWN', label: 'Внешние работы' },
   { value: 'SPRZET', label: 'Оборудование' },
   { value: 'INNE', label: 'Прочее' },
+];
+
+// ============ Единицы робочизны (из Excel) ============
+const LABOUR_UNITS = [
+  { value: 'szt.', label: 'szt. (sztuki)' },
+  { value: 'm', label: 'm (metry)' },
+  { value: 'm2', label: 'm² (metry kwadratowe)' },
+  { value: 'm3', label: 'm³ (metry sześcienne)' },
+  { value: 'kg', label: 'kg (kilogramy)' },
+  { value: 'kpl.', label: 'kpl. (komplet)' },
+  { value: 'godz.', label: 'godz. (godziny)' },
+  { value: 'mb', label: 'mb (metry bieżące)' },
+  { value: 'm.b.', label: 'm.b. (metry bieżące)' },
+  { value: 'op.', label: 'op. (opakowanie)' },
+  { value: 'rg', label: 'rg (roboczogodziny)' },
+  { value: 'mtg', label: 'mtg (maszynogodziny)' },
+  { value: 'pkt', label: 'pkt (punkty)' },
+  { value: 'zest.', label: 'zest. (zestawy)' },
 ];
 
 // ============ Категории материалов — теперь динамические (user-created) ============
@@ -195,6 +218,39 @@ export const DictionariesPage: React.FC = () => {
   const [equipmentImages, setEquipmentImages] = useState<string[]>([]);
   const [addToEquipmentCatalogModal, setAddToEquipmentCatalogModal] = useState<{ product: any; wholesaler: string } | null>(null);
   const [eqPriceSyncMode, setEqPriceSyncMode] = useState<'fixed' | 'synced'>('fixed');
+
+  // ============ Robocizna — Katalog Systemowy ============
+  const [labourSubTab, setLabourSubTab] = useState<'system' | 'own'>('system');
+  const [systemLabours, setSystemLabours] = useState<KosztorysSystemLabour[]>([]);
+  const [systemLabourCategories, setSystemLabourCategories] = useState<KosztorysSystemLabourCategory[]>([]);
+  const [systemLabourSearch, setSystemLabourSearch] = useState('');
+  const [selectedSystemCategory, setSelectedSystemCategory] = useState<string | null>(null);
+  const [expandedSystemCategories, setExpandedSystemCategories] = useState<Set<string>>(new Set());
+  const [systemLabourDetail, setSystemLabourDetail] = useState<KosztorysSystemLabour | null>(null);
+  const [systemLabourLoading, setSystemLabourLoading] = useState(false);
+
+  // ============ Robocizna — Katalog Własny ============
+  const [ownLabours, setOwnLabours] = useState<KosztorysOwnLabour[]>([]);
+  const [ownLabourCategories, setOwnLabourCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
+  const [ownLabourSearch, setOwnLabourSearch] = useState('');
+  const [selectedOwnLabourCategory, setSelectedOwnLabourCategory] = useState<string | null>(null);
+  const [expandedOwnLabourCategories, setExpandedOwnLabourCategories] = useState<Set<string>>(new Set());
+  const [ownLabourDialog, setOwnLabourDialog] = useState(false);
+  const [editingOwnLabour, setEditingOwnLabour] = useState<Partial<KosztorysOwnLabour> | null>(null);
+  const [autoGenerateLabourCode, setAutoGenerateLabourCode] = useState(true);
+  const [ownLabourMaterials, setOwnLabourMaterials] = useState<KosztorysOwnLabourMaterial[]>([]);
+  const [ownLabourEquipment, setOwnLabourEquipment] = useState<KosztorysOwnLabourEquipment[]>([]);
+  const [deleteOwnLabourConfirm, setDeleteOwnLabourConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [newOwnLabourCategoryName, setNewOwnLabourCategoryName] = useState('');
+  const [showAddOwnLabourCategory, setShowAddOwnLabourCategory] = useState(false);
+  const [addOwnLabourSubcategoryParentId, setAddOwnLabourSubcategoryParentId] = useState<string | null>(null);
+  const [editingOwnLabourCategoryId, setEditingOwnLabourCategoryId] = useState<string | null>(null);
+  const [editingOwnLabourCategoryName, setEditingOwnLabourCategoryName] = useState('');
+  const [deleteOwnLabourCategoryConfirm, setDeleteOwnLabourCategoryConfirm] = useState<{ id: string; name: string; parent_id?: string | null } | null>(null);
+  const [materialSearchModal, setMaterialSearchModal] = useState(false);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState('');
+  const [equipmentSearchModal, setEquipmentSearchModal] = useState(false);
+  const [equipmentSearchQuery, setEquipmentSearchQuery] = useState('');
 
   // ============ Шаблонные задания ============
   const [templateTasks, setTemplateTasks] = useState<any[]>([]);
@@ -852,6 +908,364 @@ export const DictionariesPage: React.FC = () => {
     }
   };
 
+  // ============ Robocizna — Katalog Systemowy (loading) ============
+  const loadSystemLabours = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_system_labours')
+        .select('*')
+        .eq('is_active', true)
+        .order('category_path', { ascending: true })
+        .order('code', { ascending: true });
+      if (error) throw error;
+      setSystemLabours(data || []);
+    } catch (err) {
+      console.error('Error loading system labours:', err);
+      setSystemLabours([]);
+    }
+  };
+
+  const loadSystemLabourCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_system_labour_categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      setSystemLabourCategories(data || []);
+    } catch (err) {
+      console.error('Error loading system labour categories:', err);
+      setSystemLabourCategories([]);
+    }
+  };
+
+  // ============ Robocizna — Katalog Własny (loading) ============
+  const loadOwnLabours = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_own_labours')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      setOwnLabours(data || []);
+    } catch (err) {
+      console.error('Error loading own labours:', err);
+      setOwnLabours([]);
+    }
+  };
+
+  const loadOwnLabourCategories = async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('kosztorys_own_labour_categories')
+        .select('*')
+        .eq('company_id', currentUser.company_id)
+        .order('sort_order', { ascending: true });
+      if (!error) setOwnLabourCategories(data || []);
+    } catch (err) {
+      console.error('Error loading own labour categories:', err);
+    }
+  };
+
+  const loadOwnLabourLinked = async (labourId: string) => {
+    const [matRes, eqRes] = await Promise.all([
+      supabase.from('kosztorys_own_labour_materials').select('*').eq('labour_id', labourId),
+      supabase.from('kosztorys_own_labour_equipment').select('*').eq('labour_id', labourId),
+    ]);
+    setOwnLabourMaterials(matRes.data || []);
+    setOwnLabourEquipment(eqRes.data || []);
+  };
+
+  // ============ Robocizna — Katalog Własny (handlers) ============
+  const generateLabourCode = () => {
+    const prefix = 'ROB';
+    let maxNum = 0;
+    ownLabours.forEach(l => {
+      const match = l.code?.match(/^ROB-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    });
+    return `${prefix}-${String(maxNum + 1).padStart(5, '0')}`;
+  };
+
+  const handleSaveOwnLabour = async () => {
+    if (!editingOwnLabour || !currentUser) return;
+    setSaving(true);
+    const code = autoGenerateLabourCode && !editingOwnLabour.id ? generateLabourCode() : editingOwnLabour.code;
+
+    try {
+      const labourData: any = {
+        code,
+        name: editingOwnLabour.name,
+        unit: editingOwnLabour.unit || 'szt.',
+        price: editingOwnLabour.price || 0,
+        time_hours: editingOwnLabour.time_hours || 0,
+        time_minutes: editingOwnLabour.time_minutes || 0,
+        cost_type: editingOwnLabour.cost_type || 'rg',
+        cost_ryczalt: editingOwnLabour.cost_ryczalt || null,
+        is_active: editingOwnLabour.is_active ?? true,
+        description: editingOwnLabour.description || null,
+        category: editingOwnLabour.category || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (editingOwnLabour.id) {
+        const { error } = await supabase
+          .from('kosztorys_own_labours')
+          .update(labourData)
+          .eq('id', editingOwnLabour.id);
+        if (error) throw error;
+        showNotification('Robocizna zaktualizowana', 'success');
+      } else {
+        labourData.company_id = currentUser.company_id;
+        const { data, error } = await supabase
+          .from('kosztorys_own_labours')
+          .insert(labourData)
+          .select()
+          .single();
+        if (error) throw error;
+
+        // Save linked materials & equipment
+        if (data && ownLabourMaterials.length > 0) {
+          await supabase.from('kosztorys_own_labour_materials').insert(
+            ownLabourMaterials.map(m => ({ ...m, id: undefined, labour_id: data.id }))
+          );
+        }
+        if (data && ownLabourEquipment.length > 0) {
+          await supabase.from('kosztorys_own_labour_equipment').insert(
+            ownLabourEquipment.map(e => ({ ...e, id: undefined, labour_id: data.id }))
+          );
+        }
+        showNotification('Robocizna dodana', 'success');
+      }
+
+      setOwnLabourDialog(false);
+      setEditingOwnLabour(null);
+      setOwnLabourMaterials([]);
+      setOwnLabourEquipment([]);
+      setAutoGenerateLabourCode(true);
+      await loadOwnLabours();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas zapisywania', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteOwnLabour = async (id: string) => {
+    try {
+      const { error } = await supabase.from('kosztorys_own_labours').delete().eq('id', id);
+      if (error) throw error;
+      showNotification('Robocizna usunięta', 'success');
+      await loadOwnLabours();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd podczas usuwania', 'error');
+    }
+    setDeleteOwnLabourConfirm(null);
+  };
+
+  const handleAddSystemLabourToOwn = async (sysLabour: KosztorysSystemLabour) => {
+    if (!currentUser) return;
+    const code = generateLabourCode();
+    try {
+      const { error } = await supabase.from('kosztorys_own_labours').insert({
+        company_id: currentUser.company_id,
+        code,
+        name: sysLabour.name,
+        unit: sysLabour.unit,
+        price: sysLabour.price_unit || 0,
+        time_hours: 0,
+        time_minutes: 0,
+        cost_type: 'rg',
+        is_active: true,
+        description: sysLabour.description || null,
+        category: sysLabour.category_name || null,
+      });
+      if (error) throw error;
+      showNotification('Dodano do katalogu własnego', 'success');
+      await loadOwnLabours();
+    } catch (error: any) {
+      showNotification(error.message || 'Błąd', 'error');
+    }
+  };
+
+  // ============ Own labour categories handlers ============
+  const handleAddOwnLabourCategory = async (parentId?: string | null) => {
+    if (!newOwnLabourCategoryName.trim() || !currentUser?.company_id) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_own_labour_categories')
+        .insert({
+          company_id: currentUser.company_id,
+          name: newOwnLabourCategoryName.trim(),
+          sort_order: ownLabourCategories.length,
+          parent_id: parentId || null,
+        });
+      if (error) throw error;
+      setNewOwnLabourCategoryName('');
+      setShowAddOwnLabourCategory(false);
+      setAddOwnLabourSubcategoryParentId(null);
+      if (parentId) setExpandedOwnLabourCategories(prev => new Set([...prev, parentId]));
+      await loadOwnLabourCategories();
+      showNotification('Kategoria dodana', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleRenameOwnLabourCategory = async (id: string) => {
+    if (!editingOwnLabourCategoryName.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('kosztorys_own_labour_categories')
+        .update({ name: editingOwnLabourCategoryName.trim() })
+        .eq('id', id);
+      if (error) throw error;
+
+      const oldCat = ownLabourCategories.find(c => c.id === id);
+      if (oldCat && oldCat.name !== editingOwnLabourCategoryName.trim()) {
+        await supabase
+          .from('kosztorys_own_labours')
+          .update({ category: editingOwnLabourCategoryName.trim() })
+          .eq('category', oldCat.name)
+          .eq('company_id', currentUser?.company_id);
+      }
+
+      setEditingOwnLabourCategoryId(null);
+      setEditingOwnLabourCategoryName('');
+      await loadOwnLabourCategories();
+      await loadOwnLabours();
+      showNotification('Kategoria zmieniona', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const handleDeleteOwnLabourCategory = async (id: string) => {
+    const cat = ownLabourCategories.find(c => c.id === id);
+    if (!cat) return;
+    try {
+      const parentCat = cat.parent_id ? ownLabourCategories.find(c => c.id === cat.parent_id) : null;
+      const newCategory = parentCat?.name || null;
+
+      await supabase
+        .from('kosztorys_own_labours')
+        .update({ category: newCategory })
+        .eq('category', cat.name)
+        .eq('company_id', currentUser?.company_id);
+
+      await supabase
+        .from('kosztorys_own_labour_categories')
+        .update({ parent_id: cat.parent_id || null })
+        .eq('parent_id', id);
+
+      const { error } = await supabase.from('kosztorys_own_labour_categories').delete().eq('id', id);
+      if (error) throw error;
+
+      setDeleteOwnLabourCategoryConfirm(null);
+      if (selectedOwnLabourCategory === cat.name) setSelectedOwnLabourCategory(null);
+      await loadOwnLabourCategories();
+      await loadOwnLabours();
+      showNotification('Kategoria usunięta', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Błąd', 'error');
+    }
+  };
+
+  const getOwnLabourCatChildren = (parentId: string | null): typeof ownLabourCategories =>
+    ownLabourCategories.filter(c => (c.parent_id || null) === parentId);
+
+  const getOwnLabourCatCount = (catName: string): number => {
+    const cat = ownLabourCategories.find(c => c.name === catName);
+    if (!cat) return 0;
+    const directCount = ownLabours.filter(l => l.category === catName).length;
+    const children = ownLabourCategories.filter(c => c.parent_id === cat.id);
+    return directCount + children.reduce((sum, ch) => sum + getOwnLabourCatCount(ch.name), 0);
+  };
+
+  const getOwnLabourCatSubtreeNames = (catName: string): string[] => {
+    const cat = ownLabourCategories.find(c => c.name === catName);
+    if (!cat) return [catName];
+    const children = ownLabourCategories.filter(c => c.parent_id === cat.id);
+    return [catName, ...children.flatMap(ch => getOwnLabourCatSubtreeNames(ch.name))];
+  };
+
+  // System category helpers
+  const getSystemCatChildren = (parentId: string | null): KosztorysSystemLabourCategory[] =>
+    systemLabourCategories.filter(c => (c.parent_id || null) === parentId).sort((a, b) => a.sort_order - b.sort_order);
+
+  const getSystemCatLabourCount = (catPath: string): number => {
+    return systemLabours.filter(l => l.category_path?.startsWith(catPath)).length;
+  };
+
+  // Linked material/equipment handlers for own labour edit modal
+  const handleAddLinkedMaterial = (mat: KosztorysMaterial) => {
+    setOwnLabourMaterials(prev => [...prev, {
+      id: crypto.randomUUID(),
+      labour_id: editingOwnLabour?.id || '',
+      material_name: mat.name,
+      material_price: (mat as any).purchase_price || mat.default_price || 0,
+      material_quantity: 1,
+      source_material_id: mat.id,
+    }]);
+    setMaterialSearchModal(false);
+    setMaterialSearchQuery('');
+  };
+
+  const handleAddLinkedEquipment = (eq: KosztorysEquipment) => {
+    setOwnLabourEquipment(prev => [...prev, {
+      id: crypto.randomUUID(),
+      labour_id: editingOwnLabour?.id || '',
+      equipment_name: eq.name,
+      equipment_price: (eq as any).purchase_price || eq.default_price || 0,
+      equipment_quantity: 1,
+      source_equipment_id: eq.id,
+    }]);
+    setEquipmentSearchModal(false);
+    setEquipmentSearchQuery('');
+  };
+
+  const handleSaveLinkedItems = async (labourId: string) => {
+    // Delete old and re-insert
+    await supabase.from('kosztorys_own_labour_materials').delete().eq('labour_id', labourId);
+    await supabase.from('kosztorys_own_labour_equipment').delete().eq('labour_id', labourId);
+
+    if (ownLabourMaterials.length > 0) {
+      await supabase.from('kosztorys_own_labour_materials').insert(
+        ownLabourMaterials.map(m => ({
+          labour_id: labourId,
+          material_name: m.material_name,
+          material_price: m.material_price,
+          material_quantity: m.material_quantity,
+          source_material_id: m.source_material_id || null,
+          source_wholesaler: m.source_wholesaler || null,
+          source_sku: m.source_sku || null,
+          source_url: m.source_url || null,
+        }))
+      );
+    }
+    if (ownLabourEquipment.length > 0) {
+      await supabase.from('kosztorys_own_labour_equipment').insert(
+        ownLabourEquipment.map(e => ({
+          labour_id: labourId,
+          equipment_name: e.equipment_name,
+          equipment_price: e.equipment_price,
+          equipment_quantity: e.equipment_quantity,
+          source_equipment_id: e.source_equipment_id || null,
+          source_wholesaler: e.source_wholesaler || null,
+          source_sku: e.source_sku || null,
+          source_url: e.source_url || null,
+        }))
+      );
+    }
+  };
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -869,6 +1283,10 @@ export const DictionariesPage: React.FC = () => {
         loadCustomManufacturers(),
         loadCustomUnits(),
         loadEquipmentCategories(),
+        loadSystemLabours(),
+        loadSystemLabourCategories(),
+        loadOwnLabours(),
+        loadOwnLabourCategories(),
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -1485,6 +1903,31 @@ export const DictionariesPage: React.FC = () => {
       wt.code?.toLowerCase().includes(workTypeSearch.toLowerCase()) ||
       wt.name?.toLowerCase().includes(workTypeSearch.toLowerCase())
     ), [workTypes, workTypeSearch]);
+
+  const filteredSystemLabours = useMemo(() =>
+    systemLabours.filter(l => {
+      const matchesSearch = !systemLabourSearch ||
+        l.code?.toLowerCase().includes(systemLabourSearch.toLowerCase()) ||
+        l.name?.toLowerCase().includes(systemLabourSearch.toLowerCase()) ||
+        l.tags?.toLowerCase().includes(systemLabourSearch.toLowerCase());
+      const matchesCat = !selectedSystemCategory || l.category_path?.startsWith(selectedSystemCategory);
+      return matchesSearch && matchesCat;
+    }), [systemLabours, systemLabourSearch, selectedSystemCategory]);
+
+  const filteredOwnLabours = useMemo(() =>
+    ownLabours.filter(l => {
+      const matchesSearch = !ownLabourSearch ||
+        l.code?.toLowerCase().includes(ownLabourSearch.toLowerCase()) ||
+        l.name?.toLowerCase().includes(ownLabourSearch.toLowerCase());
+      let matchesCat = true;
+      if (selectedOwnLabourCategory === '__none__') {
+        matchesCat = !l.category;
+      } else if (selectedOwnLabourCategory) {
+        const validNames = getOwnLabourCatSubtreeNames(selectedOwnLabourCategory);
+        matchesCat = validNames.includes(l.category || '');
+      }
+      return matchesSearch && matchesCat;
+    }), [ownLabours, ownLabourSearch, selectedOwnLabourCategory, ownLabourCategories]);
 
   // Collect all category names in subtree (for filtering when parent selected)
   const getCategorySubtreeNames = (catName: string): string[] => {
@@ -2872,196 +3315,747 @@ export const DictionariesPage: React.FC = () => {
   );
 
   // ============ Render Work Types Tab ============
-  const renderWorkTypesTab = () => (
+  const renderWorkTypesTab = () => {
+    const materialCostSum = ownLabourMaterials.reduce((sum, m) => sum + (m.material_price || 0) * (m.material_quantity || 1), 0);
+    const equipmentCostSum = ownLabourEquipment.reduce((sum, e) => sum + (e.equipment_price || 0) * (e.equipment_quantity || 1), 0);
+    const canSaveLabour = editingOwnLabour?.name && (autoGenerateLabourCode || editingOwnLabour.code);
+
+    // Search modal filtered results
+    const searchedMaterials = materialSearchQuery.length >= 2
+      ? materials.filter(m => m.name?.toLowerCase().includes(materialSearchQuery.toLowerCase()) || m.code?.toLowerCase().includes(materialSearchQuery.toLowerCase())).slice(0, 30)
+      : [];
+    const searchedEquipment = equipmentSearchQuery.length >= 2
+      ? equipment.filter(e => e.name?.toLowerCase().includes(equipmentSearchQuery.toLowerCase()) || e.code?.toLowerCase().includes(equipmentSearchQuery.toLowerCase())).slice(0, 30)
+      : [];
+
+    return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Szukaj..."
-            value={workTypeSearch}
-            onChange={(e) => setWorkTypeSearch(e.target.value)}
-            className="pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+      {/* Sub-tabs */}
+      <div className="flex gap-1 mb-4 bg-slate-100 rounded-lg p-1 w-fit">
         <button
-          onClick={() => {
-            setEditingWorkType({ is_active: true, labor_hours: 1 });
-            setWorkTypeDialog(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          onClick={() => setLabourSubTab('system')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${labourSubTab === 'system' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
         >
-          <Plus className="w-4 h-4" />
-          Dodaj typ pracy
+          Katalog Systemowy
+        </button>
+        <button
+          onClick={() => setLabourSubTab('own')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${labourSubTab === 'own' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+        >
+          Katalog Własny
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Kategoria</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Jednostka</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">R-g</th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Akcje</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-slate-200">
-            {filteredWorkTypes.map((wt) => (
-              <tr key={wt.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm font-medium text-slate-900">{wt.code}</td>
-                <td className="px-4 py-3 text-sm text-slate-600">{wt.name}</td>
-                <td className="px-4 py-3">
-                  <span className="px-2 py-1 text-xs rounded-full bg-slate-100 text-slate-700">
-                    {WORK_CATEGORIES.find(c => c.value === wt.category)?.label || wt.category}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-600">{wt.unit}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 text-right">{wt.labor_hours}</td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-1 text-xs rounded-full ${wt.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {wt.is_active ? 'Aktywny' : 'Nieaktywny'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => {
-                      setEditingWorkType(wt);
-                      setWorkTypeDialog(true);
-                    }}
-                    className="p-1 text-slate-400 hover:text-blue-600"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm({ type: 'workType', id: wt.id })}
-                    className="p-1 text-slate-400 hover:text-red-600 ml-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filteredWorkTypes.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                  Brak typów prac
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* ========== KATALOG SYSTEMOWY ========== */}
+      {labourSubTab === 'system' && (
+        <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 360px)', minHeight: 500 }}>
+          {/* Left sidebar: System categories */}
+          <div className="w-64 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+            <div className="px-3 py-2.5 border-b border-slate-200">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+            </div>
+            <div className="py-1">
+              <button
+                onClick={() => setSelectedSystemCategory(null)}
+                className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                  !selectedSystemCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                <span className="truncate">Wszystkie</span>
+                <span className="ml-auto text-[10px] text-slate-400">{systemLabours.length}</span>
+              </button>
 
-      {/* Work Type Dialog */}
-      <Modal
-        isOpen={workTypeDialog}
-        onClose={() => setWorkTypeDialog(false)}
-        title={editingWorkType?.id ? 'Edytuj typ pracy' : 'Dodaj typ pracy'}
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kod *</label>
-              <input
-                type="text"
-                value={editingWorkType?.code || ''}
-                onChange={(e) => setEditingWorkType({ ...editingWorkType, code: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
-              <select
-                value={editingWorkType?.category || ''}
-                onChange={(e) => setEditingWorkType({ ...editingWorkType, category: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Wybierz...</option>
-                {WORK_CATEGORIES.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
-            <input
-              type="text"
-              value={editingWorkType?.name || ''}
-              onChange={(e) => setEditingWorkType({ ...editingWorkType, name: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
-              <select
-                value={editingWorkType?.unit || ''}
-                onChange={(e) => setEditingWorkType({ ...editingWorkType, unit: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Wybierz...</option>
-                {DEFAULT_UNITS.map(u => (
-                  <option key={u.value} value={u.value}>{u.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">R-g (godz.)</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                value={editingWorkType?.labor_hours || ''}
-                onChange={(e) => setEditingWorkType({ ...editingWorkType, labor_hours: parseFloat(e.target.value) })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+              {(() => {
+                const renderSysCatNode = (cat: KosztorysSystemLabourCategory, depth: number): React.ReactNode => {
+                  const children = getSystemCatChildren(cat.id);
+                  const hasChildren = children.length > 0;
+                  const isExpanded = expandedSystemCategories.has(cat.id);
+                  const count = getSystemCatLabourCount(cat.path || cat.name);
+
+                  return (
+                    <div key={cat.id}>
+                      <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
+                        <button
+                          onClick={() => {
+                            setSelectedSystemCategory(cat.path || cat.name);
+                            if (hasChildren) {
+                              setExpandedSystemCategories(prev => {
+                                const next = new Set(prev);
+                                if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                return next;
+                              });
+                            }
+                          }}
+                          className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${
+                            selectedSystemCategory === (cat.path || cat.name)
+                              ? 'bg-blue-50 text-blue-700 font-semibold'
+                              : 'text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {hasChildren ? (
+                            <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          ) : (
+                            <span className="w-3 flex-shrink-0" />
+                          )}
+                          <FolderOpen className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                          <span className="truncate">{cat.name}</span>
+                          <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{count}</span>
+                        </button>
+                      </div>
+                      {isExpanded && hasChildren && children.map(child => renderSysCatNode(child, depth + 1))}
+                    </div>
+                  );
+                };
+                return getSystemCatChildren(null).map(cat => renderSysCatNode(cat, 0));
+              })()}
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
-            <textarea
-              value={editingWorkType?.description || ''}
-              onChange={(e) => setEditingWorkType({ ...editingWorkType, description: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="wt-active"
-              checked={editingWorkType?.is_active ?? true}
-              onChange={(e) => setEditingWorkType({ ...editingWorkType, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 rounded border-slate-300"
-            />
-            <label htmlFor="wt-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+
+          {/* Main content: System labours table */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
+              <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+                <Search className="w-4 h-4 text-slate-400" />
+                <input
+                  value={systemLabourSearch}
+                  onChange={e => setSystemLabourSearch(e.target.value)}
+                  placeholder="Szukaj robocizny..."
+                  className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400"
+                />
+                {systemLabourSearch && (
+                  <button onClick={() => setSystemLabourSearch('')} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <span className="text-xs text-slate-400 whitespace-nowrap">{filteredSystemLabours.length} pozycji</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
+                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
+                    <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
+                    <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100">
+                  {filteredSystemLabours.slice(0, 200).map(l => (
+                    <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSystemLabourDetail(l)}>
+                      <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
+                      <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
+                      <td className="px-3 py-2 text-xs text-slate-500">{l.unit}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price_unit ? `${l.price_unit.toFixed(2)} zł` : '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleAddSystemLabourToOwn(l); }}
+                          className="p-1 text-slate-300 hover:text-green-600 rounded hover:bg-green-50"
+                          title="Dodaj do katalogu własnego"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredSystemLabours.length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">Brak wyników</td></tr>
+                  )}
+                  {filteredSystemLabours.length > 200 && (
+                    <tr><td colSpan={5} className="px-4 py-3 text-center text-xs text-slate-400">
+                      Pokazano 200 z {filteredSystemLabours.length} — użyj wyszukiwania lub wybierz kategorię
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* System labour detail modal */}
+      <Modal isOpen={!!systemLabourDetail} onClose={() => setSystemLabourDetail(null)} title="Szczegóły robocizny systemowej" size="lg">
+        {systemLabourDetail && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Kod</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800 font-mono">{systemLabourDetail.code}</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Jednostka</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800">{systemLabourDetail.unit}</div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa</label>
+              <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800">{systemLabourDetail.name}</div>
+            </div>
+            {systemLabourDetail.description && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Opis</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-600">{systemLabourDetail.description}</div>
+              </div>
+            )}
+            {systemLabourDetail.comments && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Komentarz</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-600">{systemLabourDetail.comments}</div>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Cena jednostkowa</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800">{systemLabourDetail.price_unit ? `${systemLabourDetail.price_unit.toFixed(2)} zł` : '—'}</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">PKWiU</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800">{systemLabourDetail.pkwiu || '—'}</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Kategoria</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-800">{systemLabourDetail.category_name || '—'}</div>
+              </div>
+            </div>
+            {systemLabourDetail.tags && (
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">Tagi</label>
+                <div className="px-3 py-2 bg-slate-50 rounded text-sm text-slate-600">{systemLabourDetail.tags}</div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
+              <button onClick={() => setSystemLabourDetail(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">
+                Zamknij
+              </button>
+              <button
+                onClick={() => { handleAddSystemLabourToOwn(systemLabourDetail); setSystemLabourDetail(null); }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj do katalogu własnego
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ========== KATALOG WŁASNY ========== */}
+      {labourSubTab === 'own' && (
+        <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white" style={{ height: 'calc(100vh - 360px)', minHeight: 500 }}>
+          {/* Left sidebar: Own categories */}
+          <div className="w-60 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-slate-50">
+            <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kategorie</span>
+              <button
+                onClick={() => { setShowAddOwnLabourCategory(true); setAddOwnLabourSubcategoryParentId(null); setNewOwnLabourCategoryName(''); }}
+                className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                title="Dodaj kategorię"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="py-1">
+              <button
+                onClick={() => setSelectedOwnLabourCategory(null)}
+                className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                  !selectedOwnLabourCategory ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                <span className="truncate">Wszystkie</span>
+                <span className="ml-auto text-[10px] text-slate-400">{ownLabours.length}</span>
+              </button>
+
+              {(() => {
+                const renderOwnCatNode = (cat: typeof ownLabourCategories[0], depth: number): React.ReactNode => {
+                  const children = getOwnLabourCatChildren(cat.id);
+                  const hasChildren = children.length > 0;
+                  const isExpanded = expandedOwnLabourCategories.has(cat.id);
+                  const isEditing = editingOwnLabourCategoryId === cat.id;
+                  const isAddingSub = addOwnLabourSubcategoryParentId === cat.id;
+                  const totalCount = getOwnLabourCatCount(cat.name);
+
+                  return (
+                    <div key={cat.id}>
+                      {isEditing ? (
+                        <div className="px-1.5 py-1" style={{ paddingLeft: 6 + depth * 14 }}>
+                          <input autoFocus value={editingOwnLabourCategoryName} onChange={e => setEditingOwnLabourCategoryName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleRenameOwnLabourCategory(cat.id); if (e.key === 'Escape') { setEditingOwnLabourCategoryId(null); setEditingOwnLabourCategoryName(''); } }}
+                            className="w-full px-2 py-1 text-xs border border-blue-400 rounded focus:ring-1 focus:ring-blue-500 mb-1" />
+                          <div className="flex gap-1">
+                            <button onClick={() => handleRenameOwnLabourCategory(cat.id)} className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Zapisz</button>
+                            <button onClick={() => setDeleteOwnLabourCategoryConfirm({ id: cat.id, name: cat.name, parent_id: cat.parent_id })} className="py-0.5 px-2 bg-red-50 text-red-600 rounded text-[10px] hover:bg-red-100"><Trash2 className="w-3 h-3" /></button>
+                            <button onClick={() => { setEditingOwnLabourCategoryId(null); setEditingOwnLabourCategoryName(''); }} className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="group flex items-center" style={{ paddingLeft: depth * 14 }}>
+                          <button
+                            onClick={() => {
+                              setSelectedOwnLabourCategory(cat.name);
+                              if (hasChildren) {
+                                setExpandedOwnLabourCategories(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                  return next;
+                                });
+                              }
+                            }}
+                            className={`flex-1 text-left flex items-center gap-1 py-1.5 px-2 text-xs rounded transition-colors min-w-0 ${
+                              selectedOwnLabourCategory === cat.name ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {hasChildren ? <ChevronRight className={`w-3 h-3 flex-shrink-0 opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`} /> : <span className="w-3 flex-shrink-0" />}
+                            <FolderOpen className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
+                            <span className="truncate">{cat.name}</span>
+                            <span className="ml-auto text-[10px] text-slate-400 flex-shrink-0">{totalCount}</span>
+                          </button>
+                          <div className="flex items-center gap-0.5 pr-1 flex-shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingOwnLabourCategoryId(cat.id); setEditingOwnLabourCategoryName(cat.name); }} className="p-0.5 text-slate-400 hover:text-blue-600 rounded" title="Edytuj"><Pencil className="w-3 h-3" /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setAddOwnLabourSubcategoryParentId(cat.id); setShowAddOwnLabourCategory(false); setNewOwnLabourCategoryName(''); setExpandedOwnLabourCategories(prev => new Set([...prev, cat.id])); }} className="p-0.5 text-slate-400 hover:text-green-600 rounded" title="Dodaj podkategorię"><Plus className="w-3 h-3" /></button>
+                          </div>
+                        </div>
+                      )}
+                      {isExpanded && hasChildren && children.map(child => renderOwnCatNode(child, depth + 1))}
+                      {isAddingSub && (
+                        <div className="px-1.5 py-1" style={{ paddingLeft: 12 + (depth + 1) * 14 }}>
+                          <input autoFocus value={newOwnLabourCategoryName} onChange={e => setNewOwnLabourCategoryName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleAddOwnLabourCategory(cat.id); if (e.key === 'Escape') { setAddOwnLabourSubcategoryParentId(null); setNewOwnLabourCategoryName(''); } }}
+                            placeholder="Nazwa podkategorii..." className="w-full px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500 mb-1" />
+                          <div className="flex gap-1">
+                            <button onClick={() => handleAddOwnLabourCategory(cat.id)} className="flex-1 py-0.5 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                            <button onClick={() => { setAddOwnLabourSubcategoryParentId(null); setNewOwnLabourCategoryName(''); }} className="flex-1 py-0.5 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                };
+                return getOwnLabourCatChildren(null).map(cat => renderOwnCatNode(cat, 0));
+              })()}
+
+              {ownLabours.some(l => !l.category) && (
+                <button
+                  onClick={() => setSelectedOwnLabourCategory('__none__')}
+                  className={`w-full text-left flex items-center gap-1.5 py-1.5 px-2.5 text-xs rounded transition-colors ${
+                    selectedOwnLabourCategory === '__none__' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <FolderOpen className="w-3.5 h-3.5 opacity-40" />
+                  <span className="truncate">Bez kategorii</span>
+                  <span className="ml-auto text-[10px] text-slate-400">{ownLabours.filter(l => !l.category).length}</span>
+                </button>
+              )}
+            </div>
+
+            {showAddOwnLabourCategory && !addOwnLabourSubcategoryParentId && (
+              <div className="px-2 py-2 border-t border-slate-200">
+                <input autoFocus value={newOwnLabourCategoryName} onChange={e => setNewOwnLabourCategoryName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddOwnLabourCategory(null); if (e.key === 'Escape') { setShowAddOwnLabourCategory(false); setNewOwnLabourCategoryName(''); } }}
+                  placeholder="Nazwa kategorii..." className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500" />
+                <div className="flex gap-1 mt-1">
+                  <button onClick={() => handleAddOwnLabourCategory(null)} className="flex-1 py-1 bg-blue-600 text-white rounded text-[10px] hover:bg-blue-700">Dodaj</button>
+                  <button onClick={() => { setShowAddOwnLabourCategory(false); setNewOwnLabourCategoryName(''); }} className="flex-1 py-1 border border-slate-300 rounded text-[10px] hover:bg-slate-50">Anuluj</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Main content: Own labours table */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-3 bg-white">
+              <div className="flex-1 max-w-md flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+                <Search className="w-4 h-4 text-slate-400" />
+                <input value={ownLabourSearch} onChange={e => setOwnLabourSearch(e.target.value)}
+                  placeholder="Szukaj robocizny..." className="flex-1 bg-transparent border-none px-2.5 py-2 text-sm outline-none text-slate-700 placeholder-slate-400" />
+                {ownLabourSearch && <button onClick={() => setOwnLabourSearch('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>}
+              </div>
+              <span className="text-xs text-slate-400 whitespace-nowrap">{filteredOwnLabours.length} pozycji</span>
+              <button
+                onClick={() => {
+                  setEditingOwnLabour({ is_active: true, time_hours: 0, time_minutes: 0, cost_type: 'rg' } as any);
+                  setAutoGenerateLabourCode(true);
+                  setOwnLabourMaterials([]);
+                  setOwnLabourEquipment([]);
+                  setOwnLabourDialog(true);
+                }}
+                className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj Robociznę
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {filteredOwnLabours.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <Wrench className="w-12 h-12 text-slate-200 mb-4" />
+                  <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog robocizny</h3>
+                  <p className="text-sm text-slate-400 max-w-sm">
+                    {ownLabourSearch ? `Brak wyników dla «${ownLabourSearch}»` : 'Dodaj robocizny ręcznie lub importuj z katalogu systemowego.'}
+                  </p>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
+                      <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
+                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Czas</th>
+                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Mat.</th>
+                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Spr.</th>
+                      <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Akcje</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-slate-100">
+                    {filteredOwnLabours.map(l => (
+                      <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={async () => {
+                        setEditingOwnLabour(l);
+                        setAutoGenerateLabourCode(false);
+                        await loadOwnLabourLinked(l.id);
+                        setOwnLabourDialog(true);
+                      }}>
+                        <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
+                        <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500">{l.unit || '—'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price ? `${l.price.toFixed(2)} zł` : '—'}</td>
+                        <td className="px-3 py-2 text-xs text-slate-500 text-center">{String(l.time_hours || 0).padStart(2, '0')}:{String(l.time_minutes || 0).padStart(2, '0')}</td>
+                        <td className="px-3 py-2 text-center"><Package className={`w-3.5 h-3.5 inline-block ${l.materials && l.materials.length > 0 ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                        <td className="px-3 py-2 text-center"><Monitor className={`w-3.5 h-3.5 inline-block ${l.equipment && l.equipment.length > 0 ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                        <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setDeleteOwnLabourConfirm({ id: l.id, name: l.name })} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete own labour confirm */}
+      <Modal isOpen={!!deleteOwnLabourConfirm} onClose={() => setDeleteOwnLabourConfirm(null)} title="Usunąć robociznę?" size="sm">
+        {deleteOwnLabourConfirm && (
+          <div>
+            <p className="text-sm text-slate-600 mb-4">Czy na pewno chcesz usunąć <strong>{deleteOwnLabourConfirm.name}</strong>?</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteOwnLabourConfirm(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={() => handleDeleteOwnLabour(deleteOwnLabourConfirm.id)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Usuń</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete own labour category confirm */}
+      <Modal isOpen={!!deleteOwnLabourCategoryConfirm} onClose={() => setDeleteOwnLabourCategoryConfirm(null)} title="Usunąć kategorię?" size="sm">
+        {deleteOwnLabourCategoryConfirm && (
+          <div>
+            <p className="text-sm text-slate-600 mb-4">Kategoria <strong>{deleteOwnLabourCategoryConfirm.name}</strong> zostanie usunięta. Robocizny zostaną przeniesione do kategorii nadrzędnej.</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteOwnLabourCategoryConfirm(null)} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+              <button onClick={() => handleDeleteOwnLabourCategory(deleteOwnLabourCategoryConfirm.id)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Usuń</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ========== OWN LABOUR EDIT/CREATE MODAL ========== */}
+      <Modal isOpen={ownLabourDialog} onClose={() => { setOwnLabourDialog(false); setEditingOwnLabour(null); }} title={editingOwnLabour?.id ? 'Edytuj robociznę' : 'Dodaj robociznę'} size="xl">
+        {editingOwnLabour && (
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {/* Code + Auto-generate */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kod robocizny</label>
+                <div className="flex items-center gap-2">
+                  <input type="text" value={editingOwnLabour.code || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, code: e.target.value })}
+                    disabled={autoGenerateLabourCode} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400 text-sm" placeholder={autoGenerateLabourCode ? 'Auto' : 'ROB-XXXXX'} />
+                  <label className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
+                    <input type="checkbox" checked={autoGenerateLabourCode} onChange={e => setAutoGenerateLabourCode(e.target.checked)} className="h-3.5 w-3.5 text-blue-600 rounded border-slate-300" />
+                    Auto
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Kategoria</label>
+                <select value={editingOwnLabour.category || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, category: e.target.value || undefined })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                  <option value="">Bez kategorii</option>
+                  {ownLabourCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa *</label>
+              <input type="text" value={editingOwnLabour.name || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, name: e.target.value })}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" />
+            </div>
+
+            {/* Unit + Price */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jednostka</label>
+                <select value={editingOwnLabour.unit || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, unit: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm">
+                  <option value="">Wybierz...</option>
+                  {LABOUR_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cena (sprzedaży)</label>
+                <input type="number" step="0.01" min="0" value={editingOwnLabour.price || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, price: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="0.00 zł" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Czasochłonność (HH:MM)</label>
+                <div className="flex items-center gap-1">
+                  <input type="number" min="0" max="999" value={editingOwnLabour.time_hours || 0} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, time_hours: parseInt(e.target.value) || 0 })}
+                    className="w-16 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-center" />
+                  <span className="text-slate-400">:</span>
+                  <input type="number" min="0" max="59" value={editingOwnLabour.time_minutes || 0} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, time_minutes: Math.min(59, parseInt(e.target.value) || 0) })}
+                    className="w-16 px-2 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm text-center" />
+                </div>
+              </div>
+            </div>
+
+            {/* Cost type toggle */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Koszt robocizny</label>
+              <div className="flex gap-2 mb-2">
+                <button onClick={() => setEditingOwnLabour({ ...editingOwnLabour, cost_type: 'rg' })}
+                  className={`px-3 py-1.5 rounded text-sm font-medium ${editingOwnLabour.cost_type === 'rg' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  RG
+                </button>
+                <button onClick={() => setEditingOwnLabour({ ...editingOwnLabour, cost_type: 'ryczalt' })}
+                  className={`px-3 py-1.5 rounded text-sm font-medium ${editingOwnLabour.cost_type === 'ryczalt' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  Ryczałt
+                </button>
+              </div>
+              {editingOwnLabour.cost_type === 'rg' ? (
+                <div className="px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700">
+                  Koszt = Średnia stawka pracowników × Czasochłonność
+                </div>
+              ) : (
+                <input type="number" step="0.01" min="0" value={editingOwnLabour.cost_ryczalt || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, cost_ryczalt: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" placeholder="Kwota ryczałtu..." />
+              )}
+            </div>
+
+            {/* Cost summary */}
+            <div className="grid grid-cols-3 gap-4 p-3 bg-slate-50 rounded-lg">
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Materiału</div>
+                <div className="text-sm font-semibold text-slate-800">{materialCostSum.toFixed(2)} zł</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Sprzętu</div>
+                <div className="text-sm font-semibold text-slate-800">{equipmentCostSum.toFixed(2)} zł</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-slate-500 uppercase font-medium">Zysk</div>
+                <div className={`text-sm font-semibold ${((editingOwnLabour.price || 0) - materialCostSum - equipmentCostSum) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {((editingOwnLabour.price || 0) - materialCostSum - equipmentCostSum).toFixed(2)} zł
+                </div>
+              </div>
+            </div>
+
+            {/* Linked Materials */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-blue-500" />
+                  Materiały ({ownLabourMaterials.length})
+                </label>
+                <button onClick={() => { setMaterialSearchModal(true); setMaterialSearchQuery(''); }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                  <Plus className="w-3 h-3" /> Dodaj materiał
+                </button>
+              </div>
+              {ownLabourMaterials.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-slate-500">Nazwa</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-20">Cena</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-16">Ilość</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-24">Wartość</th>
+                        <th className="px-3 py-2 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ownLabourMaterials.map((m, idx) => (
+                        <tr key={m.id || idx}>
+                          <td className="px-3 py-1.5 text-slate-800">{m.material_name}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-600">{(m.material_price || 0).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min="0.01" step="0.01" value={m.material_quantity} onChange={e => {
+                              const qty = parseFloat(e.target.value) || 1;
+                              setOwnLabourMaterials(prev => prev.map((p, i) => i === idx ? { ...p, material_quantity: qty } : p));
+                            }} className="w-14 px-1 py-0.5 border border-slate-200 rounded text-right text-xs" />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-medium text-slate-800">{((m.material_price || 0) * (m.material_quantity || 1)).toFixed(2)}</td>
+                          <td className="px-3 py-1.5">
+                            <button onClick={() => setOwnLabourMaterials(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 text-slate-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Linked Equipment */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                  <Monitor className="w-4 h-4 text-blue-500" />
+                  Sprzęt ({ownLabourEquipment.length})
+                </label>
+                <button onClick={() => { setEquipmentSearchModal(true); setEquipmentSearchQuery(''); }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                  <Plus className="w-3 h-3" /> Dodaj sprzęt
+                </button>
+              </div>
+              {ownLabourEquipment.length > 0 && (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-slate-200 text-xs">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-[10px] font-medium text-slate-500">Nazwa</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-20">Cena</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-16">Ilość</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-medium text-slate-500 w-24">Wartość</th>
+                        <th className="px-3 py-2 w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ownLabourEquipment.map((e, idx) => (
+                        <tr key={e.id || idx}>
+                          <td className="px-3 py-1.5 text-slate-800">{e.equipment_name}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-600">{(e.equipment_price || 0).toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min="0.01" step="0.01" value={e.equipment_quantity} onChange={ev => {
+                              const qty = parseFloat(ev.target.value) || 1;
+                              setOwnLabourEquipment(prev => prev.map((p, i) => i === idx ? { ...p, equipment_quantity: qty } : p));
+                            }} className="w-14 px-1 py-0.5 border border-slate-200 rounded text-right text-xs" />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-medium text-slate-800">{((e.equipment_price || 0) * (e.equipment_quantity || 1)).toFixed(2)}</td>
+                          <td className="px-3 py-1.5">
+                            <button onClick={() => setOwnLabourEquipment(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 text-slate-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Opis</label>
+              <textarea value={editingOwnLabour.description || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, description: e.target.value })}
+                rows={2} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" />
+            </div>
+
+            {/* Active */}
+            <div className="flex items-center">
+              <input type="checkbox" id="ol-active" checked={editingOwnLabour.is_active ?? true} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, is_active: e.target.checked })}
+                className="h-4 w-4 text-blue-600 rounded border-slate-300" />
+              <label htmlFor="ol-active" className="ml-2 text-sm text-slate-700">Aktywny</label>
+            </div>
+          </div>
+        )}
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-          <button
-            onClick={() => setWorkTypeDialog(false)}
-            className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50"
-          >
-            Anuluj
-          </button>
-          <button
-            onClick={handleSaveWorkType}
-            disabled={saving || !editingWorkType?.code || !editingWorkType?.name}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-          >
+          <button onClick={() => { setOwnLabourDialog(false); setEditingOwnLabour(null); }} className="px-4 py-2 text-slate-700 border border-slate-300 rounded-lg hover:bg-slate-50">Anuluj</button>
+          <button onClick={async () => {
+            await handleSaveOwnLabour();
+            if (editingOwnLabour?.id) await handleSaveLinkedItems(editingOwnLabour.id);
+          }} disabled={saving || !canSaveLabour}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Zapisz
           </button>
         </div>
       </Modal>
+
+      {/* Material search modal */}
+      <Modal isOpen={materialSearchModal} onClose={() => setMaterialSearchModal(false)} title="Wybierz materiał" size="lg" zIndex={60}>
+        <div className="space-y-3">
+          <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+            <Search className="w-4 h-4 text-slate-400" />
+            <input autoFocus value={materialSearchQuery} onChange={e => setMaterialSearchQuery(e.target.value)}
+              placeholder="Szukaj materiału po nazwie lub kodzie..." className="flex-1 bg-transparent border-none px-2.5 py-2.5 text-sm outline-none" />
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {searchedMaterials.length === 0 && materialSearchQuery.length >= 2 && (
+              <div className="text-center py-8 text-sm text-slate-400">Brak wyników</div>
+            )}
+            {materialSearchQuery.length < 2 && (
+              <div className="text-center py-8 text-sm text-slate-400">Wpisz min. 2 znaki...</div>
+            )}
+            {searchedMaterials.map(m => (
+              <div key={m.id} onClick={() => handleAddLinkedMaterial(m)}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer border-b border-slate-100">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-slate-800 truncate">{m.name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{m.code}</div>
+                </div>
+                <div className="text-sm font-medium text-blue-600 whitespace-nowrap">
+                  {((m as any).purchase_price || m.default_price || 0).toFixed(2)} zł
+                </div>
+                <Plus className="w-4 h-4 text-slate-300" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Equipment search modal */}
+      <Modal isOpen={equipmentSearchModal} onClose={() => setEquipmentSearchModal(false)} title="Wybierz sprzęt" size="lg" zIndex={60}>
+        <div className="space-y-3">
+          <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
+            <Search className="w-4 h-4 text-slate-400" />
+            <input autoFocus value={equipmentSearchQuery} onChange={e => setEquipmentSearchQuery(e.target.value)}
+              placeholder="Szukaj sprzętu po nazwie lub kodzie..." className="flex-1 bg-transparent border-none px-2.5 py-2.5 text-sm outline-none" />
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {searchedEquipment.length === 0 && equipmentSearchQuery.length >= 2 && (
+              <div className="text-center py-8 text-sm text-slate-400">Brak wyników</div>
+            )}
+            {equipmentSearchQuery.length < 2 && (
+              <div className="text-center py-8 text-sm text-slate-400">Wpisz min. 2 znaki...</div>
+            )}
+            {searchedEquipment.map(eq => (
+              <div key={eq.id} onClick={() => handleAddLinkedEquipment(eq)}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer border-b border-slate-100">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-slate-800 truncate">{eq.name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">{eq.code}</div>
+                </div>
+                <div className="text-sm font-medium text-blue-600 whitespace-nowrap">
+                  {((eq as any).purchase_price || eq.default_price || 0).toFixed(2)} zł
+                </div>
+                <Plus className="w-4 h-4 text-slate-300" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
     </div>
-  );
+    );
+  };
 
   // ============ Render Materials Tab ============
   const renderMaterialsTab = () => {
