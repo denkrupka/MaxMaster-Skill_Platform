@@ -261,6 +261,7 @@ export const DictionariesPage: React.FC = () => {
   // ============ Cost calculation ============
   const [avgEmployeeRate, setAvgEmployeeRate] = useState<number | null>(null);
   const [manualHourlyRate, setManualHourlyRate] = useState<number>(0);
+  const [useManualRate, setUseManualRate] = useState(false);
 
   // ============ Linked items tracking for icon highlighting ============
   const [laboursWithMats, setLaboursWithMats] = useState<Set<string>>(new Set());
@@ -483,18 +484,40 @@ export const DictionariesPage: React.FC = () => {
   const fetchAvgEmployeeRate = useCallback(async () => {
     if (!currentUser?.company_id) return;
     try {
-      const { data, error } = await supabase
+      // 1. Get active employees with base_rate
+      const { data: employees, error: empErr } = await supabase
         .from('users')
-        .select('base_rate')
+        .select('id, base_rate')
         .eq('company_id', currentUser.company_id)
         .eq('status', 'active')
         .not('base_rate', 'is', null);
-      if (!error && data && data.length > 0) {
-        const avg = data.reduce((sum: number, p: any) => sum + (p.base_rate || 0), 0) / data.length;
-        setAvgEmployeeRate(Math.round(avg * 100) / 100);
-      } else {
-        setAvgEmployeeRate(null);
-      }
+      if (empErr || !employees || employees.length === 0) { setAvgEmployeeRate(null); return; }
+
+      // 2. Get confirmed skill assignments with hourly_bonus
+      const empIds = employees.map((e: any) => e.id);
+      const { data: userSkillsData } = await supabase
+        .from('user_skills')
+        .select('user_id, skill_id')
+        .in('user_id', empIds)
+        .eq('status', 'confirmed');
+      const { data: skillsData } = await supabase
+        .from('skills')
+        .select('id, hourly_bonus');
+
+      // 3. Build bonus map: userId → total bonus
+      const bonusMap: Record<string, number> = {};
+      const skillBonusMap: Record<string, number> = {};
+      if (skillsData) skillsData.forEach((s: any) => { if (s.hourly_bonus) skillBonusMap[s.id] = s.hourly_bonus; });
+      if (userSkillsData) userSkillsData.forEach((us: any) => {
+        const bonus = skillBonusMap[us.skill_id] || 0;
+        if (bonus > 0) bonusMap[us.user_id] = (bonusMap[us.user_id] || 0) + bonus;
+      });
+
+      // 4. Calculate average final rate (base_rate + skill bonuses)
+      const totalRate = employees.reduce((sum: number, emp: any) => {
+        return sum + (emp.base_rate || 0) + (bonusMap[emp.id] || 0);
+      }, 0);
+      setAvgEmployeeRate(Math.round((totalRate / employees.length) * 100) / 100);
     } catch { setAvgEmployeeRate(null); }
   }, [currentUser]);
 
@@ -4032,27 +4055,52 @@ export const DictionariesPage: React.FC = () => {
               </div>
               {editingOwnLabour.cost_type === 'rg' ? (
                 <div className="px-3 py-2.5 bg-blue-50 rounded-lg space-y-2">
-                  {avgEmployeeRate !== null ? (
-                    <div className="text-xs text-blue-700">
-                      Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span>
-                      {' × '}
-                      {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
-                      {' = '}
-                      <span className="font-bold">{(avgEmployeeRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)).toFixed(2)} zł</span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="text-xs text-blue-600">Dla wyliczenia kosztu robocizny, podaj stawkę godzinową brutto.</div>
-                      <div className="flex items-center gap-2">
-                        <input type="number" step="0.01" min="0" value={manualHourlyRate || ''} onChange={e => setManualHourlyRate(parseFloat(e.target.value) || 0)}
-                          className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
-                        <span className="text-xs text-blue-700">
-                          × {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
-                          = <span className="font-bold">{(manualHourlyRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)).toFixed(2)} zł</span>
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  {(() => {
+                    const activeRate = useManualRate ? manualHourlyRate : (avgEmployeeRate ?? 0);
+                    const timeDecimal = (editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60;
+                    const cost = activeRate * timeDecimal;
+                    return (
+                      <>
+                        {/* Toggle: auto / manual */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setUseManualRate(false)}
+                              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${!useManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                              Średnia
+                            </button>
+                            <button onClick={() => setUseManualRate(true)}
+                              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${useManualRate ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-100 border border-slate-200'}`}>
+                              Ręcznie
+                            </button>
+                          </div>
+                          {!useManualRate && avgEmployeeRate !== null && (
+                            <span className="text-[10px] text-blue-500">śr. stawka pracowników (baza + bonusy)</span>
+                          )}
+                        </div>
+                        {/* Rate display / input */}
+                        {useManualRate ? (
+                          <div className="flex items-center gap-2">
+                            <input type="number" step="0.01" min="0" value={manualHourlyRate || ''} onChange={e => setManualHourlyRate(parseFloat(e.target.value) || 0)}
+                              className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
+                            <span className="text-xs text-blue-700">
+                              × {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
+                              = <span className="font-bold">{cost.toFixed(2)} zł</span>
+                            </span>
+                          </div>
+                        ) : avgEmployeeRate !== null ? (
+                          <div className="text-xs text-blue-700">
+                            Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span>
+                            {' × '}
+                            {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
+                            {' = '}
+                            <span className="font-bold">{cost.toFixed(2)} zł</span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-blue-500">Brak aktywnych pracowników ze stawką — przełącz na «Ręcznie»</div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ) : (
                 <input type="number" step="0.01" min="0" value={editingOwnLabour.cost_ryczalt || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, cost_ryczalt: parseFloat(e.target.value) || 0 })}
@@ -4062,7 +4110,7 @@ export const DictionariesPage: React.FC = () => {
 
             {/* Cost summary — 4 columns */}
             {(() => {
-              const rgRate = avgEmployeeRate !== null ? avgEmployeeRate : manualHourlyRate;
+              const rgRate = useManualRate ? manualHourlyRate : (avgEmployeeRate ?? 0);
               const labourCost = editingOwnLabour.cost_type === 'rg'
                 ? rgRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)
                 : (editingOwnLabour.cost_ryczalt || 0);
