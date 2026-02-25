@@ -520,18 +520,25 @@ function parseProductPage(html: string): any {
     }
   }
 
-  // Prices from HTML
-  const priceBlock = html.match(/<[^>]*class="[^"]*product-price[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
-  if (priceBlock) {
-    const netBlock = priceBlock[1].match(/<[^>]*class="[^"]*price-net[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
-    const grossBlock = priceBlock[1].match(/<[^>]*class="[^"]*price-gross[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
-    if (netBlock) {
-      const net = parsePrice(netBlock[1]) ?? parsePriceFromText(stripHtml(netBlock[1]))
+  // Prices from HTML — always prefer HTML classes over JSON-LD (more reliable labels)
+  // Search for price-net and price-gross classes anywhere in the page
+  const netAnywhere = html.match(/<[^>]*class="[^"]*price-net[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
+  if (netAnywhere) {
+    const net = parsePrice(netAnywhere[1]) ?? parsePriceFromText(stripHtml(netAnywhere[1]))
+    if (net != null) p.priceNetto = net
+  }
+  const grossAnywhere = html.match(/<[^>]*class="[^"]*price-gross[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
+  if (grossAnywhere) {
+    const gross = parsePrice(grossAnywhere[1]) ?? parsePriceFromText(stripHtml(grossAnywhere[1]))
+    if (gross != null) p.priceGross = gross
+  }
+  // Fallback: text patterns with "netto" / "Cena netto"
+  if (p.priceNetto == null) {
+    const nettoText = html.match(/(?:cena\s+netto|netto)[:\s]*<[^>]*>\s*([\d\s,.]+)\s*(?:zł|PLN)/i)
+      || html.match(/(?:cena\s+netto|netto)[:\s]*([\d\s,.]+)\s*(?:zł|PLN)/i)
+    if (nettoText) {
+      const net = parsePriceFromText(nettoText[1])
       if (net != null) p.priceNetto = net
-    }
-    if (grossBlock) {
-      const gross = parsePrice(grossBlock[1]) ?? parsePriceFromText(stripHtml(grossBlock[1]))
-      if (gross != null) p.priceGross = gross
     }
   }
 

@@ -168,7 +168,7 @@ const ProductDetail: React.FC<{
     setLoadingOtherPrices(true);
     setOtherPrices([]);
 
-    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true))
+    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet'))
       .then(({ data: integrations }) => {
         if (!integrations?.length) { setLoadingOtherPrices(false); return; }
         // Deduplicate by wholesaler_id — only one integration per wholesaler
