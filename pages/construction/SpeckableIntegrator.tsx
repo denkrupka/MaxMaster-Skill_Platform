@@ -525,26 +525,36 @@ const ProductDetail: React.FC<{
           slug={viewWholesalerProduct.slug}
           name={viewWholesalerProduct.name}
           onClose={() => setViewWholesalerProduct(null)}
+          onAddToOwnCatalog={onAddToOwnCatalog}
         />
       )}
     </div>
   );
 };
 
-// ═══ Wholesaler Product Modal (view product from TIM/Onninen without leaving) ═══
+// ═══ Wholesaler Product Modal (view product from another wholesaler) ═══
 const WholesalerProductModal: React.FC<{
   wholesalerId: string;
   integrationId: string;
   slug: string;
   name: string;
   onClose: () => void;
-}> = ({ wholesalerId, integrationId, slug, name, onClose }) => {
+  onAddToOwnCatalog?: Props['onAddToOwnCatalog'];
+}> = ({ wholesalerId, integrationId, slug, name, onClose, onAddToOwnCatalog }) => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [otherPrices, setOtherPrices] = useState<Array<{ wholesaler: string; wholesalerId: string; integrationId: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string; productSlug?: string; productName?: string }>>([]);
+  const [loadingOtherPrices, setLoadingOtherPrices] = useState(false);
+
+  const isTim = wholesalerId === 'tim';
+  const isOnninen = wholesalerId === 'oninen';
+  const isSpeckable = wholesalerId === 'speckable';
+  const wholesalerLabel = isTim ? 'TIM S.A.' : isOnninen ? 'Onninen' : isSpeckable ? 'Speckable' : name;
+  const websiteLabel = isTim ? 'TIM.pl' : isOnninen ? 'Onninen.pl' : isSpeckable ? 'Speckable.pl' : name;
 
   useEffect(() => {
-    const proxyName = wholesalerId === 'tim' ? 'tim-proxy' : wholesalerId === 'oninen' ? 'oninen-proxy' : 'speckable-proxy';
+    const proxyName = isTim ? 'tim-proxy' : isOnninen ? 'oninen-proxy' : 'speckable-proxy';
     supabase.functions.invoke(proxyName, {
       body: { action: 'product', integrationId, slug },
     }).then(({ data: resp, error: err }) => {
@@ -556,93 +566,331 @@ const WholesalerProductModal: React.FC<{
     }).catch(e => { setError(e.message); setLoading(false); });
   }, [wholesalerId, integrationId, slug]);
 
-  const wholesalerLabel = wholesalerId === 'tim' ? 'TIM S.A.' : wholesalerId === 'oninen' ? 'Onninen' : name;
+  // Fetch prices from other wholesalers
+  useEffect(() => {
+    if (!data) return;
+    setLoadingOtherPrices(true);
+    setOtherPrices([]);
+    const ean = data.ean || '';
+    const refNum = data.ref_num || data.sku || '';
+    const prodName = data.name || '';
+
+    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet'))
+      .then(({ data: integrations }) => {
+        if (!integrations?.length) { setLoadingOtherPrices(false); return; }
+        const seenW = new Set<string>();
+        const others = integrations.filter((i: any) => {
+          if (i.wholesaler_id === wholesalerId) return false;
+          if (seenW.has(i.wholesaler_id)) return false;
+          seenW.add(i.wholesaler_id);
+          return true;
+        });
+        if (!others.length) { setLoadingOtherPrices(false); return; }
+
+        const queries: string[] = [];
+        if (refNum) queries.push(refNum);
+        if (ean) queries.push(ean);
+        if (!queries.length && prodName) queries.push(prodName);
+        if (!queries.length) { setLoadingOtherPrices(false); return; }
+
+        const scoreProduct = (p: any): number => {
+          let sc = 0;
+          const pN = (p.name || '').toLowerCase();
+          const pS = (p.sku || p.ref_num || '').toLowerCase();
+          if (refNum) { const r = refNum.toLowerCase(); if (pS === r || pS.includes(r) || pN.includes(r)) sc += 20; }
+          if (ean && (pN.includes(ean) || pS.includes(ean))) sc += 15;
+          const words = prodName.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+          sc += words.filter((w: string) => pN.includes(w)).length * 2;
+          return sc;
+        };
+
+        Promise.allSettled(others.map(async (integ: any) => {
+          const pName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'oninen' ? 'oninen-proxy' : 'speckable-proxy';
+          const qResults = await Promise.allSettled(
+            queries.map(q => supabase.functions.invoke(pName, { body: { action: 'search', integrationId: integ.id, q } })
+              .then(({ data: d, error: e }) => { if (e) throw e; const p = typeof d === 'string' ? JSON.parse(d) : d; if (p?.error) throw new Error(p.error); return p; })
+            )
+          );
+          const seen = new Map<string, { product: any; score: number }>();
+          for (const qr of qResults) { if (qr.status !== 'fulfilled') continue; for (const p of (qr.value.products || [])) { const k = p.sku || p.url || p.name; const s = scoreProduct(p); const ex = seen.get(k); if (!ex || s > ex.score) seen.set(k, { product: p, score: s }); } }
+          let best: any = null, bestScore = -1;
+          for (const { product: pr, score: s } of seen.values()) { if (s > bestScore) { best = pr; bestScore = s; } }
+          if ((refNum || ean) && bestScore <= 0) best = null;
+          return { integ, best };
+        })).then(results => {
+          const prices: typeof otherPrices = [];
+          for (const r of results) {
+            if (r.status !== 'fulfilled') continue;
+            const { integ, best } = r.value;
+            if (!best) continue;
+            const t = integ.wholesaler_id === 'tim';
+            const s = integ.wholesaler_id === 'speckable';
+            prices.push({
+              wholesaler: integ.wholesaler_name || (t ? 'TIM S.A.' : s ? 'Speckable' : integ.wholesaler_id === 'oninen' ? 'Onninen' : integ.wholesaler_id),
+              wholesalerId: integ.wholesaler_id,
+              integrationId: integ.id,
+              catalogPrice: t ? (best.publicPrice ?? null) : s ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
+              purchasePrice: t ? (best.price ?? null) : s ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
+              stock: best.stock ?? null,
+              url: best.url || undefined,
+              productSlug: best.slug || best.url || undefined,
+              productName: best.name || undefined,
+            });
+          }
+          setOtherPrices(prices);
+          setLoadingOtherPrices(false);
+        });
+      })
+      .catch(() => setLoadingOtherPrices(false));
+  }, [data]);
+
+  if (loading) return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl p-12 text-center" onClick={e => e.stopPropagation()}>
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
+        <p className="text-sm text-slate-500">Ładowanie z {wholesalerLabel}...</p>
+      </div>
+    </div>
+  );
+
+  if (error || !data) return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl p-8 text-center max-w-sm" onClick={e => e.stopPropagation()}>
+        <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
+        <p className="text-sm text-red-600 mb-1">Błąd: {error || 'Produkt nie znaleziony'}</p>
+        <button onClick={onClose} className="mt-4 px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50">Zamknij</button>
+      </div>
+    </div>
+  );
+
+  // Normalize fields
+  const purchasePrice = isTim ? (data.price ?? null) : isOnninen ? (data.priceEnd ?? null) : (data.priceNetto ?? null);
+  const catalogPrice = isTim ? (data.publicPrice ?? null) : isOnninen ? (data.priceCatalog ?? null) : (data.priceGross ?? null);
+  const discount = catalogPrice && purchasePrice && catalogPrice > purchasePrice
+    ? Math.round((1 - purchasePrice / catalogPrice) * 100) : null;
+  const img = data.image || data.images?.[0] || '';
+  const productName = data.name || data.title || '—';
+  const sku = data.sku || data.ref_num || '';
+  const ean = data.ean || '';
+  const brand = data.brand || data.manufacturer || '';
+  const refNum = data.ref_num || '';
+  const stockQty = data.stock ?? data.stock_qty ?? null;
+  const stockLocal = data.stockLocal ?? null;
+  const stockExternal = data.stockExternal ?? null;
+  const unit = data.unit || 'szt';
+  const description = data.descriptionHtml || data.description || '';
+  const hasHtml = /<[a-z][\s\S]*>/i.test(description);
+  const specs = data.specs || data.specification || [];
+  const category = data.category || data.breadcrumb || '';
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto bg-black/70" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden relative" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
-          <span className="text-sm font-semibold text-slate-700">Karta produktu — {wholesalerLabel}</span>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"><X className="w-4 h-4" /></button>
+    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+            <span className="text-xs text-slate-400 font-mono">SKU: {sku}{ean ? ` · EAN: ${ean}` : ''}</span>
+          </div>
+          <span className="text-xs font-medium text-slate-500">{wholesalerLabel}</span>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
-            <span className="text-sm text-slate-500">Ładowanie z {wholesalerLabel}...</span>
+        <div className="flex flex-wrap">
+          {/* Image */}
+          <div className="w-64 min-h-[220px] bg-slate-50 flex items-center justify-center p-4">
+            {img ? <img src={img} alt="" className="max-w-[90%] max-h-52 object-contain" /> : <Package className="w-14 h-14 text-slate-200" />}
           </div>
-        ) : error ? (
-          <div className="text-center py-12 px-5">
-            <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
-            <p className="text-sm text-red-600">{error}</p>
-          </div>
-        ) : data ? (
-          <div className="p-5">
-            <div className="flex flex-wrap gap-5">
-              {/* Image */}
-              {(data.image || data.images?.[0]) && (
-                <div className="w-48 h-48 bg-slate-50 rounded-lg flex items-center justify-center p-3">
-                  <img src={data.image || data.images[0]} alt="" className="max-w-full max-h-full object-contain" />
-                </div>
-              )}
-              {/* Info */}
-              <div className="flex-1 min-w-[200px]">
-                <h3 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{data.name || data.title || '—'}</h3>
-                {(data.sku || data.ref_num) && <p className="text-xs text-slate-500 mb-1">SKU: <span className="font-mono">{data.sku || data.ref_num}</span></p>}
-                {data.ean && <p className="text-xs text-slate-500 mb-1">EAN: <span className="font-mono">{data.ean}</span></p>}
-                {(data.brand || data.manufacturer) && <p className="text-xs text-slate-500 mb-2">Producent: <span className="font-medium text-slate-700">{data.brand || data.manufacturer}</span></p>}
 
-                {/* Prices */}
-                <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                  {(data.priceNetto ?? data.price ?? data.priceEnd) != null ? (
-                    <>
-                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena netto</div>
-                      <div className="text-xl font-bold text-blue-600">{(data.priceNetto ?? data.price ?? data.priceEnd).toFixed(2)} <span className="text-sm font-normal">zł</span></div>
-                      {(data.priceGross ?? data.publicPrice ?? data.priceCatalog) != null && (
-                        <div className="mt-1 text-xs text-slate-400">Cena katalogowa: {(data.priceGross ?? data.publicPrice ?? data.priceCatalog).toFixed(2)} zł</div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-xs text-slate-400">Cena niedostępna</div>
+          {/* Info */}
+          <div className="flex-1 p-5 min-w-[260px]">
+            <h2 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{productName}</h2>
+            {brand && <p className="text-xs text-slate-500">Producent: <span className="font-medium text-slate-700">{brand}</span></p>}
+            {refNum && <p className="text-xs text-slate-400 mt-0.5">Indeks producenta: {refNum}</p>}
+
+            {/* Price block */}
+            <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+              {purchasePrice != null ? (
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena netto (zakup)</div>
+                  <div className="text-xl font-bold text-blue-600">{Number(purchasePrice).toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                  {catalogPrice != null && discount != null && discount > 0 && (
+                    <div className="mt-1 text-xs text-slate-400">
+                      Cena katalogowa: <span className="line-through">{Number(catalogPrice).toFixed(2)} zł</span>
+                      <span className="ml-1.5 text-green-600 font-medium">-{discount}%</span>
+                    </div>
                   )}
-                </div>
-
-                {/* Stock */}
-                {data.stock != null && (
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${data.stock > 0 || (typeof data.stock === 'string' && data.stock !== '0') ? 'bg-green-500' : 'bg-red-400'}`} />
-                    <span className="text-xs text-slate-600">Magazyn: <b>{data.stock}</b> {data.unit || 'szt'}</span>
-                  </div>
-                )}
-
-                {/* Link to wholesaler */}
-                {data.url && (
-                  <a href={data.url.startsWith('http') ? data.url : undefined} target="_blank" rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700">
-                    <ExternalLink className="w-3 h-3" />
-                    Otwórz na stronie {wholesalerLabel}
-                  </a>
-                )}
-              </div>
+                </>
+              ) : catalogPrice != null ? (
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena katalogowa</div>
+                  <div className="text-xl font-bold text-slate-700">{Number(catalogPrice).toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                </>
+              ) : (
+                <>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena</div>
+                  <div className="text-xs text-slate-400">Niedostępna</div>
+                </>
+              )}
             </div>
 
-            {/* Description */}
-            {(data.description || data.descriptionHtml) && (() => {
-              const desc = data.descriptionHtml || data.description || '';
-              const hasHtml = /<[a-z][\s\S]*>/i.test(desc);
-              return (
-                <div className="mt-4 pt-3 border-t border-slate-100">
-                  <h4 className="text-xs font-semibold text-slate-600 mb-1">Opis</h4>
-                  {hasHtml ? (
-                    <div className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto prose prose-xs" dangerouslySetInnerHTML={{ __html: desc }} />
-                  ) : (
-                    <p className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto">{desc}</p>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Stock badges */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {stockQty != null && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                  <span className={`w-2 h-2 rounded-full ${typeof stockQty === 'number' ? (stockQty > 0 ? 'bg-green-500' : 'bg-red-500') : stockQty === '0' || (typeof stockQty === 'string' && stockQty.toLowerCase().includes('brak')) ? 'bg-red-500' : 'bg-green-500'}`} />
+                  Magazyn: <b>{stockQty} {unit}</b>
+                </span>
+              )}
+              {stockLocal != null && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                  <span className={`w-2 h-2 rounded-full ${stockLocal > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
+                  Lokalny: <b>{stockLocal} {unit}</b>
+                </span>
+              )}
+              {stockExternal && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                  Zewnętrzny: <b>{stockExternal}</b>
+                </span>
+              )}
+              {unit && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
+                  Jedn.: <b>{unit}</b>
+                </span>
+              )}
+            </div>
+
+            {/* Open on website */}
+            {data.url && (
+              <a
+                href={data.url.startsWith('http') ? data.url : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mb-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Otwórz na {websiteLabel}
+              </a>
+            )}
+
+            {/* Add to own catalog */}
+            {onAddToOwnCatalog && (
+              <button
+                onClick={() => {
+                  onAddToOwnCatalog({
+                    name: productName,
+                    sku: sku,
+                    ean: ean || undefined,
+                    ref_num: refNum || undefined,
+                    price: purchasePrice,
+                    catalogPrice: catalogPrice,
+                    image: img || undefined,
+                    manufacturer: brand || undefined,
+                    unit: unit,
+                    description: typeof description === 'string' ? description.replace(/<[^>]*>/g, '').slice(0, 500) : undefined,
+                    url: data.url,
+                    wholesaler: wholesalerId,
+                    category: category ? (typeof category === 'string' ? category.split(' > ').pop() || undefined : undefined) : undefined,
+                  });
+                  onClose();
+                }}
+                className="w-full py-2.5 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <Package className="w-4 h-4" />
+                Dodaj do katalogu Własnego
+              </button>
+            )}
           </div>
-        ) : null}
+        </div>
+
+        {/* Prices in other wholesalers */}
+        {(loadingOtherPrices || otherPrices.length > 0) && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-2">Ceny i dostępność w innych hurtowniach</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-slate-500 font-medium">Hurtownia</th>
+                    <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
+                    <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
+                    <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
+                    <th className="px-3 py-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingOtherPrices ? (
+                    <tr><td colSpan={5} className="px-3 py-4 text-center"><Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" /></td></tr>
+                  ) : otherPrices.map((wp, idx) => {
+                    const allP = otherPrices.filter(p => p.purchasePrice != null).map(p => p.purchasePrice!);
+                    const bestP = allP.length > 0 ? Math.min(...allP) : null;
+                    const worstP = allP.length > 1 ? Math.max(...allP) : null;
+                    const isB = bestP != null && wp.purchasePrice === bestP && allP.length > 1;
+                    const isW = worstP != null && wp.purchasePrice === worstP && worstP !== bestP;
+                    return (
+                      <tr key={idx} className={isB ? 'bg-green-50' : isW ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">{wp.catalogPrice?.toFixed(2) ?? '—'} zł</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-800">{wp.purchasePrice?.toFixed(2) ?? '—'} zł</td>
+                        <td className="px-3 py-2 text-center">
+                          {wp.stock != null ? (
+                            <span className={`px-1.5 py-0.5 rounded ${typeof wp.stock === 'number' ? (wp.stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600') : 'bg-green-100 text-green-700'}`}>
+                              {typeof wp.stock === 'number' ? (wp.stock > 0 ? `${wp.stock} szt.` : 'Brak') : wp.stock}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {wp.url && (
+                            <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Description */}
+        {description && (
+          <div className="px-5 pb-3">
+            <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Opis</h4>
+            {hasHtml ? (
+              <div className="text-xs text-slate-600 leading-relaxed prose prose-xs max-w-none max-h-60 overflow-y-auto [&_img]:max-w-full [&_img]:h-auto [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4" dangerouslySetInnerHTML={{ __html: description }} />
+            ) : (
+              <p className="text-xs text-slate-600 leading-relaxed max-h-60 overflow-y-auto">{description}</p>
+            )}
+          </div>
+        )}
+
+        {/* Technical specifications */}
+        {specs.length > 0 && (
+          <div className="px-5 pb-4">
+            <h4 className="text-xs font-semibold text-slate-600 mb-1.5">Dane techniczne</h4>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-xs">
+                <tbody>
+                  {specs.map((spec: any, idx: number) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-3 py-1.5 text-slate-500 font-medium w-2/5">{spec.name}</td>
+                      <td className="px-3 py-1.5 text-slate-700">{spec.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Category breadcrumb */}
+        {category && (
+          <div className="px-5 pb-4">
+            <p className="text-[10px] text-slate-400">{category}</p>
+          </div>
+        )}
       </div>
     </div>
   );

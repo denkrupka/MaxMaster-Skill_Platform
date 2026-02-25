@@ -3630,7 +3630,14 @@ export const KosztorysEditorPage: React.FC = () => {
   useEffect(() => {
     if (!searchMatDetailItem) { setSearchMatWholesalerPrices([]); setSearchMatLoadingPrices(false); return; }
     const dm = searchMatDetailItem as any;
-    const activeInts = searchMaterialIntegrations.filter(i => i.is_active);
+    const seenWholesalers = new Set<string>();
+    const activeInts = searchMaterialIntegrations.filter(i => {
+      if (!i.is_active) return false;
+      if (i.branza === 'sprzet') return false;
+      if (seenWholesalers.has(i.wholesaler_id)) return false;
+      seenWholesalers.add(i.wholesaler_id);
+      return true;
+    });
     if (activeInts.length === 0) return;
 
     const queries: string[] = [];
@@ -3687,7 +3694,7 @@ export const KosztorysEditorPage: React.FC = () => {
         if (!best) continue;
         const isTim = integration.wholesaler_id === 'tim';
         const isSpeckable = integration.wholesaler_id === 'speckable';
-        const wholesalerLabel = isTim ? 'TIM' : isSpeckable ? 'Speckable' : 'Onninen';
+        const wholesalerLabel = integration.wholesaler_name || (isTim ? 'TIM S.A.' : isSpeckable ? 'Speckable' : integration.wholesaler_id === 'oninen' ? 'Onninen' : integration.wholesaler_id);
         const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
         const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
         prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
