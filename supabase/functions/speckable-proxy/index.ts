@@ -124,8 +124,9 @@ async function viaScraperAPI(url: string, method = 'GET', postBody?: string, coo
 
 async function fetchPage(url: string, jar: CookieJar, retries = 3, render = false): Promise<string> {
   const fullUrl = url.startsWith('http') ? url : BASE + url
+  const hasAuth = Object.keys(jar).length > 0
   // When rendering JS, use a separate cache key to avoid mixing cached non-rendered HTML
-  const cacheKey = render ? fullUrl + '::rendered' : fullUrl
+  const cacheKey = (render ? fullUrl + '::rendered' : fullUrl) + (hasAuth ? '::auth' : '')
   const errors: string[] = []
 
   // Check cache first
@@ -135,15 +136,49 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3, render = fals
     return cached
   }
 
-  // Strategy 1: Try ScraperAPI first (if configured)
+  // When authenticated, try direct fetch FIRST — ScraperAPI doesn't properly relay auth cookies
+  // for customer-specific netto pricing. Direct fetch sends cookies directly to Speckable.
+  if (hasAuth) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 800 * attempt))
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pl-PL,pl;q=0.9',
+          'Cookie': cookieString(jar),
+        }
+        if (attempt > 0) headers['Referer'] = BASE + '/'
+        const res = await fetch(fullUrl, { headers, redirect: 'follow' })
+        parseCookiesFromHeaders(res.headers, jar)
+        const body = await res.text()
+        console.log(`[fetchPage] AuthDirect attempt ${attempt + 1} → ${res.status}, ${body.length} bytes`)
+        if (res.ok && body.length > 500) {
+          if (body.includes('cf-browser-verification') || body.includes('challenge-platform')) {
+            errors.push(`AuthDirect[${attempt + 1}]: Cloudflare challenge`)
+            continue
+          }
+          setCachedPage(cacheKey, body)
+          return body
+        }
+        errors.push(`AuthDirect[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)
+        if (res.status === 403 || res.status >= 500) continue
+      } catch (e: any) {
+        errors.push(`AuthDirect[${attempt + 1}]: ${e.message}`)
+        console.log(`[fetchPage] AuthDirect error: ${e.message}`)
+      }
+    }
+    // AuthDirect failed — fall through to ScraperAPI
+  }
+
+  // ScraperAPI (primary for anonymous, fallback for authenticated)
   if (SCRAPER_API_KEY) {
     try {
-      const cookieStr = Object.keys(jar).length > 0 ? cookieString(jar) : undefined
+      const cookieStr = hasAuth ? cookieString(jar) : undefined
       console.log(`[fetchPage] Trying ScraperAPI for ${fullUrl}${cookieStr ? ' (with cookies)' : ''}`)
-      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr)
+      const r = await viaScraperAPI(fullUrl, 'GET', undefined, cookieStr, render)
       console.log(`[fetchPage] ScraperAPI → ${r.status}, ${r.body.length} bytes`)
       if (r.status >= 200 && r.status < 400 && r.body.length > 500) {
-        // Verify it's not a Cloudflare challenge page
         if (!r.body.includes('cf-browser-verification') && !r.body.includes('challenge-platform')) {
           setCachedPage(cacheKey, r.body)
           return r.body
@@ -158,37 +193,35 @@ async function fetchPage(url: string, jar: CookieJar, retries = 3, render = fals
     }
   }
 
-  // Strategy 2: Direct fetch with retries (fallback or primary if no ScraperAPI)
-  for (let attempt = 0; attempt < retries; attempt++) {
-    if (attempt > 0) {
-      await new Promise(r => setTimeout(r, 800 * attempt))
-    }
-    try {
-      const headers: Record<string, string> = {
-        'User-Agent': UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pl-PL,pl;q=0.9',
-      }
-      if (jar && Object.keys(jar).length) headers['Cookie'] = cookieString(jar)
-      if (attempt > 0) headers['Referer'] = BASE + '/'
-      const res = await fetch(fullUrl, { headers, redirect: 'follow' })
-      parseCookiesFromHeaders(res.headers, jar)
-      const body = await res.text()
-      console.log(`[fetchPage] Direct attempt ${attempt + 1} → ${res.status}, ${body.length} bytes`)
-
-      if (res.ok && body.length > 500) {
-        if (body.includes('cf-browser-verification') || body.includes('challenge-platform')) {
-          errors.push(`Direct[${attempt + 1}]: Cloudflare challenge`)
-          continue
+  // Direct fetch (for anonymous requests or if everything above failed)
+  if (!hasAuth) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 800 * attempt))
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pl-PL,pl;q=0.9',
         }
-        setCachedPage(cacheKey, body)
-        return body
+        if (attempt > 0) headers['Referer'] = BASE + '/'
+        const res = await fetch(fullUrl, { headers, redirect: 'follow' })
+        parseCookiesFromHeaders(res.headers, jar)
+        const body = await res.text()
+        console.log(`[fetchPage] Direct attempt ${attempt + 1} → ${res.status}, ${body.length} bytes`)
+        if (res.ok && body.length > 500) {
+          if (body.includes('cf-browser-verification') || body.includes('challenge-platform')) {
+            errors.push(`Direct[${attempt + 1}]: Cloudflare challenge`)
+            continue
+          }
+          setCachedPage(cacheKey, body)
+          return body
+        }
+        errors.push(`Direct[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)
+        if (res.status === 403 || res.status >= 500) continue
+      } catch (e: any) {
+        errors.push(`Direct[${attempt + 1}]: ${e.message}`)
+        console.log(`[fetchPage] Direct error: ${e.message}`)
       }
-      errors.push(`Direct[${attempt + 1}]: HTTP ${res.status} (${body.length}b)`)
-      if (res.status === 403 || res.status >= 500) continue
-    } catch (e: any) {
-      errors.push(`Direct[${attempt + 1}]: ${e.message}`)
-      console.log(`[fetchPage] Direct error: ${e.message}`)
     }
   }
 

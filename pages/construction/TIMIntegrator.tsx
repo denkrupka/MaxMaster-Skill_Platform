@@ -293,7 +293,10 @@ const ProductDetail: React.FC<{
   const catalogPrice = detail.publicPrice;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center pt-8 pb-8 px-4 overflow-y-auto bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <>
+    <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[70] overflow-y-auto" onClick={onClose}>
+     <div className="flex items-start justify-center min-h-full pt-8 pb-8 px-4">
       <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
@@ -530,7 +533,9 @@ const ProductDetail: React.FC<{
           catalogButtonLabel={catalogButtonLabel}
         />
       )}
+     </div>
     </div>
+    </>
   );
 };
 
