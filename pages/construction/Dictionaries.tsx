@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Plus, Search, Loader2, Pencil, Trash2, X, Check, RefreshCw,
   Wrench, Package, Monitor, FileText, Link2, ChevronDown, BookOpen,
@@ -252,6 +252,18 @@ export const DictionariesPage: React.FC = () => {
   const [equipmentSearchModal, setEquipmentSearchModal] = useState(false);
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState('');
 
+  // ============ Lazy tab loading ============
+  const loadedTabs = useRef<Set<string>>(new Set());
+  const [tabLoading, setTabLoading] = useState(false);
+
+  // ============ Cost calculation ============
+  const [avgEmployeeRate, setAvgEmployeeRate] = useState<number | null>(null);
+  const [manualHourlyRate, setManualHourlyRate] = useState<number>(0);
+
+  // ============ Full catalog pickers for labour modal ============
+  const [labourMaterialPickerOpen, setLabourMaterialPickerOpen] = useState(false);
+  const [labourEquipmentPickerOpen, setLabourEquipmentPickerOpen] = useState(false);
+
   // ============ Шаблонные задания ============
   const [templateTasks, setTemplateTasks] = useState<any[]>([]);
   const [templateDialog, setTemplateDialog] = useState(false);
@@ -415,12 +427,85 @@ export const DictionariesPage: React.FC = () => {
     });
   }, [detailMaterial, integrations]);
 
+  // ============ Tab-grouped loaders ============
+  const loadWorkTypesTabData = useCallback(async () => {
+    await Promise.all([
+      loadSystemLabours(), loadSystemLabourCategories(),
+      loadOwnLabours(), loadOwnLabourCategories(),
+      loadWorkTypes(), loadRequestWorkTypes(),
+    ]);
+  }, [currentUser]);
+
+  const loadMaterialsTabData = useCallback(async () => {
+    await Promise.all([
+      loadMaterials(), loadCustomCategories(),
+      loadCustomManufacturers(), loadCustomUnits(),
+    ]);
+  }, [currentUser]);
+
+  const loadEquipmentTabData = useCallback(async () => {
+    await Promise.all([loadEquipment(), loadEquipmentCategories()]);
+  }, [currentUser]);
+
+  const loadSlownikTabData = useCallback(async () => {
+    await Promise.all([
+      loadTemplateTasks(), loadMappingRules(),
+      loadFormTemplates(), loadWallTypes(),
+    ]);
+  }, [currentUser]);
+
+  const loadTabData = useCallback(async (tab: TabType) => {
+    if (loadedTabs.current.has(tab)) return;
+    setTabLoading(true);
+    try {
+      if (tab === 'work_types') await loadWorkTypesTabData();
+      else if (tab === 'materials') await loadMaterialsTabData();
+      else if (tab === 'equipment') await loadEquipmentTabData();
+      else if (tab === 'slownik') await loadSlownikTabData();
+      loadedTabs.current.add(tab);
+    } catch (error) {
+      console.error('Error loading tab data:', error);
+      showNotification('Błąd podczas ładowania danych', 'error');
+    } finally {
+      setTabLoading(false);
+    }
+  }, [loadWorkTypesTabData, loadMaterialsTabData, loadEquipmentTabData, loadSlownikTabData]);
+
+  // Fetch avg employee rate
+  const fetchAvgEmployeeRate = useCallback(async () => {
+    if (!currentUser?.company_id) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('base_rate')
+        .eq('company_id', currentUser.company_id)
+        .eq('status', 'active')
+        .not('base_rate', 'is', null);
+      if (!error && data && data.length > 0) {
+        const avg = data.reduce((sum: number, p: any) => sum + (p.base_rate || 0), 0) / data.length;
+        setAvgEmployeeRate(Math.round(avg * 100) / 100);
+      } else {
+        setAvgEmployeeRate(null);
+      }
+    } catch { setAvgEmployeeRate(null); }
+  }, [currentUser]);
+
   // ============ Загрузка данных ============
   useEffect(() => {
     if (currentUser) {
-      loadAllData();
+      // Load integrations always (needed cross-tab), then load active tab
+      setLoading(true);
+      Promise.all([loadIntegrations(), loadTabData('work_types')]).finally(() => setLoading(false));
+      fetchAvgEmployeeRate();
     }
   }, [currentUser]);
+
+  // Load data when tab changes
+  useEffect(() => {
+    if (currentUser && activeTab) {
+      loadTabData(activeTab);
+    }
+  }, [activeTab, currentUser]);
 
   const loadIntegrations = async () => {
     if (!currentUser?.company_id) return;
@@ -1222,8 +1307,6 @@ export const DictionariesPage: React.FC = () => {
       material_quantity: 1,
       source_material_id: mat.id,
     }]);
-    setMaterialSearchModal(false);
-    setMaterialSearchQuery('');
   };
 
   const handleAddLinkedEquipment = (eq: KosztorysEquipment) => {
@@ -1235,8 +1318,6 @@ export const DictionariesPage: React.FC = () => {
       equipment_quantity: 1,
       source_equipment_id: eq.id,
     }]);
-    setEquipmentSearchModal(false);
-    setEquipmentSearchQuery('');
   };
 
   const handleSaveLinkedItems = async (labourId: string) => {
@@ -1271,36 +1352,6 @@ export const DictionariesPage: React.FC = () => {
           source_url: e.source_url || null,
         }))
       );
-    }
-  };
-
-  const loadAllData = async () => {
-    setLoading(true);
-    try {
-      await Promise.all([
-        loadWorkTypes(),
-        loadMaterials(),
-        loadEquipment(),
-        loadTemplateTasks(),
-        loadMappingRules(),
-        loadRequestWorkTypes(),
-        loadFormTemplates(),
-        loadWallTypes(),
-        loadIntegrations(),
-        loadCustomCategories(),
-        loadCustomManufacturers(),
-        loadCustomUnits(),
-        loadEquipmentCategories(),
-        loadSystemLabours(),
-        loadSystemLabourCategories(),
-        loadOwnLabours(),
-        loadOwnLabourCategories(),
-      ]);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      showNotification('Błąd podczas ładowania danych', 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -3328,14 +3379,6 @@ export const DictionariesPage: React.FC = () => {
     const equipmentCostSum = ownLabourEquipment.reduce((sum, e) => sum + (e.equipment_price || 0) * (e.equipment_quantity || 1), 0);
     const canSaveLabour = editingOwnLabour?.name && (autoGenerateLabourCode || editingOwnLabour.code);
 
-    // Search modal filtered results
-    const searchedMaterials = materialSearchQuery.length >= 2
-      ? materials.filter(m => m.name?.toLowerCase().includes(materialSearchQuery.toLowerCase()) || m.code?.toLowerCase().includes(materialSearchQuery.toLowerCase())).slice(0, 30)
-      : [];
-    const searchedEquipment = equipmentSearchQuery.length >= 2
-      ? equipment.filter(e => e.name?.toLowerCase().includes(equipmentSearchQuery.toLowerCase()) || e.code?.toLowerCase().includes(equipmentSearchQuery.toLowerCase())).slice(0, 30)
-      : [];
-
     return (
     <div>
       {/* Sub-tabs */}
@@ -3721,7 +3764,7 @@ export const DictionariesPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100">
-                    {filteredOwnLabours.map(l => (
+                    {filteredOwnLabours.slice(0, 200).map(l => (
                       <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={async () => {
                         setEditingOwnLabour(l);
                         setAutoGenerateLabourCode(false);
@@ -3740,6 +3783,11 @@ export const DictionariesPage: React.FC = () => {
                         </td>
                       </tr>
                     ))}
+                    {filteredOwnLabours.length > 200 && (
+                      <tr><td colSpan={8} className="px-4 py-3 text-center text-xs text-slate-400">
+                        Pokazano 200 z {filteredOwnLabours.length} — użyj wyszukiwania lub wybierz kategorię
+                      </td></tr>
+                    )}
                   </tbody>
                 </table>
               )}
@@ -3849,8 +3897,28 @@ export const DictionariesPage: React.FC = () => {
                 </button>
               </div>
               {editingOwnLabour.cost_type === 'rg' ? (
-                <div className="px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-700">
-                  Koszt = Średnia stawka pracowników × Czasochłonność
+                <div className="px-3 py-2.5 bg-blue-50 rounded-lg space-y-2">
+                  {avgEmployeeRate !== null ? (
+                    <div className="text-xs text-blue-700">
+                      Śr. stawka: <span className="font-semibold">{avgEmployeeRate.toFixed(2)} zł/h</span>
+                      {' × '}
+                      {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
+                      {' = '}
+                      <span className="font-bold">{(avgEmployeeRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)).toFixed(2)} zł</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="text-xs text-blue-600">Brak stawek pracowników — podaj ręcznie:</div>
+                      <div className="flex items-center gap-2">
+                        <input type="number" step="0.01" min="0" value={manualHourlyRate || ''} onChange={e => setManualHourlyRate(parseFloat(e.target.value) || 0)}
+                          className="w-28 px-2 py-1.5 border border-blue-200 rounded text-sm focus:ring-2 focus:ring-blue-500" placeholder="zł/h" />
+                        <span className="text-xs text-blue-700">
+                          × {editingOwnLabour.time_hours || 0}h{String(editingOwnLabour.time_minutes || 0).padStart(2, '0')}m
+                          = <span className="font-bold">{(manualHourlyRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)).toFixed(2)} zł</span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <input type="number" step="0.01" min="0" value={editingOwnLabour.cost_ryczalt || ''} onChange={e => setEditingOwnLabour({ ...editingOwnLabour, cost_ryczalt: parseFloat(e.target.value) || 0 })}
@@ -3858,23 +3926,40 @@ export const DictionariesPage: React.FC = () => {
               )}
             </div>
 
-            {/* Cost summary */}
-            <div className="grid grid-cols-3 gap-4 p-3 bg-slate-50 rounded-lg">
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Materiału</div>
-                <div className="text-sm font-semibold text-slate-800">{materialCostSum.toFixed(2)} zł</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Sprzętu</div>
-                <div className="text-sm font-semibold text-slate-800">{equipmentCostSum.toFixed(2)} zł</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-slate-500 uppercase font-medium">Zysk</div>
-                <div className={`text-sm font-semibold ${((editingOwnLabour.price || 0) - materialCostSum - equipmentCostSum) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {((editingOwnLabour.price || 0) - materialCostSum - equipmentCostSum).toFixed(2)} zł
+            {/* Cost summary — 4 columns */}
+            {(() => {
+              const rgRate = avgEmployeeRate !== null ? avgEmployeeRate : manualHourlyRate;
+              const labourCost = editingOwnLabour.cost_type === 'rg'
+                ? rgRate * ((editingOwnLabour.time_hours || 0) + (editingOwnLabour.time_minutes || 0) / 60)
+                : (editingOwnLabour.cost_ryczalt || 0);
+              const totalCost = labourCost + materialCostSum + equipmentCostSum;
+              const profit = (editingOwnLabour.price || 0) - totalCost;
+              return (
+                <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                  <div className="grid grid-cols-4 gap-3">
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt robocizny</div>
+                      <div className="text-sm font-semibold text-slate-800">{labourCost.toFixed(2)} zł</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Materiału</div>
+                      <div className="text-sm font-semibold text-slate-800">{materialCostSum.toFixed(2)} zł</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-medium">Koszt Sprzętu</div>
+                      <div className="text-sm font-semibold text-slate-800">{equipmentCostSum.toFixed(2)} zł</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-medium">Zysk</div>
+                      <div className={`text-sm font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {profit.toFixed(2)} zł
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-400">Cena − Suma kosztów = Zysk</div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Linked Materials */}
             <div>
@@ -3883,7 +3968,11 @@ export const DictionariesPage: React.FC = () => {
                   <Package className="w-4 h-4 text-blue-500" />
                   Materiały ({ownLabourMaterials.length})
                 </label>
-                <button onClick={() => { setMaterialSearchModal(true); setMaterialSearchQuery(''); }}
+                <button onClick={() => {
+                    setLabourMaterialPickerOpen(true);
+                    // Ensure materials data is loaded
+                    if (!loadedTabs.current.has('materials')) loadTabData('materials' as TabType);
+                  }}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
                   <Plus className="w-3 h-3" /> Dodaj materiał
                 </button>
@@ -3930,7 +4019,11 @@ export const DictionariesPage: React.FC = () => {
                   <Monitor className="w-4 h-4 text-blue-500" />
                   Sprzęt ({ownLabourEquipment.length})
                 </label>
-                <button onClick={() => { setEquipmentSearchModal(true); setEquipmentSearchQuery(''); }}
+                <button onClick={() => {
+                    setLabourEquipmentPickerOpen(true);
+                    // Ensure equipment data is loaded
+                    if (!loadedTabs.current.has('equipment')) loadTabData('equipment' as TabType);
+                  }}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded">
                   <Plus className="w-3 h-3" /> Dodaj sprzęt
                 </button>
@@ -3998,75 +4091,41 @@ export const DictionariesPage: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Material search modal */}
-      <Modal isOpen={materialSearchModal} onClose={() => setMaterialSearchModal(false)} title="Wybierz materiał" size="lg" zIndex={60}>
-        <div className="space-y-3">
-          <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
-            <Search className="w-4 h-4 text-slate-400" />
-            <input autoFocus value={materialSearchQuery} onChange={e => setMaterialSearchQuery(e.target.value)}
-              placeholder="Szukaj materiału po nazwie lub kodzie..." className="flex-1 bg-transparent border-none px-2.5 py-2.5 text-sm outline-none" />
-          </div>
-          <div className="max-h-80 overflow-y-auto">
-            {searchedMaterials.length === 0 && materialSearchQuery.length >= 2 && (
-              <div className="text-center py-8 text-sm text-slate-400">Brak wyników</div>
-            )}
-            {materialSearchQuery.length < 2 && (
-              <div className="text-center py-8 text-sm text-slate-400">Wpisz min. 2 znaki...</div>
-            )}
-            {searchedMaterials.map(m => (
-              <div key={m.id} onClick={() => handleAddLinkedMaterial(m)}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer border-b border-slate-100">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-800 truncate">{m.name}</div>
-                  <div className="text-[10px] text-slate-400 font-mono">{m.code}</div>
-                </div>
-                <div className="text-sm font-medium text-blue-600 whitespace-nowrap">
-                  {((m as any).purchase_price || m.default_price || 0).toFixed(2)} zł
-                </div>
-                <Plus className="w-4 h-4 text-slate-300" />
-              </div>
-            ))}
+      {/* Full catalog material picker overlay */}
+      {labourMaterialPickerOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => setLabourMaterialPickerOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Wybierz materiał z katalogu</h3>
+              <button onClick={() => setLabourMaterialPickerOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {renderMaterialsTab({ onSelect: (m) => { handleAddLinkedMaterial(m); setLabourMaterialPickerOpen(false); } })}
+            </div>
           </div>
         </div>
-      </Modal>
+      )}
 
-      {/* Equipment search modal */}
-      <Modal isOpen={equipmentSearchModal} onClose={() => setEquipmentSearchModal(false)} title="Wybierz sprzęt" size="lg" zIndex={60}>
-        <div className="space-y-3">
-          <div className="flex items-center bg-slate-100 rounded-lg px-3 border border-slate-200">
-            <Search className="w-4 h-4 text-slate-400" />
-            <input autoFocus value={equipmentSearchQuery} onChange={e => setEquipmentSearchQuery(e.target.value)}
-              placeholder="Szukaj sprzętu po nazwie lub kodzie..." className="flex-1 bg-transparent border-none px-2.5 py-2.5 text-sm outline-none" />
-          </div>
-          <div className="max-h-80 overflow-y-auto">
-            {searchedEquipment.length === 0 && equipmentSearchQuery.length >= 2 && (
-              <div className="text-center py-8 text-sm text-slate-400">Brak wyników</div>
-            )}
-            {equipmentSearchQuery.length < 2 && (
-              <div className="text-center py-8 text-sm text-slate-400">Wpisz min. 2 znaki...</div>
-            )}
-            {searchedEquipment.map(eq => (
-              <div key={eq.id} onClick={() => handleAddLinkedEquipment(eq)}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer border-b border-slate-100">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-800 truncate">{eq.name}</div>
-                  <div className="text-[10px] text-slate-400 font-mono">{eq.code}</div>
-                </div>
-                <div className="text-sm font-medium text-blue-600 whitespace-nowrap">
-                  {((eq as any).purchase_price || eq.default_price || 0).toFixed(2)} zł
-                </div>
-                <Plus className="w-4 h-4 text-slate-300" />
-              </div>
-            ))}
+      {/* Full catalog equipment picker overlay */}
+      {labourEquipmentPickerOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center" onClick={() => setLabourEquipmentPickerOpen(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Wybierz sprzęt z katalogu</h3>
+              <button onClick={() => setLabourEquipmentPickerOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              {renderEquipmentTab({ onSelect: (eq) => { handleAddLinkedEquipment(eq); setLabourEquipmentPickerOpen(false); } })}
+            </div>
           </div>
         </div>
-      </Modal>
+      )}
     </div>
     );
   };
 
   // ============ Render Materials Tab ============
-  const renderMaterialsTab = () => {
+  const renderMaterialsTab = (pickerMode?: { onSelect: (m: KosztorysMaterial) => void }) => {
     const mat = editingMaterial as any;
     const isCodeRequired = !autoGenerateCode;
     const canSaveMaterial = editingMaterial?.name && ((editingMaterial as any).purchase_price > 0 || editingMaterial.default_price) && (autoGenerateCode || editingMaterial.code);
@@ -4311,18 +4370,20 @@ export const DictionariesPage: React.FC = () => {
 
             <span className="text-xs text-slate-400 whitespace-nowrap">{filteredMaterials.length} materiałów</span>
 
-            <button
-              onClick={() => {
-                setEditingMaterial({ is_active: true, default_price: 0 } as any);
-                setAutoGenerateCode(true);
-                setMaterialImages([]);
-                setMaterialDialog(true);
-              }}
-              className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              Dodaj materiał
-            </button>
+            {!pickerMode && (
+              <button
+                onClick={() => {
+                  setEditingMaterial({ is_active: true, default_price: 0 } as any);
+                  setAutoGenerateCode(true);
+                  setMaterialImages([]);
+                  setMaterialDialog(true);
+                }}
+                className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj materiał
+              </button>
+            )}
           </div>
 
           {/* Content area */}
@@ -4342,7 +4403,7 @@ export const DictionariesPage: React.FC = () => {
                   return (
                     <div
                       key={m.id}
-                      onClick={() => setDetailMaterial(m)}
+                      onClick={() => pickerMode ? pickerMode.onSelect(m) : setDetailMaterial(m)}
                       className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                     >
                       <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
@@ -4380,7 +4441,7 @@ export const DictionariesPage: React.FC = () => {
                   return (
                     <div
                       key={m.id}
-                      onClick={() => setDetailMaterial(m)}
+                      onClick={() => pickerMode ? pickerMode.onSelect(m) : setDetailMaterial(m)}
                       className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
                     >
                       <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
@@ -5012,7 +5073,7 @@ export const DictionariesPage: React.FC = () => {
   };
 
   // ============ Render Equipment Tab ============
-  const renderEquipmentTab = () => {
+  const renderEquipmentTab = (pickerMode?: { onSelect: (eq: KosztorysEquipment) => void }) => {
     const eq = editingEquipment as any;
     const isEqCodeRequired = !autoGenerateEqCode;
     const canSaveEquipment = editingEquipment?.name && ((editingEquipment as any).purchase_price > 0 || editingEquipment.default_price) && (autoGenerateEqCode || editingEquipment.code);
@@ -5183,19 +5244,21 @@ export const DictionariesPage: React.FC = () => {
 
             <span className="text-xs text-slate-400 whitespace-nowrap">{filteredEquipment.length} sprzętu</span>
 
-            <button
-              onClick={() => {
-                setEditingEquipment({ is_active: true, default_price: 0 } as any);
-                setAutoGenerateEqCode(true);
-                setEquipmentImages([]);
-                setEqPriceSyncMode('fixed');
-                setEquipmentDialog(true);
-              }}
-              className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              Dodaj sprzęt
-            </button>
+            {!pickerMode && (
+              <button
+                onClick={() => {
+                  setEditingEquipment({ is_active: true, default_price: 0 } as any);
+                  setAutoGenerateEqCode(true);
+                  setEquipmentImages([]);
+                  setEqPriceSyncMode('fixed');
+                  setEquipmentDialog(true);
+                }}
+                className="ml-auto flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                Dodaj sprzęt
+              </button>
+            )}
           </div>
 
           {/* Content area */}
@@ -5215,7 +5278,7 @@ export const DictionariesPage: React.FC = () => {
                   return (
                     <div
                       key={item.id}
-                      onClick={() => setDetailEquipment(item)}
+                      onClick={() => pickerMode ? pickerMode.onSelect(item) : setDetailEquipment(item)}
                       className="bg-white rounded-lg border border-slate-200 overflow-hidden cursor-pointer hover:border-blue-400 hover:shadow-md transition-all"
                     >
                       <div className="h-32 bg-slate-50 flex items-center justify-center border-b border-slate-100">
@@ -5253,7 +5316,7 @@ export const DictionariesPage: React.FC = () => {
                   return (
                     <div
                       key={item.id}
-                      onClick={() => setDetailEquipment(item)}
+                      onClick={() => pickerMode ? pickerMode.onSelect(item) : setDetailEquipment(item)}
                       className="bg-white rounded-lg border border-slate-200 p-2.5 flex items-center gap-3 cursor-pointer hover:border-blue-400 transition-colors"
                     >
                       <div className="w-14 h-14 bg-slate-50 rounded flex items-center justify-center flex-shrink-0">
@@ -6190,7 +6253,7 @@ export const DictionariesPage: React.FC = () => {
         </div>
 
         <div className="p-6">
-          {loading ? (
+          {(loading || tabLoading) ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
