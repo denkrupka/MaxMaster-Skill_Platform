@@ -228,14 +228,14 @@ export const DictionariesPage: React.FC = () => {
   const [expandedSystemCategories, setExpandedSystemCategories] = useState<Set<string>>(new Set());
   const [systemLabourDetail, setSystemLabourDetail] = useState<KosztorysSystemLabour | null>(null);
   const [systemLabourLoading, setSystemLabourLoading] = useState(false);
-  const [systemLabourLimit, setSystemLabourLimit] = useState(200);
+  const [systemLabourPage, setSystemLabourPage] = useState(1);
 
   // ============ Robocizna — Katalog Własny ============
   const [ownLabours, setOwnLabours] = useState<KosztorysOwnLabour[]>([]);
   const [ownLabourCategories, setOwnLabourCategories] = useState<{ id: string; name: string; sort_order: number; parent_id?: string | null }[]>([]);
   const [ownLabourSearch, setOwnLabourSearch] = useState('');
   const [selectedOwnLabourCategory, setSelectedOwnLabourCategory] = useState<string | null>(null);
-  const [ownLabourLimit, setOwnLabourLimit] = useState(200);
+  const [ownLabourPage, setOwnLabourPage] = useState(1);
   const [expandedOwnLabourCategories, setExpandedOwnLabourCategories] = useState<Set<string>>(new Set());
   const [ownLabourDialog, setOwnLabourDialog] = useState(false);
   const [editingOwnLabour, setEditingOwnLabour] = useState<Partial<KosztorysOwnLabour> | null>(null);
@@ -1012,14 +1012,25 @@ export const DictionariesPage: React.FC = () => {
   // ============ Robocizna — Katalog Systemowy (loading) ============
   const loadSystemLabours = async () => {
     try {
-      const { data, error } = await supabase
-        .from('kosztorys_system_labours')
-        .select('*')
-        .eq('is_active', true)
-        .order('category_path', { ascending: true })
-        .order('code', { ascending: true });
-      if (error) throw error;
-      setSystemLabours(data || []);
+      // Supabase default limit is 1000 — fetch all rows in batches
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('kosztorys_system_labours')
+          .select('*')
+          .eq('is_active', true)
+          .order('category_path', { ascending: true })
+          .order('code', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData = allData.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      setSystemLabours(allData);
     } catch (err) {
       console.error('Error loading system labours:', err);
       setSystemLabours([]);
@@ -2028,9 +2039,9 @@ export const DictionariesPage: React.FC = () => {
       return matchesSearch && matchesCat;
     }), [systemLabours, systemLabourSearch, selectedSystemCategory]);
 
-  // Reset render limits when filters change
-  useEffect(() => { setSystemLabourLimit(200); }, [systemLabourSearch, selectedSystemCategory]);
-  useEffect(() => { setOwnLabourLimit(200); }, [ownLabourSearch, selectedOwnLabourCategory]);
+  // Reset page when filters change
+  useEffect(() => { setSystemLabourPage(1); }, [systemLabourSearch, selectedSystemCategory]);
+  useEffect(() => { setOwnLabourPage(1); }, [ownLabourSearch, selectedOwnLabourCategory]);
 
   const filteredOwnLabours = useMemo(() =>
     ownLabours.filter(l => {
@@ -3542,49 +3553,79 @@ export const DictionariesPage: React.FC = () => {
               <span className="text-xs text-slate-400 whitespace-nowrap">{filteredSystemLabours.length} pozycji</span>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
-                    <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
-                    <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
-                    <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase w-10"></th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
-                  {filteredSystemLabours.slice(0, systemLabourLimit).map(l => (
-                    <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSystemLabourDetail(l)}>
-                      <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
-                      <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
-                      <td className="px-3 py-2 text-xs text-slate-500">{l.unit}</td>
-                      <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price_unit ? `${l.price_unit.toFixed(2)} zł` : '—'}</td>
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleAddSystemLabourToOwn(l); }}
-                          className="p-1 text-slate-300 hover:text-green-600 rounded hover:bg-green-50"
-                          title="Dodaj do katalogu własnego"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredSystemLabours.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">Brak wyników</td></tr>
-                  )}
-                  {filteredSystemLabours.length > systemLabourLimit && (
-                    <tr><td colSpan={5} className="px-4 py-3 text-center">
-                      <button onClick={() => setSystemLabourLimit(prev => prev + 200)}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                        Pokaż więcej ({systemLabourLimit} z {filteredSystemLabours.length})
-                      </button>
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            {(() => {
+              const PER_PAGE = 50;
+              const totalPages = Math.max(1, Math.ceil(filteredSystemLabours.length / PER_PAGE));
+              const safePage = Math.min(systemLabourPage, totalPages);
+              const pageItems = filteredSystemLabours.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+              return (
+                <>
+                <div className="flex-1 overflow-y-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
+                        <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
+                        <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-100">
+                      {pageItems.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSystemLabourDetail(l)}>
+                          <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
+                          <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500">{l.unit}</td>
+                          <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price_unit ? `${l.price_unit.toFixed(2)} zł` : '—'}</td>
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAddSystemLabourToOwn(l); }}
+                              className="p-1 text-slate-300 hover:text-green-600 rounded hover:bg-green-50"
+                              title="Dodaj do katalogu własnego"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredSystemLabours.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">Brak wyników</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+                    <span className="text-xs text-slate-400">
+                      {(safePage - 1) * PER_PAGE + 1}–{Math.min(safePage * PER_PAGE, filteredSystemLabours.length)} z {filteredSystemLabours.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setSystemLabourPage(1)} disabled={safePage <= 1}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">«</button>
+                      <button onClick={() => setSystemLabourPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">‹</button>
+                      {(() => {
+                        const pages: number[] = [];
+                        let start = Math.max(1, safePage - 2);
+                        let end = Math.min(totalPages, start + 4);
+                        if (end - start < 4) start = Math.max(1, end - 4);
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        return pages.map(p => (
+                          <button key={p} onClick={() => setSystemLabourPage(p)}
+                            className={`px-2.5 py-1 text-xs rounded border ${p === safePage ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-600 hover:bg-white'}`}>{p}</button>
+                        ));
+                      })()}
+                      <button onClick={() => setSystemLabourPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">›</button>
+                      <button onClick={() => setSystemLabourPage(totalPages)} disabled={safePage >= totalPages}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">»</button>
+                    </div>
+                  </div>
+                )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -3802,61 +3843,89 @@ export const DictionariesPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              {filteredOwnLabours.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <Wrench className="w-12 h-12 text-slate-200 mb-4" />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog robocizny</h3>
-                  <p className="text-sm text-slate-400 max-w-sm">
-                    {ownLabourSearch ? `Brak wyników dla «${ownLabourSearch}»` : 'Dodaj robocizny ręcznie lub importuj z katalogu systemowego.'}
-                  </p>
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
-                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Czas</th>
-                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Mat.</th>
-                      <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Spr.</th>
-                      <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Akcje</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-100">
-                    {filteredOwnLabours.slice(0, ownLabourLimit).map(l => (
-                      <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={async () => {
-                        setEditingOwnLabour(l);
-                        setAutoGenerateLabourCode(false);
-                        await loadOwnLabourLinked(l.id);
-                        setOwnLabourDialog(true);
-                      }}>
-                        <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
-                        <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">{l.unit || '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price ? `${l.price.toFixed(2)} zł` : '—'}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500 text-center">{String(l.time_hours || 0).padStart(2, '0')}:{String(l.time_minutes || 0).padStart(2, '0')}</td>
-                        <td className="px-3 py-2 text-center"><Package className={`w-3.5 h-3.5 inline-block ${laboursWithMats.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
-                        <td className="px-3 py-2 text-center"><Monitor className={`w-3.5 h-3.5 inline-block ${laboursWithEquip.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
-                        <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
-                          <button onClick={() => setDeleteOwnLabourConfirm({ id: l.id, name: l.name })} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </td>
+            {filteredOwnLabours.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
+                <Wrench className="w-12 h-12 text-slate-200 mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">Własny katalog robocizny</h3>
+                <p className="text-sm text-slate-400 max-w-sm">
+                  {ownLabourSearch ? `Brak wyników dla «${ownLabourSearch}»` : 'Dodaj robocizny ręcznie lub importuj z katalogu systemowego.'}
+                </p>
+              </div>
+            ) : (() => {
+              const PER_PAGE = 50;
+              const totalPages = Math.max(1, Math.ceil(filteredOwnLabours.length / PER_PAGE));
+              const safePage = Math.min(ownLabourPage, totalPages);
+              const pageItems = filteredOwnLabours.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+              return (
+                <>
+                <div className="flex-1 overflow-y-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Kod</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Nazwa</th>
+                        <th className="px-3 py-2.5 text-left text-[10px] font-medium text-slate-500 uppercase">Jedn.</th>
+                        <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Cena</th>
+                        <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Czas</th>
+                        <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Mat.</th>
+                        <th className="px-3 py-2.5 text-center text-[10px] font-medium text-slate-500 uppercase">Spr.</th>
+                        <th className="px-3 py-2.5 text-right text-[10px] font-medium text-slate-500 uppercase">Akcje</th>
                       </tr>
-                    ))}
-                    {filteredOwnLabours.length > ownLabourLimit && (
-                      <tr><td colSpan={8} className="px-4 py-3 text-center">
-                        <button onClick={() => setOwnLabourLimit(prev => prev + 200)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                          Pokaż więcej ({ownLabourLimit} z {filteredOwnLabours.length})
-                        </button>
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-slate-100">
+                      {pageItems.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50 cursor-pointer" onClick={async () => {
+                          setEditingOwnLabour(l);
+                          setAutoGenerateLabourCode(false);
+                          await loadOwnLabourLinked(l.id);
+                          setOwnLabourDialog(true);
+                        }}>
+                          <td className="px-3 py-2 text-xs font-mono text-slate-500">{l.code}</td>
+                          <td className="px-3 py-2 text-xs text-slate-800">{l.name}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500">{l.unit || '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-600 text-right">{l.price ? `${l.price.toFixed(2)} zł` : '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500 text-center">{String(l.time_hours || 0).padStart(2, '0')}:{String(l.time_minutes || 0).padStart(2, '0')}</td>
+                          <td className="px-3 py-2 text-center"><Package className={`w-3.5 h-3.5 inline-block ${laboursWithMats.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                          <td className="px-3 py-2 text-center"><Monitor className={`w-3.5 h-3.5 inline-block ${laboursWithEquip.has(l.id) ? 'text-blue-500' : 'text-slate-200'}`} /></td>
+                          <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setDeleteOwnLabourConfirm({ id: l.id, name: l.name })} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 bg-slate-50 flex-shrink-0">
+                    <span className="text-xs text-slate-400">
+                      {(safePage - 1) * PER_PAGE + 1}–{Math.min(safePage * PER_PAGE, filteredOwnLabours.length)} z {filteredOwnLabours.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => setOwnLabourPage(1)} disabled={safePage <= 1}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">«</button>
+                      <button onClick={() => setOwnLabourPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">‹</button>
+                      {(() => {
+                        const pages: number[] = [];
+                        let start = Math.max(1, safePage - 2);
+                        let end = Math.min(totalPages, start + 4);
+                        if (end - start < 4) start = Math.max(1, end - 4);
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        return pages.map(p => (
+                          <button key={p} onClick={() => setOwnLabourPage(p)}
+                            className={`px-2.5 py-1 text-xs rounded border ${p === safePage ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200 text-slate-600 hover:bg-white'}`}>{p}</button>
+                        ));
+                      })()}
+                      <button onClick={() => setOwnLabourPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">›</button>
+                      <button onClick={() => setOwnLabourPage(totalPages)} disabled={safePage >= totalPages}
+                        className="px-2 py-1 text-xs rounded border border-slate-200 text-slate-600 hover:bg-white disabled:opacity-30 disabled:cursor-default">»</button>
+                    </div>
+                  </div>
+                )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
