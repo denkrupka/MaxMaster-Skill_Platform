@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search, Loader2, X, ChevronRight,
   FolderOpen, Grid3X3, List, Package, AlertTriangle,
-  ExternalLink, ChevronLeft, Truck
+  ExternalLink, ChevronLeft, Truck, Eye
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -146,7 +146,8 @@ const ProductDetail: React.FC<{
   const [detail, setDetail] = useState<SpeckableProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [otherPrices, setOtherPrices] = useState<Array<{ wholesaler: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string }>>([]);
+  const [otherPrices, setOtherPrices] = useState<Array<{ wholesaler: string; wholesalerId: string; integrationId: string; catalogPrice: number | null; purchasePrice: number | null; stock: number | null; url?: string; productSlug?: string; productName?: string }>>([]);
+  const [viewWholesalerProduct, setViewWholesalerProduct] = useState<{ wholesalerId: string; integrationId: string; slug: string; name: string } | null>(null);
   const [loadingOtherPrices, setLoadingOtherPrices] = useState(false);
 
   useEffect(() => {
@@ -238,10 +239,14 @@ const ProductDetail: React.FC<{
             const isOnninen = integ.wholesaler_id === 'oninen';
             prices.push({
               wholesaler: integ.wholesaler_name || (isTim ? 'TIM' : isOnninen ? 'Onninen' : integ.wholesaler_id),
+              wholesalerId: integ.wholesaler_id,
+              integrationId: integ.id,
               catalogPrice: isTim ? (best.publicPrice ?? null) : isOnninen ? (best.priceCatalog ?? null) : (best.priceGross ?? null),
               purchasePrice: isTim ? (best.price ?? null) : isOnninen ? (best.priceEnd ?? null) : (best.priceNetto ?? null),
               stock: best.stock ?? null,
               url: best.url || undefined,
+              productSlug: best.slug || best.url || undefined,
+              productName: best.name || undefined,
             });
           }
           setOtherPrices(prices);
@@ -273,8 +278,11 @@ const ProductDetail: React.FC<{
     </div>
   );
 
-  const discount = detail.priceGross && detail.priceNetto && detail.priceGross > detail.priceNetto
-    ? Math.round((1 - detail.priceNetto / detail.priceGross) * 100)
+  // Prefer listing price (server-side rendered, correct) over detail page price (JS-rendered, often wrong/catalog price)
+  const priceNetto = product.priceNetto ?? detail.priceNetto ?? null;
+  const priceGross = detail.priceGross != null && detail.priceGross !== priceNetto ? detail.priceGross : null;
+  const discount = priceGross && priceNetto && priceGross > priceNetto
+    ? Math.round((1 - priceNetto / priceGross) * 100)
     : null;
 
   return (
@@ -303,23 +311,23 @@ const ProductDetail: React.FC<{
 
             {/* Price block */}
             <div className="mt-3 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
-              {detail.priceNetto != null ? (
+              {priceNetto != null ? (
                 <>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena netto (zakup)</div>
-                  <div className="text-xl font-bold text-blue-600">{detail.priceNetto.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
-                  {detail.priceGross != null && (
+                  <div className="text-xl font-bold text-blue-600">{priceNetto.toFixed(2)} <span className="text-sm font-normal">zł netto</span></div>
+                  {priceGross != null && (
                     <div className="mt-1 text-xs text-slate-400">
-                      Cena brutto: {detail.priceGross.toFixed(2)} zł
+                      Cena brutto: {priceGross.toFixed(2)} zł
                       {discount != null && discount > 0 && (
                         <span className="ml-1.5 text-green-600 font-medium">-{discount}%</span>
                       )}
                     </div>
                   )}
                 </>
-              ) : detail.priceGross != null ? (
+              ) : priceGross != null ? (
                 <>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena brutto</div>
-                  <div className="text-xl font-bold text-slate-700">{detail.priceGross.toFixed(2)} <span className="text-sm font-normal">zł</span></div>
+                  <div className="text-xl font-bold text-slate-700">{priceGross.toFixed(2)} <span className="text-sm font-normal">zł</span></div>
                 </>
               ) : (
                 <>
@@ -419,7 +427,7 @@ const ProductDetail: React.FC<{
                     <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena katalogowa</th>
                     <th className="px-3 py-2 text-right text-slate-500 font-medium">Cena zakupu</th>
                     <th className="px-3 py-2 text-center text-slate-500 font-medium">Dostępność</th>
-                    <th className="px-3 py-2 w-10"></th>
+                    <th className="px-3 py-2 w-16"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -427,10 +435,10 @@ const ProductDetail: React.FC<{
                     <tr><td colSpan={5} className="px-3 py-4 text-center"><Loader2 className="w-4 h-4 animate-spin text-blue-600 mx-auto" /></td></tr>
                   ) : otherPrices.map((wp, idx) => {
                     const allPrices = otherPrices.filter(p => p.purchasePrice != null).map(p => p.purchasePrice!);
-                    const best = allPrices.length > 0 ? Math.min(...allPrices) : null;
+                    const bestPrice = allPrices.length > 0 ? Math.min(...allPrices) : null;
                     const worst = allPrices.length > 1 ? Math.max(...allPrices) : null;
-                    const isBest = best != null && wp.purchasePrice === best && allPrices.length > 1;
-                    const isWorst = worst != null && wp.purchasePrice === worst && worst !== best;
+                    const isBest = bestPrice != null && wp.purchasePrice === bestPrice && allPrices.length > 1;
+                    const isWorst = worst != null && wp.purchasePrice === worst && worst !== bestPrice;
                     return (
                       <tr key={idx} className={isBest ? 'bg-green-50' : isWorst ? 'bg-red-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                         <td className="px-3 py-2 font-medium text-slate-700">{wp.wholesaler}</td>
@@ -443,9 +451,17 @@ const ProductDetail: React.FC<{
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2 flex gap-1.5">
+                          {wp.productSlug && (
+                            <button
+                              onClick={() => setViewWholesalerProduct({ wholesalerId: wp.wholesalerId, integrationId: wp.integrationId, slug: wp.productSlug!, name: wp.productName || wp.wholesaler })}
+                              className="text-slate-500 hover:text-blue-600 transition-colors" title="Karta produktu"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {wp.url && (
-                            <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700">
+                            <a href={wp.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700" title="Otwórz na stronie hurtowni">
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
@@ -499,6 +515,130 @@ const ProductDetail: React.FC<{
             <p className="text-[10px] text-slate-400">{detail.breadcrumb}</p>
           </div>
         )}
+      </div>
+
+      {/* Wholesaler product card modal */}
+      {viewWholesalerProduct && (
+        <WholesalerProductModal
+          wholesalerId={viewWholesalerProduct.wholesalerId}
+          integrationId={viewWholesalerProduct.integrationId}
+          slug={viewWholesalerProduct.slug}
+          name={viewWholesalerProduct.name}
+          onClose={() => setViewWholesalerProduct(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+// ═══ Wholesaler Product Modal (view product from TIM/Onninen without leaving) ═══
+const WholesalerProductModal: React.FC<{
+  wholesalerId: string;
+  integrationId: string;
+  slug: string;
+  name: string;
+  onClose: () => void;
+}> = ({ wholesalerId, integrationId, slug, name, onClose }) => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const proxyName = wholesalerId === 'tim' ? 'tim-proxy' : wholesalerId === 'oninen' ? 'oninen-proxy' : 'speckable-proxy';
+    supabase.functions.invoke(proxyName, {
+      body: { action: 'product', integrationId, slug },
+    }).then(({ data: resp, error: err }) => {
+      if (err) { setError(err.message); setLoading(false); return; }
+      const parsed = typeof resp === 'string' ? JSON.parse(resp) : resp;
+      if (parsed?.error) { setError(parsed.error); setLoading(false); return; }
+      setData(parsed.product || parsed);
+      setLoading(false);
+    }).catch(e => { setError(e.message); setLoading(false); });
+  }, [wholesalerId, integrationId, slug]);
+
+  const wholesalerLabel = wholesalerId === 'tim' ? 'TIM S.A.' : wholesalerId === 'oninen' ? 'Onninen' : name;
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+          <span className="text-sm font-semibold text-slate-700">Karta produktu — {wholesalerLabel}</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600 mr-2" />
+            <span className="text-sm text-slate-500">Ładowanie z {wholesalerLabel}...</span>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12 px-5">
+            <AlertTriangle className="w-6 h-6 text-red-500 mx-auto mb-2" />
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        ) : data ? (
+          <div className="p-5">
+            <div className="flex flex-wrap gap-5">
+              {/* Image */}
+              {(data.image || data.images?.[0]) && (
+                <div className="w-48 h-48 bg-slate-50 rounded-lg flex items-center justify-center p-3">
+                  <img src={data.image || data.images[0]} alt="" className="max-w-full max-h-full object-contain" />
+                </div>
+              )}
+              {/* Info */}
+              <div className="flex-1 min-w-[200px]">
+                <h3 className="text-base font-semibold text-slate-900 mb-2 leading-tight">{data.name || data.title || '—'}</h3>
+                {(data.sku || data.ref_num) && <p className="text-xs text-slate-500 mb-1">SKU: <span className="font-mono">{data.sku || data.ref_num}</span></p>}
+                {data.ean && <p className="text-xs text-slate-500 mb-1">EAN: <span className="font-mono">{data.ean}</span></p>}
+                {(data.brand || data.manufacturer) && <p className="text-xs text-slate-500 mb-2">Producent: <span className="font-medium text-slate-700">{data.brand || data.manufacturer}</span></p>}
+
+                {/* Prices */}
+                <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  {(data.priceNetto ?? data.price ?? data.priceEnd) != null ? (
+                    <>
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena netto</div>
+                      <div className="text-xl font-bold text-blue-600">{(data.priceNetto ?? data.price ?? data.priceEnd).toFixed(2)} <span className="text-sm font-normal">zł</span></div>
+                      {(data.priceGross ?? data.publicPrice ?? data.priceCatalog) != null && (
+                        <div className="mt-1 text-xs text-slate-400">Cena katalogowa: {(data.priceGross ?? data.publicPrice ?? data.priceCatalog).toFixed(2)} zł</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-xs text-slate-400">Cena niedostępna</div>
+                  )}
+                </div>
+
+                {/* Stock */}
+                {data.stock != null && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${data.stock > 0 || (typeof data.stock === 'string' && data.stock !== '0') ? 'bg-green-500' : 'bg-red-400'}`} />
+                    <span className="text-xs text-slate-600">Magazyn: <b>{data.stock}</b> {data.unit || 'szt'}</span>
+                  </div>
+                )}
+
+                {/* Link to wholesaler */}
+                {data.url && (
+                  <a href={data.url.startsWith('http') ? data.url : undefined} target="_blank" rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700">
+                    <ExternalLink className="w-3 h-3" />
+                    Otwórz na stronie {wholesalerLabel}
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Description */}
+            {(data.description || data.descriptionHtml) && (
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <h4 className="text-xs font-semibold text-slate-600 mb-1">Opis</h4>
+                {data.descriptionHtml ? (
+                  <div className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto" dangerouslySetInnerHTML={{ __html: data.descriptionHtml }} />
+                ) : (
+                  <p className="text-xs text-slate-600 leading-relaxed max-h-40 overflow-y-auto">{data.description}</p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
