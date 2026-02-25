@@ -364,17 +364,25 @@ function parseListPage(html: string, requestedPath: string): any {
         if (strongMatch) symbol = strongMatch[1].trim()
       }
 
-      // Price netto
+      // Price netto (authenticated users see .price-net)
       const priceNetBlock = block.match(/<[^>]*class="[^"]*price-net[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
       let priceNetto: number | null = null
       if (priceNetBlock) {
         priceNetto = parsePrice(priceNetBlock[1])
         if (priceNetto === null) priceNetto = parsePriceFromText(stripHtml(priceNetBlock[1]))
       }
-      // Fallback: first <strong> with a decimal number (price value)
-      if (priceNetto === null) {
+
+      // Price gross (from .price-gross or fallback <strong>)
+      const priceGrossBlock = block.match(/<[^>]*class="[^"]*price-gross[^"]*"[^>]*>([\s\S]*?)<\/[^>]*>/i)
+      let priceGross: number | null = null
+      if (priceGrossBlock) {
+        priceGross = parsePrice(priceGrossBlock[1])
+        if (priceGross === null) priceGross = parsePriceFromText(stripHtml(priceGrossBlock[1]))
+      }
+      // Fallback: first <strong> with a decimal number — this is gross price (public view)
+      if (priceNetto === null && priceGross === null) {
         const priceStrong = block.match(/<strong[^>]*>(\d+\.\d{2,4})<\/strong>/i)
-        if (priceStrong) priceNetto = parseFloat(priceStrong[1])
+        if (priceStrong) priceGross = parseFloat(priceStrong[1])
       }
 
       // Stock
@@ -383,8 +391,8 @@ function parseListPage(html: string, requestedPath: string): any {
 
       products.push({
         slug, name, image, symbol,
-        priceNetto, currency: 'PLN', stock,
-        price: priceNetto != null ? priceNetto.toFixed(2).replace('.', ',') + ' PLN netto' : '',
+        priceNetto, priceGross, currency: 'PLN', stock,
+        price: priceNetto != null ? priceNetto.toFixed(2).replace('.', ',') + ' PLN netto' : (priceGross != null ? priceGross.toFixed(2).replace('.', ',') + ' PLN brutto' : ''),
       })
     }
   }

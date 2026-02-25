@@ -565,8 +565,10 @@ const WholesalerProductModal: React.FC<{
 
   useEffect(() => {
     const proxyName = isTim ? 'tim-proxy' : isOnninen ? 'oninen-proxy' : 'speckable-proxy';
+    const bodyParams: any = { action: 'product', integrationId };
+    if (isTim) { bodyParams.url = slug; } else { bodyParams.slug = slug; }
     supabase.functions.invoke(proxyName, {
-      body: { action: 'product', integrationId, slug },
+      body: bodyParams,
     }).then(({ data: resp, error: err }) => {
       if (err) { setError(err.message); setLoading(false); return; }
       const parsed = typeof resp === 'string' ? JSON.parse(resp) : resp;
@@ -603,15 +605,20 @@ const WholesalerProductModal: React.FC<{
         if (!queries.length && prodName) queries.push(prodName);
         if (!queries.length) { setLoadingOtherPrices(false); return; }
 
-        const scoreProduct = (p: any): number => {
+        const scoreProduct = (p: any): { score: number; strong: boolean } => {
           let sc = 0;
+          let strong = false;
           const pN = (p.name || '').toLowerCase();
           const pS = (p.sku || p.ref_num || '').toLowerCase();
-          if (refNum) { const r = refNum.toLowerCase(); if (pS === r || pS.includes(r) || pN.includes(r)) sc += 20; }
-          if (ean && (pN.includes(ean) || pS.includes(ean))) sc += 15;
+          if (refNum) { const r = refNum.toLowerCase(); if (pS === r || pS.includes(r) || pN.includes(r)) { sc += 20; strong = true; } }
+          if (ean && (pN.includes(ean) || pS.includes(ean))) { sc += 15; strong = true; }
           const words = prodName.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-          sc += words.filter((w: string) => pN.includes(w)).length * 2;
-          return sc;
+          const matchingWords = words.filter((w: string) => pN.includes(w));
+          sc += matchingWords.length * 2;
+          if (words.length > 0 && matchingWords.length / words.length < 0.3 && !strong) {
+            sc = Math.floor(sc / 2);
+          }
+          return { score: sc, strong };
         };
 
         Promise.allSettled(others.map(async (integ: any) => {
@@ -621,11 +628,12 @@ const WholesalerProductModal: React.FC<{
               .then(({ data: d, error: e }) => { if (e) throw e; const p = typeof d === 'string' ? JSON.parse(d) : d; if (p?.error) throw new Error(p.error); return p; })
             )
           );
-          const seen = new Map<string, { product: any; score: number }>();
-          for (const qr of qResults) { if (qr.status !== 'fulfilled') continue; for (const p of (qr.value.products || [])) { const k = p.sku || p.url || p.name; const s = scoreProduct(p); const ex = seen.get(k); if (!ex || s > ex.score) seen.set(k, { product: p, score: s }); } }
-          let best: any = null, bestScore = -1;
-          for (const { product: pr, score: s } of seen.values()) { if (s > bestScore) { best = pr; bestScore = s; } }
+          const seen = new Map<string, { product: any; score: number; strong: boolean }>();
+          for (const qr of qResults) { if (qr.status !== 'fulfilled') continue; for (const p of (qr.value.products || [])) { const k = p.sku || p.url || p.name; const { score: s, strong: st } = scoreProduct(p); const ex = seen.get(k); if (!ex || s > ex.score) seen.set(k, { product: p, score: s, strong: st }); } }
+          let best: any = null, bestScore = -1, bestStrong = false;
+          for (const { product: pr, score: s, strong: st } of seen.values()) { if (s > bestScore) { best = pr; bestScore = s; bestStrong = st; } }
           if ((refNum || ean) && bestScore <= 0) best = null;
+          if (!bestStrong && bestScore < 6) best = null;
           return { integ, best };
         })).then(results => {
           const prices: typeof otherPrices = [];
@@ -642,7 +650,7 @@ const WholesalerProductModal: React.FC<{
               catalogPrice: t ? (best.publicPrice ?? null) : s ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
               purchasePrice: t ? (best.price ?? null) : s ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
               stock: best.stock ?? null,
-              url: best.url || undefined,
+              url: s ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined),
               productSlug: best.slug || best.url || undefined,
               productName: best.name || undefined,
             });
