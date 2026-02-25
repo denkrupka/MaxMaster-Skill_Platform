@@ -328,8 +328,9 @@ export const DictionariesPage: React.FC = () => {
     if (queries.length === 0) return;
 
     // Score how well a search result matches our product
-    const scoreProduct = (p: any): number => {
+    const scoreProduct = (p: any): { score: number; strong: boolean } => {
       let score = 0;
+      let strong = false;
       const pName = (p.name || '').toLowerCase();
       const pSku = (p.sku || '').toLowerCase();
       const pRefNum = (p.ref_num || '').toLowerCase();
@@ -337,15 +338,19 @@ export const DictionariesPage: React.FC = () => {
       // Exact ref_num match (strongest signal)
       if (dm.ref_num) {
         const ref = dm.ref_num.toLowerCase();
-        if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
+        if (pRefNum === ref || pSku.includes(ref) || pName.includes(ref)) { score += 20; strong = true; }
       }
       // EAN match in name or sku
-      if (dm.ean && (pName.includes(dm.ean) || pSku.includes(dm.ean))) score += 15;
+      if (dm.ean && (pName.includes(dm.ean) || pSku.includes(dm.ean))) { score += 15; strong = true; }
       // Name keyword overlap (ignore short words)
       const dmWords = (dm.name || '').toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
       const matchingWords = dmWords.filter((w: string) => pName.includes(w));
       score += matchingWords.length * 2;
-      return score;
+      // Penalize if less than 30% of words match (too different product)
+      if (dmWords.length > 0 && matchingWords.length / dmWords.length < 0.3 && !strong) {
+        score = Math.floor(score / 2);
+      }
+      return { score, strong };
     };
 
     setLoadingPrices(true);
@@ -361,15 +366,15 @@ export const DictionariesPage: React.FC = () => {
       );
 
       // Collect all products, dedup by sku, score each
-      const seen = new Map<string, { product: any; score: number }>();
+      const seen = new Map<string, { product: any; score: number; strong: boolean }>();
       for (const qr of queryResults) {
         if (qr.status !== 'fulfilled') continue;
         for (const p of (qr.value.products || [])) {
           const key = p.sku || p.url || p.name;
-          const score = scoreProduct(p);
+          const { score, strong } = scoreProduct(p);
           const existing = seen.get(key);
           if (!existing || score > existing.score) {
-            seen.set(key, { product: p, score });
+            seen.set(key, { product: p, score, strong });
           }
         }
       }
@@ -377,12 +382,15 @@ export const DictionariesPage: React.FC = () => {
       // Pick the best scoring product (must score > 0 if we have ref_num/ean to validate against)
       let best: any = null;
       let bestScore = -1;
-      for (const { product, score } of seen.values()) {
-        if (score > bestScore) { best = product; bestScore = score; }
+      let bestStrong = false;
+      for (const { product, score, strong } of seen.values()) {
+        if (score > bestScore) { best = product; bestScore = score; bestStrong = strong; }
       }
 
       // If we have strong identifiers but no product scored above 0, skip (avoids wrong matches)
       if ((dm.ref_num || dm.ean) && bestScore <= 0) best = null;
+      // If no strong match (ref_num/ean), require minimum score of 6 (at least 3 keyword matches)
+      if (!bestStrong && bestScore < 6) best = null;
 
       return { integration, best };
     })).then(results => {
@@ -399,7 +407,7 @@ export const DictionariesPage: React.FC = () => {
         const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
         const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
 
-        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
+        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: isSpeckable ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined) });
       }
 
       setWholesalerPrices(prices);

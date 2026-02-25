@@ -188,18 +188,23 @@ const ProductDetail: React.FC<{
         if (!queries.length && detail.name) queries.push(detail.name);
         if (!queries.length) { setLoadingOtherPrices(false); return; }
 
-        const scoreProduct = (p: any): number => {
+        const scoreProduct = (p: any): { score: number; strong: boolean } => {
           let score = 0;
+          let strong = false;
           const pName = (p.name || '').toLowerCase();
           const pSku = (p.sku || p.ref_num || '').toLowerCase();
           if (detail.sku) {
             const ref = detail.sku.toLowerCase();
-            if (pSku === ref || pSku.includes(ref) || pName.includes(ref)) score += 20;
+            if (pSku === ref || pSku.includes(ref) || pName.includes(ref)) { score += 20; strong = true; }
           }
-          if (detail.ean && (pName.includes(detail.ean) || pSku.includes(detail.ean))) score += 15;
+          if (detail.ean && (pName.includes(detail.ean) || pSku.includes(detail.ean))) { score += 15; strong = true; }
           const words = (detail.name || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
-          score += words.filter(w => pName.includes(w)).length * 2;
-          return score;
+          const matchingWords = words.filter(w => pName.includes(w));
+          score += matchingWords.length * 2;
+          if (words.length > 0 && matchingWords.length / words.length < 0.3 && !strong) {
+            score = Math.floor(score / 2);
+          }
+          return { score, strong };
         };
 
         Promise.allSettled(others.map(async (integ) => {
@@ -215,19 +220,20 @@ const ProductDetail: React.FC<{
                 })
             )
           );
-          const seen = new Map<string, { product: any; score: number }>();
+          const seen = new Map<string, { product: any; score: number; strong: boolean }>();
           for (const qr of qResults) {
             if (qr.status !== 'fulfilled') continue;
             for (const p of (qr.value.products || [])) {
               const key = p.sku || p.url || p.name;
-              const sc = scoreProduct(p);
+              const { score: sc, strong: st } = scoreProduct(p);
               const ex = seen.get(key);
-              if (!ex || sc > ex.score) seen.set(key, { product: p, score: sc });
+              if (!ex || sc > ex.score) seen.set(key, { product: p, score: sc, strong: st });
             }
           }
-          let best: any = null, bestScore = -1;
-          for (const { product: pr, score: sc } of seen.values()) { if (sc > bestScore) { best = pr; bestScore = sc; } }
+          let best: any = null, bestScore = -1, bestStrong = false;
+          for (const { product: pr, score: sc, strong: st } of seen.values()) { if (sc > bestScore) { best = pr; bestScore = sc; bestStrong = st; } }
           if ((detail.sku || detail.ean) && bestScore <= 0) best = null;
+          if (!bestStrong && bestScore < 6) best = null;
           return { integ, best };
         })).then(results => {
           const prices: typeof otherPrices = [];
@@ -237,6 +243,7 @@ const ProductDetail: React.FC<{
             if (!best) continue;
             const isTim = integ.wholesaler_id === 'tim';
             const isOnninen = integ.wholesaler_id === 'oninen';
+            const isSpeck = integ.wholesaler_id === 'speckable';
             prices.push({
               wholesaler: integ.wholesaler_name || (isTim ? 'TIM' : isOnninen ? 'Onninen' : integ.wholesaler_id),
               wholesalerId: integ.wholesaler_id,
@@ -244,7 +251,7 @@ const ProductDetail: React.FC<{
               catalogPrice: isTim ? (best.publicPrice ?? null) : isOnninen ? (best.priceCatalog ?? null) : (best.priceGross ?? null),
               purchasePrice: isTim ? (best.price ?? null) : isOnninen ? (best.priceEnd ?? null) : (best.priceNetto ?? null),
               stock: best.stock ?? null,
-              url: best.url || undefined,
+              url: isSpeck ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined),
               productSlug: best.slug || best.url || undefined,
               productName: best.name || undefined,
             });
@@ -278,9 +285,10 @@ const ProductDetail: React.FC<{
     </div>
   );
 
-  // Prefer listing price (server-side rendered, correct) over detail page price (JS-rendered, often wrong/catalog price)
-  const priceNetto = product.priceNetto ?? detail.priceNetto ?? null;
+  // Prefer detail page price (fetched with auth cookies) over listing price (may be stale/cached)
+  const priceNetto = detail.priceNetto ?? product.priceNetto ?? null;
   const priceGross = detail.priceGross != null && detail.priceGross !== priceNetto ? detail.priceGross : null;
+  const onlyBrutto = priceNetto == null && priceGross != null;
   const discount = priceGross && priceNetto && priceGross > priceNetto
     ? Math.round((1 - priceNetto / priceGross) * 100)
     : null;
@@ -328,6 +336,9 @@ const ProductDetail: React.FC<{
                 <>
                   <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Cena brutto</div>
                   <div className="text-xl font-bold text-slate-700">{priceGross.toFixed(2)} <span className="text-sm font-normal">zł</span></div>
+                  {onlyBrutto && (
+                    <div className="mt-1 text-[10px] text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Zaloguj się w Speckable aby zobaczyć cenę netto</div>
+                  )}
                 </>
               ) : (
                 <>
@@ -555,8 +566,10 @@ const WholesalerProductModal: React.FC<{
 
   useEffect(() => {
     const proxyName = isTim ? 'tim-proxy' : isOnninen ? 'oninen-proxy' : 'speckable-proxy';
+    const bodyParams: any = { action: 'product', integrationId };
+    if (isTim) { bodyParams.url = slug; } else { bodyParams.slug = slug; }
     supabase.functions.invoke(proxyName, {
-      body: { action: 'product', integrationId, slug },
+      body: bodyParams,
     }).then(({ data: resp, error: err }) => {
       if (err) { setError(err.message); setLoading(false); return; }
       const parsed = typeof resp === 'string' ? JSON.parse(resp) : resp;
@@ -593,15 +606,20 @@ const WholesalerProductModal: React.FC<{
         if (!queries.length && prodName) queries.push(prodName);
         if (!queries.length) { setLoadingOtherPrices(false); return; }
 
-        const scoreProduct = (p: any): number => {
+        const scoreProduct = (p: any): { score: number; strong: boolean } => {
           let sc = 0;
+          let strong = false;
           const pN = (p.name || '').toLowerCase();
           const pS = (p.sku || p.ref_num || '').toLowerCase();
-          if (refNum) { const r = refNum.toLowerCase(); if (pS === r || pS.includes(r) || pN.includes(r)) sc += 20; }
-          if (ean && (pN.includes(ean) || pS.includes(ean))) sc += 15;
+          if (refNum) { const r = refNum.toLowerCase(); if (pS === r || pS.includes(r) || pN.includes(r)) { sc += 20; strong = true; } }
+          if (ean && (pN.includes(ean) || pS.includes(ean))) { sc += 15; strong = true; }
           const words = prodName.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-          sc += words.filter((w: string) => pN.includes(w)).length * 2;
-          return sc;
+          const matchingWords = words.filter((w: string) => pN.includes(w));
+          sc += matchingWords.length * 2;
+          if (words.length > 0 && matchingWords.length / words.length < 0.3 && !strong) {
+            sc = Math.floor(sc / 2);
+          }
+          return { score: sc, strong };
         };
 
         Promise.allSettled(others.map(async (integ: any) => {
@@ -611,11 +629,12 @@ const WholesalerProductModal: React.FC<{
               .then(({ data: d, error: e }) => { if (e) throw e; const p = typeof d === 'string' ? JSON.parse(d) : d; if (p?.error) throw new Error(p.error); return p; })
             )
           );
-          const seen = new Map<string, { product: any; score: number }>();
-          for (const qr of qResults) { if (qr.status !== 'fulfilled') continue; for (const p of (qr.value.products || [])) { const k = p.sku || p.url || p.name; const s = scoreProduct(p); const ex = seen.get(k); if (!ex || s > ex.score) seen.set(k, { product: p, score: s }); } }
-          let best: any = null, bestScore = -1;
-          for (const { product: pr, score: s } of seen.values()) { if (s > bestScore) { best = pr; bestScore = s; } }
+          const seen = new Map<string, { product: any; score: number; strong: boolean }>();
+          for (const qr of qResults) { if (qr.status !== 'fulfilled') continue; for (const p of (qr.value.products || [])) { const k = p.sku || p.url || p.name; const { score: s, strong: st } = scoreProduct(p); const ex = seen.get(k); if (!ex || s > ex.score) seen.set(k, { product: p, score: s, strong: st }); } }
+          let best: any = null, bestScore = -1, bestStrong = false;
+          for (const { product: pr, score: s, strong: st } of seen.values()) { if (s > bestScore) { best = pr; bestScore = s; bestStrong = st; } }
           if ((refNum || ean) && bestScore <= 0) best = null;
+          if (!bestStrong && bestScore < 6) best = null;
           return { integ, best };
         })).then(results => {
           const prices: typeof otherPrices = [];
@@ -632,7 +651,7 @@ const WholesalerProductModal: React.FC<{
               catalogPrice: t ? (best.publicPrice ?? null) : s ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
               purchasePrice: t ? (best.price ?? null) : s ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
               stock: best.stock ?? null,
-              url: best.url || undefined,
+              url: s ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined),
               productSlug: best.slug || best.url || undefined,
               productName: best.name || undefined,
             });
