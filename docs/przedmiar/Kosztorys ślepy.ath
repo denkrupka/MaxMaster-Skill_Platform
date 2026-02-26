@@ -1,0 +1,11288 @@
+[KOSZTORYS ATHENASOFT]
+co=Copyright Athenasoft sp. z o.o. (dotyczy formatu zapisu kosztorysu / kosztorys utworzony w programie KOMA - KOSZTMAN Mateusz Moœcicki)
+wf=4
+pr=KOMA	 5.0.3.82
+pe=1
+op=1
+opn=0	0	0	0	0	0	0	8	1	0	1	0	0	0	1.	1	1	0	1	0	1
+own=2	1	1	0	1	0	0	0	1	0	0	0	1	0	1	1	poz.	<	>	1	0	0	0	0	0	0	1	0
+prn=2	2	2	2	4	0	4	0	1
+nan=TABLICE TA
+cr=0
+pe=10
+pm=dzia³	dzia³
+pm=dzia³u	dzia³u
+pm=dzia³y	dzia³y
+pm=dzia³ów	dzia³ów
+wan=PLN
+wbn=PLN	z³
+
+[STRONA TYT]
+na=KOSZTORYS BUDOWLANY
+nfn=Mad-Tech Sp. z o.o.
+afn=ul. Rembieliñska 10b/6131003-343 Warszawa
+nb= Remont instalacji elektrycznej i teletechnicznej w budynku mieszkalnym przy Ul. P³ockiej 3 w Warszawie
+ab=P³ocka 3 Warszawa
+ni=
+ai=
+nw=Mad-Tech Sp. z o.o.
+aw=ul. Rembieliñska 10b/6131003-343 Warszawa
+br=Elektryczna
+nk=Krzysztof Lembas (Bran¿a elektryczna)
+npn=
+dt=13 listopada 2024
+pcn=
+kln=
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[GRUPY RMS]
+gr=Bez kosztów
+gm=Bez kosztów
+gs=Bez kosztów
+
+[STA£E]
+
+[GRUPY WARIANTÓW]
+grn=1	przewody	1	12	0
+wan=wtynkowe-YDYt	p³askie -YDYn
+grn=2	³¹czniki/przyciski	1	20	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=3	wapno	1	25	0
+wan=ciasto wapienne	suchogaszone
+grn=4	wapno	1	45	0
+wan=ciasto wapienne	suchogaszone
+grn=5	³¹czniki/przyciski	1	58	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=6	wapno	1	63	0
+wan=ciasto wapienne	suchogaszone
+grn=7	wapno	1	81	0
+wan=ciasto wapienne	suchogaszone
+grn=8	³¹czniki/przyciski	1	94	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=9	wapno	1	99	0
+wan=ciasto wapienne	suchogaszone
+grn=10	wapno	1	117	0
+wan=ciasto wapienne	suchogaszone
+grn=11	³¹czniki/przyciski	1	130	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=12	wapno	1	135	0
+wan=ciasto wapienne	suchogaszone
+grn=13	wapno	1	153	0
+wan=ciasto wapienne	suchogaszone
+grn=14	wapno	1	170	0
+wan=ciasto wapienne	suchogaszone
+grn=15	wapno	1	175	0
+wan=ciasto wapienne	suchogaszone
+grn=16	przewody	1	180	0
+wan=wtynkowe-YDYt	p³askie -YDYn
+grn=17	przewody	1	188	0
+wan=wtynkowe-YDYt	p³askie -YDYn
+grn=18	³¹czniki/przyciski	1	196	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=19	wapno	1	201	0
+wan=ciasto wapienne	suchogaszone
+grn=20	wapno	1	221	0
+wan=ciasto wapienne	suchogaszone
+grn=21	³¹czniki/przyciski	1	234	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=22	wapno	1	239	0
+wan=ciasto wapienne	suchogaszone
+grn=23	wapno	1	257	0
+wan=ciasto wapienne	suchogaszone
+grn=24	³¹czniki/przyciski	1	270	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=25	wapno	1	275	0
+wan=ciasto wapienne	suchogaszone
+grn=26	wapno	1	293	0
+wan=ciasto wapienne	suchogaszone
+grn=27	³¹czniki/przyciski	1	306	0
+wan=³¹czniki instalacyjne	przyciski instalacyjne
+grn=28	wapno	1	311	0
+wan=ciasto wapienne	suchogaszone
+grn=29	wapno	1	329	0
+wan=ciasto wapienne	suchogaszone
+grn=30	wapno	1	346	0
+wan=ciasto wapienne	suchogaszone
+grn=31	wapno	1	351	0
+wan=ciasto wapienne	suchogaszone
+grn=32	przewody	1	356	0
+wan=wtynkowe-YDYt	p³askie -YDYn
+grn=33	³¹czniki/przyciski	1	369	0
+wan=³¹czniki	przyciski
+
+[RMS ZEST 1]
+ty=R	1
+na=robocizna pomocnicza	0
+id=000	1
+jm=%	147
+cw=1	PLN
+
+[RMS ZEST 2]
+ty=M	1
+na=materia³y pomocnicze	0
+id=0000000	1
+jm=%	147
+cw=1	PLN
+
+[RMS ZEST 3]
+ty=S	1
+na=sprzêt pomocniczy	0
+id=00000	1
+jm=%	147
+cw=1	PLN
+
+[RMS ZEST 4]
+ty=R
+na=elektromonterzy gr.II	0
+id=662	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 5]
+ty=R
+na=stolarze budowlani gr.II	0
+id=412	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 6]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 7]
+ty=R
+na=robotnicy	0
+id=999	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 8]
+ty=R
+na=elektromonterzy gr.III	0
+id=663	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 9]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 10]
+ty=R
+na=tynkarze gr.III	0
+id=463	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 11]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 12]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 13]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 14]
+ty=R
+na=tynkarze gr.II	0
+id=462	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 15]
+ty=R
+na=malarze gr.II	0
+id=122	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 16]
+ty=R
+na=robocizna'	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 17]
+ty=R
+na=robocizna''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 18]
+ty=R
+na=robocizna'''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 19]
+ty=R
+na=monterzy gr.III	0
+id=333	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 20]
+ty=R
+na=monterzy gr.II	0
+id=332	1
+jm=r-g	149
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 21]
+ty=R
+na=robocizna''''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 22]
+ty=R
+na=robocizna'''''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 23]
+ty=R
+na=robocizna''''''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 24]
+ty=R
+na=robocizna'''''''	0
+id=999	1
+jm=r-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1216,63007
+
+[RMS ZEST 25]
+ty=M
+na=p³yta izolacyjna	0
+id=7592799	1
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1,02
+
+[RMS ZEST 26]
+ty=M
+na=Zamek drzwi I	0
+id=1344399	1
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=7
+
+[RMS ZEST 27]
+ty=M
+na=drzwiczki stalowe	0
+id=8311099	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=45
+
+[RMS ZEST 28]
+ty=M
+na=wy³¹czniki nadpr¹dowe S301B16	0
+id=7512999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1
+
+[RMS ZEST 29]
+ty=M
+na=przewody wtynkowe-YDYt 3x1,5	0
+id=7951399	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=218,4
+
+[RMS ZEST 30]
+ty=M
+na=rury winidurowe	0
+id=7580099	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=989,456
+
+[RMS ZEST 31]
+ty=M
+na=z³¹czki	0
+id=7580499	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=386,63
+
+[RMS ZEST 32]
+ty=M
+na=ko³ki rozporowe plastykowe	0
+id=8990499	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=588
+
+[RMS ZEST 33]
+ty=M
+na=uchwyty	0
+id=1551399	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=588
+
+[RMS ZEST 34]
+ty=M
+na=oprawy oœwietleniowe piwniczne	0
+id=7302299	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=40
+
+[RMS ZEST 35]
+ty=M
+na=ko³ki kotwi¹ce	0
+id=8321799	1
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=184
+
+[RMS ZEST 36]
+ty=M
+na=Oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)	0
+id=7302299	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=27
+
+[RMS ZEST 37]
+ty=M
+na=Czujnik ruchu mikrofalowy	0
+id=7302299	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=32
+
+[RMS ZEST 38]
+ty=M
+na=Przycisk dzwonkowy	0
+id=7519999	1
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=66,3
+
+[RMS ZEST 39]
+ty=M
+na=cement portlandzki z dodatkami 25	0
+id=1701100	1
+jm=t	034
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,0385
+
+[RMS ZEST 40]
+ty=M
+na=ciasto wapienne (wapno gaszone)	0
+id=2360000	1
+jm=m3	060
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,302894
+
+[RMS ZEST 41]
+ty=M
+na=piasek do zapraw	0
+id=1602003	1
+jm=m3	060
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,51425
+
+[RMS ZEST 42]
+ty=M
+na=Zamek Zelp	0
+id=1344399	1
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=48
+
+[RMS ZEST 43]
+ty=M
+na=przewody kabelkowe YDYp 3x1,5mm2	0
+id=7959999	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=239,2
+
+[RMS ZEST 44]
+ty=M
+na=przewody kabelkowe UTP 5E	0
+id=7959999	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=322,4
+
+[RMS ZEST 45]
+ty=M
+na=przewody kabelkowe RG6	0
+id=7959999	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=288,08
+
+[RMS ZEST 46]
+ty=M
+na=przewody kabelkowe YDYp 3x2,5mm2	0
+id=7959999	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=31,2
+
+[RMS ZEST 47]
+ty=M
+na=cement portlandzki zwyk³y bez dodatków 35	0
+id=1700301	1
+jm=t	034
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,15471
+
+[RMS ZEST 48]
+ty=M
+na=piasek do betonów zwyk³ych	0
+id=1601808	1
+jm=m3	060
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,891
+
+[RMS ZEST 49]
+ty=M
+na=gips szpachlowy	0
+id=1740103	1
+jm=t	034
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,085778
+
+[RMS ZEST 50]
+ty=M
+na=farby emulsyjne nawierzchniowe	0
+id=1510899	1
+jm=dm3	066
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=16,83682
+
+[RMS ZEST 51]
+ty=M
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji niskopr¹dowych	0
+id=7540099	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=52,02
+
+[RMS ZEST 52]
+ty=M
+na=skrzynki lub rozdzielnice	0
+id=7052999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=8
+
+[RMS ZEST 53]
+ty=M
+na=farba olejna nawierzchniowa szara	0
+id=1510105	3
+jm=dm3	066
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,13
+
+[RMS ZEST 54]
+ty=M
+na=Unifony	0
+id=	
+jm=szt.	
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=42,84
+
+[RMS ZEST 55]
+ty=M
+na=przewody wtynkowe-YDYt ¿o 3x1,5	0
+id=7951399	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=72,8
+
+[RMS ZEST 56]
+ty=M
+na=Monta¿ skrzynek i rozdzielnic skrzynkowych o masie do 10 kg Kaseta antywandal MASTER	0
+id=7052999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=1
+
+[RMS ZEST 57]
+ty=M
+na=Zasilacz	0
+id=7099999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=2
+
+[RMS ZEST 58]
+ty=M
+na=puszki izolacyjne podtynkowe	0
+id=7540099	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=2,04
+
+[RMS ZEST 59]
+ty=M
+na=Przycisk wyjœcia	0
+id=7519999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=2,04
+
+[RMS ZEST 60]
+ty=M
+na=spoiwo cynowo-o³owiowe LC-60 z topnikiem TLR 157	0
+id=8220405	1
+jm=kg	033
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,078
+
+[RMS ZEST 61]
+ty=M
+na=Samozamykacz	0
+id=7059999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=2
+
+[RMS ZEST 62]
+ty=M
+na=Zwora magnetyczna	0
+id=7059999	3
+jm=szt.	020
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=2
+
+[RMS ZEST 63]
+ty=M
+na=Przewody kabelkowe OMY 2x1 do zwór i przycisków wyjœcia)	0
+id=7959999	3
+jm=m	040
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=20,8
+
+[RMS ZEST 64]
+ty=S
+na=wyci¹g jednomasztowy z napêdem elektrycznym 0,5 t	0
+id=34312	1
+jm=m-g	148
+ce=0
+cw=0	PLN	0
+wc=1	1
+il=0,6127
+
+[ELEMENT 1]
+id=1
+na=
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=2
+pd=	KNR 4-03 0313-10			
+na=Wymiana p³yty maskuj¹cej w tablicy TA
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,798	0	0,798
+nan=0
+
+[RMS 25]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=3
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków tablic zewnêtrznych
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 26]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=4
+pd=	KNR-W 4-03 0313-03			
+na=Naprawa okienek rewizyjnych w drzwiczkach zewnêtrznych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=5
+pd=	KNNR 5 0407-01			
+na=Wy³¹cznik nadpr¹dowy 1-biegunowy w rozdzielnicach10(uzupe³nienie TA) S301B16
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,18	0	0,18
+nan=0
+
+[RMS 28]
+nz=1	0	1
+nan=0
+
+[POZYCJA]
+id=6
+pd=	KNR 5-08 0817-04			
+na=Aktualizacja opisów
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 8]
+nz=0,011	0	0,011
+nan=0
+
+[ELEMENT 1]
+id=7
+na=INSTALACJA ELEKTRYCZNA
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[ELEMENT 2]
+id=8
+na=KLATKA I - PIWNICA
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=9
+pd=	KNNR 9 0401-07			
+na=Demonta¿ wy³¹cznika natynkowego 
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=10
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów dla wy³¹czników oœwieltenia
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=11
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- Mikrofalowy czujniki ruchu
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 9]
+nz=0,513	0	0,513
+nan=0
+
+[POZYCJA]
+id=12
+pd=	KNNR 9 0301-01			
+na=Wymiana przewodów uk³adanych pod tynkiem wtynkowych lub p³askich - Przewód YDY¿o 3x1,5mm
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,264	0	0,264
+nan=0
+
+[RMS 29]
+nz=1,04	0	1,04
+np=2
+nan=0
+stn=1	0
+
+[RMS 30]
+nz=0,0312	0	0,0312
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=13
+pd=	KNNR 5 0103-01			
+na=Rury elektroinstalacyjne o œr.do 20 mm uk³adane n.t. na betonie10- Rura elektroinstalacyjna sztywna
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,356	0	0,356
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 32]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 33]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=14
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych piwnicznych
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 34]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=15
+pd=	KNR 5-08 0502-09			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na betonie mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 2)
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,14	0	0,14
+nan=0
+
+[RMS 35]
+nz=2	0	2
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[ELEMENT 2]
+id=16
+na=KLATKA I - PARTER
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=17
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=18
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=19
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=20
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=2	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=21
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=22
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=23
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=24
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=25
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=3	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=26
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=27
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=28
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=29
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=30
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=31
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=32
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=17.00	17.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=17.00	1	17					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=33
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=17.00	17.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=17.00	1	17					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=34
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=36.00	36.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=36.00	1	36					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=35
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=36.00	36.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=36.00	1	36					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=36
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=27.00	27.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=27.00	1	27					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=37
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=27.00	27.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=27.00	1	27,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=38
+pd=	KNNR 5 1207-01			
+na=Wykucie bruzd dla przewodów wtynkowych w cegle
+op=0	0	0	0	1	0
+ob=27.00	27.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=27.00	1	27,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0798	0	0,0798
+nan=0
+
+[POZYCJA]
+id=39
+pd=	KNNR 5 0205-01			
+na=Przewody kabelkowe o ³¹cznym przekroju ¿y³ do 7.5 mm2 uk³adane p.t. w gotowych bruzdach w pod³o¿u innym ni¿ betonowe
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 46]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=40
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=13.00	13.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=13.00	1	13,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=41
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=42
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=88.50	88.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=88.50	1	88,500					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=43
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=18.00	18.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=18.00	1	18					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=44
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.10	0.10
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.10	1	0,098					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=45
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.23	6.23
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.23	1	6,225					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=4	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=46
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.23	6.23
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.23	1	6,225					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=47
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=48
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=49
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=50
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=51
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=52
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 16]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=53
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=54
+na=KLATKA I - PIÊTRO 1
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=55
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=56
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=57
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=58
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=5	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=59
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=60
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=61
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=62
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=63
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=6	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=64
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=65
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=66
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=67
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=68
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=69
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=70
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=71
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=72
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=73
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=74
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=34.00	34.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=34.00	1	34					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=75
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=30.00	30.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=30.00	1	30,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=76
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=22.00	22.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=22.00	1	22,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=77
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=78
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=97.50	97.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=97.50	1	97,500					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=79
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=80
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.09	0.09
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.09	1	0,091					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=81
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.68	6.68
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.68	1	6,675					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=7	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=82
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.08	6.08
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.08	1	6,075					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=83
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=84
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=85
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=86
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=87
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=88
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=89
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=90
+na=KLATKA I - PIÊTRO 2
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=91
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=92
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=93
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=94
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=8	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=95
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=96
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=97
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=98
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=99
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=9	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=100
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=101
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=102
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=103
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=104
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=105
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=106
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=107
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=108
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=109
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=110
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=34.00	34.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=34.00	1	34					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=111
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=30.00	30.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=30.00	1	30,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=112
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=22.00	22.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=22.00	1	22,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=113
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=114
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=97.50	97.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=97.50	1	97,500					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=115
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=116
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.09	0.09
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.09	1	0,091					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=117
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.68	6.68
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.68	1	6,675					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=10	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=118
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.08	6.08
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.08	1	6,075					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=119
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=120
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=121
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=122
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=123
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=124
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=125
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=126
+na=KLATKA I - PIÊTRO 3
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=127
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=128
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=129
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=130
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=11	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=131
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=132
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=133
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=134
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=135
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=12	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=136
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=137
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=138
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=139
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=140
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=141
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=142
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=143
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=144
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=145
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=146
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=34.00	34.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=34.00	1	34					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=147
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=30.00	30.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=30.00	1	30,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=148
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=22.00	22.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=22.00	1	22,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=149
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=150
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=97.50	97.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=97.50	1	97,500					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=151
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=152
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.09	0.09
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.09	1	0,091					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=153
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.68	6.68
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.68	1	6,675					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=13	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=154
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.08	6.08
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.08	1	6,075					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=155
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=156
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=157
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=158
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=159
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=160
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=161
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=162
+na=KLATKA I - STRYCH
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=163
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=164
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=165
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=166
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=167
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=168
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=169
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=170
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=14	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=171
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=172
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=173
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=97.50	97.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=97.50	1	97,500					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=174
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.01	0.01
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.01	1	0,009					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=175
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.68	6.68
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.68	1	6,675					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=15	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=176
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.08	6.08
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.08	1	6,075					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=177
+pd=	KNNR 9 0401-07			
+na=Demonta¿ wy³¹cznika natynkowego 
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=178
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów dla wy³¹czników oœwieltenia
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=179
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- Mikrofalowy czujniki ruchu
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 9]
+nz=0,513	0	0,513
+nan=0
+
+[POZYCJA]
+id=180
+pd=	KNNR 9 0301-01			
+na=Wymiana przewodów uk³adanych pod tynkiem wtynkowych lub p³askich - Przewód YDY¿o 3x1,5mm
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,264	0	0,264
+nan=0
+
+[RMS 29]
+nz=1,04	0	1,04
+np=2
+nan=0
+stn=16	0
+
+[RMS 30]
+nz=0,0312	0	0,0312
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=181
+pd=	KNNR 5 0103-01			
+na=Rury elektroinstalacyjne o œr.do 20 mm uk³adane n.t. na betonie10- Rura elektroinstalacyjna sztywna
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,356	0	0,356
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 32]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 33]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=182
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych piwnicznych
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 34]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=183
+pd=	KNR 5-08 0502-09			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na betonie mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 2)
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,14	0	0,14
+nan=0
+
+[RMS 35]
+nz=2	0	2
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[ELEMENT 2]
+id=184
+na=KLATKA II PIWNICA
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=185
+pd=	KNNR 9 0401-07			
+na=Demonta¿ wy³¹cznika natynkowego 
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=186
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów dla wy³¹czników oœwieltenia
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=187
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- Mikrofalowy czujniki ruchu
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 9]
+nz=0,513	0	0,513
+nan=0
+
+[POZYCJA]
+id=188
+pd=	KNNR 9 0301-01			
+na=Wymiana przewodów uk³adanych pod tynkiem wtynkowych lub p³askich - Przewód YDY¿o 3x1,5mm
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,264	0	0,264
+nan=0
+
+[RMS 29]
+nz=1,04	0	1,04
+np=2
+nan=0
+stn=17	0
+
+[RMS 30]
+nz=0,0312	0	0,0312
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=189
+pd=	KNNR 5 0103-01			
+na=Rury elektroinstalacyjne o œr.do 20 mm uk³adane n.t. na betonie10- Rura elektroinstalacyjna sztywna
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,356	0	0,356
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 32]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 33]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=190
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych piwnicznych
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 34]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=191
+pd=	KNR 5-08 0502-09			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na betonie mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 2)
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,14	0	0,14
+nan=0
+
+[RMS 35]
+nz=2	0	2
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[ELEMENT 2]
+id=192
+na=KLATKA II - PARTER
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=193
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=194
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=195
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=196
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=18	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=197
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=198
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=199
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=200
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=201
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=19	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=202
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=203
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=204
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=205
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=206
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=207
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=208
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=17.00	17.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=17.00	1	17					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=209
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=17.00	17.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=17.00	1	17					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=210
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=211
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=212
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=44.00	44.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=44.00	1	44					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=213
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=35.00	35.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=35.00	1	35					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=214
+pd=	KNNR 5 1207-01			
+na=Wykucie bruzd dla przewodów wtynkowych w cegle
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0798	0	0,0798
+nan=0
+
+[POZYCJA]
+id=215
+pd=	KNNR 5 0205-01			
+na=Przewody kabelkowe o ³¹cznym przekroju ¿y³ do 7.5 mm2 uk³adane p.t. w gotowych bruzdach w pod³o¿u innym ni¿ betonowe
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 46]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=216
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=217
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=218
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=122.50	122.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=122.50	1	122,5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=219
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=17.00	17.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=17.00	1	17					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=220
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.12	0.12
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.12	1	0,119					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=221
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=7.83	7.83
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=7.83	1	7,825					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=20	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=222
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=7.83	7.83
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=7.83	1	7,825					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=223
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=224
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=225
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=226
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=227
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=8.00	1	8,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=228
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=229
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=230
+na=KLATKA II - PIÊTRO 1
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=231
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=232
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=233
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=234
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=21	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=235
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=236
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=237
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=238
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=239
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=22	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=240
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=241
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=242
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=243
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=244
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=245
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=246
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=247
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=13.00	13.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=13.00	1	13					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=248
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=60.00	60.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=60.00	1	60					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=249
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=250
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=39.00	39.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=39.00	1	39					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=251
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=35.00	35.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=35.00	1	35					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=252
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=253
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=254
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=107.50	107.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=107.50	1	107,5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=255
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=256
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.10	0.10
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.10	1	0,097					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=257
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=23	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=258
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=259
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=260
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=261
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=262
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=263
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=264
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=265
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=266
+na=KLATKA II - PIÊTRO 2
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=267
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=268
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=269
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=270
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=24	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=271
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=272
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=273
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=274
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=275
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=25	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=276
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=277
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=278
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=279
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=280
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=281
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=282
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=283
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=284
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=90.00	90.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=90.00	1	90					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=285
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=90.00	90.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=90.00	1	90					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=286
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=49.00	49.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=49.00	1	49					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=287
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=45.00	45.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=45.00	1	45					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=288
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=289
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=290
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=107.50	107.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=107.50	1	107,5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=291
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=292
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.10	0.10
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.10	1	0,097					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=293
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=26	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=294
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=295
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=296
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=297
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=298
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=299
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=300
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=7.00	7.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=7.00	1	7					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=301
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=302
+na=KLATKA II - PIÊTRO 3
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=303
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=304
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=305
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=306
+pd=	KNR 4-03 0307-01			
+na=Wymiana wy³¹cznika lub przycisku 1-bieg. podtynkowego w puszce (Wymiana przycisku dzwonkowego)
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4095	0	0,4095
+nan=0
+
+[RMS 38]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=27	0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=307
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=308
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=4.00	4.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=4.00	1	4					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=309
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=310
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=311
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=28	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=312
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ teletechniczna)
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=313
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ zabezpieczeñ przedlicznikowych)10101010
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=314
+pd=	KNR-W 4-03 0313-03			
+na=Wymiana drzwiczek zewnêtrznych metalowych tablic piêtrowych (czêœæ licznikowa, z trzema okienkami rewizyjnymi)
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=1,42	0	1,42
+nan=0
+
+[RMS 27]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=315
+pd=	KNR 4-01 0919-28			
+na=Wymiana zamków skrzynkowych (wymiana zamków ZELP)
+op=0	0	0	0	1	0
+ob=6.00	6.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=6.00	1	6,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 5]
+nz=0,61	0	0,61
+nan=0
+
+[RMS 42]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=8	0	8
+np=1
+op=
+
+[POZYCJA]
+id=316
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=317
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=25.00	25.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=25.00	1	25,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=318
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=319
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=320
+pd=	KNNR 5 1207-05			
+na=Wykucie bruzd dla rur RKLG18, RS22 w cegle
+op=0	0	0	0	1	0
+ob=90.00	90.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=90.00	1	90					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,11	0	0,11
+nan=0
+
+[POZYCJA]
+id=321
+pd=	KNNR 5 0101-02			
+na=Rury winidurowe o œr.do 28 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=90.00	90.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=90.00	1	90					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,12	0	0,12
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=322
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji domofonowej - Kabel10UTP5e
+op=0	0	0	0	1	0
+ob=49.00	49.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=49.00	1	49					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 44]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=323
+pd=	KNR-W 5-08 0207-01			
+na=Wci¹gane do rur przewodów instalacji telewizyjnej - Kabel koncentryczny RG6
+op=0	0	0	0	1	0
+ob=45.00	45.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=45.00	1	45					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 45]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=324
+pd=	KNP 18 0809-02.01			
+na=Demonta¿ natynkowych kana³ów elektroinstalacyjnych
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=325
+pd=	Analiza w³asna			
+na=Przeniesienie istniej¹cych przewodów instalacji operatorów do nowych rur instalacyjnych podtynkowych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 13]
+nz=0,06	0	0,06
+nan=0
+
+[POZYCJA]
+id=326
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=107.50	107.50
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=107.50	1	107,5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=327
+pd=	KNNR 5 1208-02			
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	1	0
+ob=12.00	12.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=12.00	1	12					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0525	0	0,0525
+nan=0
+
+[POZYCJA]
+id=328
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.10	0.10
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.10	1	0,097					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=329
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=29	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=330
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=6.58	6.58
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=6.58	1	6,575					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=331
+pd=	KNR 4-03 1011-11			
+na=Rêczne wykucie wnêki o objêtoœci do 1.00 dm3 w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,4316	0	0,4316
+nan=0
+
+[POZYCJA]
+id=332
+pd=	KNR 4-03 1011-12			
+na=Rêczne wykucie wnêki - dodatek za ka¿dy nastêpny 1  dm3 w pod³o¿u ceglanym (do 5 dm3)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,1764	0	0,1764
+nan=0
+
+[POZYCJA]
+id=333
+pd=	KNNR 5 0303-01			
+na=Puszki z tworzywa sztucznego 159x126x70 dla instalacji10niskopr¹dowych
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,347	0	0,347
+nan=0
+
+[RMS 51]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=334
+pd=	KNR-W 5-08 0404-01			
+na=Mocowanie pt w gotowych otworach obudowy podtynkowej, zamykanej na kluczyk na potrzeby instalacji domofonowej
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 52]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=335
+pd=	KNR-W 4-03 1003-11			
+na=Mechaniczne przebijanie otworów w œcianach lub stropach z ceg³y o d³ugoœci przebicia do 1 1/2 ceg³y - œr. rury do 25 mm
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=otw.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,725	0	0,725
+nan=0
+
+[POZYCJA]
+id=336
+pd=	KNR AL-01 0304-03			
+na=Monta¿ i pod³¹czenie unifonów domofonowych w mieszkaniach
+op=0	0	0	0	1	0
+ob=9.00	9.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=9.00	1	9					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=0,925	0	0,925
+nan=0
+
+[RMS 54]
+nz=1,02	0	1,02
+nan=0
+
+[POZYCJA]
+id=337
+pd=	Analiza indywidualna			
+na=Czyszczenie, naprawa/wymiana maskownic, kontrola po³¹czeñ, regulacja drzwiczek, regulacja mocowañ, malowanie zewnêtrznej obudowy metalowej ZELP
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 17]
+nz=5,725	0	5,725
+nan=0
+
+[ELEMENT 2]
+id=338
+na=KLATKA II STRYCH
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=339
+pd=	KNR 5-08 0502-06			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na cegle mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 4)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 35]
+nz=4	0	4
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=340
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych œwietlówkowych do 3x40W - (wymiana oprawy typu plafon, okr¹g³a z wbudowan¹ czujk¹ ruchu i swiat³a, Ÿród³o œwiat³a LED)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 36]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=341
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=342
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=343
+pd=	KNR-W 4-03 1148-01			
+na=Demonta¿ puszek wtynkowych koñcowych
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,168	0	0,168
+nan=0
+
+[POZYCJA]
+id=344
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=345
+pd=	KNR-W 4-03 1148-02			
+na=Demonta¿ puszek wtynkowych trójnikowych lub krzy¿owych
+op=0	0	0	0	1	0
+ob=3.00	3.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=3.00	1	3					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,2	0	0,2
+nan=0
+
+[POZYCJA]
+id=346
+pd=	KNR 4-01 0707-03			
+na=Wykonanie tynków uzupe³niaj¹cych zwyk³ych kat. III na murach na pod³o¿u z cegie³ lub betonowym po obsadzonych puszkach, wy³¹cznikach itp. oraz hakach, wspornikach itp.
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 10]
+nz=0,2	0	0,2
+nan=0
+
+[RMS 11]
+nz=0,03	0	0,03
+nan=0
+
+[RMS 12]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 39]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+
+[RMS 40]
+nz=0,0005	0	0,0005
+np=2
+nan=0
+stn=30	0
+
+[RMS 41]
+nz=0,0027	0	0,0027
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[POZYCJA]
+id=347
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla instalacji oœwietleniowej
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=348
+pd=	KNNR 5 0205-01			
+na=uk³adane p.t. przewodów YDYp 3x1,5mm2 instalacji oœwietleniowej w gotowych bruzdach
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0546	0	0,0546
+nan=0
+
+[RMS 43]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=349
+pd=	KNNR 5 1208-01			
+na=Zaprawianie bruzd o szerokoœci do 25 mm
+op=0	0	0	0	1	0
+ob=15.00	15.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=15.00	1	15					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0315	0	0,0315
+nan=0
+
+[POZYCJA]
+id=350
+pd=	KNR 4-03 1014-01			
+na=Rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	1	0
+ob=0.01	0.01
+kj=0.00	0.00	0.00
+jm=m3	
+
+[PRZEDMIAR]
+wo=0.01	1	0,009					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=4,03	0	4,03
+nan=0
+
+[RMS 47]
+nz=0,191	0	0,191
+np=2
+nan=0
+
+[RMS 48]
+nz=1,1	0	1,1
+np=2
+nan=0
+
+[RMS 40]
+nz=0,16	0	0,16
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=351
+pd=	KNR 4-01 0713-01			
+na=Przecieranie istniej¹cych tynków wewnêtrznych z zeskrobaniem farby lub zdzieraniem tapet na œcianach
+op=0	0	0	0	1	0
+ob=0.75	0.75
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=0.75	1	0,750					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 14]
+nz=0,25	0	0,25
+nan=0
+
+[RMS 11]
+nz=0,04	0	0,04
+nan=0
+
+[RMS 12]
+nz=0,08	0	0,08
+nan=0
+
+[RMS 40]
+nz=0,0022	0	0,0022
+np=2
+nan=0
+stn=31	0
+
+[RMS 49]
+nz=0,0014	0	0,0014
+np=2
+nan=0
+
+[RMS 41]
+nz=0,005	0	0,005
+np=2
+nan=0
+
+[RMS 2]
+nz=1,5	0	1,5
+np=1
+op=
+
+[RMS 64]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=352
+pd=	KNR 4-01 1204-02			
+na=Dwukrotne malowanie farbami emulsyjnymi starych tynków wewnêtrznych œcian
+op=0	0	0	0	1	0
+ob=0.75	0.75
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=0.75	1	0,750					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 15]
+nz=0,119	0	0,119
+nan=0
+
+[RMS 50]
+nz=0,286	0	0,286
+np=2
+nan=0
+
+[RMS 2]
+nz=2	0	2
+np=1
+op=
+
+[POZYCJA]
+id=353
+pd=	KNNR 9 0302-05			
+na=Demonta¿ przewodów instalacji oœwietleniowej10
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,113	0	0,113
+nan=0
+
+[POZYCJA]
+id=354
+pd=	KNNR 9 0401-07			
+na=Demonta¿ nieuszczelnionego ³¹cznika podtynkowego, natynkowego (demonta¿ nieczynnych w³¹czników oœwietleniowych)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,188	0	0,188
+nan=0
+
+[POZYCJA]
+id=355
+pd=	KNR AL-01 0201-03			
+na=Monta¿ czujki ruchu- mikrofalowa (pod³¹czenie czujki ruchu w oprawie)
+op=0	0	0	0	1	0
+ob=5.00	5.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=5.00	1	5					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 37]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=356
+pd=	KNNR 9 0301-01			
+na=Wymiana przewodów uk³adanych pod tynkiem wtynkowych lub p³askich
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,264	0	0,264
+nan=0
+
+[RMS 55]
+nz=1,04	0	1,04
+np=2
+nan=0
+stn=32	0
+
+[RMS 30]
+nz=0,0312	0	0,0312
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=357
+pd=	KNNR 5 0103-01			
+na=Rury elektroinstalacyjne o œr.do 20 mm uk³adane n.t. na betonie10- Rura elektroinstalacyjna sztywna
+op=0	0	0	0	1	0
+ob=70.00	70.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=70.00	1	70					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,356	0	0,356
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 32]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 33]
+nz=2,1	0	2,1
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=358
+pd=	KNNR 9 0501-02			
+na=Wymiana opraw oœwietleniowych piwnicznych
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=1,14	0	1,14
+nan=0
+
+[RMS 34]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=359
+pd=	KNR 5-08 0502-09			
+na=Przygotowanie pod³o¿a pod oprawy oœwietleniowe przykrêcane na betonie mocowane na ko³kach kotwi¹cych (iloœæ mocowañ 2)
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=kpl.	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 4]
+nz=0,14	0	0,14
+nan=0
+
+[RMS 35]
+nz=2	0	2
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[ELEMENT 2]
+id=360
+na=Pomiary
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=361
+pd=	KNR-W 5-08 0901-01			
+na=Pomiar rezystancji izolacji instalacji elektrycznych - obwód 1-fazowy, pierwszy pomiar
+op=0	0	0	0	1	0
+ob=10.00	10.00
+kj=0.00	0.00	0.00
+jm=pomiar	
+
+[PRZEDMIAR]
+wo=10.00	1	10					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,63	0	0,63
+nan=0
+
+[POZYCJA]
+id=362
+pd=	KNR-W 5-08 0902-01			
+na=Sprawdzenie samoczynnego wy³¹czenia zasilania - pomiar impedancji pêtli zwarciowej - pierwszy
+op=0	0	0	0	1	0
+ob=22.00	22.00
+kj=0.00	0.00	0.00
+jm=pomiar	
+
+[PRZEDMIAR]
+wo=22.00	1	22					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,5	0	0,5
+nan=0
+
+[POZYCJA]
+id=363
+pd=	Analiza w³asna			
+na=Sporz¹dzenie dokumentacji powykonawczej instalacji elektrycznych
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 18]
+nz=15,5	0	15,5
+nan=0
+
+[ELEMENT 2]
+id=364
+na=INSTALACJA DOMOFONOWA
+nu=
+kn=0	0	0
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[POZYCJA]
+id=365
+pd=	KNR-W 5-08 0404-01			
+na=Monta¿ skrzynek i rozdzielnic skrzynkowych o masie do 10 kg wraz z konstrukcj¹ - mocowanie przez  zabetonowanie w gotowych otworach
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,39	0	0,39
+nan=0
+
+[RMS 56]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=366
+pd=	KNR-W 4-03 0309-04			
+na=Monta¿ zasilacza w skrzynce os³onowej z przedzwonieniem i pod³¹czeniem przewodów
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=2,3	0	2,3
+nan=0
+
+[RMS 57]
+nz=1	0	1
+np=2
+nan=0
+
+[RMS 2]
+nz=4	0	4
+np=1
+op=
+
+[POZYCJA]
+id=367
+pd=	KNNR 5 0301-11			
+na=Przygotowanie pod³o¿a pod osprzêt instalacyjny mocowany na zaprawie cementowej lub gipsowej - wykonanie œlepych otworów w pod³o¿u ceglanym
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,0914	0	0,0914
+nan=0
+
+[POZYCJA]
+id=368
+pd=	KNNR 5 0302-01			
+na=Puszki instalacyjne podtynkowe pojedyncze o œr.do 60 mm
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,084	0	0,084
+nan=0
+
+[RMS 58]
+nz=1,02	0	1,02
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=369
+pd=	KNNR 5 0306-02			
+na=£¹czniki i przyciski jednobiegunowe podtynkowe w puszce instalacyjnej (Przycisk wyjœcia)
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,158	0	0,158
+nan=0
+
+[RMS 59]
+nz=1,02	0	1,02
+np=2
+nan=0
+stn=33	0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=370
+pd=	KNR 5-06 0702-02			
+na=Zarabianie i pod³¹czanie koñców kabli i przewodów stacyjnych bez ekranu o 2 ¿y³ach o œrednicy do 0.9 mm pod zaciski
+op=0	0	0	0	1	0
+ob=50.00	50.00
+kj=0.00	0.00	0.00
+jm=koñc.	
+
+[PRZEDMIAR]
+wo=50.00	1	50					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 19]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 60]
+nz=0,001	0	0,001
+nan=0
+
+[POZYCJA]
+id=371
+pd=	KNR 5-06 0702-05			
+na=Zarabianie i pod³¹czanie koñców kabli i przewodów stacyjnych bez ekranu o 7 ¿y³ach o œrednicy do 0.9 mm pod zaciski
+op=0	0	0	0	1	0
+ob=8.00	8.00
+kj=0.00	0.00	0.00
+jm=koñc.	
+
+[PRZEDMIAR]
+wo=8.00	1	8					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 19]
+nz=0,28	0	0,28
+nan=0
+
+[RMS 60]
+nz=0,0035	0	0,0035
+nan=0
+
+[POZYCJA]
+id=372
+pd=	KNR-W 5-08 0403-01			
+na=Mocowanie na gotowym pod³o¿u samozamykacza do drzwi
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 61]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=373
+pd=	KNR-W 5-08 0403-01			
+na=Mocowanie na gotowym pod³o¿u samozamykacza do drzwi - ZWORA ELEKTROMAGNETYCZNA
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,22	0	0,22
+nan=0
+
+[RMS 62]
+nz=1	0	1
+nan=0
+
+[RMS 53]
+nz=0,01	0	0,01
+nan=0
+
+[POZYCJA]
+id=374
+pd=	KNR 5-06 1707-02			
+na=Sprawdzanie dzia³ania aparatów telefonicznych CB bez tarczy. UNIFON-u.
+op=0	0	0	0	1	0
+ob=50.00	50.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=50.00	1	50,0					
+
+[MNO¯NIKI RMS]
+wr=0,955		
+wm=1		
+ws=1		
+
+[RMS 20]
+nz=0,55	0	0,55
+nan=0
+
+[POZYCJA]
+id=375
+pd=	KNNR 5 1207-12			
+na=Wykucie bruzd dla rur RKLG28, RS37 w cegle
+op=0	0	0	0	1	0
+ob=20.00	20.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=20.00	1	20					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,269	0	0,269
+nan=0
+
+[POZYCJA]
+id=376
+pd=	KNNR 5 0101-03			
+na=Rury winidurowe o œr.do 37 mm uk³adane p.t. w gotowych bruzdach w betonie
+op=0	0	0	0	1	0
+ob=20.00	20.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=20.00	1	20					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 7]
+nz=0,133	0	0,133
+nan=0
+
+[RMS 30]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 31]
+nz=0,41	0	0,41
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=377
+pd=	KNR-W 5-08 0207-01			
+na=Przewody kabelkowe o ³¹cznym przekroju ¿y³ do 7.5 mm2 wci¹gane do rur (OMY 2x1 do zwór i przycisków wyjœcia)
+op=0	0	0	0	1	0
+ob=20.00	20.00
+kj=0.00	0.00	0.00
+jm=m	
+
+[PRZEDMIAR]
+wo=20.00	1	20,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 6]
+nz=0,0352	0	0,0352
+nan=0
+
+[RMS 63]
+nz=1,04	0	1,04
+np=2
+nan=0
+
+[RMS 2]
+nz=2,5	0	2,5
+np=1
+op=
+
+[POZYCJA]
+id=378
+pd=	KNR 4-03 1206-01			
+na=Sprawdzenie i pomiary elektryczne obwodów sygnalizacyjnych
+op=0	0	0	0	1	0
+ob=50.00	50.00
+kj=0.00	0.00	0.00
+jm=pomiar.	
+
+[PRZEDMIAR]
+wo=50.00	1	50					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 8]
+nz=0,34	0	0,34
+nan=0
+
+[POZYCJA]
+id=379
+pd=	KNR AL-01 0307-01			
+na=Praca próbna systemu kontroli dostêpu - próby pomonta¿owe klawiatury obs³uguj¹cej PIN-kod
+op=0	0	0	0	1	0
+ob=2.00	2.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=2.00	1	2					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 21]
+nz=8,34	0	8,34
+nan=0
+
+[POZYCJA]
+id=380
+pd=	Analiza w³asna			
+na=Sporz¹dzenie dokumentacji powykonawczej instalacji domofonowe
+op=0	0	0	0	1	0
+ob=1.00	1.00
+kj=0.00	0.00	0.00
+jm=szt.	
+
+[PRZEDMIAR]
+wo=1.00	1	1					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 22]
+nz=14,944	0	9,34*1,6
+nan=0
+
+[POZYCJA]
+id=381
+pd=	KNR AT-38 0102-01			
+na=Oczyszczenie i zmycie pod³o¿a
+op=0	0	0	0	1	0
+ob=200.00	200.00
+kj=0.00	0.00	0.00
+jm=m2	
+
+[PRZEDMIAR]
+wo=200.00	1	200,0					
+
+[MNO¯NIKI RMS]
+wr=1		
+wm=1		
+ws=1		
+
+[RMS 23]
+nz=0,05	0	0,05
+nan=0
+

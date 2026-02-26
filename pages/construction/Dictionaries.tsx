@@ -31,7 +31,6 @@ import type {
 import { WholesalerIntegrationModal } from './WholesalerIntegrationModal';
 import { TIMIntegrator } from './TIMIntegrator';
 import { OninenIntegrator } from './OninenIntegrator';
-import { SpeckableIntegrator } from './SpeckableIntegrator';
 import { RentalIntegrationModal } from './RentalIntegrationModal';
 import { AtutIntegrator } from './AtutIntegrator';
 import { RamirentIntegrator } from './RamirentIntegrator';
@@ -379,7 +378,7 @@ export const DictionariesPage: React.FC = () => {
 
     // For each integration, search all queries in parallel, then pick best match
     Promise.allSettled(activeIntegrations.map(async (integration) => {
-      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : integration.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
+      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
 
       // Fire all queries for this wholesaler in parallel
       const queryResults = await Promise.allSettled(
@@ -423,12 +422,11 @@ export const DictionariesPage: React.FC = () => {
         if (!best) continue;
 
         const isTim = integration.wholesaler_id === 'tim';
-        const isSpeckable = integration.wholesaler_id === 'speckable';
-        const wholesalerLabel = isTim ? 'TIM' : isSpeckable ? 'Speckable' : 'Onninen';
-        const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
-        const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
+        const wholesalerLabel = isTim ? 'TIM' : 'Onninen';
+        const purchasePrice = isTim ? (best.price ?? null) : (best.priceEnd ?? null);
+        const catalogPrice = isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null);
 
-        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: isSpeckable ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined) });
+        prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
       }
 
       setWholesalerPrices(prices);
@@ -4304,10 +4302,6 @@ export const DictionariesPage: React.FC = () => {
                 <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id}
                   onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
               )}
-              {pickerMatSubTab === 'speckable' && (
-                <SpeckableIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'speckable')?.id}
-                  onAddToOwnCatalog={(p) => handlePickWholesalerMaterial(p)} catalogButtonLabel="Przypisz do robocizny" />
-              )}
             </div>
           </div>
         </div>
@@ -4787,7 +4781,7 @@ export const DictionariesPage: React.FC = () => {
                     )}
                     {dm.source_wholesaler && (
                       <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">
-                        Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler === 'speckable' ? 'Speckable' : dm.source_wholesaler}</b>
+                        Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler}</b>
                       </span>
                     )}
                     {dm.source_wholesaler && (
@@ -5095,7 +5089,7 @@ export const DictionariesPage: React.FC = () => {
               <label htmlFor="priceSyncToggle" className="text-sm text-blue-800 cursor-pointer">
                 Synchronizacja ceny z hurtownią
                 <span className="text-xs text-blue-600 ml-1">
-                  ({(editingMaterial as any)?.source_wholesaler === 'tim' ? 'TIM' : (editingMaterial as any)?.source_wholesaler === 'oninen' ? 'Onninen' : (editingMaterial as any)?.source_wholesaler === 'speckable' ? 'Speckable' : (editingMaterial as any)?.source_wholesaler})
+                  ({(editingMaterial as any)?.source_wholesaler === 'tim' ? 'TIM' : (editingMaterial as any)?.source_wholesaler === 'oninen' ? 'Onninen' : (editingMaterial as any)?.source_wholesaler})
                 </span>
               </label>
             </div>
@@ -6533,9 +6527,6 @@ export const DictionariesPage: React.FC = () => {
                   {materialsSubTab === 'oninen' && (
                     <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
-                  {materialsSubTab === 'speckable' && (
-                    <SpeckableIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'speckable')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
-                  )}
                 </div>
               )}
 
@@ -6665,9 +6656,6 @@ export const DictionariesPage: React.FC = () => {
                   )}
                   {slownikMainSubTab === 'oninen' && (
                     <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
-                  )}
-                  {slownikMainSubTab === 'speckable' && (
-                    <SpeckableIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'speckable')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                 </div>
               )}

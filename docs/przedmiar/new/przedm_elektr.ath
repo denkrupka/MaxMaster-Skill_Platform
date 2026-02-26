@@ -1,0 +1,1676 @@
+[KOSZTORYS ATHENASOFT]
+co=Copyright Athenasoft sp. z o.o.
+wf=4
+pr=NORMA	4.68
+pe=1
+op=1
+opn=2	0	2	1	1	0	19	8	0	0	0	0	0	0	1.	1	1	0	1	3	1
+prn=2	2	3	3	4	1	6	0	1
+own=2	1	1	0	1	0	0	1	1	1	0	0	1	0	1	1	poz.	<	>	1	0	0	0	0	0	0	1	0	2	0	0	1	1	1	0	0	0
+pm=dzia³	dzia³
+pd=dzia³u	dzia³u
+mm=dzia³y	dzia³y
+md=dzia³ów	dzia³ów
+wan=PLN
+wbn=PLN	z³
+wk=0
+na=
+
+[STRONA TYT]
+na=PRZEDMIAR	PRZEDMIAR
+nb=REMONT KORYTARZA I HOLU KLATKI SCHODOWEJ NA KONDYGNACJI PIWNIC W SKRZYDLE ZACHODNIM W BUDYNKU WIP PW W WARSZAWIE PRZY UL. NARBUTTA 85
+ab=Warszawa, ul.Narbutta 85
+ni=POLITECHNIKA WARSZAWSKA WYDZIA£ IN¯YNIERII PRODUKCJI
+ai=ul. Narbutta 85, 02-524 Warszawa
+br=elektryczna
+dt=poniedzia³ek, 20 styczeñ 2020	0
+cpv=45310000-3	Roboty instalacyjne elektryczne
+
+[CHARAKTERYSTYKA OBIEKTU]
+sz=	0
+lp=1	2
+pa=1	1	1	
+pa=0	1	0	Zakres prac:1310PRACE ROZBIÓRKOWE1310-09demonta¿ istniej¹cej œciany poprzecznej korytarza przy klatce schodowej1310-09demonta¿ œciany pomieszczenia pod schodami1310-09demonta¿ istniej¹cych listew drewnianych coko³owych1310- 09demonta¿ istniej¹cych os³on instalacji1310- 09demonta¿ istniej¹cych drewnianych drzwi wraz z oœcie¿nicami1310- 09zeskrobanie farby olejnej lamperii na korytarzu i na holu1310-09usuniêcie farby emulsyjnej z powierzchni tynków1310-09skucie tynków 1310- 09demonta¿ opraw oœwietleniowych1310- 09zerwanie posadzki lastrikowej na spoczniku schodów w drzwiach zewnêtrznych po³udniowych1310PRACE BUDOWLANE1310- 09likwidacja istniej¹cego kana³y podposadzkowego na rury CO- zabetonowanie, wykonanie posadzki lastrikowej1310- 09wykonanie nowego kana³u podposadzkowego w korytarzu w obrêbie klatki schodowej, na przeprowadzenie rur CO z wêz³a- pokrywy z p³yt lastrikowych prefabrykowanych demontowalnych, opartych na konstrukcji stalowej, 1310- 09wykonanie nowej pokrywy istniej¹cego kana³u podposadzkowego na przewody energetyczne, pokrywa z p³yt lastrikowych prefabrykowanych demontowalnych,1310-09przebudowa schodów w zakresie powiêkszenia spocznika i nowych schodów, wykoñczonych sytemow¹ ok³adzin¹ k¹tow¹ prost¹1310-09dostosowanie istniej¹cych otworów drzwiowych do wymiarów zalecanych przez producenta drzwi przy wykorzystaniu technologii g-k1310- 09wykonanie zabudowy œciennej z p³yt g-k na œcianie holu z drzwiami do sanitariatu mêskiego, pozostawienie wnêk na skrzynkê hydrantu i skrzynkê z gaœnic¹, zabudowa podsufitowa- spód na wys. 2,50 m, monta¿ w p³aszczy¿nie pionowej krat wentylacyjnych, kolor bia³y, 1310- 09wykonanie  zabudowy œciennej w korytarzu w okolicach rozdzielni elektrycznej, zabudowa na 1310pe³n¹ wysokoœæ1310-09wykonanie zabudów g-k w celu poszerzenia filarów miêdzyokiennych w czêœci po³udniowej korytarza ( w niektórych zabudowach zostanie przeprowadzone zasilanie do projektowanych grzejników)1310-09wykonanie œciany pomieszczenia pod schodami- technologia g-k, odpornoœæ ogniowa EI1201310- 09wykonanie 2 szt œcian oddzielenia po¿arowego na korytarzu- œciany w technologii g-k REI 120, gr.17,5 cm- profile CW 75, obustronne podwójne op³ytowanie p³yt¹ DF 2 x 12,5 mm wraz z zabezpieczeniem œciany na styku z elementami sta³ymi budynku1310- 09wykonaniu zabudów sufitowych w korytarzu - sufit kratkowy typu OPEN CELL wg rysunku sufitów- spód sufitu podwieszonego 2,50 m1310- 09wykonanie sufitu podwieszonego kratkowego typu OPEN CELL w holu klatki schodowej spód sufitu podwieszonego 2,80 m1310- 09obudowa zasilania projektowanych grzejników wraz z obsadzeniem drzwiczek rewizyjnych do zaworów1310- 09wymiana grzejników, przy pionach monta¿ jednego grzejnika stalowego p³ytowego zamiast dwóch grzejników ¿eberkowych, grzejniki z zasilaniem bocznym1310- 09wykonanie obudowy g-k, prze³o¿onych rur CO zlokalizowanych przy œcianie zachodniej korytarza, wraz monta¿em krat wentylacyjnych w p³aszczyznach pionowych, kolor krat bia³y1310- 09naprawa posadzki: miejscowe uzupe³nienie ubytków, wymiana posadzki w polach wg rysunku1310- 09wykonanie nowej wyprawy œcian- tynk cementowo-wapienny, g³ad¿ gipsowa, na œcianach, wraz z osadzeniem listew glifowych1310-09wykonanie nowej wyprawy  na suficie- g³adŸ gipsowa1310- 09monta¿ coko³ów: cokó³ na œcianie okiennej- z p³yty HPL gr 3 mm, wysokoœc 20 cm, cokó³ na œcianie przeciwleg³ej (œciana z drzwiami) z p³yty HPL gr.3 mm, wys. 20 cm ( wysokoœæ projektowanego coko³u jest dostosowana do wymagañ u¿ytkownika)1310- 09monta¿ koryta kablowego 1310- 09monta¿ nowych opraw oœwietleniowych1310- 09monta¿ nowych drzwi do pomieszczeñ dydaktycznych- drzwi stalowe, pe³ne , kolor ciemnoszary, bezklasowe1310- 09monta¿ drzwi na korytarzu w œcianach oddzielenia po¿arowego REI 120: drzwi przeszklone EI60S- 3 szt1310-09monta¿ drzwi w holu klatki schodowej- drzwi do pomieszczenia dydaktycznycznego I gospodarczego pod schodami, pe³ne, stalowe, EI60S1310- 09monta¿ drzwi na dodatkow¹ klatkê schodow¹- drzwi pe³ne, stalowe EI 60S1310- 09balustrady schodów g³ównych1310
+
+[RMS ZEST 10]
+ty=R
+na=cieœle gr.II	0
+id=042	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 205]
+ty=M
+na=uchwyty	0
+id=1551399	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=588
+pr=ICB_SREDNIE	0	0	0	7580399
+
+[RMS ZEST 211]
+ty=M
+na=piasek do betonów	0
+id=1601899	0
+jm=m3	060
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=0.4675
+
+[RMS ZEST 210]
+ty=M
+na=cement portlandzki CEM 1	0
+id=1700399	0
+jm=t	034
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=0.0812
+
+[RMS ZEST 128]
+ty=M
+na=ciasto wapienne (wapno gaszone)	0
+id=1720300	0
+jm=m3	060
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=0.068
+
+[RMS ZEST 9]
+ty=R
+na=murarze gr.III	0
+id=343	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 43]
+ty=R
+na=posadzkarze gr.II	0
+id=382	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 11]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 218]
+ty=M
+na=Obudowa podtynkowa, IP31, Przybli¿one wymiary: szer. 60cm, wys. 80cm, wyposa¿ona w drzwi metalowe bia³e, zamek zabezpieczaj¹cy	0
+id=7058999	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=10
+pr=ICB_SREDNIE	0	0	0	7058999
+
+[RMS ZEST 231]
+ty=M
+na=Sufitowy czujnik ruchu PIR, 360st 230VAC,  obci¹¿enie min 400W dla opraw LED, regulacja czasu 10sek-15min, regulacja czu³oœci na œwiat³o, zasiêg min 6m, monta¿ na suficie podwieszanym n/k	0
+id=7099999	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=11
+pr=ICB_SREDNIE	0	0	0	7059999
+
+[RMS ZEST 219]
+ty=M
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na stropie podwieszanym  - ozn A	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=16
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 220]
+ty=M
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na stropie GK  - ozn. AGK	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=2
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 221]
+ty=M
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na zwieszakach ozn AN	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=17
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 222]
+ty=M
+na=Oprawa awaryjna nastropowa (rozsy³ korytarzowy) LED, 1-2W, IP65, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn. AW1	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=11
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 223]
+ty=M
+na=Oprawa awaryjna nastropowa (rozsy³ symetryczny) LED 2-3W, IP65, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn AW2	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=4
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 224]
+ty=M
+na=Oprawa awaryjna wskazuj¹ca kierunek ewakuacji jednostronna z piktogramem, LED 1,5-2W, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn. EW1	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=8
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 225]
+ty=M
+na=Oprawa awaryjna wskazuj¹ca kierunek ewakuacji dwustronna z piktogramem, LED 2-3W, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP - ozn EW2	0
+id=7302299	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=2
+pr=ICB_SREDNIE	0	0	0	7302299
+
+[RMS ZEST 214]
+ty=M
+na=Wy³¹cznik instalacyjny B10/1	0
+id=7512999	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=4
+pr=ICB_SREDNIE	0	0	0	7512299
+
+[RMS ZEST 215]
+ty=M
+na=Wy³¹cznik instalacyjny B16/1	0
+id=7512999	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=4
+pr=ICB_SREDNIE	0	0	0	7512299
+
+[RMS ZEST 216]
+ty=M
+na=Wy³¹cznik ró¿nicowo-pr¹dowy 2P, 25A 30mA	0
+id=7513199	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=4
+pr=ICB_SREDNIE	0	0	0	7513199
+
+[RMS ZEST 217]
+ty=M
+na=Ochronnik przepiêciowy typu II, 3P+N	0
+id=7513199	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=3
+pr=ICB_SREDNIE	0	0	0	7513199
+
+[RMS ZEST 230]
+ty=M
+na=Gniazdo 1-faz 230V -16A (L+N+PE)+ 2x port USB 2,1A, IP44	0
+id=7530399	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=11.22
+
+[RMS ZEST 207]
+ty=M
+na=puszki izolacyjne podtynkowe	0
+id=7540099	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=11.22
+pr=ICB_SREDNIE	0	0	0	7540060
+
+[RMS ZEST 226]
+ty=M
+na=Puszka rozga³êŸna, n/t	0
+id=7540099	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=76.5
+pr=ICB_SREDNIE	0	0	0	7580799
+
+[RMS ZEST 227]
+ty=M
+na=Rurka sztywna œred 21mm, uniepalniona	0
+id=7580099	2
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=187.2
+pr=ICB_SREDNIE	0	0	0	7580999
+
+[RMS ZEST 228]
+ty=M
+na=Rurka giêtka -peszel œred 22mm, uniepalniona	0
+id=7580099	2
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=72.8
+pr=ICB_SREDNIE	0	0	0	7580099
+
+[RMS ZEST 229]
+ty=M
+na=Rurka sztywna œred 28mm, uniepalniona	0
+id=7580099	2
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=104
+pr=ICB_SREDNIE	0	0	0	7580999
+
+[RMS ZEST 203]
+ty=M
+na=z³¹czki	0
+id=7580499	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=114.8
+pr=ICB_SREDNIE	0	0	0	7580499
+
+[RMS ZEST 232]
+ty=M
+na=Przewody kabelkowe YDYp(¿o) 3x2,5	0
+id=7959999	0
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=156
+
+[RMS ZEST 233]
+ty=M
+na=Przewody kabelkowe YDYp(¿o) 3x1,5	0
+id=7959999	0
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=260
+
+[RMS ZEST 234]
+ty=M
+na=Przewody kabelkowe YDYp(¿o) 4x1,5	0
+id=7959999	0
+jm=m	040
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=124.8
+
+[RMS ZEST 204]
+ty=M
+na=ko³ki rozporowe plastykowe	0
+id=8990499	2
+jm=szt.	020
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=588
+pr=ICB_SREDNIE	0	0	0	8990499
+
+[RMS ZEST 1]
+ty=R
+na=Robocizna - roboty inst. elektrycznych - region mazowiecki - MZ - ogó³em	0
+id=999	1
+jm=r-g	149
+ce=0	1579987127
+cw=0	PLN
+il=381.7892
+
+[RMS ZEST 213]
+ty=R
+na=Stawka robocizny kosztorysowej w robotach instalacji elektrycznych - region mazowiecki - MZ - Warszawa	0
+id=999	1
+jm=r-g	149
+ce=0	1548011168
+cw=0	PLN
+il=0
+
+[RMS ZEST 193]
+ty=M
+na=Demonta¿ istniej¹cych instalacji	0
+id=	3
+jm=kpl	090
+ce=0	1579987127
+cw=0	PLN
+kz=4	-1	PLN	1	
+il=1
+
+[RMS ZEST 5]
+ty=M	1
+na=materia³y pomocnicze	0
+id=0000000	1
+jm=%	147
+cw=1	PLN
+il=0
+
+[ELEMENT 1]
+na=Rozbiórki, demonta¿e
+wa=0
+kn=0	0	0
+id=494
+nu=1
+
+[POZYCJA]
+id=1103
+pd=		1.1		1.1		0
+na=Demonta¿ istniej¹cych instalacji
+op=0	0	0	0	0	0	0	0
+nu=1
+ob=1
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=1	1	1						
+
+[RMS 193]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[POZYCJA]
+id=1105
+pd=		1.2		1.2		1
+mpn=_1211
+na=Demonta¿ opraw oœwietleniowych
+op=0	0	0	0	0	0	0	0
+nu=2
+ob=20
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=20	1	20						
+
+[RMS 1]
+nz=0.55	0	0,55
+np=1
+wa=0
+wb=0
+il=11
+
+[POZYCJA]
+id=1107
+pd=		1.3		1.3		1
+mpn=_1211
+na=Demonta¿ tablic rozdzielczych
+op=0	0	0	0	0	0	0	0
+nu=3
+ob=6
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=6	1	6						
+
+[RMS 1]
+nz=1.43	0	1,43
+np=1
+wa=0
+wb=0
+il=8.58
+
+[ELEMENT 1]
+na=Istniej¹ca tablica TE- doposa¿enie
+wa=0
+kn=0	0	0
+id=1109
+nu=2
+
+[POZYCJA]
+id=1110
+pd=		2.1		2.1		1
+mpn=1211
+na=Wy³¹cznik instalacyjny B10/1
+op=0	0	0	0	0	0	0	0
+nu=4
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[RMS 1]
+nz=0.18	0	0,18
+np=1
+wa=0
+wb=0
+il=0.72
+
+[RMS 214]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[POZYCJA]
+id=1113
+pd=		2.2		2.2		1
+mpn=1211
+na=Wy³¹cznik instalacyjny B16/1
+op=0	0	0	0	0	0	0	0
+nu=5
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[RMS 1]
+nz=0.18	0	0,18
+np=1
+wa=0
+wb=0
+il=0.72
+
+[RMS 215]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[POZYCJA]
+id=1116
+pd=		2.3		2.3		1
+mpn=121,0:0,0911
+na=Wy³¹cznik ró¿nicowo-pr¹dowy 2P, 25A 30mA
+op=0	0	0	0	0	0	0	0
+nu=6
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[RMS 1]
+nz=0.22	0	0,22
+np=1
+wa=0
+wb=0
+il=0.88
+
+[RMS 216]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[POZYCJA]
+id=1119
+pd=		2.4		2.4		1
+mpn=121,0:0,0911
+na=Ochronnik przepiêciowy typu II, 3P+N
+op=0	0	0	0	0	0	0	0
+nu=7
+ob=3
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=3	1	3						
+
+[RMS 1]
+nz=0.34	0	0,34
+np=1
+wa=0
+wb=0
+il=1.02
+
+[RMS 217]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=3
+
+[ELEMENT 1]
+na=Tablice elektryczne wymiana obudowy  
+wa=0
+kn=0	0	0
+id=1122
+nu=3
+
+[POZYCJA]
+id=1123
+pd=		3.1		3.1		1
+mpn=_1211
+na=Obudowa podtynkowa, IP31, Przybli¿one wymiary: szer. 60cm, wys. 80cm, wyposa¿ona w drzwi metalowe bia³e, zamek zabezpieczaj¹cy
+op=0	0	0	0	0	0	0	0
+nu=8
+ob=10
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=10	1	10						
+
+[RMS 1]
+nz=4.42	0	4,42
+np=1
+wa=0
+wb=0
+il=44.2
+
+[RMS 218]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=10
+
+[ELEMENT 1]
+na=Oprawy i osprzêt instalacyjny
+wa=0
+kn=0	0	0
+id=1147
+nu=4
+
+[POZYCJA]
+id=1133
+pd=		4.1		4.1		1
+mpn=_1211
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na stropie podwieszanym  - ozn A
+op=0	0	0	0	0	0	0	0
+nu=9
+ob=16
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=16	1	16						
+
+[RMS 1]
+nz=0.7	0	0,7
+np=1
+wa=0
+wb=0
+il=11.2
+
+[RMS 219]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=16
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1148
+pd=		4.2		4.2		1
+mpn=_1211
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na stropie GK  - ozn. AGK
+op=0	0	0	0	0	0	0	0
+nu=10
+ob=2
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[RMS 1]
+nz=0.7	0	0,7
+np=1
+wa=0
+wb=0
+il=1.4
+
+[RMS 220]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1140
+pd=		4.3		4.3		1
+mpn=_1211
+na=Oprawa oœwietleniowa ze Ÿród³ami LED, dyfuzor opalowy, moc oko³o 35-40W o wymiarach 60x60cm z kloszem, IP40, 230V AC, monta¿ na zwieszakach ozn AN
+op=0	0	0	0	0	0	0	0
+nu=11
+ob=17
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=17	1	17						
+
+[RMS 1]
+nz=1.3	0	1,3
+np=1
+wa=0
+wb=0
+il=22.1
+
+[RMS 221]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=17
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1155
+pd=		4.4		4.4		1
+mpn=_1211
+na=Oprawa awaryjna nastropowa (rozsy³ korytarzowy) LED, 1-2W, IP65, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn. AW1
+op=0	0	0	0	0	0	0	0
+nu=12
+ob=11
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=11	1	11						
+
+[RMS 1]
+nz=0.92	0	0,92
+np=1
+wa=0
+wb=0
+il=10.12
+
+[RMS 222]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=11
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1162
+pd=		4.5		4.5		1
+mpn=_1211
+na=Oprawa awaryjna nastropowa (rozsy³ symetryczny) LED 2-3W, IP65, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn AW2
+op=0	0	0	0	0	0	0	0
+nu=13
+ob=4
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[RMS 1]
+nz=0.92	0	0,92
+np=1
+wa=0
+wb=0
+il=3.68
+
+[RMS 223]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1169
+pd=		4.6		4.6		1
+mpn=_1211
+na=Oprawa awaryjna wskazuj¹ca kierunek ewakuacji jednostronna z piktogramem, LED 1,5-2W, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP  - ozn. EW1
+op=0	0	0	0	0	0	0	0
+nu=14
+ob=8
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=8	1	8						
+
+[RMS 1]
+nz=0.92	0	0,92
+np=1
+wa=0
+wb=0
+il=7.36
+
+[RMS 224]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=8
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1176
+pd=		4.7		4.7		1
+mpn=_1211
+na=Oprawa awaryjna wskazuj¹ca kierunek ewakuacji dwustronna z piktogramem, LED 2-3W, z inwerterem - czas 1h, funkcja autotestu, certyfikat CNBOP - ozn EW2
+op=0	0	0	0	0	0	0	0
+nu=15
+ob=2
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[RMS 1]
+nz=0.92	0	0,92
+np=1
+wa=0
+wb=0
+il=1.84
+
+[RMS 225]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1183
+pd=		4.8		4.8		1
+mpn=_1211
+na=Puszka rozga³êŸna, n/t
+op=0	0	0	0	0	0	0	0
+nu=16
+ob=75
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=75	1	75						
+
+[RMS 1]
+nz=0.347	0	0,347
+np=1
+wa=0
+wb=0
+il=26.025
+
+[RMS 226]
+nz=1.02	0	1,02
+np=1
+wa=0
+wb=0
+il=76.5
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1187
+pd=		4.9		4.9		1
+mpn=_1211
+na=Rurka sztywna œred 21mm, uniepalniona
+op=0	0	0	0	0	0	0	0
+nu=17
+ob=180
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=180	1	180						
+
+[RMS 1]
+nz=0.318	0	0,318
+np=1
+wa=0
+wb=0
+il=57.24
+
+[RMS 227]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=187.2
+
+[RMS 203]
+nz=0.41	0	0,41
+np=1
+wa=0
+wb=0
+il=73.8
+
+[RMS 204]
+nz=2.1	0	2,1
+np=1
+wa=0
+wb=0
+il=378
+
+[RMS 205]
+nz=2.1	0	2,1
+np=1
+wa=0
+wb=0
+il=378
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1194
+pd=		4.10		4.10		1
+mpn=_1211
+na=Rurka giêtka -peszel œred 22mm, uniepalniona
+op=0	0	0	0	0	0	0	0
+nu=18
+ob=70
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=70	1	70						
+
+[RMS 1]
+nz=0.0714	0	0,0714
+np=1
+wa=0
+wb=0
+il=4.998
+
+[RMS 228]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=72.8
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1198
+pd=		4.11		4.11		1
+mpn=_1211
+na=Rurka sztywna œred 28mm, uniepalniona
+op=0	0	0	0	0	0	0	0
+nu=19
+ob=100
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=100	1	100						
+
+[RMS 1]
+nz=0.318	0	0,318
+np=1
+wa=0
+wb=0
+il=31.8
+
+[RMS 229]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=104
+
+[RMS 203]
+nz=0.41	0	0,41
+np=1
+wa=0
+wb=0
+il=41
+
+[RMS 204]
+nz=2.1	0	2,1
+np=1
+wa=0
+wb=0
+il=210
+
+[RMS 205]
+nz=2.1	0	2,1
+np=1
+wa=0
+wb=0
+il=210
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1205
+pd=		4.12		4.12		1
+mpn=_1211
+na=Przygotowanie pod³o¿a pod osprzêt instalacyjny mocowany na zaprawie cementowej lub gipsowej - wykonanie œlepych otworów w pod³o¿u ceglanym
+op=0	0	0	0	0	0	0	0
+nu=20
+ob=11
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=11	1	11						
+
+[RMS 1]
+nz=0.0914	0	0,0914
+np=1
+wa=0
+wb=0
+il=1.0054
+
+[POZYCJA]
+id=1207
+pd=		4.13		4.13		1
+mpn=_1211
+na=Puszki instalacyjne podtynkowe pojedyncze o œr.do 60 mm
+op=0	0	0	0	0	0	0	0
+nu=21
+ob=11
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=11	1	11						
+
+[RMS 1]
+nz=0.084	0	0,084
+np=1
+wa=0
+wb=0
+il=0.924
+
+[RMS 207]
+nz=1.02	0	1,02
+np=1
+wa=0
+wb=0
+il=11.22
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1211
+pd=		4.14		4.14		1
+mpn=_1211
+na=Gniazdo 1-faz 230V -16A (L+N+PE)+ 2x port USB 2,1A, IP44
+op=0	0	0	0	0	0	0	0
+nu=22
+ob=11
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=11	1	11						
+
+[RMS 1]
+nz=0.341	0	0,341
+np=1
+wa=0
+wb=0
+il=3.751
+
+[RMS 230]
+nz=1.02	0	1,02
+np=1
+wa=0
+wb=0
+il=11.22
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1215
+pd=		4.15		4.15		1
+mpn=1211
+na=Sufitowy czujnik ruchu PIR, 360st 230VAC,  obci¹¿enie min 400W dla opraw LED, regulacja czasu 10sek-15min, regulacja czu³oœci na œwiat³o, zasiêg min 6m, monta¿ na suficie podwieszanym n/k
+op=0	0	0	0	0	0	0	0
+nu=23
+ob=11
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=11	1	11						
+
+[RMS 1]
+nz=0.63	0	0,63
+np=1
+wa=0
+wb=0
+il=6.93
+
+[RMS 231]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=11
+
+[ELEMENT 1]
+na=Przewody
+wa=0
+kn=0	0	0
+id=1218
+nu=5
+
+[POZYCJA]
+id=1219
+pd=		5.1		5.1		1
+mpn=1211
+na=Wykucie bruzd dla przewodów wtynkowych w cegle
+op=0	0	0	0	0	0	0	0
+nu=24
+ob=170
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=170	1	50+80+40						
+
+[RMS 1]
+nz=0.0798	0	0,0798
+np=1
+wa=0
+wb=0
+il=13.566
+
+[POZYCJA]
+id=1221
+pd=		5.2		5.2		1
+mpn=1211
+na=Zaprawianie bruzd o szerokoœci do 50 mm
+op=0	0	0	0	0	0	0	0
+nu=25
+ob=170
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=170	1	50+80+40						
+
+[RMS 1]
+nz=0.0525	0	0,0525
+np=1
+wa=0
+wb=0
+il=8.925
+
+[POZYCJA]
+id=1223
+pd=		5.3		5.3		1
+mpn=1211
+na=Zaprawianie bruzd - rêczne przygotowanie zaprawy cementowo-wapiennej
+op=0	0	0	0	0	0	0	0
+nu=26
+ob=0.425
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=0.425	1	(50+80+40)*0,05*0,05						
+
+[RMS 1]
+nz=4.03	0	4,03
+np=1
+wa=0
+wb=0
+il=1.7128
+
+[RMS 210]
+nz=0.191	0	0,191
+np=1
+wa=0
+wb=0
+il=0.0812
+
+[RMS 211]
+nz=1.1	0	1,1
+np=1
+wa=0
+wb=0
+il=0.4675
+
+[RMS 128]
+nz=0.16	0	0,16
+np=1
+wa=0
+wb=0
+il=0.068
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1229
+pd=		5.4		5.4		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 3x2,5 wci¹gane do rur
+op=0	0	0	0	0	0	0	0
+nu=27
+ob=100
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=100	1	100						
+
+[RMS 1]
+nz=0.0352	0	0,0352
+np=1
+wa=0
+wb=0
+il=3.52
+
+[RMS 232]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=104
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1233
+pd=		5.5		5.5		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 3x1,5 wci¹gane do rur
+op=0	0	0	0	0	0	0	0
+nu=28
+ob=170
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=170	1	170						
+
+[RMS 1]
+nz=0.0352	0	0,0352
+np=1
+wa=0
+wb=0
+il=5.984
+
+[RMS 233]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=176.8
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1237
+pd=		5.6		5.6		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 4x1,5 wci¹gane do rur
+op=0	0	0	0	0	0	0	0
+nu=29
+ob=80
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=80	1	80						
+
+[RMS 1]
+nz=0.0352	0	0,0352
+np=1
+wa=0
+wb=0
+il=2.816
+
+[RMS 234]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=83.2
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1241
+pd=		5.7		5.7		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 3x2,5 uk³adane p.t.
+op=0	0	0	0	0	0	0	0
+nu=30
+ob=50
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=50	1	50						
+
+[RMS 1]
+nz=0.0546	0	0,0546
+np=1
+wa=0
+wb=0
+il=2.73
+
+[RMS 232]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=52
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1245
+pd=		5.8		5.8		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 3x1,5 uk³adane p.t.
+op=0	0	0	0	0	0	0	0
+nu=31
+ob=80
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=80	1	80						
+
+[RMS 1]
+nz=0.0546	0	0,0546
+np=1
+wa=0
+wb=0
+il=4.368
+
+[RMS 233]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=83.2
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=1249
+pd=		5.9		5.9		1
+mpn=_1211
+na=Przewody kabelkowe YDYp(¿o) 4x1,5 uk³adane p.t.
+op=0	0	0	0	0	0	0	0
+nu=32
+ob=40
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=40	1	40						
+
+[RMS 1]
+nz=0.0546	0	0,0546
+np=1
+wa=0
+wb=0
+il=2.184
+
+[RMS 234]
+nz=1.04	0	1,04
+np=1
+wa=0
+wb=0
+il=41.6
+
+[RMS 5]
+nz=2.5	0	2,5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[ELEMENT 1]
+na=Pomiary
+wa=0
+kn=0	0	0
+id=1253
+nu=6
+
+[POZYCJA]
+id=1254
+pd=		6.1		6.1		1
+mpn=1211
+na=Pomiar rezystancji izolacji instalacji elektrycznej - obwód 1-fazowy (pomiar pierwszy)
+op=0	0	0	0	0	0	0	0
+nu=33
+ob=9
+jm=pomiar	108
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=9	1	9						
+
+[RMS 1]
+nz=0.63	0	0,63
+np=1
+wa=0
+wb=0
+il=5.67
+
+[POZYCJA]
+id=1256
+pd=		6.2		6.2		1
+mpn=1211
+na=Badania i pomiary instalacji skutecznoœci zerowania (pierwszy pomiar)
+op=0	0	0	0	0	0	0	0
+nu=34
+ob=17
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=17	1	17						
+
+[RMS 1]
+nz=0.5	0	0,5
+np=1
+wa=0
+wb=0
+il=8.5
+
+[POZYCJA]
+id=1258
+pd=		6.3		6.3		1
+mpn=1211
+na=Sprawdzenie samoczynnego wy³¹czania zasilania (pierwsza próba)
+op=0	0	0	0	0	0	0	0
+nu=35
+ob=4
+jm=prób.	000
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[RMS 1]
+nz=0.33	0	0,33
+np=1
+wa=0
+wb=0
+il=1.32
+
+[POZYCJA]
+id=1260
+pd=		6.4		6.4		1
+mpn=1211
+na=Pomiar natê¿enia oœwietlenia wnêtrz
+op=0	0	0	0	0	0	0	0
+nu=36
+ob=210
+jm=punkt	000
+kj=0	0	0
+cj=0		0	0	0
+nsn=SST.04
+
+[PRZEDMIAR]
+wo=210	1	210						
+
+[RMS 1]
+nz=0.3	0	0,3
+np=1
+wa=0
+wb=0
+il=63
+
+[SUMA KONTROLNA]
+1d65138890232e9e 3f8 b2c3b5efb9d

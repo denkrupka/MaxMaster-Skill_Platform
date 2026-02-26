@@ -64,7 +64,6 @@ import type {
 } from '../../types';
 import { OninenIntegrator } from './OninenIntegrator';
 import { TIMIntegrator } from './TIMIntegrator';
-import { SpeckableIntegrator } from './SpeckableIntegrator';
 import { AtutIntegrator } from './AtutIntegrator';
 import { RamirentIntegrator } from './RamirentIntegrator';
 
@@ -3663,7 +3662,7 @@ export const KosztorysEditorPage: React.FC = () => {
     setSearchMatWholesalerPrices([]);
 
     Promise.allSettled(activeInts.map(async (integration) => {
-      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : integration.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
+      const proxyName = integration.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
       const queryResults = await Promise.allSettled(
         queries.map(q => supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integration.id, q } }).then(({ data, error }) => {
           if (error) throw error;
@@ -3693,10 +3692,9 @@ export const KosztorysEditorPage: React.FC = () => {
         const { integration, best } = r.value;
         if (!best) continue;
         const isTim = integration.wholesaler_id === 'tim';
-        const isSpeckable = integration.wholesaler_id === 'speckable';
-        const wholesalerLabel = integration.wholesaler_name || (isTim ? 'TIM S.A.' : isSpeckable ? 'Speckable' : integration.wholesaler_id === 'oninen' ? 'Onninen' : integration.wholesaler_id);
-        const purchasePrice = isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null);
-        const catalogPrice = isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null);
+        const wholesalerLabel = integration.wholesaler_name || (isTim ? 'TIM S.A.' : integration.wholesaler_id === 'oninen' ? 'Onninen' : integration.wholesaler_id);
+        const purchasePrice = isTim ? (best.price ?? null) : (best.priceEnd ?? null);
+        const catalogPrice = isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null);
         prices.push({ wholesaler: wholesalerLabel, productName: best.name || '—', catalogPrice, purchasePrice, stock: best.stock ?? null, url: best.url || undefined });
       }
       setSearchMatWholesalerPrices(prices);
@@ -11940,18 +11938,6 @@ export const KosztorysEditorPage: React.FC = () => {
                   TIM
                 </button>
               )}
-              {searchMaterialIntegrations.some(i => i.wholesaler_id === 'speckable') && (
-                <button
-                  onClick={() => setSearchMaterialSubTab('speckable')}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                    searchMaterialSubTab === 'speckable'
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Speckable
-                </button>
-              )}
             </div>
 
             {/* Tab content */}
@@ -12136,7 +12122,7 @@ export const KosztorysEditorPage: React.FC = () => {
                           </div>
                           <div className="flex flex-wrap gap-1.5 mb-3">
                             {dm.unit && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Jedn.: <b>{dm.unit}</b></span>}
-                            {dm.source_wholesaler && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler === 'speckable' ? 'Speckable' : dm.source_wholesaler}</b></span>}
+                            {dm.source_wholesaler && <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] text-slate-600">Źródło: <b>{dm.source_wholesaler === 'tim' ? 'TIM' : dm.source_wholesaler === 'oninen' ? 'Onninen' : dm.source_wholesaler}</b></span>}
                             <span className={`px-2 py-0.5 rounded text-[10px] ${dm.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>{dm.is_active ? 'Aktywny' : 'Nieaktywny'}</span>
                           </div>
                           <button
@@ -12255,14 +12241,6 @@ export const KosztorysEditorPage: React.FC = () => {
                 </div>
               )}
 
-              {searchMaterialSubTab === 'speckable' && (
-                <div className="p-0">
-                  <SpeckableIntegrator
-                    integrationId={searchMaterialIntegrations.find(i => i.wholesaler_id === 'speckable')?.id}
-                    onSelectProduct={(p) => handleApplyMaterialFromSearch({ name: p.name, price: p.price, sku: p.sku, ean: p.ean, unit: p.unit })}
-                  />
-                </div>
-              )}
             </div>
           </div>
         </div>

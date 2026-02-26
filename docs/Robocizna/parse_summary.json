@@ -1,0 +1,855 @@
+{
+  "total_rows": 2537,
+  "total_categories": 139,
+  "unique_units": [
+    "godz.",
+    "kg",
+    "kpl.",
+    "m",
+    "m.b.",
+    "m2",
+    "m3",
+    "mtg",
+    "op.",
+    "pkt",
+    "rg",
+    "szt.",
+    "zest."
+  ],
+  "categories": [
+    {
+      "category_id": 3074,
+      "category_name": "Na konstrukcji krzyżowej jednopoziomowej z profili CD 60",
+      "category_number": "SR4 02 01",
+      "category_path": "Prace budowlane / Sufity podwieszane / Na konstrukcji krzyżowej jednopoziomowej z profili CD 60"
+    },
+    {
+      "category_id": 3075,
+      "category_name": "Na konstrukcji z profili CW i UW (bezwieszakowy)",
+      "category_number": "SR4 02 02",
+      "category_path": "Prace budowlane / Sufity podwieszane / Na konstrukcji z profili CW i UW (bezwieszakowy)"
+    },
+    {
+      "category_id": 2966,
+      "category_name": "CW 100 UW 100",
+      "category_number": "SR4 01 03",
+      "category_path": "Prace budowlane / Ściany działowe GK / CW 100 UW 100"
+    },
+    {
+      "category_id": 2964,
+      "category_name": "CW 50 UW 50",
+      "category_number": "SR4 01 01",
+      "category_path": "Prace budowlane / Ściany działowe GK / CW 50 UW 50"
+    },
+    {
+      "category_id": 2965,
+      "category_name": "CW 75 UW 75",
+      "category_number": "SR4 01 02",
+      "category_path": "Prace budowlane / Ściany działowe GK / CW 75 UW 75"
+    },
+    {
+      "category_id": 3154,
+      "category_name": "Bednarka",
+      "category_number": "SR2 04",
+      "category_path": "Instalacje Elektryczne / Bednarka"
+    },
+    {
+      "category_id": 2596,
+      "category_name": "Biały montaż",
+      "category_number": "SR2 03",
+      "category_path": "Instalacje Elektryczne / Biały montaż"
+    },
+    {
+      "category_id": 3171,
+      "category_name": "Domofony",
+      "category_number": "SR2 19",
+      "category_path": "Instalacje Elektryczne / Domofony"
+    },
+    {
+      "category_id": 3175,
+      "category_name": "Inne energetyka",
+      "category_number": "SR2 23",
+      "category_path": "Instalacje Elektryczne / Inne energetyka"
+    },
+    {
+      "category_id": 3151,
+      "category_name": "Instalacja",
+      "category_number": "SR2 01",
+      "category_path": "Instalacje Elektryczne / Instalacja"
+    },
+    {
+      "category_id": 3156,
+      "category_name": "Instalacja odgromowa",
+      "category_number": "SR2 06",
+      "category_path": "Instalacje Elektryczne / Instalacja odgromowa"
+    },
+    {
+      "category_id": 2594,
+      "category_name": "Instalacje",
+      "category_number": "SR2 01",
+      "category_path": "Instalacje Elektryczne / Instalacje"
+    },
+    {
+      "category_id": 3152,
+      "category_name": "Kable zasilające",
+      "category_number": "SR2 02",
+      "category_path": "Instalacje Elektryczne / Kable zasilające"
+    },
+    {
+      "category_id": 3161,
+      "category_name": "Mocowanie przewodów",
+      "category_number": "SR2 11",
+      "category_path": "Instalacje Elektryczne / Mocowanie przewodów"
+    },
+    {
+      "category_id": 3166,
+      "category_name": "Multimedia",
+      "category_number": "SR2 16",
+      "category_path": "Instalacje Elektryczne / Multimedia"
+    },
+    {
+      "category_id": 3179,
+      "category_name": "Ograniczniki mocy",
+      "category_number": "SR2 27",
+      "category_path": "Instalacje Elektryczne / Ograniczniki mocy"
+    },
+    {
+      "category_id": 3167,
+      "category_name": "Osprzęt instalacyjny",
+      "category_number": "SR2 17",
+      "category_path": "Instalacje Elektryczne / Osprzęt instalacyjny"
+    },
+    {
+      "category_id": 3164,
+      "category_name": "Peszle",
+      "category_number": "SR2 14",
+      "category_path": "Instalacje Elektryczne / Peszle"
+    },
+    {
+      "category_id": 2598,
+      "category_name": "Pomiary",
+      "category_number": "SR2 05",
+      "category_path": "Instalacje Elektryczne / Pomiary"
+    },
+    {
+      "category_id": 3168,
+      "category_name": "Pomiary rezystancji",
+      "category_number": "SR2 18",
+      "category_path": "Instalacje Elektryczne / Pomiary rezystancji"
+    },
+    {
+      "category_id": 2597,
+      "category_name": "Prace montażowe",
+      "category_number": "SR2 04",
+      "category_path": "Instalacje Elektryczne / Prace montażowe"
+    },
+    {
+      "category_id": 3160,
+      "category_name": "Przewody i kable",
+      "category_number": "SR2 10",
+      "category_path": "Instalacje Elektryczne / Przewody i kable"
+    },
+    {
+      "category_id": 3162,
+      "category_name": "Puszki",
+      "category_number": "SR2 12",
+      "category_path": "Instalacje Elektryczne / Puszki"
+    },
+    {
+      "category_id": 2595,
+      "category_name": "Rozdzielnica",
+      "category_number": "SR2 02",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica"
+    },
+    {
+      "category_id": 3158,
+      "category_name": "Rozdzielnica aparatura",
+      "category_number": "SR2 08",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura"
+    },
+    {
+      "category_id": 3186,
+      "category_name": "Rozdzielnica aparatura EATON",
+      "category_number": "SR2 08 02",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura / Rozdzielnica aparatura EATON"
+    },
+    {
+      "category_id": 3185,
+      "category_name": "Rozdzielnica aparatura Hager",
+      "category_number": "SR2 08 01",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura / Rozdzielnica aparatura Hager"
+    },
+    {
+      "category_id": 3187,
+      "category_name": "Rozdzielnica aparatura Legrand",
+      "category_number": "SR2 08 03",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura / Rozdzielnica aparatura Legrand"
+    },
+    {
+      "category_id": 3188,
+      "category_name": "Rozdzielnica aparatura Saltek",
+      "category_number": "SR2 08 04",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura / Rozdzielnica aparatura Saltek"
+    },
+    {
+      "category_id": 3189,
+      "category_name": "Rozdzielnica aparatura Schneider Electric",
+      "category_number": "SR2 08 05",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica aparatura / Rozdzielnica aparatura Schneider Electric"
+    },
+    {
+      "category_id": 3159,
+      "category_name": "Rozdzielnica inne",
+      "category_number": "SR2 09",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica inne"
+    },
+    {
+      "category_id": 3184,
+      "category_name": "Rozdzielnica obudowa DEHN",
+      "category_number": "SR2 07 05",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica obudowa / Rozdzielnica obudowa DEHN"
+    },
+    {
+      "category_id": 3182,
+      "category_name": "Rozdzielnica obudowa Eaton",
+      "category_number": "SR2 07 03",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica obudowa / Rozdzielnica obudowa Eaton"
+    },
+    {
+      "category_id": 3181,
+      "category_name": "Rozdzielnica obudowa Hager Golf",
+      "category_number": "SR2 07 02",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica obudowa / Rozdzielnica obudowa Hager Golf"
+    },
+    {
+      "category_id": 3183,
+      "category_name": "Rozdzielnica obudowa Hager SBN",
+      "category_number": "SR2 07 04",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica obudowa / Rozdzielnica obudowa Hager SBN"
+    },
+    {
+      "category_id": 3180,
+      "category_name": "Rozdzielnica obudowa Legrand",
+      "category_number": "SR2 07 01",
+      "category_path": "Instalacje Elektryczne / Rozdzielnica obudowa / Rozdzielnica obudowa Legrand"
+    },
+    {
+      "category_id": 3153,
+      "category_name": "Rury osłonowe",
+      "category_number": "SR2 03",
+      "category_path": "Instalacje Elektryczne / Rury osłonowe"
+    },
+    {
+      "category_id": 3165,
+      "category_name": "Trasy kablowe",
+      "category_number": "SR2 15",
+      "category_path": "Instalacje Elektryczne / Trasy kablowe"
+    },
+    {
+      "category_id": 3174,
+      "category_name": "Uchwyty i zaciski",
+      "category_number": "SR2 22",
+      "category_path": "Instalacje Elektryczne / Uchwyty i zaciski"
+    },
+    {
+      "category_id": 3173,
+      "category_name": "Ustoje",
+      "category_number": "SR2 21",
+      "category_path": "Instalacje Elektryczne / Ustoje"
+    },
+    {
+      "category_id": 3155,
+      "category_name": "Uziom",
+      "category_number": "SR2 05",
+      "category_path": "Instalacje Elektryczne / Uziom"
+    },
+    {
+      "category_id": 3178,
+      "category_name": "Wkładki bezpiecznikowe",
+      "category_number": "SR2 26",
+      "category_path": "Instalacje Elektryczne / Wkładki bezpiecznikowe"
+    },
+    {
+      "category_id": 3176,
+      "category_name": "Wykopy liniowe",
+      "category_number": "SR2 24",
+      "category_path": "Instalacje Elektryczne / Wykopy liniowe"
+    },
+    {
+      "category_id": 3177,
+      "category_name": "Złącza kablowe",
+      "category_number": "SR2 25",
+      "category_path": "Instalacje Elektryczne / Złącza kablowe"
+    },
+    {
+      "category_id": 3163,
+      "category_name": "Złączki",
+      "category_number": "SR2 13",
+      "category_path": "Instalacje Elektryczne / Złączki"
+    },
+    {
+      "category_id": 3172,
+      "category_name": "Żerdzie",
+      "category_number": "SR2 20",
+      "category_path": "Instalacje Elektryczne /Słupy"
+    },
+    {
+      "category_id": 2574,
+      "category_name": "Sterowanie kotłem",
+      "category_number": "SR1 06 01",
+      "category_path": "Instalacje Sanitarne/ Automatyka / Sterowanie kotłem"
+    },
+    {
+      "category_id": 2327,
+      "category_name": "Elementy instalacji",
+      "category_number": "SR1 04 01",
+      "category_path": "Instalacje Sanitarne/ Inst. gazowe / Elementy instalacji"
+    },
+    {
+      "category_id": 2329,
+      "category_name": "Instalacje z rur CU (zaciskane)",
+      "category_number": "SR1 04 03",
+      "category_path": "Instalacje Sanitarne/ Inst. gazowe / Instalacje z rur CU (zaciskane)"
+    },
+    {
+      "category_id": 2328,
+      "category_name": "Instalacje z rur stalowych",
+      "category_number": "SR1 04 02",
+      "category_path": "Instalacje Sanitarne/ Inst. gazowe / Instalacje z rur stalowych"
+    },
+    {
+      "category_id": 2330,
+      "category_name": "Przyłącze",
+      "category_number": "SR1 04 04",
+      "category_path": "Instalacje Sanitarne/ Inst. gazowe / Przyłącze"
+    },
+    {
+      "category_id": 2319,
+      "category_name": "Automatyka",
+      "category_number": "SR1 03 04",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Automatyka"
+    },
+    {
+      "category_id": 2315,
+      "category_name": "Elementy instalacji",
+      "category_number": "SR1 03 01",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Elementy instalacji"
+    },
+    {
+      "category_id": 2324,
+      "category_name": "Instalacje stalowe",
+      "category_number": "SR1 03 09",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Instalacje stalowe"
+    },
+    {
+      "category_id": 2323,
+      "category_name": "Instalacje z CU",
+      "category_number": "SR1 03 08",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Instalacje z CU"
+    },
+    {
+      "category_id": 2321,
+      "category_name": "Instalacje z PEX/PERT/PE",
+      "category_number": "SR1 03 06",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Instalacje z PEX/PERT/PE"
+    },
+    {
+      "category_id": 2322,
+      "category_name": "Instalacje z PP",
+      "category_number": "SR1 03 07",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Instalacje z PP"
+    },
+    {
+      "category_id": 2316,
+      "category_name": "Montaż grzejników",
+      "category_number": "SR1 03 02",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Montaż grzejników"
+    },
+    {
+      "category_id": 2318,
+      "category_name": "Ogrzewanie podłogowe",
+      "category_number": "SR1 03 03",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Ogrzewanie podłogowe"
+    },
+    {
+      "category_id": 2320,
+      "category_name": "Remontowe",
+      "category_number": "SR1 03 05",
+      "category_path": "Instalacje Sanitarne/ Inst. grzewcze / Remontowe"
+    },
+    {
+      "category_id": 2235,
+      "category_name": "Elementy instalacji",
+      "category_number": "SR1 02 02",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Elementy instalacji"
+    },
+    {
+      "category_id": 2236,
+      "category_name": "Instalacje wewnętrzne",
+      "category_number": "SR1 02 03",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Instalacje wewnętrzne"
+    },
+    {
+      "category_id": 2237,
+      "category_name": "Podposadzkówka",
+      "category_number": "SR1 02 04",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Podposadzkówka"
+    },
+    {
+      "category_id": 2234,
+      "category_name": "Pozycje scalone",
+      "category_number": "SR1 02 01",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Pozycje scalone"
+    },
+    {
+      "category_id": 2239,
+      "category_name": "Przyłącze",
+      "category_number": "SR1 02 06",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Przyłącze"
+    },
+    {
+      "category_id": 2238,
+      "category_name": "Remontowe",
+      "category_number": "SR1 02 05",
+      "category_path": "Instalacje Sanitarne/ Inst. kanalizacyjne / Remontowe"
+    },
+    {
+      "category_id": 2224,
+      "category_name": "Elementy instalacji",
+      "category_number": "SR1 01 02",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Elementy instalacji"
+    },
+    {
+      "category_id": 2229,
+      "category_name": "Instalacje stalowe - INOX",
+      "category_number": "SR1 01 07",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Instalacje stalowe - INOX"
+    },
+    {
+      "category_id": 2228,
+      "category_name": "Instalacje stalowe - ocynk",
+      "category_number": "SR1 01 06",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Instalacje stalowe - ocynk"
+    },
+    {
+      "category_id": 2227,
+      "category_name": "Instalacje z CU",
+      "category_number": "SR1 01 05",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Instalacje z CU"
+    },
+    {
+      "category_id": 2225,
+      "category_name": "Instalacje z PEX/PERT/PE",
+      "category_number": "SR1 01 03",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Instalacje z PEX/PERT/PE"
+    },
+    {
+      "category_id": 2226,
+      "category_name": "Instalacje z PP",
+      "category_number": "SR1 01 04",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Instalacje z PP"
+    },
+    {
+      "category_id": 2231,
+      "category_name": "Izolacje",
+      "category_number": "SR1 01 09",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Izolacje"
+    },
+    {
+      "category_id": 2223,
+      "category_name": "Pozycje scalone",
+      "category_number": "SR1 01 01",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Pozycje scalone"
+    },
+    {
+      "category_id": 2233,
+      "category_name": "Przyłącze",
+      "category_number": "SR1 01 11",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Przyłącze"
+    },
+    {
+      "category_id": 2232,
+      "category_name": "Remontowe",
+      "category_number": "SR1 01 10",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Remontowe"
+    },
+    {
+      "category_id": 2230,
+      "category_name": "Uzdatnianie wody",
+      "category_number": "SR1 01 08",
+      "category_path": "Instalacje Sanitarne/ Inst. wodociągowe / Uzdatnianie wody"
+    },
+    {
+      "category_id": 1929,
+      "category_name": "Czyszcz. wymienników",
+      "category_number": "SR1 05 06",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Czyszcz. wymienników"
+    },
+    {
+      "category_id": 1924,
+      "category_name": "Czyszczenie inst.",
+      "category_number": "SR1 05 01",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Czyszczenie inst."
+    },
+    {
+      "category_id": 1931,
+      "category_name": "Czyszczenie przemysłowe",
+      "category_number": "SR1 05 01 01",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Czyszczenie inst. / Czyszczenie przemysłowe"
+    },
+    {
+      "category_id": 1936,
+      "category_name": "TF1 Compact Filter - do kotłów",
+      "category_number": "SR1 05 04 05",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Compact Filter - do kotłów"
+    },
+    {
+      "category_id": 1938,
+      "category_name": "TF1 Delta Filter",
+      "category_number": "SR1 05 04 07",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Delta Filter"
+    },
+    {
+      "category_id": 1935,
+      "category_name": "TF1 Omega",
+      "category_number": "SR1 05 04 04",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Omega"
+    },
+    {
+      "category_id": 1933,
+      "category_name": "TF1 Sigma Filter - do kotłów",
+      "category_number": "SR1 05 04 02",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Sigma Filter - do kotłów"
+    },
+    {
+      "category_id": 1932,
+      "category_name": "TF1 Sigma HP Filter - do PC",
+      "category_number": "SR1 05 04 01",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Sigma HP Filter - do PC"
+    },
+    {
+      "category_id": 1934,
+      "category_name": "TF1 Sigma UB Filter - do kotłów (ciasny montaż)",
+      "category_number": "SR1 05 04 03",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Sigma UB Filter - do kotłów (ciasny montaż)"
+    },
+    {
+      "category_id": 1937,
+      "category_name": "TF1 Total Filter",
+      "category_number": "SR1 05 04 06",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Filtry / TF1 Total Filter"
+    },
+    {
+      "category_id": 1928,
+      "category_name": "OZE",
+      "category_number": "SR1 05 05",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / OZE"
+    },
+    {
+      "category_id": 1930,
+      "category_name": "Przyg. instalacji",
+      "category_number": "SR1 05 07",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Przyg. instalacji"
+    },
+    {
+      "category_id": 1926,
+      "category_name": "Uszczelnianie",
+      "category_number": "SR1 05 03",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Uszczelnianie"
+    },
+    {
+      "category_id": 1925,
+      "category_name": "Zabezpieczanie inst.",
+      "category_number": "SR1 05 02",
+      "category_path": "Instalacje Sanitarne/ Technologia Fernox / Zabezpieczanie inst."
+    },
+    {
+      "category_id": 3554,
+      "category_name": "Automatyka i Sterowanie",
+      "category_number": "SR1 07 06",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Automatyka i Sterowanie"
+    },
+    {
+      "category_id": 3552,
+      "category_name": "Demontażowe",
+      "category_number": "SR1 07 04",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Demontażowe"
+    },
+    {
+      "category_id": 3549,
+      "category_name": "Montaż kotła",
+      "category_number": "SR1 07 01",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Montaż kotła"
+    },
+    {
+      "category_id": 3551,
+      "category_name": "Montaż systemu spalin",
+      "category_number": "SR1 07 03",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Montaż systemu spalin"
+    },
+    {
+      "category_id": 3550,
+      "category_name": "Montaż zbiornika",
+      "category_number": "SR1 07 02",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Montaż zbiornika"
+    },
+    {
+      "category_id": 3553,
+      "category_name": "Prace Instalacyjne",
+      "category_number": "SR1 07 05",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Prace Instalacyjne"
+    },
+    {
+      "category_id": 3555,
+      "category_name": "Zabezpieczenie kotła",
+      "category_number": "SR1 07 07",
+      "category_path": "Instalacje Sanitarne/ Wymiana lub montaż kotła gazowego / Zabezpieczenie kotła"
+    },
+    {
+      "category_id": 3324,
+      "category_name": "Demontaż i prace dodatkowe",
+      "category_number": "SR7 03",
+      "category_path": "Klimatyzacyjne / Demontaż i prace dodatkowe"
+    },
+    {
+      "category_id": 3325,
+      "category_name": "Klimatyzacja VRF",
+      "category_number": "SR7 04",
+      "category_path": "Klimatyzacyjne / Klimatyzacja VRF"
+    },
+    {
+      "category_id": 3322,
+      "category_name": "Montaż klimatyzacji",
+      "category_number": "SR7 01",
+      "category_path": "Klimatyzacyjne / Montaż klimatyzacji"
+    },
+    {
+      "category_id": 3323,
+      "category_name": "Serwis i konserwacja",
+      "category_number": "SR7 02",
+      "category_path": "Klimatyzacyjne / Serwis i konserwacja"
+    },
+    {
+      "category_id": 3393,
+      "category_name": "Mała architektura",
+      "category_number": "SR9 05",
+      "category_path": "Ogrodnictwo / Mała architektura"
+    },
+    {
+      "category_id": 3389,
+      "category_name": "Prace przygotowawcze terenu",
+      "category_number": "SR9 01",
+      "category_path": "Ogrodnictwo / Prace przygotowawcze terenu"
+    },
+    {
+      "category_id": 3394,
+      "category_name": "Prace sezonowe i serwis ogrodu",
+      "category_number": "SR9 06",
+      "category_path": "Ogrodnictwo / Prace sezonowe i serwis ogrodu"
+    },
+    {
+      "category_id": 3396,
+      "category_name": "Drzewa ozdobne",
+      "category_number": "SR9 07 01",
+      "category_path": "Ogrodnictwo / Rośliny - sadzenie / Drzewa ozdobne"
+    },
+    {
+      "category_id": 3397,
+      "category_name": "Krzewy ozdobne",
+      "category_number": "SR9 07 02",
+      "category_path": "Ogrodnictwo / Rośliny - sadzenie / Krzewy ozdobne"
+    },
+    {
+      "category_id": 3399,
+      "category_name": "Trawy i byliny",
+      "category_number": "SR9 07 04",
+      "category_path": "Ogrodnictwo / Rośliny - sadzenie / Trawy i byliny"
+    },
+    {
+      "category_id": 3398,
+      "category_name": "Żywopłoty i iglaki",
+      "category_number": "SR9 07 03",
+      "category_path": "Ogrodnictwo / Rośliny - sadzenie / Żywopłoty i iglaki"
+    },
+    {
+      "category_id": 3391,
+      "category_name": "Sadzenie roślin i pielęgnacja",
+      "category_number": "SR9 03",
+      "category_path": "Ogrodnictwo / Sadzenie roślin i pielęgnacja"
+    },
+    {
+      "category_id": 3392,
+      "category_name": "Systemy nawadniania",
+      "category_number": "SR9 04",
+      "category_path": "Ogrodnictwo / Systemy nawadniania"
+    },
+    {
+      "category_id": 3390,
+      "category_name": "Zakładanie trawnika",
+      "category_number": "SR9 02",
+      "category_path": "Ogrodnictwo / Zakładanie trawnika"
+    },
+    {
+      "category_id": 2704,
+      "category_name": "Montaż okładzin ściennych",
+      "category_number": "SR3 04 01",
+      "category_path": "Prace Posadzkarskie / Montaż okładzin ściennych i antypoślizgowych / Montaż okładzin ściennych"
+    },
+    {
+      "category_id": 2706,
+      "category_name": "Montaż wykładzin ściennych na powierzchni do 25 m² w jednym pomieszczeniu",
+      "category_number": "SR3 04 01 01",
+      "category_path": "Prace Posadzkarskie / Montaż okładzin ściennych i antypoślizgowych / Montaż okładzin ściennych / Montaż wykładzin ściennych na powierzchni do 25 m² w jednym pomieszczeniu"
+    },
+    {
+      "category_id": 2707,
+      "category_name": "Montaż wykładzin ściennych na powierzchni powyżej 25 m² w jednym pomieszczeniu",
+      "category_number": "SR3 04 01 02",
+      "category_path": "Prace Posadzkarskie / Montaż okładzin ściennych i antypoślizgowych / Montaż okładzin ściennych / Montaż wykładzin ściennych na powierzchni powyżej 25 m² w jednym pomieszczeniu"
+    },
+    {
+      "category_id": 2705,
+      "category_name": "Montaż wykładzin antypoślizgowych",
+      "category_number": "SR3 04 02",
+      "category_path": "Prace Posadzkarskie / Montaż okładzin ściennych i antypoślizgowych / Montaż wykładzin antypoślizgowych"
+    },
+    {
+      "category_id": 2710,
+      "category_name": "Montaż wykładzin dywanowych w 2 i więcej kolorach",
+      "category_number": "SR3 05 02",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin dywanowych / Montaż wykładzin dywanowych w 2 i więcej kolorach"
+    },
+    {
+      "category_id": 2709,
+      "category_name": "Montaż wykładzin dywanowych w jednym kolorze",
+      "category_number": "SR3 05 01",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin dywanowych / Montaż wykładzin dywanowych w jednym kolorze"
+    },
+    {
+      "category_id": 2699,
+      "category_name": "Montaż elementów wykończeniowych",
+      "category_number": "SR3 03 03",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin z PVC i naturalnych / Montaż elementów wykończeniowych"
+    },
+    {
+      "category_id": 2700,
+      "category_name": "Wykładziny w 1-2 kolorach, bez skomplikowanych wzorów",
+      "category_number": "SR3 03 01 01",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin z PVC i naturalnych / Montaż wykładzin PVC / Wykładziny w 1-2 kolorach, bez skomplikowanych wzorów"
+    },
+    {
+      "category_id": 2701,
+      "category_name": "Wykładziny w 3 lub więcej kolorach, bez skomplikowanych wzorów",
+      "category_number": "SR3 03 01 02",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin z PVC i naturalnych / Montaż wykładzin PVC / Wykładziny w 3 lub więcej kolorach, bez skomplikowanych wzorów"
+    },
+    {
+      "category_id": 2698,
+      "category_name": "Montaż wykładzin naturalnych - linoleum",
+      "category_number": "SR3 03 02",
+      "category_path": "Prace Posadzkarskie / Montaż wykładzin z PVC i naturalnych / Montaż wykładzin naturalnych - linoleum"
+    },
+    {
+      "category_id": 2695,
+      "category_name": "Prace przygotowawcze",
+      "category_number": "SR3 02",
+      "category_path": "Prace Posadzkarskie / Prace przygotowawcze"
+    },
+    {
+      "category_id": 2694,
+      "category_name": "Prace rozbiórkowe",
+      "category_number": "SR3 01",
+      "category_path": "Prace Posadzkarskie / Prace rozbiórkowe"
+    },
+    {
+      "category_id": 3294,
+      "category_name": "Porządkowanie terenów zewnętrznych",
+      "category_number": "SR5 04",
+      "category_path": "Sprzątanie / Porządkowanie terenów zewnętrznych"
+    },
+    {
+      "category_id": 3295,
+      "category_name": "Sprzątanie biur i lokali użytkowych",
+      "category_number": "SR5 05",
+      "category_path": "Sprzątanie / Sprzątanie biur i lokali użytkowych"
+    },
+    {
+      "category_id": 3292,
+      "category_name": "Sprzątanie domów i mieszkań",
+      "category_number": "SR5 02",
+      "category_path": "Sprzątanie / Sprzątanie domów i mieszkań"
+    },
+    {
+      "category_id": 3291,
+      "category_name": "Sprzątanie po budowie / remoncie",
+      "category_number": "SR5 01",
+      "category_path": "Sprzątanie / Sprzątanie po budowie / remoncie"
+    },
+    {
+      "category_id": 3293,
+      "category_name": "Usługi specjalistyczne i dodatkowe",
+      "category_number": "SR5 03",
+      "category_path": "Sprzątanie / Usługi specjalistyczne i dodatkowe"
+    },
+    {
+      "category_id": 3169,
+      "category_name": "Alarmy",
+      "category_number": "SR6 20",
+      "category_path": "Instalacje Teletechniczne/ Systemy Alarmowe"
+    },
+    {
+      "category_id": 3170,
+      "category_name": "Kamery i rejestratory",
+      "category_number": "SR6 19",
+      "category_path": "Instalacje Teletechniczne/ CCTV"
+    },
+    {
+      "category_id": 3354,
+      "category_name": "Automatyka",
+      "category_number": "SR8 05",
+      "category_path": "Instalacje Wentylacyjne/ Automatyka"
+    },
+    {
+      "category_id": 3357,
+      "category_name": "Kauczuk",
+      "category_number": "SR8 06 02",
+      "category_path": "Instalacje Wentylacyjne/ Izolacje / Kauczuk"
+    },
+    {
+      "category_id": 3356,
+      "category_name": "Wełna",
+      "category_number": "SR8 06 01",
+      "category_path": "Instalacje Wentylacyjne/ Izolacje / Wełna"
+    },
+    {
+      "category_id": 3358,
+      "category_name": "Montaż centrali",
+      "category_number": "SR8 07",
+      "category_path": "Instalacje Wentylacyjne/ Montaż centrali"
+    },
+    {
+      "category_id": 3346,
+      "category_name": "Montaż kanałów okrągłych",
+      "category_number": "SR8 01",
+      "category_path": "Instalacje Wentylacyjne/ Montaż kanałów okrągłych"
+    },
+    {
+      "category_id": 3351,
+      "category_name": "Montaż kanałów prostokątnych",
+      "category_number": "SR8 03",
+      "category_path": "Instalacje Wentylacyjne/ Montaż kanałów prostokątnych"
+    },
+    {
+      "category_id": 3353,
+      "category_name": "Montaż osprzętu",
+      "category_number": "SR8 04",
+      "category_path": "Instalacje Wentylacyjne/ Montaż osprzętu"
+    },
+    {
+      "category_id": 3343,
+      "category_name": "Pozycje scalone",
+      "category_number": "SR8 02",
+      "category_path": "Instalacje Wentylacyjne/ Pozycje scalone"
+    }
+  ]
+}

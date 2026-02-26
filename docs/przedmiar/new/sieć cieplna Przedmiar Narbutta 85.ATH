@@ -1,0 +1,2029 @@
+[KOSZTORYS ATHENASOFT]
+co=Copyright Athenasoft sp. z o.o.
+wf=4
+pr=NORMA	4.67
+nan=Sieæ cieplna  - ul. Narbutta 85
+pe=1
+op=1
+opn=1	0	2	1	1	0	19	8	0	7.9	1	0	0	0	1.	1	1	0	1	1	1
+prn=2	2	3	3	4	1	6	0	1
+own=2	1	1	0	1	0	0	1	1	0	0	0	1	0	1	1	poz.	<	>	1	0	0	0	0	0	1	1	0	2	0	0	1	1	1	0	0	0
+pm=dzia³	dzia³
+pd=dzia³u	dzia³u
+mm=dzia³y	dzia³y
+md=dzia³ów	dzia³ów
+wan=PLN
+wbn=PLN	z³
+kwn=EuroZAMPUB		4.3117	15.3.2018 13:8:59
+wk=0
+na=Koszty poœrednie	Zysk
+wn=	
+
+[STRONA TYT]
+na=KOSZTORYS INWESTORSKI 	PRZEDMIAR ROBÓT
+nfn=EKOPROJEKT tel.  886 44 39 fax 846 87 43    
+afn=02-219 WARSZAWA  al. Krakowska 224
+nb=PRZEBUDOWA PRZY£¥CZA SIECI CIEP£OWNICZEJ PRZECHODZ¥CEJ PRZEZ POMIESZCZENIA BUDYNKU NOWEGO TECHNOLOGICZNEGO WYDZIA£U IN¯YNIERII PRODUKCJI PW
+ab=ul. Narbutta 85 w Warszawie.  dz. ew. nr 63 z obrêbu 1-01-08 jedn. ew. nr 146508_8 Dzielnica Mokotów
+ni=POLITECHNIKA WARSZAWSKA WYDZIA£ IN¯YNIERII PRODUKCJI
+ai=  UL. NARBUTTA 85  02-524 WARSZAWA
+nw= 
+aw= 
+nk=Zenon Mielañczuk	
+dt=25.04.2020	0
+cpv=45113000-2	Roboty na placu budowy
+cpv=45233000-9	Roboty w zakresie konstruowania, fundamentowania oraz wykonywania nawierzchni autostrad, dróg
+cpv=45111200-0	Roboty w zakresie przygotowania terenu pod budowê i roboty ziemne
+cpv=45232140-5	Roboty budowlane w zakresie lokalnych sieci grzewczych
+pcn=1 kw. 20 [Informacja o cenach czynników produkcji RMS (Promocja)]
+
+[CHARAKTERYSTYKA OBIEKTU]
+sz=	0
+lp=1	2
+pa=1	1	1	
+pa=0	1	0	1310Przedmiotem opracowania jest przebudowa przy³¹cza sieci ciep³owniczej przechodz¹cej przez pomieszczenia budynku Nowego Technologicznego Wydzia³u In¿ynierii Produkcji PW przy ul. Narbutta 85 na terenie Dzielnicy Mokotów w Warszawie.1310Opracowanie niniejsze ujmuje zakres niezbêdny do uzyskania pozwolenia na budowê/zg³oszenia robót budowlanych oraz wykonania robót technologicznych.1310Trasa przebudowywanego przy³¹cza ciep³owniczego do budynku przy ul. Narbutta 85 zosta³a zlokalizowana w jezdni wewnêtrznej, trawniku oraz w pomieszczeniach piwnicznych budynku.1310Przebudowywane przy³¹cze ciep³ownicze to ruroci¹gi preizolowane 2xDN80/160 mm oraz SPIRO (wewn¹trz budynku).1310Przy³¹cze zostanie poprowadzone po pomieszczeniu w rurach SPIRO 2xDN80/160 mm a1310nastêpnie w korytarzu zostanie po³¹czone z istniej¹cymi ruroci¹gami SPIRO.
+
+[NARZUTY NORMA 2]
+na=Koszty poœrednie	Kp
+wa=0	1	0	PLN
+op=1	0
+nr=1
+ns=1
+
+[NARZUTY NORMA 2]
+na=Zysk	Z
+wa=0	1	0	PLN
+op=1	0
+nr=1
+ns=1
+
+[RMS ZEST 1918]
+ty=R
+na=betoniarze gr. II	0
+id=002	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2011]
+ty=R
+na=betoniarze gr.II	0
+id=002	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 420]
+ty=R
+na=bitumiarze gr.II	0
+id=012	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2021]
+ty=R
+na=bitumiarze gr.II	0
+id=012	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 422]
+ty=R
+na=bitumiarze gr.III	0
+id=013	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2023]
+ty=R
+na=bitumiarze gr.III	0
+id=013	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 136]
+ty=R
+na=brukarze gr.II	0
+id=032	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 841]
+ty=R
+na=brukarze gr.II	0
+id=032	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1305]
+ty=R
+na=brukarze gr.II	0
+id=032	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2025]
+ty=R
+na=brukarze gr.II	0
+id=032	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 529]
+ty=R
+na=brukarze gr.III	0
+id=033	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1304]
+ty=R
+na=brukarze gr.III	0
+id=033	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 847]
+ty=R
+na=cieœle gr.II	0
+id=042	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1913]
+ty=R
+na=cieœle gr.II	0
+id=042	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2447]
+ty=R
+na=cieœle gr.II	0
+id=042	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 359]
+ty=R
+na=izolarze gr.II	0
+id=092	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 848]
+ty=R
+na=izolarze gr.II	0
+id=092	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 821]
+ty=R
+na=malarze gr.II	0
+id=122	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1202]
+ty=R
+na=malarze gr.II	0
+id=122	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1700]
+ty=R
+na=malarze gr.II	0
+id=122	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2852]
+ty=R
+na=malarze gr.II	0
+id=122	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 52]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 577]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr. II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 876]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr. II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 889]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1084]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1351]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1550]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1776]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1831]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2601]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2780]
+ty=R
+na=monterzy instalacji sanitarnych i ogrzewczych gr.II	0
+id=202	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1699]
+ty=R
+na=murarze gr.II	0
+id=342	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 24]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 177]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 579]
+ty=R
+na=robotnicy budowlani gr. I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 592]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 827]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 846]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 866]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 878]
+ty=R
+na=robotnicy budowlani gr. I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 967]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1086]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1108]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1306]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1324]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1348]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1516]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1542]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1626]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1772]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1778]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1832]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1919]
+ty=R
+na=robotnicy budowlani gr. I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1969]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2075]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2418]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2588]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2621]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2669]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2782]
+ty=R
+na=robotnicy gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2810]
+ty=R
+na=robotnicy budowlani gr.I	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2855]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2950]
+ty=R
+na=robotnicy	0
+id=391	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 135]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 840]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1303]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2012]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2417]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2615]
+ty=R
+na=robotnicy gr.II	0
+id=392	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 53]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 578]
+ty=R
+na=spawacze gr. II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 877]
+ty=R
+na=spawacze gr. II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 890]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1085]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1352]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1551]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1777]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2083]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2602]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2781]
+ty=R
+na=spawacze gr.II	0
+id=402	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1302]
+ty=R
+na=ogrodnicy gr.I	0
+id=761	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1511]
+ty=R
+na=ogrodnicy gr.I	0
+id=761	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2413]
+ty=R
+na=ogrodnicy gr.I	0
+id=761	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1301]
+ty=R
+na=ogrodnicy gr.II	0
+id=762	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1510]
+ty=R
+na=ogrodnicy gr.II	0
+id=762	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2412]
+ty=R
+na=ogrodnicy gr.II	0
+id=762	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2869]
+ty=R
+na=ogrodnicy gr.III	0
+id=763	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 178]
+ty=R
+na=specjaliœci badañ nie niszcz¹cych gr.IV	0
+id=894	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 913]
+ty=R
+na=specjaliœci badañ nie niszcz¹cych gr.IV	0
+id=894	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1590]
+ty=R
+na=specjaliœci badañ nie niszcz¹cych gr.IV	0
+id=894	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2118]
+ty=R
+na=specjaliœci badañ nie niszcz¹cych gr.IV	0
+id=894	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 2814]
+ty=R
+na=specjaliœci badañ nie niszcz¹cych gr.IV	0
+id=894	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1]
+ty=R
+na=robocizna - region ³ódzki	0
+id=999	1
+jm=r-g	149
+ce=13.99	1407920857
+cw=13.99	PLN
+il=0
+
+[RMS ZEST 307]
+ty=R
+na=Roboty in¿ynieryjne (WA)	0
+id=999	1
+jm=r-g	149
+ce=23.43	1585306697
+cw=23.43	PLN
+il=0
+
+[RMS ZEST 327]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	149
+ce=19.07
+cw=19.07	PLN
+il=0
+
+[RMS ZEST 791]
+ty=R
+na=robotnicy	0
+id=999	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1226]
+ty=R
+na=robocizna	0
+id=999	2
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1475]
+ty=R
+na=robotnicy gr.I	0
+id=999	1
+jm=r-g	149
+ce=0
+cw=0	PLN
+il=0
+
+[RMS ZEST 1500]
+ty=R
+na=Roboty in¿ynieryjne (WA)'	0
+id=999	1
+jm=r-g	149
+ce=18.93	1417022240
+cw=18.93	PLN
+il=0
+
+[RMS ZEST 1503]
+ty=R
+na=Roboty in¿ynieryjne (WA)''	0
+id=999	1
+jm=r-g	149
+ce=18.93	1417022240
+cw=18.93	PLN
+il=0
+
+[RMS ZEST 1750]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	149
+ce=18.93
+cw=18.93	PLN
+il=0
+
+[RMS ZEST 1872]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	149
+ce=18.71	1430286816
+cw=18.71	PLN
+il=0
+
+[RMS ZEST 2453]
+ty=R
+na=Roboty in¿ynieryjne (WA)''	0
+id=999	1
+jm=r-g	149
+ce=18.93	1456765930
+cw=18.93	PLN
+il=0
+
+[RMS ZEST 2624]
+ty=R
+na=robocizna	0
+id=999	1
+jm=r-g	149
+ce=23.43
+cw=23.43	PLN
+il=0
+
+[RMS ZEST 2957]
+ty=R
+na=Stawka robocizny kosztorysowej w robotach in¿ynieryjnych - region mazowiecki - MZ - stolica województwa	0
+id=999	1
+jm=r-g	149
+ce=18.93	1520874638
+cw=18.93	PLN
+il=0
+
+[ELEMENT 1]
+na=Gospodarka zieleni¹
+wa=0
+kn=0	0	0
+id=1351
+nu=1
+cpv=45113000-2
+wn=	
+
+[POZYCJA]
+id=1354
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0417-01	2-25	0417-01		1
+mpn=1211
+na=Barierki ochronne z desek na s³upkach drewnianych - budowa - drzew i zabezpieczenie krzewów
+op=0	0	0	0	0	0	0	0
+nu=1
+ob=130
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=130	1	130						
+
+[POZYCJA]
+id=1355
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0417-02	2-25	0417-02		1
+mpn=1211
+na=Barierki ochronne z desek na s³upkach drewnianych - rozebranie
+op=0	0	0	0	0	0	0	0
+nu=2
+ob=130
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=130	1	#p1						
+
+[POZYCJA]
+id=1356
+pd=Miastoprojekt 1992,biuletyny do 9 1996	KNR	2-21 0401-02	2-21	0401-02		1
+mpn=1211
+na=Wykonanie trawników dywanowych siewem na gruncie kat. III bez nawo¿enia
+op=0	0	0	0	0	0	0	0
+nu=3
+ob=84
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=84	1	10.0*(8,4)						
+
+[MNO¯NIKI RMS]
+wr=0.955		0.955
+wm=1		1
+ws=1		1
+
+[ELEMENT 1]
+na=Organizacja ruchu
+wa=0
+kn=0	0	0
+id=2278
+nu=2
+wn=	
+
+[POZYCJA]
+id=2279
+pd=						0
+na=Projekt organizacji ruchu i op³ata za zajêcie terenu
+op=0	0	0	0	0	0	0	0
+nu=4
+ob=1
+jm=kpl.	090
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1	1	1						
+
+[POZYCJA]
+id=4723
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0419-02	2-25	0419-02		1
+mpn=1211
+na=S³upki do znaków drogowych z rur stalowych o œr.70 mm - budowa
+op=0	0	0	0	0	0	0	0
+nu=5
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=4	1	4						
+
+[POZYCJA]
+id=4724
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0419-05	2-25	0419-05		1
+mpn=1211
+na=S³upki do znaków drogowych z rur stalowych o œr.70 mm - rozebranie
+op=0	0	0	0	0	0	0	0
+nu=6
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=4	1	#p5						
+
+[POZYCJA]
+id=4721
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0420-01	2-25	0420-01		1
+mpn=1211
+na=Znaki drogowe p³askie - budowa
+op=0	0	0	0	0	0	0	0
+nu=7
+ob=6
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=6	1	6						
+
+[POZYCJA]
+id=4722
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0420-03	2-25	0420-03		1
+mpn=1211
+na=Znaki drogowe p³askie - rozebranie
+op=0	0	0	0	0	0	0	0
+nu=8
+ob=6
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=6	1	#p7						
+
+[POZYCJA]
+id=2280
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0417-01	2-25	0417-01		1
+mpn=1211
+na=Barierki ochronne typ U20b i U20c , U12c U3d- budowa
+op=0	0	0	0	0	0	0	0
+nu=9
+ob=36
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=36	1	36,0						
+
+[POZYCJA]
+id=2281
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0417-02	2-25	0417-02		1
+mpn=1211
+na=Barierki ochronne typ U20b i U20c - rozebranie
+op=0	0	0	0	0	0	0	0
+nu=10
+ob=36
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=36	1	#p9						
+
+[ELEMENT 1]
+na=Roboty drogowe
+wa=0
+kn=0	0	0
+id=14
+nu=3
+cpv=45233000-9
+wn=	
+
+[POZYCJA]
+id=1067
+pd=ORGBUD wyd.III 1993,biuletyny do 9 1996	KNR	2-31 0811-02	2-31	0811-02		1
+mpn=_1211
+na=Rozebranie nawierzchni z p³yt drogowych betonowych o gruboœci 15 cm z wype³nieniem spoin piaskiem
+op=0	0	0	0	0	0	0	0
+nu=11
+ob=16.25
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=16.25	1	2.5*6.5						
+
+[POZYCJA]
+id=4
+pd=ORGBUD wyd.III 1993,biuletyny do 9 1996	KNR	2-31 0813-04	2-31	0813-04		1
+mpn=_1211
+na=Rozebranie krawê¿ników betonowych 20x30 cm na podsypce cementowo-piaskowej
+op=0	0	0	0	0	0	0	0
+nu=12
+ob=7
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=7	1	7,0						
+
+[POZYCJA]
+id=10
+pd=ORGBUD wyd.III 1993,biuletyny do 9 1996	KNR	2-31 0403-02	2-31	0403-02		1
+mpn=_1211
+na=Krawê¿niki betonowe wystaj¹ce o wymiarach 20x30 cm na podsypce piaskowej
+op=0	0	0	0	0	0	0	0
+nu=13
+ob=7
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=7	1	#p12						
+
+[POZYCJA]
+id=2105
+pd=ORGBUD wyd.III 1993,biuletyny do 9 1996	KNR	2-31 0111-01 0111-02	2-31	0111-01	 0111-02	1
+mpn=36:0:200982,101211
+na=Podbudowa z gruntu stabilizowanego cementem wykonywana sprzêtem rolniczym - gruboœæ podbudowy po zagêszczeniu 20 cm
+op=0	0	0	0	0	0	0	0
+nu=14
+ob=16.25
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=16.25	1	#p11						
+
+[POZYCJA]
+id=1073
+pd=ORGBUD wyd.III 1993,biuletyny do 9 1996	KNR	2-31 0309-02	2-31	0309-02		1
+mpn=_1211
+na=Nawierzchnia z p³yt drogowych betonowych szeœciok¹tnych o gruboœci 15 cm z wype³nieniem spoin piaskiem - 70% trylinki z odzysku
+op=0	0	0	0	0	0	0	0
+nu=15
+ob=16.25
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=16.25	1	#p11						
+
+[POZYCJA]
+id=1091
+pd=ORGBUD wyd.I 1988,biuletyny do 9 1996	KNR	4-01 0108-11 0108-12 	4-01	0108-11	 0108-12 	1
+mpn=38:0:160967,101211
+na=Wywiezienie gruzu spryzmowanego samochodami samowy³adowczymi na odleg³oœæ 16 km  - miejsce wyznacza Wykonawca z utylizacj¹
+op=0	0	0	0	0	0	0	0
+nu=16
+ob=0.558
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=0.39	1	#p11*0.08*30%						
+wo=0.168	1	#p12*0.08*0.3						
+
+[ELEMENT 1]
+na=Roboty ziemne  
+wa=0
+kn=0	0	0
+id=664
+nu=4
+cpv=45111200-0
+wn=	
+
+[POZYCJA]
+id=665
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0206-02 0214-04 	2-01	0206-02	 0214-04 	1
+mpn=49:3:180977,101211
+na=Roboty ziemne wykonywane koparkami podsiêbiernymi o poj.³y¿ki 0.40 m3 w gr.kat.III z transportem urobku samochodami samowy³adowczymi na odleg³oœæ 18 km - miejsce wywozu wyznacza Wykonawca
+op=0	0	0	0	0	0	0	0
+nu=17
+ob=22.669
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=28.336	0	((1.2+1.2+(0,99+0,85)/2*0.6*2)/2+0.1)*1.02*15,0						
+scn=28.336	0						
+wo=22.669	1	#p17A*80%						
+
+[POZYCJA]
+id=666
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0301-02 0214-04 	2-01	0301-02	 0214-04 	1
+mpn=49:3:180977,101211
+na=Rêczne roboty ziemne z transportem urobku samochodami samowy³adowczymi na odleg³oœæ 18 km (kat.gr.III) - miejsce wywozu wyznacza Wykonawca
+op=0	0	0	0	0	0	0	0
+nu=18
+ob=5.667
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=5.667	1	#p17A*20%						
+
+[MNO¯NIKI RMS]
+wr=0.955		0.955
+wm=1		1
+ws=1		1
+
+[POZYCJA]
+id=670
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0230-01	2-01	0230-01		1
+mpn=_121,0:0,0911
+na=Zasypywanie wykopów spycharkami z przemieszczeniem gruntu na odleg³oœæ do 10 m w gruncie kat. I-III
+op=0	0	0	0	0	0	0	0
+nu=19
+ob=15.844
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=28.336	1	#p17A						
+ko=	minus  rury			
+wo=-2.412	1	-((0.16*0.16*3.14*15,0)*2)						
+ko=	podsypka + zasypka wstêpna			
+wo=-10.08	1	-(#p25+#p34)						
+scn=15.844	1						
+
+[POZYCJA]
+id=672
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0236-03 z.sz. 2.5.2. 9907 	2-01	0236-03	 z.sz. 2.5.2. 9907 	1
+mpn=10:4:0925,101211
+na=Zagêszczenie nasypów zagêszczarkami; grunty sypkie kat. I-III WskaŸnik zagêszczenia Js = 1.00
+op=0	0	0	0	0	0	0	0
+nu=20
+ob=15.844
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=15.844	1	#p19						
+
+[MNO¯NIKI RMS]
+wr=1.86		1.86
+wm=1		1
+ws=1.86		1.86
+
+[POZYCJA]
+id=1108
+pd=						1
+mpn=49:3:140977,10121,0:0,092,0:0,0911
+na=Dostarczenie piasku do zasypki
+op=0	0	0	0	0	0	0	0
+nu=21
+ob=15.844
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=15.844	1	(#p19)						
+
+[ELEMENT 1]
+na=Roboty monta¿owe sieæ preizolowana1310
+wa=0
+kn=0	0	0
+id=26
+nu=5
+cpv=45232140-5
+wn=	
+
+[POZYCJA]
+id=4736
+pd=Zeszyt WACETOB	S	-219 1400-12	219	1400-12		1
+mpn=121,0:0,0911
+na=Rury ochronne (os³onowe) z  ¿ywic poliestrowych GRP o œr.nom. 250 mm SN10000
+op=0	0	0	0	0	0	0	0
+nu=22
+ob=2
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	(1,0)*2						
+
+[POZYCJA]
+id=7324
+pd=WACETOB wyd.I 1992,uzupe³nienie 1997	KNR-W	2-19 0120-03	2-19	0120-03		1
+mpn=_1211
+na=Przeci¹ganie rur medialnych o œr. nominalnej 250 mm przez rury przeciskowe - p³ozy L45
+op=0	0	0	0	0	0	0	0
+nu=23
+ob=2
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	#p22						
+
+[POZYCJA]
+id=1118
+pd=WACETOB wyd.I 1992,uzupe³nienie 1997	KNR-W	2-19 0122-03	2-19	0122-03		1
+mpn=_1211
+na=Uszczelnianie koñców rur ochronnych o œr.nom.250 mm - manszeta dn 160x250
+op=0	0	0	0	0	0	0	0
+nu=24
+ob=4
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=4	1	2*2						
+
+[POZYCJA]
+id=23
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-01	2-18	0511-01		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 10 cm
+op=0	0	0	0	0	0	0	0
+nu=25
+ob=1.8
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1.8	1	1.2*(15,0)*0.1						
+
+[POZYCJA]
+id=7343
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0501-03	2-20	0501-03		1
+mpn=1211
+na=Monta¿ rur preizolowanych o œrednicy do 88.9/160 mm (gruboœæ œcianki 3.2 mm)
+op=0	0	0	0	0	0	0	0
+nu=26
+ob=30
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=30	1	6.0*5						
+
+[POZYCJA]
+id=5560
+pd=IGM wyd.I 1995	KNR	0-10 0219-01	0-10	0219-01		1
+mpn=1211
+na=Elementy ruroci¹gów sieci cieplnych z rur preizolowanych - kolana ³ukowe o œr. 88.9/160, gruboœæ œcianek rur stalowych 3.2 mm - 1,0x1,0 m
+op=0	0	0	0	0	0	0	0
+nu=27
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=1149
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0503-02	2-20	0503-02		1
+mpn=1211
+na=Spawanie rêczne gazowe rur preizolowanych o œrednicy 76,1/140 mm (gruboœæ œcianki 3.2 mm) ze stali wêglowych i niskostopowych. Spoiny badane radiologicznie
+op=0	0	0	0	0	0	0	0
+nu=28
+ob=8
+jm=z³¹cz.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=8	1	8						
+
+[POZYCJA]
+id=5708
+pd=ORGBUD wyd.II 1988,biuletyny do 9 1996	KNR	7-29 1303-01	7-29	1303-01		1
+mpn=1211
+na=Badania ultradŸwiêkowe doczo³owych obwodowych z³¹czy spawanych rur z zastosowaniem g³owic profilowanych. Œrednica zewnêtrzna rury 89 mm.Grub œcianki do 6 mm
+op=0	0	0	0	0	0	0	0
+nu=29
+ob=8
+jm=z³¹cz.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=8	1	#p28						
+
+[MNO¯NIKI RMS]
+wr=0.955		0.955
+wm=1		1
+ws=1		1
+
+[POZYCJA]
+id=6575
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0505-05	2-20	0505-05		1
+mpn=1211
+na=Monta¿ muf   muf usieciowanych , radiacyjnych , termokurczliwych redukcyjnych z matyk¹ i klejem i korkami   o œrednicy rury os³onowej 160 mm i œrednicy zewnêtrznej rury stalowej 88,9 mm
+op=0	0	0	0	0	0	0	0
+nu=30
+ob=8
+jm=muf.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=8	1	8						
+
+[POZYCJA]
+id=7580
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0505-05	2-20	0505-05		1
+mpn=1211
+na=Monta¿ uszczelek koñcowych termokurczliwych o œrednicy rury os³onowej 160 mm i œrednicy zewnêtrznej rury stalowej 88,9 mm
+op=0	0	0	0	0	0	0	0
+nu=31
+ob=2
+jm=muf.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=7446
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0113-11	2-20	0113-11		1
+mpn=1211
+na=Przejœcia przez œcianê betonow¹ ODWIERT o gruboœci 30-40 cm dla ruroci¹gów cieplnych zasilaj¹cych lub powrotnych z rur stalowych o œrednicach nominalnych 150 mm - z pierœcieniami uszczelniaj¹cymi  Finpol x2 dn 160  i  przejœciem szczelnym Integra WGC150 lub równowa¿ne
+op=0	0	0	0	0	0	0	0
+nu=32
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=88
+pd=WACETOB wyd.I 1992,uzupe³nienie 1997	KNR-W	2-19 0102-01	2-19	0102-01		1
+mpn=_1211
+na=Oznakowanie trasy sieci cieplnej u³o¿onej w ziemi taœm¹ z tworzywa sztucznego
+op=0	0	0	0	0	0	0	0
+nu=33
+ob=30
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=30	1	15,0*2						
+
+[POZYCJA]
+id=673
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-04	2-18	0511-04		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich gr. 25 cm - zasypka wstêpna 30 cm nad rurê
+op=0	0	0	0	0	0	0	0
+nu=34
+ob=8.28
+jm=m3	060
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=8.28	1	1.2*(15,0)*(0.16+0.3)						
+
+[POZYCJA]
+id=837
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0208-01	2-20	0208-01		1
+mpn=1211
+na=Uruchomienie ruroci¹gów sieci cieplnych - odcinek do 100 m d³ugoœci o œr. 25-150 mm
+op=0	0	0	0	0	0	0	0
+nu=35
+ob=1
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1	1	1						
+
+[POZYCJA]
+id=7660
+pd=WACETOB wyd.I 1992	KNR-W	2-25 0408-04	2-25	0408-04		1
+mpn=1211
+na=Nawierzchnie z p³yt ¿elbetowych pe³nych (p³yty o powierzchni ponad 3 m2) - budowa p³yty odci¹¿ajace
+op=0	0	0	0	0	0	0	0
+nu=36
+ob=7.5
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=7.5	1	2,5*3						
+
+[ELEMENT 1]
+na=Instalacja alarmowa
+wa=0
+kn=0	0	0
+id=64
+nu=6
+cpv=45232140-5
+wn=	
+
+[POZYCJA]
+id=63
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0521-01	2-20	0521-01		1
+mpn=1211
+na=Po³¹czenia przewodów alarmowych na mufie
+op=0	0	0	0	0	0	0	0
+nu=37
+ob=27
+jm=po³¹cz.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=27	1	27						
+
+[POZYCJA]
+id=359
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0522-07	2-20	0522-07		1
+mpn=1211
+na=Monta¿ elementów systemu alarmowego - szafka na lokalizator usterek - puszka pomiarowa LPS-2 lub równowa¿ny
+op=0	0	0	0	0	0	0	0
+nu=38
+ob=1
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1	1	1						
+
+[POZYCJA]
+id=69
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0522-16	2-20	0522-16		1
+mpn=1211
+na=Monta¿ elementów systemu alarmowego - kabel ³¹cz¹cy podwójny mufy tulejowej -  ME2019TK4 lub równowa¿ny
+op=0	0	0	0	0	0	0	0
+nu=39
+ob=1
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1	1	1,0						
+
+[POZYCJA]
+id=7452
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0522-06	2-20	0522-06		1
+mpn=1211
+na=Monta¿ elementów systemu alarmowego - ogniwo ³¹cznikowe - ZPB
+op=0	0	0	0	0	0	0	0
+nu=40
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[ELEMENT 1]
+na=Roboty niepreizolowane i w wêz³ach
+wa=0
+kn=0	0	0
+id=204
+nu=7
+cpv=45232140-5
+wn=	
+
+[POZYCJA]
+id=4603
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0113-15	2-20	0113-15		1
+mpn=1211
+na=Przejœcia przez œcianê betonow¹ ODWIERT o gruboœci 80 cm dla ruroci¹gów cieplnych zasilaj¹cych lub powrotnych z rur stalowych o œrednicach nominalnych 160 mm
+op=0	0	0	0	0	0	0	0
+nu=41
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=827
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0113-11	2-20	0113-11		1
+mpn=1211
+na=Przejœcia przez œcianê betonow¹ ODWIERT o gruboœci 20-30 cm dla ruroci¹gów cieplnych zasilaj¹cych lub powrotnych z rur stalowych o œrednicach nominalnych 160 mm
+op=0	0	0	0	0	0	0	0
+nu=42
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=7598
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0501-03	2-20	0501-03		1
+mpn=1211
+na=Monta¿ rur preizolowanych SPIRO o œrednicy do 88.9/160 mm (gruboœæ œcianki 3.2 mm)
+op=0	0	0	0	0	0	0	0
+nu=43
+ob=36
+jm=m	040
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=36	1	6,0*6						
+
+[POZYCJA]
+id=7604
+pd=IGM wyd.I 1995	KNR	0-10 0219-01	0-10	0219-01		1
+mpn=1211
+na=Elementy ruroci¹gów sieci cieplnych z rur preizolowanych SPIRO - kolana ³ukowe o œr. 88.9/160, gruboœæ œcianek rur stalowych 3.2 mm - 1,0x1,0 m
+op=0	0	0	0	0	0	0	0
+nu=44
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=2	1	2						
+
+[POZYCJA]
+id=7640
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0212-01	2-20	0212-01		1
+mpn=1211
+na=£uki stalowe g³adkie hamburskie o œr. 80 mm
+op=0	0	0	0	0	0	0	0
+nu=45
+ob=22
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=22	1	22						
+
+[POZYCJA]
+id=7615
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0503-02	2-20	0503-02		1
+mpn=1211
+na=Spawanie rêczne gazowe rur preizolowanych o œrednicy 76,1/140 mm (gruboœæ œcianki 3.2 mm) ze stali wêglowych i niskostopowych. Spoiny badane radiologicznie
+op=0	0	0	0	0	0	0	0
+nu=46
+ob=24
+jm=z³¹cz.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=24	1	24						
+
+[POZYCJA]
+id=7622
+pd=ORGBUD wyd.II 1988,biuletyny do 9 1996	KNR	7-29 1303-01	7-29	1303-01		1
+mpn=1211
+na=Badania ultradŸwiêkowe doczo³owych obwodowych z³¹czy spawanych rur z zastosowaniem g³owic profilowanych. Œrednica zewnêtrzna rury 89 mm.Grub œcianki do 6 mm
+op=0	0	0	0	0	0	0	0
+nu=47
+ob=24
+jm=z³¹cz.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=24	1	#p46						
+
+[MNO¯NIKI RMS]
+wr=0.955		0.955
+wm=1		1
+ws=1		1
+
+[POZYCJA]
+id=7628
+pd=WACETOB wyd.I 1992	KNR-W	2-20 0505-05	2-20	0505-05		1
+mpn=1211
+na=Monta¿ muf  SPIRO z korkami   o œrednicy rury os³onowej 160 mm i œrednicy zewnêtrznej rury stalowej 88,9 mm
+op=0	0	0	0	0	0	0	0
+nu=48
+ob=8
+jm=muf.	000
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=8	1	8						
+
+[POZYCJA]
+id=7645
+pd=WACETOB wyd.I 1992	KNR-W	2-16 0507-03	2-16	0507-03		1
+mpn=_121,0:2,0911
+na=Izolacja ruroci¹gu otulinami poliuretanowymi w jednej warstwie o gruboœci do 50 mm o œr. zewnêtrznej 65-89 mm
+op=0	0	0	0	0	0	0	0
+nu=49
+ob=4.152
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=4.152	1	0,1889*3,14*7,0						
+
+[POZYCJA]
+id=7653
+pd=WACETOB wyd.I 1992	KNR-W	2-16 0601-02	2-16	0601-02		1
+mpn=_121,0:0,0911
+na=P³aszcze ochronne z blachy ocynkowanej - ruroci¹gi o œr. zewn. 60-191 mm
+op=0	0	0	0	0	0	0	0
+nu=50
+ob=4.152
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=4.152	1	#p49						
+
+[POZYCJA]
+id=7530
+pd=						0
+na=Punkt przesuwny dla dn 80 mm
+op=0	0	0	0	0	0	0	0
+nu=51
+ob=6
+jm=szt.	020
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=6	1	6						
+
+[POZYCJA]
+id=5837
+pd=ORGBUD wyd.V 1993,biuletyny do 9 1996	KNR	7-12 0101-05	7-12	0101-05		1
+mpn=_1211
+na=Czyszczenie przez szczotkowanie rêczne do trzeciego stopnia czystoœci ruroci¹gów o œrednicy zewnêtrznej 58-219 mm (stan wyjœciowy powierzchni B)
+op=0	0	0	0	0	0	0	0
+nu=52
+ob=1.67
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+ko=				
+ko=				
+wo=1.67	1	0.076*3.14*7,0						
+
+[POZYCJA]
+id=5839
+pd=ORGBUD wyd.V 1993,biuletyny do 9 1996	KNR	7-12 0207-05	7-12	0207-05		1
+mpn=_121,0:0,0911
+na=Malowanie pêdzlem farbami do gruntowania termoodpornymi ruroci¹gów o œrednicy zewnêtrznej 58-219 mm
+op=0	0	0	0	0	0	0	0
+nu=53
+ob=1.67
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1.67	1	#p52						
+
+[POZYCJA]
+id=5846
+pd=ORGBUD wyd.V 1993,biuletyny do 9 1996	KNR	7-12 0215-05	7-12	0215-05		1
+mpn=_121,0:0,0911
+na=Malowanie pêdzlem emaliami termoodpornymi ruroci¹gów o œrednicy zewnêtrznej 58-219 mm
+op=0	0	0	0	0	0	0	0
+nu=54
+ob=1.67
+jm=m2	050
+kj=0	0	0
+cj=0		0	0	0
+wn=	
+krn=2	
+nsn=NR 12/20/ST-1/S
+
+[PRZEDMIAR]
+wo=1.67	1	#p53						
+
+[SUMA KONTROLNA]
+e046c63533d6a3b61583ef2240a1 17c

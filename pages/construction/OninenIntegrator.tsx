@@ -213,7 +213,7 @@ const ProductDetail: React.FC<{
         };
 
         Promise.allSettled(others.map(async (integ) => {
-          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'speckable' ? 'speckable-proxy' : 'oninen-proxy';
+          const proxyName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
           const qResults = await Promise.allSettled(
             queries.map(q =>
               supabase.functions.invoke(proxyName, { body: { action: 'search', integrationId: integ.id, q } })
@@ -246,15 +246,14 @@ const ProductDetail: React.FC<{
             const { integ, best } = r.value;
             if (!best) continue;
             const isTim = integ.wholesaler_id === 'tim';
-            const isSpeckable = integ.wholesaler_id === 'speckable';
             prices.push({
-              wholesaler: integ.wholesaler_name || (isTim ? 'TIM S.A.' : isSpeckable ? 'Speckable' : integ.wholesaler_id),
+              wholesaler: integ.wholesaler_name || (isTim ? 'TIM S.A.' : integ.wholesaler_id === 'oninen' ? 'Onninen' : integ.wholesaler_id),
               wholesalerId: integ.wholesaler_id,
               integrationId: integ.id,
-              catalogPrice: isTim ? (best.publicPrice ?? null) : isSpeckable ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
-              purchasePrice: isTim ? (best.price ?? null) : isSpeckable ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
+              catalogPrice: isTim ? (best.publicPrice ?? null) : (best.priceCatalog ?? null),
+              purchasePrice: isTim ? (best.price ?? null) : (best.priceEnd ?? null),
               stock: best.stock ?? null,
-              url: isSpeckable ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined),
+              url: best.url || undefined,
               productSlug: best.slug || best.url || undefined,
               productName: best.name || undefined,
             });
@@ -568,12 +567,11 @@ const WholesalerProductModal: React.FC<{
 
   const isTim = wholesalerId === 'tim';
   const isOnninen = wholesalerId === 'oninen';
-  const isSpeckable = wholesalerId === 'speckable';
-  const wholesalerLabel = isTim ? 'TIM S.A.' : isOnninen ? 'Onninen' : isSpeckable ? 'Speckable' : name;
-  const websiteLabel = isTim ? 'TIM.pl' : isOnninen ? 'Onninen.pl' : isSpeckable ? 'Speckable.pl' : name;
+  const wholesalerLabel = isTim ? 'TIM S.A.' : isOnninen ? 'Onninen' : name;
+  const websiteLabel = isTim ? 'TIM.pl' : isOnninen ? 'Onninen.pl' : name;
 
   useEffect(() => {
-    const proxyName = isTim ? 'tim-proxy' : isOnninen ? 'oninen-proxy' : 'speckable-proxy';
+    const proxyName = isTim ? 'tim-proxy' : 'oninen-proxy';
     const bodyParams: any = { action: 'product', integrationId };
     if (isTim) { bodyParams.url = slug; } else { bodyParams.slug = slug; }
     supabase.functions.invoke(proxyName, {
@@ -631,7 +629,7 @@ const WholesalerProductModal: React.FC<{
         };
 
         Promise.allSettled(others.map(async (integ: any) => {
-          const pName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : integ.wholesaler_id === 'oninen' ? 'oninen-proxy' : 'speckable-proxy';
+          const pName = integ.wholesaler_id === 'tim' ? 'tim-proxy' : 'oninen-proxy';
           const qResults = await Promise.allSettled(
             queries.map(q => supabase.functions.invoke(pName, { body: { action: 'search', integrationId: integ.id, q } })
               .then(({ data: d, error: e }) => { if (e) throw e; const p = typeof d === 'string' ? JSON.parse(d) : d; if (p?.error) throw new Error(p.error); return p; })
@@ -651,15 +649,14 @@ const WholesalerProductModal: React.FC<{
             const { integ, best } = r.value;
             if (!best) continue;
             const t = integ.wholesaler_id === 'tim';
-            const s = integ.wholesaler_id === 'speckable';
             prices.push({
-              wholesaler: integ.wholesaler_name || (t ? 'TIM S.A.' : s ? 'Speckable' : integ.wholesaler_id === 'oninen' ? 'Onninen' : integ.wholesaler_id),
+              wholesaler: integ.wholesaler_name || (t ? 'TIM S.A.' : integ.wholesaler_id === 'oninen' ? 'Onninen' : integ.wholesaler_id),
               wholesalerId: integ.wholesaler_id,
               integrationId: integ.id,
-              catalogPrice: t ? (best.publicPrice ?? null) : s ? (best.priceGross ?? null) : (best.priceCatalog ?? null),
-              purchasePrice: t ? (best.price ?? null) : s ? (best.priceNetto ?? null) : (best.priceEnd ?? null),
+              catalogPrice: t ? (best.publicPrice ?? null) : (best.priceCatalog ?? null),
+              purchasePrice: t ? (best.price ?? null) : (best.priceEnd ?? null),
               stock: best.stock ?? null,
-              url: s ? (best.url || (best.slug ? `https://www.speckable.pl${best.slug}` : undefined)) : (best.url || undefined),
+              url: best.url || undefined,
               productSlug: best.slug || best.url || undefined,
               productName: best.name || undefined,
             });

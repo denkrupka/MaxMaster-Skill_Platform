@@ -1,0 +1,2121 @@
+[KOSZTORYS ATHENASOFT]
+co=Copyright Athenasoft sp. z o.o.
+wf=4
+pr=NORMA	4.03
+nan=Budynek mieszkalnyparterowy z poddaszem nieu¿ytkowym dla czterech odrêbnych lokali mieszkalnych w gmin. Tu³owice przy ul. H. Sawickiej 12 [am2, dzia³ka nr. 5710 pow. 1312,5 m2] - przy³¹cza wodoci¹gowo-kanalizacyjne
+pe=1
+op=1
+opn=2	0	2	1	1	0	1	8	1	0	1	0	0	0	1.	1	1	0	1
+prn=0	2	2	2	3	1	6	0
+own=2	1	1	1	1	0	0	1	1	1	0	1	1	0	1	1	poz.	<	>	1	0	0	0
+pm=dzia³	dzia³
+pd=dzia³u	dzia³u
+mm=dzia³y	dzia³y
+md=dzia³ów	dzia³ów
+wan=PLN
+wk=0
+na=Koszty poœrednie	Zysk
+wn=	
+
+[STRONA TYT]
+na=KOSZTORYS INWESTORSKI
+nfn=M.TROCER-JANKOWSKA
+afn=41-103 SIEMIANOWICE ŒL.                                                                                                                UL. REYMONTA 40/7
+nb=Budynek mieszkalnyparterowy z poddaszem nieu¿ytkowym dla czterech odrêbnych lokali mieszkalnych w gmin. Tu³owice
+ab=Gmina Tu³owice, ul. H. Sawickiej 12 [am2, dzia³ka nr. 5710 pow. 1312,5 m2]
+ni=Gmina Tu³owice
+ai=49-130 Tu³owice, ul. Szkolna 1 
+br=Przy³¹cze wodoci¹gowo-kanalizacyjne
+nk=mgr Ma³gorzata Trocer-Jankowska
+dt=03.2014
+
+[NARZUTY NORMA 2]
+na=Koszty poœrednie
+wa=0	1	0
+op=1	0
+nr=1
+ns=1
+
+[NARZUTY NORMA 2]
+na=Zysk
+wa=0	1	0
+op=1	0
+nr=1
+ns=1
+
+[RMS ZEST 555]
+ty=M
+na=Bale igl.obrz.nasycone,gr.50-100mm,kl.III
+id=2640020	2
+jm=m3	060
+ce=0
+il=0.02
+
+[RMS ZEST 41]
+ty=R
+na=betoniarze gr.II
+id=002	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 35]
+ty=R
+na=cieœle gr.II
+id=042	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 34]
+ty=R
+na=cieœle gr.III
+id=043	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 81]
+ty=R
+na=dekarze gr.II
+id=052	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 544]
+ty=M
+na=Deski iglaste obrzynane gr.28-45mm,kl.III
+id=2600622	1
+jm=m3	060
+ce=0
+il=0.06
+
+[RMS ZEST 556]
+ty=M
+na=Drewno na stemple okr¹g³e korowane
+id=3950010	2
+jm=m3	060
+ce=0
+il=0.14
+
+[RMS ZEST 566]
+ty=M
+na=Kineta studzienki Tegra 600 przepyw.
+id=6333430	2
+jm=szt.	020
+ce=0
+il=6
+pr=ICB_SREDNIE	0	0	0	6333499
+
+[RMS ZEST 557]
+ty=M
+na=Klamry ciesielskie z prêtów stal. typu U
+id=1341200	2
+jm=kg	033
+ce=0
+il=6.2
+
+[RMS ZEST 561]
+ty=M
+na=Ko³n.okr¹g³y z szyjk¹ 1,6MPa fi 50mm
+id=5142307	2
+jm=szt	020
+ce=0
+il=0.2
+
+[RMS ZEST 143]
+ty=S
+na=Kop.j-nacz.na p.g¹s.0.40m3 (1)
+id=11162	1
+jm=m-g	148
+ce=0
+il=15.22
+
+[RMS ZEST 205]
+ty=M
+na=Krawêdziaki igl. wymiarowe, nasycone kl.II
+id=2641810	1
+jm=m3	060
+ce=0
+il=0.03
+
+[RMS ZEST 559]
+ty=M
+na=Króciec ¿el.ciœn.jednoko³. FW fi 50mm
+id=5681201	2
+jm=szt	020
+ce=0
+il=0.1
+
+[RMS ZEST 244]
+ty=R
+na=monta¿yœci gr.II
+id=612	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 243]
+ty=R
+na=monta¿yœci gr.III
+id=613	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 552]
+ty=M
+na=Obudowy do zasuw, g³êbokoœæ zabudowy (wkop) 1500 mm, œrednica nominalna przelotu 40-50 mm,
+id=583100101	3
+jm=szt	020
+ce=0
+il=5
+pr=MET	0	0	0	
+
+[RMS ZEST 147]
+ty=M
+na=Piasek naturalny kopany
+id=1601801	1
+jm=m3	060
+ce=0
+il=69.557
+
+[RMS ZEST 543]
+ty=M
+na=Podchloryn sodowy
+id=1410800	2
+jm=kg	033
+ce=0
+il=0.44
+
+[RMS ZEST 570]
+ty=M
+na=Pokrywa PE do rur  karbowanych
+id=6330548	2
+jm=szt.	020
+ce=0
+il=6
+
+[RMS ZEST 491]
+ty=S
+na=proœciarka do rur PE
+id=71270	1
+jm=m-g	148
+ce=0
+il=3.91
+pr=ICB_SREDNIE	0	0	0	71270
+
+[RMS ZEST 36]
+ty=R
+na=robotnicy gr.I
+id=391	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 132]
+ty=R
+na=robotnicy gr.II
+id=392	1
+jm=r-g	149
+ce=0
+il=0
+
+[RMS ZEST 1]
+ty=R
+na=Roboty instalacji sanitarnych (OP)
+id=999	1
+jm=r-g	149
+ce=0
+il=262.331
+
+[RMS ZEST 549]
+ty=M
+na=Rura PE-HD,1,0MPa,SDR11,woda,fi 32/3,0mm
+id=5631104	1
+jm=m	040
+ce=0
+il=52.02
+
+[RMS ZEST 548]
+ty=M
+na=Rura PE-HD,1,0MPa,SDR11,woda,fi 40/3,7mm
+id=5631105	1
+jm=m	040
+ce=0
+il=41.82
+
+[RMS ZEST 569]
+ty=M
+na=Rura teleskopowa
+id=6333462	2
+jm=szt.	020
+ce=0
+il=6
+
+[RMS ZEST 558]
+ty=M
+na=Rura z/szwem ocynk.gwint.10BX fi 50mm
+id=5031062	2
+jm=m	040
+ce=0
+il=6
+
+[RMS ZEST 564]
+ty=M
+na=Rury ciœnieniowe kielichowane z PVC-U, SDR 26, PN 10 fi 160x6,2 mm
+id=563051401	3
+jm=m	040
+ce=0
+il=42.84
+pr=GAM	0	0	0	
+
+[RMS ZEST 565]
+ty=M
+na=Rury ciœnieniowe kielichowane z PVC-U, SDR 26, PN 10 fi 200x8,6 mm
+id=563051701	3
+jm=m	040
+ce=0
+il=114.24
+pr=GAM	0	0	0	
+
+[RMS ZEST 512]
+ty=S
+na=Samochód dostaw.do 0.9t (1)
+id=39511	1
+jm=m-g	148
+ce=0
+il=2.931
+
+[RMS ZEST 145]
+ty=S
+na=Samochód samowy³ad.do 5t (1)
+id=39811	1
+jm=m-g	148
+ce=0
+il=26.958
+
+[RMS ZEST 490]
+ty=S
+na=Samochód skrzyn.do 5.0t (1)
+id=39521	1
+jm=m-g	148
+ce=0
+il=10.72
+
+[RMS ZEST 553]
+ty=M
+na=Skrzynka uliczna do zasuw. Woda. Nr kat. 857 DIN 4056, ciê¿ar 13 kg/szt.
+id=583130101	3
+jm=szt	020
+ce=0
+il=5
+pr=MET	0	0	0	
+
+[RMS ZEST 144]
+ty=S
+na=Spych.g¹sienicowa 55kW  (1)
+id=11333	1
+jm=m-g	148
+ce=0
+il=4.13
+
+[RMS ZEST 190]
+ty=M
+na=Œruby stal.z podk³adk.i nakrêtk. M 16
+id=6800401	1
+jm=kg	033
+ce=0
+il=2.7
+
+[RMS ZEST 550]
+ty=M
+na=Taœma z folii polietyl.do znak. wykopów
+id=1560500	1
+jm=m	040
+ce=0
+il=27.6
+
+[RMS ZEST 568]
+ty=M
+na=trzon studzienki rura karbowana h=2,0 m
+id=6333260	2
+jm=m	040
+ce=0
+il=6.3
+
+[RMS ZEST 538]
+ty=M
+na=tuleja z PVC dla luŸnych ko³nierzy stalowych
+id=5619999	2
+jm=szt.	020
+ce=0
+il=0.2
+
+[RMS ZEST 567]
+ty=M
+na=uszczelka do rury karbowanej DN 600
+id=6333830	2
+jm=szt.	020
+ce=0
+il=12
+
+[RMS ZEST 560]
+ty=M
+na=Uszczelka gumowa do po³.ko³n. fi 50mm
+id=6815041	2
+jm=szt	020
+ce=0
+il=3
+
+[RMS ZEST 514]
+ty=S
+na=Zagêszcz.wibr.spal.70-90m3/h
+id=12521	1
+jm=m-g	148
+ce=0
+il=38.1
+
+[RMS ZEST 554]
+ty=M
+na=Zasuwy odcinaj¹ce z obudow¹ o œr.32 mm montowane na ruroci¹gach PE
+id=5819931	2
+jm=szt.	020
+ce=0
+il=4
+
+[RMS ZEST 551]
+ty=M
+na=Zasuwy odcinaj¹ce z obudow¹ o œr.40 mm montowane na ruroci¹gach PE
+id=5819930	2
+jm=szt.	020
+ce=0
+il=1
+
+[RMS ZEST 562]
+ty=M
+na=Zawór przelot.¿el.z kurkiem spust.fi 50mm
+id=5701174	2
+jm=szt	020
+ce=0
+il=0.4
+
+[RMS ZEST 563]
+ty=M
+na=Zawór zwr.grzyb.z/spr.ko³.1,6MPa fi 50mm
+id=5822226	2
+jm=szt	020
+ce=0
+il=0.1
+
+[RMS ZEST 6]
+ty=M	1
+na=materia³y pomocnicze
+id=0000000	1
+jm=%	147
+il=0
+
+[ELEMENT 1]
+na=Przy³¹cze wodoci¹gowe
+wa=0
+kn=0	0	0
+id=127
+nu=1
+wn=	
+
+[POZYCJA]
+id=161
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0217-06	2-01	0217-06		1
+mpn=_1211
+na=Wykopy oraz przekopy wykonywane koparkami podsiêbiernymi 0.40 m3 na odk³ad w gruncie kat. III
+op=0	0	0	0	0	0
+nu=1
+ob=77.28
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=77.28	1	[41,0+51,0]*0,7*1,2		
+
+[RMS 1]
+nz=0.1182	0	0.1182
+np=1
+wa=0
+wb=0
+il=9.134
+
+[RMS 143]
+nz=0.0482	0	0.0482
+np=1
+wa=0
+wb=0
+il=3.725
+
+[POZYCJA]
+id=164
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - podsypka
+op=0	0	0	0	0	0
+nu=2
+ob=9.2
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=9.2	1	[41.0+51.0]*0.5*0.2		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=17.112
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=11.224
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=6.256
+
+[POZYCJA]
+id=165
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - obsypka
+op=0	0	0	0	0	0
+nu=3
+ob=10.95
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=11.04	1	[41,0+51,0]*0,6*0,2		
+wo=-0.09	1	-[3,14*0,02*0,02*41,0+3,14*0,016*0,016*51,0]		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=20.367
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=13.359
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=7.446
+
+[POZYCJA]
+id=162
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0230-01	2-01	0230-01		1
+mpn=_121,0:0,0911
+na=Zasypywanie wykopów spycharkami z przemieszczeniem gruntu na odleg³oœæ do 10 m w gruncie kat. I-III
+op=0	0	0	0	0	0
+nu=4
+ob=57.13
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=77.28	1	#p1		
+wo=-20.15	1	-[#p2+#p3]		
+
+[RMS 144]
+nz=0.0135	0	0.0135
+np=1
+wa=0
+wb=0
+il=0.771
+
+[POZYCJA]
+id=163
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0212-05 0214-04 	2-01	0212-05	 0214-04 	1
+mpn=49:3:100977,10121,0:0,092,0:0,0911
+na=Roboty ziemne wykonywane koparkami podsiêbiernymi 0.40 m3 w ziemi kat. I-III uprzednio zmagazynowanej w ha³dach z transportem urobku samochodami samowy³adowczymi na odleg³oœæ 10 km
+op=0	0	0	0	0	0
+nu=5
+ob=20.15
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=20.15	1	#p1-#p4		
+
+[RMS 1]
+nz=0.0383	0	0.0383
+np=1
+wa=0
+wb=0
+il=0.772
+
+[RMS 143]
+nz=0.0664	0	0.0664
+np=1
+wa=0
+wb=0
+il=1.338
+
+[RMS 144]
+nz=0.0298	0	0.0298
+np=1
+wa=0
+wb=0
+il=0.6
+
+[RMS 145]
+nz=0.4652	0	0.1916+18*0.0152
+np=1
+wa=0
+wb=0
+il=9.374
+
+[POZYCJA]
+id=128
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0109-01/02	2-18	0109-01	/02	1
+mpn=_121147.25
+na=Sieci wodoci¹gowe - monta¿ ruroci¹gów z rur polietylenowych (PE, PEHD) o œr.zewnêtrznej 40 mm - ekstrapolacja
+op=0	0	0	0	0	0
+nu=6
+ob=41
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=41	1	41.0		
+
+[RMS 1]
+nz=0.180688	0	0.180688
+np=1
+wa=0
+wb=0
+il=7.408
+
+[RMS 548]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=41.82
+
+[RMS 6]
+nz=1.5	0	1.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0142	0	0.0142
+np=1
+wa=0
+wb=0
+il=0.582
+
+[RMS 491]
+nz=0.0425	0	0.0425
+np=1
+wa=0
+wb=0
+il=1.743
+
+[POZYCJA]
+id=158
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0109-01/02	2-18	0109-01	/02	1
+mpn=_121147.25
+na=Sieci wodoci¹gowe - monta¿ ruroci¹gów z rur polietylenowych (PE, PEHD) o œr.zewnêtrznej 32 mm - ekstrapolacja
+op=0	0	0	0	0	0
+nu=7
+ob=51
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=51	1	51,0		
+
+[RMS 1]
+nz=0.180688	0	0.180688
+np=1
+wa=0
+wb=0
+il=9.215
+
+[RMS 549]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=52.02
+
+[RMS 6]
+nz=1.5	0	1.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0142	0	0.0142
+np=1
+wa=0
+wb=0
+il=0.724
+
+[RMS 491]
+nz=0.0425	0	0.0425
+np=1
+wa=0
+wb=0
+il=2.168
+
+[POZYCJA]
+id=185
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-19 0219-01	2-19	0219-01		1
+mpn=1211
+na=Oznakowanie trasy wodoci¹gu u³o¿onego w ziemi taœm¹ z tworzywa sztucznego
+op=0	0	0	0	0	0
+nu=8
+ob=92
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=92	1	41,0+51,0		
+
+[MNO¯NIKI RMS]
+wr=0.955		0.955
+wm=1		1
+ws=1		1
+
+[RMS 1]
+nz=0.0079	0	0.0079
+np=1
+wa=0
+wb=0
+il=0.694
+
+[RMS 550]
+nz=0.3	0	0.3
+np=1
+wa=0
+wb=0
+il=27.6
+
+[RMS 512]
+nz=0.0011	0	0.0011
+np=1
+wa=0
+wb=0
+il=0.101
+
+[POZYCJA]
+id=159
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0210-01	2-18	0210-01		1
+mpn=_121,0:0,0911
+na=Zasuwy odcinaj¹ce z obudow¹ o œr.40 mm montowane na ruroci¹gach PE
+uw=analogia
+op=0	0	0	0	0	0
+nu=9
+ob=1
+jm=kpl.	090
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=2	0	2
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 551]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 552]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 553]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 6]
+nz=1.5	0	1.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 512]
+nz=0.25	0	0.25
+np=1
+wa=0
+wb=0
+il=0.25
+
+[POZYCJA]
+id=160
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0210-01	2-18	0210-01		1
+mpn=_121,0:0,0911
+na=Zasuwy odcinaj¹ce z obudow¹ o œr.32 mm montowane na ruroci¹gach PE
+uw=analogia
+op=0	0	0	0	0	0
+nu=10
+ob=4
+jm=kpl.	090
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=4	1	4		
+
+[RMS 1]
+nz=2	0	2
+np=1
+wa=0
+wb=0
+il=8
+
+[RMS 554]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[RMS 552]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[RMS 553]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=4
+
+[RMS 6]
+nz=1.5	0	1.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 512]
+nz=0.25	0	0.25
+np=1
+wa=0
+wb=0
+il=1
+
+[POZYCJA]
+id=186
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0704-01	2-18	0704-01		1
+mpn=1211
+na=Próba wodna szczelnoœci sieci wodoci¹gowych z rur typu HOBAS, PVC, PE, PEHD o œr.nominalnej 90-110 mm
+op=0	0	0	0	0	0
+nu=11
+ob=1
+jm=200m -1 prób.	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=8.74	0	8.74
+np=1
+wa=0
+wb=0
+il=8.74
+
+[RMS 205]
+nz=0.03	0	0.03
+np=1
+wa=0
+wb=0
+il=0.03
+
+[RMS 555]
+nz=0.02	0	0.02
+np=1
+wa=0
+wb=0
+il=0.02
+
+[RMS 556]
+nz=0.02	0	0.02
+np=1
+wa=0
+wb=0
+il=0.02
+
+[RMS 557]
+nz=6.2	0	6.2
+np=1
+wa=0
+wb=0
+il=6.2
+
+[RMS 558]
+nz=1.5	0	1.5
+np=1
+wa=0
+wb=0
+il=1.5
+
+[RMS 559]
+nz=0.1	0	0.1
+np=1
+wa=0
+wb=0
+il=0.1
+
+[RMS 538]
+nz=0.2	0	0.2
+np=1
+wa=0
+wb=0
+il=0.2
+
+[RMS 560]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 190]
+nz=2.7	0	2.7
+np=1
+wa=0
+wb=0
+il=2.7
+
+[RMS 561]
+nz=0.2	0	0.2
+np=1
+wa=0
+wb=0
+il=0.2
+
+[RMS 562]
+nz=0.1	0	0.1
+np=1
+wa=0
+wb=0
+il=0.1
+
+[RMS 563]
+nz=0.05	0	0.05
+np=1
+wa=0
+wb=0
+il=0.05
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=3.16	0	3.16
+np=1
+wa=0
+wb=0
+il=3.16
+
+[POZYCJA]
+id=189
+pd=WACETOB wyd.I 1997	KNR-W	2-18 9909c-01	2-18	9909c-01		1
+mpn=1211
+na=Nak³ady za ka¿de 10 m ró¿nicy d³ugoœci (od 200 lub 500 m) przy próbach szczelnoœci przewodów PVC, PE, PEHD i typu HOBAS o œr. 50-65 mm
+op=0	0	0	0	0	0
+nu=12
+ob=-2
+jm=10m ró¿n.	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=-2	1	-2		
+
+[RMS 1]
+nz=0.06	0	0.06
+np=1
+wa=0
+wb=0
+il=-0.12
+
+[POZYCJA]
+id=187
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0707-01	2-18	0707-01		1
+mpn=1211
+na=Dezynfekcja ruroci¹gów sieci wodoci¹gowych o œr.nominalnej do 150 mm
+op=0	0	0	0	0	0
+nu=13
+ob=1
+jm=odc.200m	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=4.09	0	4.09
+np=1
+wa=0
+wb=0
+il=4.09
+
+[RMS 543]
+nz=0.5	0	0.5
+np=1
+wa=0
+wb=0
+il=0.5
+
+[RMS 558]
+nz=1.5	0	1.5
+np=1
+wa=0
+wb=0
+il=1.5
+
+[RMS 562]
+nz=0.1	0	0.1
+np=1
+wa=0
+wb=0
+il=0.1
+
+[RMS 563]
+nz=0.05	0	0.05
+np=1
+wa=0
+wb=0
+il=0.05
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 512]
+nz=1.58	0	1.58
+np=1
+wa=0
+wb=0
+il=1.58
+
+[POZYCJA]
+id=188
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0708-01	2-18	0708-01		1
+mpn=1211
+na=Jednokrotne p³ukanie sieci wodoci¹gowej o œr. nominalnej do 150 mm
+op=0	0	0	0	0	0
+nu=14
+ob=1
+jm=odc.200m	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=0.49	0	0.49
+np=1
+wa=0
+wb=0
+il=0.49
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[POZYCJA]
+id=190
+pd=WACETOB wyd.I 1997	KNR-W	2-18 9910-01	2-18	9910-01		1
+mpn=1211
+na=Nak³ady za ka¿de 10 m ró¿nicy d³ugoœci (od 200 lub 500 m) przy dezynfekcji i p³ukaniu przewodów z rur o œr. 50-65
+op=0	0	0	0	0	0
+nu=15
+ob=-2
+jm=10m ró¿n.	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=-2	1	-2		
+
+[RMS 1]
+nz=0.02	0	0.02
+np=1
+wa=0
+wb=0
+il=-0.04
+
+[RMS 543]
+nz=0.03	0	0.03
+np=1
+wa=0
+wb=0
+il=-0.06
+
+[ELEMENT 1]
+na=Przy³¹cze kanaizacji sanitarnej
+wa=0
+kn=0	0	0
+id=112
+nu=2
+wn=	
+
+[POZYCJA]
+id=170
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0217-06	2-01	0217-06		1
+mpn=_1211
+na=Wykopy oraz przekopy wykonywane koparkami podsiêbiernymi 0.40 m3 na odk³ad w gruncie kat. III
+op=0	0	0	0	0	0
+nu=16
+ob=76.56
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=4.16	1	4.0*0.8*1.3		
+wo=71.55	1	53.0*0.9*1.5		
+wo=0.24	1	0,4*0,4*1,5		
+wo=0.61	1	0,4*0,4*1,9*2		
+
+[RMS 1]
+nz=0.1182	0	0.1182
+np=1
+wa=0
+wb=0
+il=9.049
+
+[RMS 143]
+nz=0.0482	0	0.0482
+np=1
+wa=0
+wb=0
+il=3.69
+
+[POZYCJA]
+id=171
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - podsypka
+op=0	0	0	0	0	0
+nu=17
+ob=6.94
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=6.84	1	[4.0+53.0]*0.6*0.2		
+wo=0.1	1	0,4*0,4*0,2*3		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=12.908
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=8.467
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=4.719
+
+[POZYCJA]
+id=172
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - obsypka
+op=0	0	0	0	0	0
+nu=18
+ob=6.24
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=7.98	1	[4.0+53.0]*0.7*0.2		
+wo=-1.74	1	-[3.14*0.08*0.08*4.0+3.14*0.1*0.1*53.0]		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=11.606
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=7.613
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=4.243
+
+[POZYCJA]
+id=173
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0230-01	2-01	0230-01		1
+mpn=_121,0:0,0911
+na=Zasypywanie wykopów spycharkami z przemieszczeniem gruntu na odleg³oœæ do 10 m w gruncie kat. I-III
+op=0	0	0	0	0	0
+nu=19
+ob=62.42
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=76.56	1	#p16		
+wo=-13.18	1	-[#p17+#p18]		
+wo=-0.96	1	-[3,14*0,3*0,3*1,5+3,14*0,3*0,3*1,9]		
+
+[RMS 144]
+nz=0.0135	0	0.0135
+np=1
+wa=0
+wb=0
+il=0.843
+
+[POZYCJA]
+id=174
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0212-05 0214-04 	2-01	0212-05	 0214-04 	1
+mpn=49:3:100977,10121,0:0,092,0:0,0911
+na=Roboty ziemne wykonywane koparkami podsiêbiernymi 0.40 m3 w ziemi kat. I-III uprzednio zmagazynowanej w ha³dach z transportem urobku samochodami samowy³adowczymi na odleg³oœæ 10 km
+op=0	0	0	0	0	0
+nu=20
+ob=14.14
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=14.14	1	#p16-#p19		
+
+[RMS 1]
+nz=0.0383	0	0.0383
+np=1
+wa=0
+wb=0
+il=0.542
+
+[RMS 143]
+nz=0.0664	0	0.0664
+np=1
+wa=0
+wb=0
+il=0.939
+
+[RMS 144]
+nz=0.0298	0	0.0298
+np=1
+wa=0
+wb=0
+il=0.421
+
+[RMS 145]
+nz=0.4652	0	0.1916+18*0.0152
+np=1
+wa=0
+wb=0
+il=6.578
+
+[POZYCJA]
+id=113
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0408-02	2-18	0408-02		1
+mpn=_1211_
+na=Kana³y z rur PVC ³¹czonych na wcisk o œr. zewn. 160 mm
+op=0	0	0	0	0	0
+nu=21
+ob=4
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=4	1	4,0		
+
+[RMS 1]
+nz=0.345	0	0.345
+np=1
+wa=0
+wb=0
+il=1.38
+
+[RMS 564]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=4.08
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0083	0	0.0083
+np=1
+wa=0
+wb=0
+il=0.033
+
+[POZYCJA]
+id=167
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0408-03	2-18	0408-03		1
+mpn=_1211_
+na=Kana³y z rur PVC ³¹czonych na wcisk o œr. zewn. 200 mm
+op=0	0	0	0	0	0
+nu=22
+ob=53
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=53	1	53,0		
+
+[RMS 1]
+nz=0.5	0	0.5
+np=1
+wa=0
+wb=0
+il=26.5
+
+[RMS 565]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=54.06
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0104	0	0.0104
+np=1
+wa=0
+wb=0
+il=0.551
+
+[POZYCJA]
+id=168
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0517-02	2-18	0517-02		1
+mpn=121,0:0,092,0:0,0911
+na=Studzienki kanalizacyjne systemowe "WAVIN" o œr 600 mm - zamkniêcie rur¹ teleskopow¹ - h=1,5
+op=0	0	0	0	0	0
+nu=23
+ob=1
+jm=szt.	020
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=2.42	0	2.42
+np=1
+wa=0
+wb=0
+il=2.42
+
+[RMS 566]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 567]
+nz=2	0	2
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 568]
+nz=1.05	0	1.05
+np=1
+wa=0
+wb=0
+il=1.05
+
+[RMS 569]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 570]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 147]
+nz=0.2	0	0.2
+np=1
+wa=0
+wb=0
+il=0.2
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.07	0	0.07
+np=1
+wa=0
+wb=0
+il=0.07
+
+[POZYCJA]
+id=169
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0517-02	2-18	0517-02		1
+mpn=121,0:0,092,0:0,0911
+na=Studzienki kanalizacyjne systemowe "WAVIN" o œr 600 mm - zamkniêcie rur¹ teleskopow¹ - h=1,9
+op=0	0	0	0	0	0
+nu=24
+ob=2
+jm=szt.	020
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=2	1	2		
+
+[RMS 1]
+nz=2.42	0	2.42
+np=1
+wa=0
+wb=0
+il=4.84
+
+[RMS 566]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 567]
+nz=2	0	2
+np=1
+wa=0
+wb=0
+il=4
+
+[RMS 568]
+nz=1.05	0	1.05
+np=1
+wa=0
+wb=0
+il=2.1
+
+[RMS 569]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 570]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=2
+
+[RMS 147]
+nz=0.2	0	0.2
+np=1
+wa=0
+wb=0
+il=0.4
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.07	0	0.07
+np=1
+wa=0
+wb=0
+il=0.14
+
+[POZYCJA]
+id=191
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0706-01	2-18	0706-01		1
+mpn=1211
+na=Próba wodna szczelnoœci kana³ów rurowych o œr.nominalnej do 150 mm
+op=0	0	0	0	0	0
+nu=25
+ob=1
+jm=odc. -1 prób.	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=1.26	0	1.26
+np=1
+wa=0
+wb=0
+il=1.26
+
+[RMS 544]
+nz=0.03	0	0.03
+np=1
+wa=0
+wb=0
+il=0.03
+
+[RMS 556]
+nz=0.06	0	0.06
+np=1
+wa=0
+wb=0
+il=0.06
+
+[RMS 560]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 558]
+nz=1.5	0	1.5
+np=1
+wa=0
+wb=0
+il=1.5
+
+[RMS 562]
+nz=0.1	0	0.1
+np=1
+wa=0
+wb=0
+il=0.1
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=2.16	0	2.16
+np=1
+wa=0
+wb=0
+il=2.16
+
+[ELEMENT 1]
+na=Przy³¹cze kanaizacji deszczowej
+wa=0
+kn=0	0	0
+id=175
+nu=3
+wn=	
+
+[POZYCJA]
+id=176
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0217-06	2-01	0217-06		1
+mpn=_1211
+na=Wykopy oraz przekopy wykonywane koparkami podsiêbiernymi 0.40 m3 na odk³ad w gruncie kat. III
+op=0	0	0	0	0	0
+nu=26
+ob=82.1
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=81.48	1	[38.0+59.0]*0.7*1.2		
+wo=0.62	1	0.4*0.4*1.3*3		
+
+[RMS 1]
+nz=0.1182	0	0.1182
+np=1
+wa=0
+wb=0
+il=9.704
+
+[RMS 143]
+nz=0.0482	0	0.0482
+np=1
+wa=0
+wb=0
+il=3.957
+
+[POZYCJA]
+id=177
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - podsypka
+op=0	0	0	0	0	0
+nu=27
+ob=11.74
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=11.64	1	[38.0+59.0]*0.6*0.2		
+wo=0.1	1	0.4*0.4*0.2*3		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=21.836
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=14.323
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=7.983
+
+[POZYCJA]
+id=178
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0511-03	2-18	0511-03		1
+mpn=1211_
+na=Pod³o¿a pod kana³y i obiekty z materia³ów sypkich grub. 20 cm - obsypka
+op=0	0	0	0	0	0
+nu=28
+ob=10.96
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=13.58	1	[38.0+59.0]*0.7*0.2		
+wo=-2.62	1	-[3.14*0.08*0.08*38.0+3.14*0.1*0.1*59.0]		
+
+[RMS 1]
+nz=1.86	0	1.86
+np=1
+wa=0
+wb=0
+il=20.386
+
+[RMS 147]
+nz=1.22	0	1.22
+np=1
+wa=0
+wb=0
+il=13.371
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 514]
+nz=0.68	0	0.68
+np=1
+wa=0
+wb=0
+il=7.453
+
+[POZYCJA]
+id=179
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0230-01	2-01	0230-01		1
+mpn=_121,0:0,0911
+na=Zasypywanie wykopów spycharkami z przemieszczeniem gruntu na odleg³oœæ do 10 m w gruncie kat. I-III
+op=0	0	0	0	0	0
+nu=29
+ob=58.44
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=82.1	1	#p26		
+wo=-22.7	1	-[#p27+#p28]		
+wo=-0.96	1	-[3.14*0.3*0.3*1.5+3.14*0.3*0.3*1.9]		
+
+[RMS 144]
+nz=0.0135	0	0.0135
+np=1
+wa=0
+wb=0
+il=0.789
+
+[POZYCJA]
+id=180
+pd=ORGBUD wyd.II 1987,biuletyny do 9 1996	KNR	2-01 0212-05 0214-04 	2-01	0212-05	 0214-04 	1
+mpn=49:3:100977,10121,0:0,092,0:0,0911
+na=Roboty ziemne wykonywane koparkami podsiêbiernymi 0.40 m3 w ziemi kat. I-III uprzednio zmagazynowanej w ha³dach z transportem urobku samochodami samowy³adowczymi na odleg³oœæ 10 km
+op=0	0	0	0	0	0
+nu=30
+ob=23.66
+jm=m3	060
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=23.66	1	#p26-#p29		
+
+[RMS 1]
+nz=0.0383	0	0.0383
+np=1
+wa=0
+wb=0
+il=0.906
+
+[RMS 143]
+nz=0.0664	0	0.0664
+np=1
+wa=0
+wb=0
+il=1.571
+
+[RMS 144]
+nz=0.0298	0	0.0298
+np=1
+wa=0
+wb=0
+il=0.705
+
+[RMS 145]
+nz=0.4652	0	0.1916+18*0.0152
+np=1
+wa=0
+wb=0
+il=11.007
+
+[POZYCJA]
+id=181
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0408-02	2-18	0408-02		1
+mpn=_1211_
+na=Kana³y z rur PVC ³¹czonych na wcisk o œr. zewn. 160 mm
+op=0	0	0	0	0	0
+nu=31
+ob=38
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=38	1	38.0		
+
+[RMS 1]
+nz=0.345	0	0.345
+np=1
+wa=0
+wb=0
+il=13.11
+
+[RMS 564]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=38.76
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0083	0	0.0083
+np=1
+wa=0
+wb=0
+il=0.315
+
+[POZYCJA]
+id=182
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0408-03	2-18	0408-03		1
+mpn=_1211_
+na=Kana³y z rur PVC ³¹czonych na wcisk o œr. zewn. 200 mm
+op=0	0	0	0	0	0
+nu=32
+ob=59
+jm=m	040
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=59	1	59.0		
+
+[RMS 1]
+nz=0.5	0	0.5
+np=1
+wa=0
+wb=0
+il=29.5
+
+[RMS 565]
+nz=1.02	0	1.02
+np=1
+wa=0
+wb=0
+il=60.18
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.0104	0	0.0104
+np=1
+wa=0
+wb=0
+il=0.614
+
+[POZYCJA]
+id=183
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0517-02	2-18	0517-02		1
+mpn=121,0:0,092,0:0,0911
+na=Studzienki kanalizacyjne systemowe "WAVIN" o œr 600 mm - zamkniêcie rur¹ teleskopow¹ - h=1,3
+op=0	0	0	0	0	0
+nu=33
+ob=3
+jm=szt.	020
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=3	1	3		
+
+[RMS 1]
+nz=2.42	0	2.42
+np=1
+wa=0
+wb=0
+il=7.26
+
+[RMS 566]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=3
+
+[RMS 567]
+nz=2	0	2
+np=1
+wa=0
+wb=0
+il=6
+
+[RMS 568]
+nz=1.05	0	1.05
+np=1
+wa=0
+wb=0
+il=3.15
+
+[RMS 569]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=3
+
+[RMS 570]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=3
+
+[RMS 147]
+nz=0.2	0	0.2
+np=1
+wa=0
+wb=0
+il=0.6
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=0.07	0	0.07
+np=1
+wa=0
+wb=0
+il=0.21
+
+[POZYCJA]
+id=192
+pd=WACETOB wyd.I 1997	KNR-W	2-18 0706-01	2-18	0706-01		1
+mpn=1211
+na=Próba wodna szczelnoœci kana³ów rurowych o œr.nominalnej do 150 mm
+op=0	0	0	0	0	0
+nu=34
+ob=1
+jm=odc. -1 prób.	000
+kj=0	0	0
+cj=0
+wn=	
+
+[PRZEDMIAR]
+wo=1	1	1		
+
+[RMS 1]
+nz=1.26	0	1.26
+np=1
+wa=0
+wb=0
+il=1.26
+
+[RMS 544]
+nz=0.03	0	0.03
+np=1
+wa=0
+wb=0
+il=0.03
+
+[RMS 556]
+nz=0.06	0	0.06
+np=1
+wa=0
+wb=0
+il=0.06
+
+[RMS 560]
+nz=1	0	1
+np=1
+wa=0
+wb=0
+il=1
+
+[RMS 558]
+nz=1.5	0	1.5
+np=1
+wa=0
+wb=0
+il=1.5
+
+[RMS 562]
+nz=0.1	0	0.1
+np=1
+wa=0
+wb=0
+il=0.1
+
+[RMS 6]
+nz=2.5	0	2.5
+np=0
+op=M
+wa=0
+wb=0
+il=0
+
+[RMS 490]
+nz=2.16	0	2.16
+np=1
+wa=0
+wb=0
+il=2.16
+
