@@ -543,7 +543,7 @@ export const DictionariesPage: React.FC = () => {
         .from('wholesaler_integrations')
         .select('*')
         .eq('company_id', currentUser.company_id);
-      if (!error) setIntegrations(data || []);
+      if (!error) setIntegrations((data || []).filter(i => i.wholesaler_id !== 'speckable'));
     } catch (err) {
       console.error('Error loading integrations:', err);
     }
@@ -6585,41 +6585,6 @@ export const DictionariesPage: React.FC = () => {
 
               {activeTab === 'slownik' && (
                 <div>
-                  {/* Sub-tabs: Własny katalog + wholesaler tabs + Integrację button */}
-                  <div className="flex items-center gap-1 mb-4">
-                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                      <button
-                        onClick={() => setSlownikMainSubTab('own')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                          slownikMainSubTab === 'own'
-                            ? 'bg-white text-blue-600 shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        Własny katalog
-                      </button>
-                      {integrations.filter(i => i.is_active).map(integ => (
-                        <button
-                          key={integ.id}
-                          onClick={() => setSlownikMainSubTab(integ.wholesaler_id)}
-                          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                            slownikMainSubTab === integ.wholesaler_id
-                              ? 'bg-white text-blue-600 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          {integ.wholesaler_name}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => setShowIntegrationModal(true)}
-                      className="ml-2 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                    >
-                      <Store className="w-4 h-4" />
-                      Integrację
-                    </button>
-                  </div>
                   {slownikMainSubTab === 'own' && (
                     <>
                       {/* Słownik sub-tabs (Rodzaj prac / Rodzaj ścian) */}
@@ -6650,12 +6615,6 @@ export const DictionariesPage: React.FC = () => {
                       {slownikSubTab === 'rodzaj_prac' && renderRodzajPracTab()}
                       {slownikSubTab === 'wall_types' && renderWallTypesTab()}
                     </>
-                  )}
-                  {slownikMainSubTab === 'tim' && (
-                    <TIMIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'tim')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
-                  )}
-                  {slownikMainSubTab === 'oninen' && (
-                    <OninenIntegrator integrationId={integrations.find(i => i.wholesaler_id === 'oninen')?.id} onAddToOwnCatalog={handleAddToOwnCatalog} />
                   )}
                 </div>
               )}
