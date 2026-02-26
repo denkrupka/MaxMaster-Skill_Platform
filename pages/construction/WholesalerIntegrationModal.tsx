@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Loader2, Check, AlertCircle, Store, Zap, LogIn, LogOut, ChevronRight, Smartphone, RefreshCw } from 'lucide-react';
+import { X, Loader2, Check, AlertCircle, Store, Zap, LogIn, LogOut, ChevronRight, Smartphone, RefreshCw, Percent } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { WholesalerIntegration } from '../../types';
 
@@ -50,10 +50,14 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
   const [authModal, setAuthModal] = useState<{ wholesalerId: string; wholesalerName: string } | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [customerDiscount, setCustomerDiscount] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [editingDiscount, setEditingDiscount] = useState<string | null>(null); // integrationId being edited
+  const [editDiscountValue, setEditDiscountValue] = useState('');
+  const [savingDiscount, setSavingDiscount] = useState(false);
 
   // 2FA state
   const [needs2fa, setNeeds2fa] = useState(false);
@@ -70,6 +74,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
   const resetAuthState = () => {
     setUsername('');
     setPassword('');
+    setCustomerDiscount('');
     setAuthError('');
     setAuthSuccess('');
     setNeeds2fa(false);
@@ -121,6 +126,7 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
           wholesalerName: authModal.wholesalerName,
           branza: selectedBranza,
           existingIntegrationId: existing?.id,
+          ...(customerDiscount ? { customerDiscount: parseFloat(customerDiscount) } : {}),
         },
       });
 
@@ -247,6 +253,21 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
     }
   };
 
+  const handleSaveDiscount = async (integrationId: string) => {
+    setSavingDiscount(true);
+    try {
+      await supabase.functions.invoke('speckable-proxy', {
+        body: { action: 'set-discount', integrationId, discount: parseFloat(editDiscountValue) || 0 },
+      });
+      onIntegrationChange();
+      setEditingDiscount(null);
+    } catch (err: any) {
+      console.error('Save discount error:', err);
+    } finally {
+      setSavingDiscount(false);
+    }
+  };
+
   const wholesalers = WHOLESALERS[selectedBranza] || [];
 
   return (
@@ -369,7 +390,60 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
 
                         {isConnected && integration.credentials?.username && (
                           <div className="mt-2 text-xs text-slate-500 pl-13">
-                            Zalogowano jako: <span className="font-medium text-slate-700">{integration.credentials.username}</span>
+                            <span>Zalogowano jako: <span className="font-medium text-slate-700">{integration.credentials.username}</span></span>
+                            {w.id === 'speckable' && (
+                              <div className="mt-1 flex items-center gap-2">
+                                {editingDiscount === integration.id ? (
+                                  <>
+                                    <Percent className="w-3 h-3 text-slate-400" />
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="99"
+                                      step="0.1"
+                                      value={editDiscountValue}
+                                      onChange={e => setEditDiscountValue(e.target.value)}
+                                      className="w-16 px-1.5 py-0.5 border border-slate-300 rounded text-xs"
+                                      placeholder="0"
+                                      autoFocus
+                                      onKeyDown={e => e.key === 'Enter' && handleSaveDiscount(integration.id)}
+                                    />
+                                    <span className="text-slate-400">%</span>
+                                    <button
+                                      onClick={() => handleSaveDiscount(integration.id)}
+                                      disabled={savingDiscount}
+                                      className="text-blue-600 hover:text-blue-700 font-medium"
+                                    >
+                                      {savingDiscount ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Zapisz'}
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingDiscount(null)}
+                                      className="text-slate-400 hover:text-slate-500"
+                                    >
+                                      Anuluj
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Percent className="w-3 h-3 text-slate-400" />
+                                    <span className="text-slate-500">
+                                      Rabat: {integration.credentials?.customer_discount
+                                        ? <span className="font-medium text-green-600">{integration.credentials.customer_discount}%</span>
+                                        : <span className="text-slate-400">brak (ceny katalogowe)</span>}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        setEditingDiscount(integration.id);
+                                        setEditDiscountValue(String(integration.credentials?.customer_discount || ''));
+                                      }}
+                                      className="text-blue-500 hover:text-blue-600 underline"
+                                    >
+                                      zmień
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -438,6 +512,29 @@ export const WholesalerIntegrationModal: React.FC<Props> = ({
                       onKeyDown={e => e.key === 'Enter' && handleAuth()}
                     />
                   </div>
+
+                  {authModal.wholesalerId === 'speckable' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Rabat klienta (%)
+                        <span className="text-slate-400 font-normal ml-1">— opcjonalnie</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="99"
+                        step="0.1"
+                        value={customerDiscount}
+                        onChange={e => setCustomerDiscount(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        placeholder="np. 23.5"
+                        disabled={authLoading}
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400">
+                        Twój indywidualny rabat u hurtownika. Ceny katalogowe zostaną pomniejszone o ten %.
+                      </p>
+                    </div>
+                  )}
                 </>
               ) : (
                 /* 2FA SMS code form */
