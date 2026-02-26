@@ -177,7 +177,7 @@ const ProductDetail: React.FC<{
     setLoadingOtherPrices(true);
     setOtherPrices([]);
 
-    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet'))
+    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet').neq('wholesaler_id', 'speckable'))
       .then(({ data: integrations }) => {
         if (!integrations?.length) { setLoadingOtherPrices(false); return; }
         const seenWholesalers = new Set<string>();
@@ -583,7 +583,7 @@ const WholesalerProductModal: React.FC<{
     const refNum = data.ref_num || data.sku || '';
     const prodName = data.name || '';
 
-    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet'))
+    Promise.resolve(supabase.from('wholesaler_integrations').select('*').eq('is_active', true).neq('branza', 'sprzet').neq('wholesaler_id', 'speckable'))
       .then(({ data: integrations }) => {
         if (!integrations?.length) { setLoadingOtherPrices(false); return; }
         const seenW = new Set<string>();
