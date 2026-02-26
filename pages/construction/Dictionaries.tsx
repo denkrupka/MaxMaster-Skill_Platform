@@ -36,13 +36,12 @@ import { AtutIntegrator } from './AtutIntegrator';
 import { RamirentIntegrator } from './RamirentIntegrator';
 
 // ============ Типы для вкладок ============
-type TabType = 'work_types' | 'materials' | 'equipment' | 'slownik';
+type TabType = 'work_types' | 'materials' | 'equipment';
 
 const TABS: { id: TabType; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'work_types', label: 'Robocizna', icon: Wrench },
   { id: 'materials', label: 'Materiały', icon: Package },
   { id: 'equipment', label: 'Sprzęt', icon: Monitor },
-  { id: 'slownik', label: 'Słownik', icon: BookOpen },
 ];
 
 // ============ Единицы измерения (дефолтные, на польском) ============
@@ -468,7 +467,7 @@ export const DictionariesPage: React.FC = () => {
       if (tab === 'work_types') await loadWorkTypesTabData();
       else if (tab === 'materials') await loadMaterialsTabData();
       else if (tab === 'equipment') await loadEquipmentTabData();
-      else if (tab === 'slownik') await loadSlownikTabData();
+
       loadedTabs.current.add(tab);
     } catch (error) {
       console.error('Error loading tab data:', error);
@@ -6583,41 +6582,6 @@ export const DictionariesPage: React.FC = () => {
                 </div>
               )}
 
-              {activeTab === 'slownik' && (
-                <div>
-                  {slownikMainSubTab === 'own' && (
-                    <>
-                      {/* Słownik sub-tabs (Rodzaj prac / Rodzaj ścian) */}
-                      <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
-                        <button
-                          onClick={() => setSlownikSubTab('rodzaj_prac')}
-                          className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
-                            slownikSubTab === 'rodzaj_prac'
-                              ? 'bg-white text-blue-600 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <ClipboardList className="w-4 h-4" />
-                          Rodzaj prac
-                        </button>
-                        <button
-                          onClick={() => setSlownikSubTab('wall_types')}
-                          className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${
-                            slownikSubTab === 'wall_types'
-                              ? 'bg-white text-blue-600 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          <Layers className="w-4 h-4" />
-                          Rodzaj ścian
-                        </button>
-                      </div>
-                      {slownikSubTab === 'rodzaj_prac' && renderRodzajPracTab()}
-                      {slownikSubTab === 'wall_types' && renderWallTypesTab()}
-                    </>
-                  )}
-                </div>
-              )}
             </>
           )}
         </div>
