@@ -2500,22 +2500,7 @@ export const EstimatesPage: React.FC = () => {
                         )}
                       </div>
                     </div>
-                    <div className="col-span-3">
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
-                      <select
-                        value={formData.object_type}
-                        onChange={e => setFormData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
-                        ))}
-                        {objectTypes.filter((t: any) => !['industrial', 'residential', 'office'].includes(t.code)).map((t: any) => (
-                          <option key={t.id} value={t.code}>{t.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-span-3">
+                    <div className="col-span-6">
                       <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
                       <select
                         value={formData.object_category_id}
@@ -2698,7 +2683,7 @@ export const EstimatesPage: React.FC = () => {
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingRequestId ? 'Zapisz zmiany' : 'Utwórz i przejdź do formularza'}
+                  {editingRequestId ? 'Zapisz zmiany' : 'Utwórz Kosztorys'}
                 </button>
               </div>
             </div>
@@ -4056,22 +4041,7 @@ export const EstimatesPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className="col-span-3">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
-                    <select
-                      value={formData.object_type}
-                      onChange={e => setFormData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                      {objectTypes.filter((t: any) => !['industrial', 'residential', 'office'].includes(t.code)).map((t: any) => (
-                        <option key={t.id} value={t.code}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-3">
+                  <div className="col-span-6">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
                     <select
                       value={formData.object_category_id}
@@ -4254,7 +4224,7 @@ export const EstimatesPage: React.FC = () => {
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {editingRequestId ? 'Zapisz zmiany' : 'Utwórz i przejdź do formularza'}
+                {editingRequestId ? 'Zapisz zmiany' : 'Utwórz Kosztorys'}
               </button>
             </div>
           </div>

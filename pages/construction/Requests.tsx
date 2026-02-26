@@ -243,6 +243,11 @@ export const RequestsPage: React.FC = () => {
   const [workTypes, setWorkTypes] = useState<{ id: string; code: string; name: string }[]>([]);
   const [selectedWorkTypes, setSelectedWorkTypes] = useState<string[]>([]); // Selected work type IDs
   const [showWorkTypesDropdown, setShowWorkTypesDropdown] = useState(false);
+  const [newSourceOption, setNewSourceOption] = useState('');
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [customSources, setCustomSources] = useState<string[]>([]);
+  const [newObjectCategoryOption, setNewObjectCategoryOption] = useState('');
+  const [showAddObjectCategory, setShowAddObjectCategory] = useState(false);
 
   // Address autocomplete
   const [companyAddressSuggestions, setCompanyAddressSuggestions] = useState<OSMAddress[]>([]);
@@ -1965,15 +1970,47 @@ export const RequestsPage: React.FC = () => {
                   </div>
                   <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Źródło zapytania</label>
-                    <select
-                      value={formData.request_source}
-                      onChange={e => setFormData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {Object.entries(SOURCE_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
+                    {showAddSource ? (
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={newSourceOption}
+                          onChange={e => setNewSourceOption(e.target.value)}
+                          placeholder="Nowe źródło..."
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && newSourceOption.trim()) {
+                              setCustomSources(prev => [...prev, newSourceOption.trim()]);
+                              setFormData(prev => ({ ...prev, request_source: newSourceOption.trim() as any }));
+                              setNewSourceOption('');
+                              setShowAddSource(false);
+                            }
+                            if (e.key === 'Escape') setShowAddSource(false);
+                          }}
+                        />
+                        <button onClick={() => { if (newSourceOption.trim()) { setCustomSources(prev => [...prev, newSourceOption.trim()]); setFormData(prev => ({ ...prev, request_source: newSourceOption.trim() as any })); setNewSourceOption(''); } setShowAddSource(false); }} className="px-2 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">OK</button>
+                        <button onClick={() => setShowAddSource(false)} className="px-2 py-2 text-slate-600 border border-slate-200 rounded-lg text-xs hover:bg-slate-50">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1">
+                        <select
+                          value={formData.request_source}
+                          onChange={e => setFormData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+                            <option key={key} value={key}>{label}</option>
+                          ))}
+                          {customSources.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setShowAddSource(true)} className="px-2 py-2 text-blue-600 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 flex-shrink-0" title="Dodaj nowe źródło">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2235,33 +2272,47 @@ export const RequestsPage: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className="col-span-3">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
-                    <select
-                      value={formData.object_type}
-                      onChange={e => setFormData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                      {objectTypes.filter(t => !['industrial', 'residential', 'office'].includes(t.code)).map(t => (
-                        <option key={t.id} value={t.code}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-span-3">
+                  <div className="col-span-6">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
-                    <select
-                      value={formData.object_category_id}
-                      onChange={e => setFormData(prev => ({ ...prev, object_category_id: e.target.value }))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">-- Wybierz (opcjonalnie) --</option>
-                      {objectCategories.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                    {showAddObjectCategory ? (
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={newObjectCategoryOption}
+                          onChange={e => setNewObjectCategoryOption(e.target.value)}
+                          placeholder="Nowy typ obiektu..."
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                          autoFocus
+                          onKeyDown={async e => {
+                            if (e.key === 'Enter' && newObjectCategoryOption.trim()) {
+                              const { data } = await supabase.from('kosztorys_object_categories').insert({ name: newObjectCategoryOption.trim(), company_id: currentUser?.company_id }).select().single();
+                              if (data) { setObjectCategories(prev => [...prev, data]); setFormData(prev => ({ ...prev, object_category_id: data.id })); }
+                              setNewObjectCategoryOption('');
+                              setShowAddObjectCategory(false);
+                            }
+                            if (e.key === 'Escape') setShowAddObjectCategory(false);
+                          }}
+                        />
+                        <button onClick={async () => { if (newObjectCategoryOption.trim()) { const { data } = await supabase.from('kosztorys_object_categories').insert({ name: newObjectCategoryOption.trim(), company_id: currentUser?.company_id }).select().single(); if (data) { setObjectCategories(prev => [...prev, data]); setFormData(prev => ({ ...prev, object_category_id: data.id })); } } setNewObjectCategoryOption(''); setShowAddObjectCategory(false); }} className="px-2 py-2 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700">OK</button>
+                        <button onClick={() => setShowAddObjectCategory(false)} className="px-2 py-2 text-slate-600 border border-slate-200 rounded-lg text-xs hover:bg-slate-50">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1">
+                        <select
+                          value={formData.object_category_id}
+                          onChange={e => setFormData(prev => ({ ...prev, object_category_id: e.target.value }))}
+                          className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">-- Wybierz (opcjonalnie) --</option>
+                          {objectCategories.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setShowAddObjectCategory(true)} className="px-2 py-2 text-blue-600 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 flex-shrink-0" title="Dodaj nowy typ obiektu">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
                   </div>
                 </div>
 

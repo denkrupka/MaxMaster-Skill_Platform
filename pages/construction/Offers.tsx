@@ -221,6 +221,11 @@ export const OffersPage: React.FC = () => {
   const [offerWorkTypes, setOfferWorkTypes] = useState<{ id: string; code: string; name: string }[]>([]);
   const [offerSelectedWorkTypes, setOfferSelectedWorkTypes] = useState<string[]>([]);
   const [offerShowWorkTypesDropdown, setOfferShowWorkTypesDropdown] = useState(false);
+  const [offerShowAddSource, setOfferShowAddSource] = useState(false);
+  const [offerNewSourceOption, setOfferNewSourceOption] = useState('');
+  const [offerCustomSources, setOfferCustomSources] = useState<string[]>([]);
+  const [offerShowAddObjectCategory, setOfferShowAddObjectCategory] = useState(false);
+  const [offerNewObjectCategoryOption, setOfferNewObjectCategoryOption] = useState('');
   const [offerObjectTypes, setOfferObjectTypes] = useState<any[]>([]);
   const [offerObjectCategories, setOfferObjectCategories] = useState<any[]>([]);
   const [offerObjectAddressSuggestions, setOfferObjectAddressSuggestions] = useState<OSMAddress[]>([]);
@@ -1863,13 +1868,28 @@ export const OffersPage: React.FC = () => {
         </div>
         <div className="col-span-2">
           <label className="block text-sm font-medium text-slate-700 mb-1">Źródło zapytania</label>
-          <select value={offerClientData.request_source}
-            onChange={e => setOfferClientData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500">
-            {Object.entries(OFFER_SOURCE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
+          <div className="flex gap-1">
+            <select value={offerClientData.request_source}
+              onChange={e => setOfferClientData(prev => ({ ...prev, request_source: e.target.value as KosztorysRequestSource }))}
+              className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500">
+              {Object.entries(OFFER_SOURCE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+              {offerCustomSources.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button onClick={() => setOfferShowAddSource(true)} className="px-2 py-2 text-blue-600 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 flex-shrink-0" title="Dodaj nowe źródło">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          {offerShowAddSource && (
+            <div className="flex gap-1 mt-1">
+              <input type="text" value={offerNewSourceOption} onChange={e => setOfferNewSourceOption(e.target.value)} placeholder="Nowe źródło..." className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-sm" autoFocus onKeyDown={e => { if (e.key === 'Enter' && offerNewSourceOption.trim()) { setOfferCustomSources(prev => [...prev, offerNewSourceOption.trim()]); setOfferClientData(prev => ({ ...prev, request_source: offerNewSourceOption.trim() as any })); setOfferNewSourceOption(''); setOfferShowAddSource(false); } if (e.key === 'Escape') setOfferShowAddSource(false); }} />
+              <button onClick={() => { if (offerNewSourceOption.trim()) { setOfferCustomSources(prev => [...prev, offerNewSourceOption.trim()]); setOfferClientData(prev => ({ ...prev, request_source: offerNewSourceOption.trim() as any })); setOfferNewSourceOption(''); } setOfferShowAddSource(false); }} className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs">OK</button>
+              <button onClick={() => setOfferShowAddSource(false)} className="px-2 py-1.5 text-slate-600 border border-slate-200 rounded-lg text-xs">✕</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2127,33 +2147,30 @@ export const OffersPage: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="col-span-3">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj obiektu *</label>
-            <select
-              value={offerClientData.object_type}
-              onChange={e => setOfferClientData(prev => ({ ...prev, object_type: e.target.value as KosztorysObjectType }))}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              {Object.entries(OBJECT_TYPE_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-              {offerObjectTypes.filter((t: any) => !['industrial', 'residential', 'office'].includes(t.code)).map((t: any) => (
-                <option key={t.id} value={t.code}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-span-3">
+          <div className="col-span-6">
             <label className="block text-sm font-medium text-slate-700 mb-1">Typ obiektu</label>
-            <select
-              value={offerClientData.object_category_id}
-              onChange={e => setOfferClientData(prev => ({ ...prev, object_category_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">-- Wybierz (opcjonalnie) --</option>
-              {offerObjectCategories.map((c: any) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <div className="flex gap-1">
+              <select
+                value={offerClientData.object_category_id}
+                onChange={e => setOfferClientData(prev => ({ ...prev, object_category_id: e.target.value }))}
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- Wybierz (opcjonalnie) --</option>
+                {offerObjectCategories.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button onClick={() => setOfferShowAddObjectCategory(true)} className="px-2 py-2 text-blue-600 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 flex-shrink-0" title="Dodaj nowy typ obiektu">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {offerShowAddObjectCategory && (
+              <div className="flex gap-1 mt-1">
+                <input type="text" value={offerNewObjectCategoryOption} onChange={e => setOfferNewObjectCategoryOption(e.target.value)} placeholder="Nowy typ obiektu..." className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-sm" autoFocus onKeyDown={async e => { if (e.key === 'Enter' && offerNewObjectCategoryOption.trim()) { const { data } = await supabase.from('kosztorys_object_categories').insert({ name: offerNewObjectCategoryOption.trim(), company_id: currentUser?.company_id }).select().single(); if (data) { setOfferObjectCategories((prev: any) => [...prev, data]); setOfferClientData(prev => ({ ...prev, object_category_id: data.id })); } setOfferNewObjectCategoryOption(''); setOfferShowAddObjectCategory(false); } if (e.key === 'Escape') setOfferShowAddObjectCategory(false); }} />
+                <button onClick={async () => { if (offerNewObjectCategoryOption.trim()) { const { data } = await supabase.from('kosztorys_object_categories').insert({ name: offerNewObjectCategoryOption.trim(), company_id: currentUser?.company_id }).select().single(); if (data) { setOfferObjectCategories((prev: any) => [...prev, data]); setOfferClientData(prev => ({ ...prev, object_category_id: data.id })); } } setOfferNewObjectCategoryOption(''); setOfferShowAddObjectCategory(false); }} className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs">OK</button>
+                <button onClick={() => setOfferShowAddObjectCategory(false)} className="px-2 py-1.5 text-slate-600 border border-slate-200 rounded-lg text-xs">✕</button>
+              </div>
+            )}
           </div>
         </div>
 
