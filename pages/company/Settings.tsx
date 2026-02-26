@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent } from 'lucide-react';
+import { Building2, Save, AlertTriangle, Clock, CalendarDays, Plus, Trash2, Download, Moon, Sun, HardHat, Percent, Upload, X, Camera, User, Mail, Phone, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { WorkingHours, WorkingHoursDay, RoundTime, HolidayDay } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -136,7 +136,7 @@ function getPolishMovableHolidays(year: number): { date: string; name: string }[
 
 export const CompanySettingsPage: React.FC = () => {
   const { state, updateCompany } = useAppContext();
-  const { currentCompany } = state;
+  const { currentCompany, currentUser } = state;
 
   const [activeTab, setActiveTab] = useState<TabKey>('company');
   const [isSaving, setIsSaving] = useState(false);
@@ -155,6 +155,93 @@ export const CompanySettingsPage: React.FC = () => {
     contact_phone: currentCompany?.contact_phone || '',
     billing_email: currentCompany?.billing_email || ''
   });
+
+  // Logo upload state
+  const [logoUrl, setLogoUrl] = useState(currentCompany?.logo_url || '');
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  // Contact person state
+  const [contactFirstName, setContactFirstName] = useState(currentUser?.first_name || '');
+  const [contactLastName, setContactLastName] = useState(currentUser?.last_name || '');
+  const [contactPhone, setContactPhone] = useState(currentUser?.phone || '');
+
+  useEffect(() => {
+    if (currentUser) {
+      setContactFirstName(currentUser.first_name || '');
+      setContactLastName(currentUser.last_name || '');
+      setContactPhone(currentUser.phone || '');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentCompany?.logo_url) setLogoUrl(currentCompany.logo_url);
+  }, [currentCompany?.logo_url]);
+
+  const handleLogoUpload = async (file: File) => {
+    if (!currentCompany) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Wybierz plik obrazu (PNG, JPG, SVG)');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Maksymalny rozmiar pliku to 2 MB');
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const filePath = `logos/${currentCompany.id}/logo_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update({ logo_url: publicUrl })
+        .eq('id', currentCompany.id);
+      if (updateError) throw updateError;
+
+      setLogoUrl(publicUrl);
+    } catch (err) {
+      console.error('Error uploading logo:', err);
+      alert('Błąd podczas przesyłania logotypu');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!currentCompany) return;
+    try {
+      await supabase.from('companies').update({ logo_url: null }).eq('id', currentCompany.id);
+      setLogoUrl('');
+    } catch (err) {
+      console.error('Error removing logo:', err);
+    }
+  };
+
+  const handleSaveContact = async () => {
+    if (!currentUser) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ first_name: contactFirstName, last_name: contactLastName, phone: contactPhone })
+        .eq('id', currentUser.id);
+      if (error) throw error;
+      alert('Dane kontaktowe zapisane pomyślnie');
+    } catch (err) {
+      console.error('Error saving contact data:', err);
+      alert('Błąd podczas zapisywania danych kontaktowych');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -431,6 +518,55 @@ export const CompanySettingsPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Logo Upload */}
+            <div className="mb-6 pb-6 border-b border-slate-100">
+              <label className="block text-sm font-medium text-slate-700 mb-3">Logotyp firmy</label>
+              <div className="flex items-center gap-5">
+                <div className="relative group">
+                  {logoUrl ? (
+                    <div className="w-24 h-24 rounded-xl border-2 border-slate-200 overflow-hidden bg-white flex items-center justify-center">
+                      <img src={logoUrl} alt="Logo firmy" className="max-w-full max-h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 flex items-center justify-center">
+                      <Camera className="w-8 h-8 text-slate-300" />
+                    </div>
+                  )}
+                  {logoUploading && (
+                    <div className="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 cursor-pointer transition">
+                    <Upload className="w-4 h-4" />
+                    {logoUrl ? 'Zmień logo' : 'Wgraj logo'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {logoUrl && (
+                    <button
+                      onClick={handleRemoveLogo}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition"
+                    >
+                      <X className="w-4 h-4" />
+                      Usuń logo
+                    </button>
+                  )}
+                  <p className="text-xs text-slate-400">PNG, JPG lub SVG. Maks. 2 MB</p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Nazwa firmy *</label>
@@ -528,9 +664,9 @@ export const CompanySettingsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Contact Info */}
+          {/* Contact Info — company */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Dane kontaktowe</h2>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Dane kontaktowe firmy</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -572,8 +708,8 @@ export const CompanySettingsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Save Button */}
-          <div className="flex justify-end">
+          {/* Save Button — company data */}
+          <div className="flex justify-end mb-6">
             <button
               onClick={handleSave}
               disabled={isSaving || !formData.name}
@@ -582,6 +718,81 @@ export const CompanySettingsPage: React.FC = () => {
               <Save className="w-5 h-5" />
               {isSaving ? 'Zapisywanie...' : 'Zapisz zmiany'}
             </button>
+          </div>
+
+          {/* User Contact Data */}
+          <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <User className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Dane kontaktowe użytkownika</h2>
+                <p className="text-sm text-slate-500">Twoje dane osobowe</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Imię</label>
+                <input
+                  type="text"
+                  value={contactFirstName}
+                  onChange={(e) => setContactFirstName(e.target.value)}
+                  placeholder="Jan"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nazwisko</label>
+                <input
+                  type="text"
+                  value={contactLastName}
+                  onChange={(e) => setContactLastName(e.target.value)}
+                  placeholder="Kowalski"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Numer telefonu</label>
+                <input
+                  type="tel"
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="+48 123 456 789"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-slate-400" />
+                    Adres email
+                  </span>
+                </label>
+                <input
+                  type="email"
+                  value={currentUser?.email || ''}
+                  disabled
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed"
+                />
+                <p className="text-xs text-slate-400 mt-1">Adres email nie może być zmieniony</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={handleSaveContact}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition"
+              >
+                <Save className="w-5 h-5" />
+                {isSaving ? 'Zapisywanie...' : 'Zapisz dane kontaktowe'}
+              </button>
+            </div>
           </div>
         </>
       )}
