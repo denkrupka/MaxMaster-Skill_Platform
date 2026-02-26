@@ -1647,63 +1647,9 @@ serve(async (req) => {
           related: p.related || [],
         }
 
-        // Step 2: Try Shoper WebAPI for accurate (customer-specific) pricing
-        let webapiUsed = false
-        let webapiError: string | null = null
-        if (creds?.username && integrationId) {
-          const shopProductId = extractProductIdFromSlug(productPath)
-          console.log(`[product] WebAPI: productId=${shopProductId} from slug=${productPath}`)
-
-          if (shopProductId) {
-            try {
-              const token = await getWebapiToken(supabaseAdmin, integrationId, creds)
-              if (token) {
-                const wp = await webapiGetProduct(token, shopProductId)
-                if (wp) {
-                  webapiUsed = true
-                  console.log(`[product] WebAPI product: code=${wp.code}, price=${wp.stock?.price}, wholesale=${wp.price_wholesale}, special=${wp.price_special}`)
-
-                  // Use wholesale price as the netto price for authenticated customers
-                  if (wp.price_wholesale != null && wp.price_wholesale > 0) {
-                    product.priceNetto = wp.price_wholesale
-                  }
-                  // Gross price from stock
-                  if (wp.stock?.price != null) {
-                    product.priceGross = wp.stock.price
-                  }
-                  // Special/promotional price overrides
-                  if (wp.price_special != null && wp.price_special > 0) {
-                    product.priceNetto = wp.price_special
-                  }
-                  // Check for price levels (customer group pricing in Shoper)
-                  // price2, price3 may be customer-group prices
-                  if (wp.stock?.price2 != null && wp.stock.price2 > 0) {
-                    console.log(`[product] WebAPI price2=${wp.stock.price2}`)
-                  }
-                  if (wp.stock?.price3 != null && wp.stock.price3 > 0) {
-                    console.log(`[product] WebAPI price3=${wp.stock.price3}`)
-                  }
-                  // Stock info from API (more reliable)
-                  if (wp.stock?.stock != null) {
-                    product.stock = String(wp.stock.stock) + ' szt'
-                  }
-                  // EAN/SKU from API
-                  if (wp.ean && !product.ean) product.ean = wp.ean
-                  if (wp.code && !product.sku) product.sku = wp.code
-                }
-              } else {
-                webapiError = 'no_token'
-              }
-            } catch (e: any) {
-              webapiError = e.message
-              console.log(`[product] WebAPI error: ${e.message}`)
-            }
-          }
-        }
-
-        // Step 3: Apply customer discount to catalog prices (if no WebAPI data)
+        // Step 2: Apply customer discount to catalog prices
         const discount = creds?.customer_discount || 0
-        if (!webapiUsed && discount > 0) {
+        if (discount > 0) {
           product.catalogPriceNetto = product.priceNetto
           product.catalogPriceGross = product.priceGross
           product.priceNetto = applyDiscount(product.priceNetto, discount)
@@ -1718,12 +1664,6 @@ serve(async (req) => {
         return json({
           product,
           discount: discount || undefined,
-          _debug: {
-            webapiUsed,
-            webapiError,
-            scrapedPriceNetto: p.priceNetto,
-            scrapedPriceGross: p.priceGross,
-          },
         })
       }
 
