@@ -15,7 +15,7 @@ import {
   ArrowLeft, FileSpreadsheet, Clock, List, LayoutList, Expand,
   GripVertical, FileBarChart, FilePieChart, Table2, BookOpen, Grid3X3,
   HelpCircle, Camera, Flag, Clipboard, User, Puzzle, ChevronLeft, ArrowUpRight, Sparkles, SquarePen,
-  CalendarClock, ReceiptText, SearchCheck, ExternalLink
+  CalendarClock, ReceiptText, SearchCheck, ExternalLink, FolderOpen
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -61,6 +61,9 @@ import type {
   WholesalerIntegration,
   KosztorysMaterial,
   KosztorysEquipment,
+  KosztorysSystemLabour,
+  KosztorysOwnLabour,
+  KosztorysSystemLabourCategory,
 } from '../../types';
 import { OninenIntegrator } from './OninenIntegrator';
 import { TIMIntegrator } from './TIMIntegrator';
@@ -977,6 +980,16 @@ export const KosztorysEditorPage: React.FC = () => {
   const [userPriceSources, setUserPriceSources] = useState<Array<{ id: string; name: string }>>([]);
   const [allPriceSources, setAllPriceSources] = useState<Array<{ id: string; name: string }>>([]);
 
+  // Kartoteka price list modal state
+  const [showKartotekaPriceListModal, setShowKartotekaPriceListModal] = useState(false);
+  const [kartotekaPriceListTab, setKartotekaPriceListTab] = useState<'robocizna' | 'materialy' | 'sprzet'>('robocizna');
+  const [kartotekaPriceListLoading, setKartotekaPriceListLoading] = useState(false);
+  const [kartotekaPriceListData, setKartotekaPriceListData] = useState<{
+    robocizna: Array<{ code: string; name: string; category: string; unit: string; price: number }>;
+    materialy: Array<{ code: string; name: string; category: string; unit: string; price: number }>;
+    sprzet: Array<{ code: string; name: string; category: string; unit: string; price: number }>;
+  }>({ robocizna: [], materialy: [], sprzet: [] });
+
   // Replace resources confirmation modal
   const [showReplaceResourcesConfirm, setShowReplaceResourcesConfirm] = useState(false);
 
@@ -1005,6 +1018,20 @@ export const KosztorysEditorPage: React.FC = () => {
   const [searchEqViewMode, setSearchEqViewMode] = useState<'grid' | 'list'>('grid');
   const [searchEqExpandedCats, setSearchEqExpandedCats] = useState<Set<string>>(new Set());
   const [searchEqDetailItem, setSearchEqDetailItem] = useState<KosztorysEquipment | null>(null);
+
+  // Search Labour modal state
+  const [showSearchLabourModal, setShowSearchLabourModal] = useState(false);
+  const [searchLabourSubTab, setSearchLabourSubTab] = useState<'system' | 'own'>('system');
+  const [searchLabourSearch, setSearchLabourSearch] = useState('');
+  const [searchLabourSystemData, setSearchLabourSystemData] = useState<KosztorysSystemLabour[]>([]);
+  const [searchLabourSystemCategories, setSearchLabourSystemCategories] = useState<KosztorysSystemLabourCategory[]>([]);
+  const [searchLabourSelectedSystemCategory, setSearchLabourSelectedSystemCategory] = useState<string | null>(null);
+  const [searchLabourExpandedSystemCats, setSearchLabourExpandedSystemCats] = useState<Set<string>>(new Set());
+  const [searchLabourSystemPage, setSearchLabourSystemPage] = useState(0);
+  const [searchLabourOwnData, setSearchLabourOwnData] = useState<KosztorysOwnLabour[]>([]);
+  const [searchLabourOwnCategories, setSearchLabourOwnCategories] = useState<Array<{ id: string; name: string; sort_order: number; parent_id?: string | null }>>([]);
+  const [searchLabourSelectedOwnCategory, setSearchLabourSelectedOwnCategory] = useState<string | null>(null);
+  const [searchLabourExpandedOwnCats, setSearchLabourExpandedOwnCats] = useState<Set<string>>(new Set());
 
   // Import modal state
   const [showImportConfirmModal, setShowImportConfirmModal] = useState(false);
@@ -2169,10 +2196,10 @@ export const KosztorysEditorPage: React.FC = () => {
       sourceIds.push('00000000-0000-0000-0000-000000000001');
     }
     selectedPriceSources.forEach(s => {
-      if (s !== 'system') sourceIds.push(s);
+      if (s !== 'system' && s !== 'kartoteka') sourceIds.push(s);
     });
 
-    if (sourceIds.length === 0) {
+    if (sourceIds.length === 0 && !selectedPriceSources.includes('kartoteka')) {
       showNotificationMessage('Wybierz co najmniej jedno źródło cen', 'warning');
       return;
     }
@@ -2197,6 +2224,28 @@ export const KosztorysEditorPage: React.FC = () => {
       if (p.rms_index) priceByIndex.set(p.rms_index, priceData);
       if (p.name) priceByName.set(p.name.toLowerCase(), priceData);
     });
+
+    // Add kartoteka prices from own catalogs (don't overwrite existing)
+    if (selectedPriceSources.includes('kartoteka')) {
+      try {
+        const [kLabour, kMat, kEq] = await Promise.all([
+          supabase.from('kosztorys_own_labours').select('code, name, price').eq('company_id', currentUser?.company_id || '').eq('is_active', true),
+          supabase.from('kosztorys_materials').select('code, name, default_price').eq('company_id', currentUser?.company_id || '').eq('is_active', true),
+          supabase.from('kosztorys_equipment').select('code, name, default_price').eq('company_id', currentUser?.company_id || '').eq('is_active', true),
+        ]);
+        const addKartotekaPrice = (code: string | undefined, name: string | undefined, price: number | undefined) => {
+          if (!price || price === 0) return;
+          const pd = { min: price, avg: price, max: price };
+          if (code && !priceByIndex.has(code)) priceByIndex.set(code, pd);
+          if (name && !priceByName.has(name.toLowerCase())) priceByName.set(name.toLowerCase(), pd);
+        };
+        (kLabour.data || []).forEach((l: any) => addKartotekaPrice(l.code, l.name, l.price));
+        (kMat.data || []).forEach((m: any) => addKartotekaPrice(m.code, m.name, m.default_price));
+        (kEq.data || []).forEach((e: any) => addKartotekaPrice(e.code, e.name, e.default_price));
+      } catch (err) {
+        console.error('Error loading kartoteka prices:', err);
+      }
+    }
 
     // Update resources in all positions
     Object.values(newData.positions).forEach(position => {
@@ -3623,6 +3672,91 @@ export const KosztorysEditorPage: React.FC = () => {
     }
     handleUpdateSelectedItem(updates);
     setShowSearchEquipmentModal(false);
+  };
+
+  // Open Kartoteka price list modal — loads live data from own catalogs
+  const openKartotekaPriceListModal = async () => {
+    setShowKartotekaPriceListModal(true);
+    setKartotekaPriceListTab('robocizna');
+    setKartotekaPriceListLoading(true);
+    try {
+      const [labourRes, matRes, eqRes] = await Promise.all([
+        supabase.from('kosztorys_own_labours').select('code, name, category, unit, price').eq('company_id', currentUser?.company_id || '').eq('is_active', true).order('name'),
+        supabase.from('kosztorys_materials').select('code, name, category, unit, default_price').eq('company_id', currentUser?.company_id || '').eq('is_active', true).order('name'),
+        supabase.from('kosztorys_equipment').select('code, name, category, unit, default_price').eq('company_id', currentUser?.company_id || '').eq('is_active', true).order('name'),
+      ]);
+      setKartotekaPriceListData({
+        robocizna: (labourRes.data || []).map((l: any) => ({ code: l.code, name: l.name, category: l.category || '', unit: l.unit || 'r-g', price: l.price || 0 })),
+        materialy: (matRes.data || []).map((m: any) => ({ code: m.code, name: m.name, category: m.category || '', unit: m.unit || '', price: m.default_price || 0 })),
+        sprzet: (eqRes.data || []).map((e: any) => ({ code: e.code, name: e.name, category: e.category || '', unit: e.unit || '', price: e.default_price || 0 })),
+      });
+    } catch (err) {
+      console.error('Error loading kartoteka price list:', err);
+    } finally {
+      setKartotekaPriceListLoading(false);
+    }
+  };
+
+  // Open search labour modal — load system + own labours + categories
+  const openSearchLabourModal = async () => {
+    setShowSearchLabourModal(true);
+    setSearchLabourSubTab('system');
+    setSearchLabourSearch('');
+    setSearchLabourSelectedSystemCategory(null);
+    setSearchLabourSelectedOwnCategory(null);
+    setSearchLabourSystemPage(0);
+    try {
+      // Batch-fetch system labours (may be >1000 rows)
+      let allSystemLabours: KosztorysSystemLabour[] = [];
+      let from = 0;
+      const batchSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from('kosztorys_system_labours')
+          .select('*')
+          .eq('is_active', true)
+          .order('code')
+          .range(from, from + batchSize - 1);
+        if (error) { console.error('Error loading system labours:', error); break; }
+        if (!data || data.length === 0) break;
+        allSystemLabours = allSystemLabours.concat(data);
+        if (data.length < batchSize) break;
+        from += batchSize;
+      }
+      setSearchLabourSystemData(allSystemLabours);
+
+      const [sysCatRes, ownRes, ownCatRes] = await Promise.all([
+        supabase.from('kosztorys_system_labour_categories').select('*').order('sort_order'),
+        supabase.from('kosztorys_own_labours').select('*').eq('company_id', currentUser?.company_id || '').eq('is_active', true).order('name'),
+        supabase.from('kosztorys_own_labour_categories').select('*').eq('company_id', currentUser?.company_id || '').order('sort_order'),
+      ]);
+      setSearchLabourSystemCategories(sysCatRes.data || []);
+      setSearchLabourOwnData(ownRes.data || []);
+      setSearchLabourOwnCategories(ownCatRes.data || []);
+    } catch (err) {
+      console.error('Error loading search labour data:', err);
+    }
+  };
+
+  // Apply selected labour from search modal to the current resource
+  const handleApplyLabourFromSearch = (result: { name: string; code: string; price?: number | null; unit?: string }) => {
+    const updates: Partial<any> = {};
+    if (result.name) updates.name = result.name;
+    const currentResource = selectedItem as KosztorysResource | null;
+    updates.originIndex = { ...(currentResource?.originIndex || { type: 'custom' }), index: result.code };
+    if (result.price != null) {
+      updates.unitPrice = { ...(currentResource?.unitPrice || { type: 'custom' }), value: result.price };
+    }
+    if (result.unit) {
+      const matched = UNITS_REFERENCE.find(u =>
+        u.unit.toLowerCase().replace(/[.\s]/g, '') === result.unit!.toLowerCase().replace(/[.\s]/g, '')
+      );
+      if (matched) {
+        updates.unit = { label: matched.unit, unitIndex: matched.index };
+      }
+    }
+    handleUpdateSelectedItem(updates);
+    setShowSearchLabourModal(false);
   };
 
   // Fetch wholesaler prices when material detail opens in search modal
@@ -6934,6 +7068,15 @@ export const KosztorysEditorPage: React.FC = () => {
                             {resource.type === 'equipment' && (
                               <button
                                 onClick={openSearchEquipmentModal}
+                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                              >
+                                <Search className="w-3 h-3" />
+                                Szukaj
+                              </button>
+                            )}
+                            {resource.type === 'labor' && (
+                              <button
+                                onClick={openSearchLabourModal}
                                 className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
                               >
                                 <Search className="w-3 h-3" />
@@ -10568,6 +10711,22 @@ export const KosztorysEditorPage: React.FC = () => {
                             </button>
                           </div>
                         )}
+                        {selectedPriceSources.includes('kartoteka') && (
+                          <div className="flex items-center justify-between py-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-800">Cennik z Kartoteki</span>
+                              <button className="text-gray-400 hover:text-gray-600" title="Cennik z kartoteki własnych katalogów">
+                                <FolderOpen className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => setSelectedPriceSources(prev => prev.filter(s => s !== 'kartoteka'))}
+                              className="text-gray-400 hover:text-red-500"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                         {userPriceSources
                           .filter(ps => selectedPriceSources.includes(ps.id))
                           .map(ps => (
@@ -10840,6 +10999,30 @@ export const KosztorysEditorPage: React.FC = () => {
                   />
                   <span className="text-sm text-gray-800">Cennik Systemowy</span>
                 </label>
+                <div className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded group">
+                  <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedPriceSources.includes('kartoteka')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPriceSources([...selectedPriceSources, 'kartoteka']);
+                        } else {
+                          setSelectedPriceSources(selectedPriceSources.filter(s => s !== 'kartoteka'));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-800">Cennik z Kartoteki</span>
+                  </label>
+                  <button
+                    onClick={openKartotekaPriceListModal}
+                    className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                    title="Podgląd cennika z kartoteki"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 {userPriceSources
                   .filter(ps => !priceSourceSearch || ps.name.toLowerCase().includes(priceSourceSearch.toLowerCase()))
                   .map(ps => (
@@ -11276,6 +11459,87 @@ export const KosztorysEditorPage: React.FC = () => {
                   Zapisz cennik
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kartoteka Price List Read-Only Modal */}
+      {showKartotekaPriceListModal && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-5 h-5 text-blue-500" />
+                <h2 className="text-lg font-bold text-gray-900">Cennik z Kartoteki</h2>
+              </div>
+              <button onClick={() => setShowKartotekaPriceListModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex border-b border-gray-200">
+              {(['robocizna', 'materialy', 'sprzet'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setKartotekaPriceListTab(tab)}
+                  className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                    kartotekaPriceListTab === tab
+                      ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {tab === 'robocizna' ? 'Robocizna' : tab === 'materialy' ? 'Materiały' : 'Sprzęt'}
+                  <span className="ml-1.5 text-xs text-gray-400">({kartotekaPriceListData[tab].length})</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {kartotekaPriceListLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                </div>
+              ) : kartotekaPriceListData[kartotekaPriceListTab].length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <Package className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Brak pozycji w tej kategorii</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-2 text-xs font-medium text-gray-500 w-10">Nr</th>
+                      <th className="text-left py-2 px-2 text-xs font-medium text-gray-500 w-28">Indeks</th>
+                      <th className="text-left py-2 px-2 text-xs font-medium text-gray-500">Nazwa</th>
+                      <th className="text-left py-2 px-2 text-xs font-medium text-gray-500 w-28">Kategoria</th>
+                      <th className="text-left py-2 px-2 text-xs font-medium text-gray-500 w-20">Jedn. miary</th>
+                      <th className="text-right py-2 px-2 text-xs font-medium text-gray-500 w-24">Cena netto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kartotekaPriceListData[kartotekaPriceListTab].map((item, idx) => (
+                      <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-1.5 px-2 text-xs text-gray-400">{idx + 1}</td>
+                        <td className="py-1.5 px-2 text-xs font-mono text-gray-700">{item.code}</td>
+                        <td className="py-1.5 px-2 text-xs text-gray-800">{item.name}</td>
+                        <td className="py-1.5 px-2 text-xs text-gray-500">{item.category}</td>
+                        <td className="py-1.5 px-2 text-xs text-gray-500">{item.unit}</td>
+                        <td className="py-1.5 px-2 text-xs text-right font-medium text-gray-800">{item.price.toFixed(2)} zł</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-xs text-gray-500">
+                R: {kartotekaPriceListData.robocizna.length} | M: {kartotekaPriceListData.materialy.length} | S: {kartotekaPriceListData.sprzet.length}
+              </div>
+              <button
+                onClick={() => setShowKartotekaPriceListModal(false)}
+                className="px-4 py-2 text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Zamknij
+              </button>
             </div>
           </div>
         </div>
@@ -12552,6 +12816,287 @@ export const KosztorysEditorPage: React.FC = () => {
                   />
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Labour Modal */}
+      {showSearchLabourModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500/75 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-5xl w-full shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-bold text-gray-900">Szukaj Robocizna</h2>
+              <button onClick={() => setShowSearchLabourModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => { setSearchLabourSubTab('system'); setSearchLabourSearch(''); setSearchLabourSystemPage(0); }}
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                  searchLabourSubTab === 'system'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Katalog Systemowy
+              </button>
+              <button
+                onClick={() => { setSearchLabourSubTab('own'); setSearchLabourSearch(''); }}
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                  searchLabourSubTab === 'own'
+                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Katalog Własny
+              </button>
+            </div>
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left sidebar — categories */}
+              <div className="w-56 border-r border-gray-200 overflow-y-auto p-2">
+                {searchLabourSubTab === 'system' ? (
+                  <>
+                    <button
+                      onClick={() => setSearchLabourSelectedSystemCategory(null)}
+                      className={`w-full text-left px-2 py-1.5 text-xs rounded ${!searchLabourSelectedSystemCategory ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      Wszystkie ({searchLabourSystemData.length})
+                    </button>
+                    {searchLabourSystemCategories.filter(c => !c.parent_id).map(cat => {
+                      const children = searchLabourSystemCategories.filter(c => c.parent_id === cat.id);
+                      const isExpanded = searchLabourExpandedSystemCats.has(cat.id);
+                      const catCount = searchLabourSystemData.filter(l => l.category_name === cat.name || l.category_path?.startsWith(cat.name)).length;
+                      return (
+                        <div key={cat.id}>
+                          <button
+                            onClick={() => {
+                              setSearchLabourSelectedSystemCategory(cat.id);
+                              setSearchLabourSystemPage(0);
+                              if (children.length > 0) {
+                                setSearchLabourExpandedSystemCats(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                  return next;
+                                });
+                              }
+                            }}
+                            className={`w-full text-left px-2 py-1.5 text-xs rounded flex items-center gap-1 ${searchLabourSelectedSystemCategory === cat.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {children.length > 0 && (isExpanded ? <ChevronDown className="w-3 h-3 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 flex-shrink-0" />)}
+                            <FolderOpen className="w-3 h-3 flex-shrink-0 text-amber-500" />
+                            <span className="truncate flex-1">{cat.name}</span>
+                            <span className="text-[10px] text-gray-400 ml-1">{catCount}</span>
+                          </button>
+                          {isExpanded && children.map(child => {
+                            const childCount = searchLabourSystemData.filter(l => l.category_name === child.name).length;
+                            return (
+                              <button
+                                key={child.id}
+                                onClick={() => { setSearchLabourSelectedSystemCategory(child.id); setSearchLabourSystemPage(0); }}
+                                className={`w-full text-left pl-7 pr-2 py-1 text-xs rounded flex items-center gap-1 ${searchLabourSelectedSystemCategory === child.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+                              >
+                                <FolderOpen className="w-3 h-3 flex-shrink-0 text-amber-400" />
+                                <span className="truncate flex-1">{child.name}</span>
+                                <span className="text-[10px] text-gray-400 ml-1">{childCount}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setSearchLabourSelectedOwnCategory(null)}
+                      className={`w-full text-left px-2 py-1.5 text-xs rounded ${!searchLabourSelectedOwnCategory ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      Wszystkie ({searchLabourOwnData.length})
+                    </button>
+                    {searchLabourOwnCategories.filter(c => !c.parent_id).map(cat => {
+                      const children = searchLabourOwnCategories.filter(c => c.parent_id === cat.id);
+                      const isExpanded = searchLabourExpandedOwnCats.has(cat.id);
+                      const catCount = searchLabourOwnData.filter(l => l.category === cat.name).length;
+                      return (
+                        <div key={cat.id}>
+                          <button
+                            onClick={() => {
+                              setSearchLabourSelectedOwnCategory(cat.id);
+                              if (children.length > 0) {
+                                setSearchLabourExpandedOwnCats(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                  return next;
+                                });
+                              }
+                            }}
+                            className={`w-full text-left px-2 py-1.5 text-xs rounded flex items-center gap-1 ${searchLabourSelectedOwnCategory === cat.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {children.length > 0 && (isExpanded ? <ChevronDown className="w-3 h-3 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 flex-shrink-0" />)}
+                            <FolderOpen className="w-3 h-3 flex-shrink-0 text-amber-500" />
+                            <span className="truncate flex-1">{cat.name}</span>
+                            <span className="text-[10px] text-gray-400 ml-1">{catCount}</span>
+                          </button>
+                          {isExpanded && children.map(child => {
+                            const childCount = searchLabourOwnData.filter(l => l.category === child.name).length;
+                            return (
+                              <button
+                                key={child.id}
+                                onClick={() => setSearchLabourSelectedOwnCategory(child.id)}
+                                className={`w-full text-left pl-7 pr-2 py-1 text-xs rounded flex items-center gap-1 ${searchLabourSelectedOwnCategory === child.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50'}`}
+                              >
+                                <FolderOpen className="w-3 h-3 flex-shrink-0 text-amber-400" />
+                                <span className="truncate flex-1">{child.name}</span>
+                                <span className="text-[10px] text-gray-400 ml-1">{childCount}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+              {/* Main content area */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-gray-100 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchLabourSearch}
+                      onChange={(e) => { setSearchLabourSearch(e.target.value); setSearchLabourSystemPage(0); }}
+                      placeholder="Szukaj po kodzie lub nazwie..."
+                      className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto">
+                  {searchLabourSubTab === 'system' ? (() => {
+                    const selCat = searchLabourSystemCategories.find(c => c.id === searchLabourSelectedSystemCategory);
+                    let filtered = searchLabourSystemData;
+                    if (selCat) {
+                      const childNames = searchLabourSystemCategories.filter(c => c.parent_id === selCat.id).map(c => c.name);
+                      filtered = filtered.filter(l =>
+                        l.category_name === selCat.name || (l.category_path && l.category_path.startsWith(selCat.name)) || childNames.includes(l.category_name || '')
+                      );
+                    }
+                    if (searchLabourSearch) {
+                      const q = searchLabourSearch.toLowerCase();
+                      filtered = filtered.filter(l => l.code.toLowerCase().includes(q) || l.name.toLowerCase().includes(q));
+                    }
+                    const pageSize = 50;
+                    const totalPages = Math.ceil(filtered.length / pageSize);
+                    const paged = filtered.slice(searchLabourSystemPage * pageSize, (searchLabourSystemPage + 1) * pageSize);
+                    return (
+                      <>
+                        <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-100">
+                          Znaleziono: {filtered.length} pozycji
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-white">
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-28">KOD</th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">NAZWA</th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-16">JEDN.</th>
+                              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 w-24">CENA</th>
+                              <th className="w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paged.map(l => (
+                              <tr key={l.id} className="border-b border-gray-100 hover:bg-blue-50/50">
+                                <td className="py-1.5 px-3 text-xs font-mono text-gray-700">{l.code}</td>
+                                <td className="py-1.5 px-3 text-xs text-gray-800">{l.name}</td>
+                                <td className="py-1.5 px-3 text-xs text-gray-500">{l.unit}</td>
+                                <td className="py-1.5 px-3 text-xs text-right font-medium text-gray-800">{(l.price_unit || 0).toFixed(2)} zł</td>
+                                <td className="py-1.5 px-1">
+                                  <button
+                                    onClick={() => handleApplyLabourFromSearch({ name: l.name, code: l.code, price: l.price_unit, unit: l.unit })}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                    title="Dodaj"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
+                            <button
+                              onClick={() => setSearchLabourSystemPage(p => Math.max(0, p - 1))}
+                              disabled={searchLabourSystemPage === 0}
+                              className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-30"
+                            >
+                              Poprzednia
+                            </button>
+                            <span className="text-xs text-gray-500">{searchLabourSystemPage + 1} / {totalPages}</span>
+                            <button
+                              onClick={() => setSearchLabourSystemPage(p => Math.min(totalPages - 1, p + 1))}
+                              disabled={searchLabourSystemPage >= totalPages - 1}
+                              className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-30"
+                            >
+                              Następna
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })() : (() => {
+                    const selCat = searchLabourOwnCategories.find(c => c.id === searchLabourSelectedOwnCategory);
+                    let filtered = searchLabourOwnData;
+                    if (selCat) {
+                      const childNames = searchLabourOwnCategories.filter(c => c.parent_id === selCat.id).map(c => c.name);
+                      filtered = filtered.filter(l => l.category === selCat.name || childNames.includes(l.category || ''));
+                    }
+                    if (searchLabourSearch) {
+                      const q = searchLabourSearch.toLowerCase();
+                      filtered = filtered.filter(l => l.code.toLowerCase().includes(q) || l.name.toLowerCase().includes(q));
+                    }
+                    return (
+                      <>
+                        <div className="px-3 py-1.5 text-xs text-gray-400 border-b border-gray-100">
+                          Znaleziono: {filtered.length} pozycji
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-white">
+                            <tr className="border-b border-gray-200">
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-28">KOD</th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500">NAZWA</th>
+                              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 w-16">JEDN.</th>
+                              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 w-24">CENA</th>
+                              <th className="w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filtered.map(l => (
+                              <tr key={l.id} className="border-b border-gray-100 hover:bg-blue-50/50">
+                                <td className="py-1.5 px-3 text-xs font-mono text-gray-700">{l.code}</td>
+                                <td className="py-1.5 px-3 text-xs text-gray-800">{l.name}</td>
+                                <td className="py-1.5 px-3 text-xs text-gray-500">{l.unit || 'r-g'}</td>
+                                <td className="py-1.5 px-3 text-xs text-right font-medium text-gray-800">{(l.price || 0).toFixed(2)} zł</td>
+                                <td className="py-1.5 px-1">
+                                  <button
+                                    onClick={() => handleApplyLabourFromSearch({ name: l.name, code: l.code, price: l.price, unit: l.unit })}
+                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                    title="Dodaj"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </div>
