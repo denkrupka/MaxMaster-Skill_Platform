@@ -2980,53 +2980,6 @@ export const OffersPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5 text-slate-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{offers.filter(o => o.status === 'draft').length}</p>
-              <p className="text-sm text-slate-500">Wersje robocze</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Send className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{offers.filter(o => o.status === 'sent').length}</p>
-              <p className="text-sm text-slate-500">Wysłane</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{offers.filter(o => o.status === 'accepted').length}</p>
-              <p className="text-sm text-slate-500">Zaakceptowane</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircle className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{offers.filter(o => o.status === 'rejected').length}</p>
-              <p className="text-sm text-slate-500">Odrzucone</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Filters & List */}
       <div className="bg-white rounded-xl border border-slate-200">
@@ -3077,7 +3030,7 @@ export const OffersPage: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Klient</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Kwota</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Wartość netto</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ważna do</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Akcje</th>
               </tr>
