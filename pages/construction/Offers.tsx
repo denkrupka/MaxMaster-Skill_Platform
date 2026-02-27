@@ -1435,11 +1435,85 @@ export const OffersPage: React.FC = () => {
     }
   };
 
-  const handleSendOffer = async (offer: Offer) => {
+  const handleSendOffer = async (offer: Offer, channels?: string[], coverLetter?: string) => {
     if (!currentUser) return;
-    if (!confirm('Czy na pewno chcesz wysłać tę ofertę? Status zmieni się na "Wysłana".')) return;
     try {
-      const { error } = await supabase
+      const offerUrl = offer.public_url
+        ? window.location.origin + offer.public_url
+        : `${window.location.origin}/#/offer/${offer.public_token || offer.id.substring(0, 8)}`;
+
+      // Generate public token if not exists
+      if (!offer.public_token) {
+        const token = offer.id.substring(0, 8);
+        await supabase.from('offers').update({ public_token: token }).eq('id', offer.id);
+      }
+
+      const activeChannels = channels || sendChannels;
+      const letter = coverLetter || sendCoverLetter;
+
+      // Find representative contact
+      const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
+      const repEmail = rep?.email || '';
+      const repPhone = rep?.phone?.replace(/\s/g, '') || '';
+      const repName = rep ? `${rep.first_name} ${rep.last_name}` : '';
+
+      // Send via selected channels
+      for (const channel of activeChannels) {
+        if (channel === 'email' && repEmail) {
+          try {
+            await supabase.functions.invoke('send-email', {
+              body: {
+                to: repEmail,
+                subject: `Oferta ${offer.number} — ${offer.name}`,
+                html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                  <div style="background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);padding:30px;text-align:center;">
+                    <h1 style="color:white;margin:0;">${state.currentCompany?.name || 'Firma'}</h1>
+                  </div>
+                  <div style="padding:30px;background:#f8fafc;">
+                    <p style="color:#475569;">${letter.replace(/\n/g, '<br/>')}</p>
+                    <div style="margin:20px 0;padding:20px;background:white;border-radius:8px;border:1px solid #e2e8f0;">
+                      <p style="margin:0;font-weight:bold;color:#1e293b;">${offer.name}</p>
+                      <p style="margin:5px 0 0;color:#64748b;">Nr: ${offer.number}</p>
+                    </div>
+                    <a href="${offerUrl}" style="display:inline-block;background:#3b82f6;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;">Zobacz ofertę online</a>
+                  </div>
+                  <div style="padding:15px;text-align:center;color:#94a3b8;font-size:11px;">
+                    <p>Wygenerowano w MaxMaster</p>
+                  </div>
+                </div>`,
+                template: 'CUSTOM'
+              }
+            });
+          } catch (e) {
+            console.error('Email send error:', e);
+          }
+        }
+
+        if (channel === 'sms' && repPhone) {
+          const smsText = `Oferta ${offer.number} od ${state.currentCompany?.name || 'firmy'} jest gotowa. Zobacz: ${offerUrl}`;
+          try {
+            await supabase.functions.invoke('send-sms', {
+              body: { phoneNumber: repPhone, message: smsText }
+            });
+          } catch (e) {
+            console.error('SMS send error:', e);
+          }
+        }
+
+        if (channel === 'whatsapp' && repPhone) {
+          const phone = repPhone.startsWith('+') ? repPhone.substring(1) : (repPhone.startsWith('48') ? repPhone : '48' + repPhone);
+          const waText = encodeURIComponent(`${letter}\n\nZobacz ofertę: ${offerUrl}`);
+          window.open(`https://wa.me/${phone}?text=${waText}`, '_blank');
+        }
+
+        if (channel === 'telegram' && repPhone) {
+          const tgText = encodeURIComponent(`${letter}\n\nZobacz ofertę: ${offerUrl}`);
+          window.open(`https://t.me/share/url?url=${encodeURIComponent(offerUrl)}&text=${tgText}`, '_blank');
+        }
+      }
+
+      // Update offer status
+      await supabase
         .from('offers')
         .update({
           status: 'sent',
@@ -1447,11 +1521,9 @@ export const OffersPage: React.FC = () => {
         })
         .eq('id', offer.id);
 
-      if (!error) {
-        await loadData();
-        if (selectedOffer?.id === offer.id) {
-          await loadOfferDetails(offer.id);
-        }
+      await loadData();
+      if (selectedOffer?.id === offer.id) {
+        await loadOfferDetails(offer.id);
       }
     } catch (err) {
       console.error('Error sending offer:', err);
@@ -1955,27 +2027,33 @@ export const OffersPage: React.FC = () => {
   const exportToCSV = () => {
     if (!selectedOffer) return;
     const rows: string[] = [];
-    rows.push(['Sekcja', 'Pozycja', 'Opis', 'Ilość', 'Cena jedn.', 'Wartość', 'Opcjonalna'].join(';'));
+    rows.push(['Sekcja', 'Pozycja', 'Opis', 'Ilość', 'Cena jedn.', 'Wartość netto', 'Rabat %', 'VAT %'].join(';'));
 
-    sections.forEach(section => {
-      section.items.forEach(item => {
+    const exportSection = (sec: LocalOfferSection, prefix: string = '') => {
+      sec.items.forEach(item => {
         rows.push([
-          section.name,
+          prefix + sec.name,
           item.name,
           item.description || '',
           item.quantity.toString().replace('.', ','),
           item.unit_price.toFixed(2).replace('.', ','),
-          item.total_price.toFixed(2).replace('.', ','),
-          item.is_optional ? 'Tak' : 'Nie'
+          (item.quantity * item.unit_price).toFixed(2).replace('.', ','),
+          (item.discount_percent || 0).toString(),
+          (item.vat_rate ?? 23).toString()
         ].join(';'));
       });
-    });
+      (sec.children || []).forEach(child => exportSection(child, prefix + sec.name + ' > '));
+    };
+
+    sections.forEach(sec => exportSection(sec));
 
     rows.push('');
-    rows.push(['', '', '', '', 'Suma:', totals.total.toFixed(2).replace('.', ','), ''].join(';'));
-    rows.push(['', '', '', '', 'Rabat %:', totals.discountPct.toFixed(2).replace('.', ','), ''].join(';'));
-    rows.push(['', '', '', '', 'Rabat kwota:', totals.discountFixed.toFixed(2).replace('.', ','), ''].join(';'));
-    rows.push(['', '', '', '', 'DO ZAPŁATY:', totals.final.toFixed(2).replace('.', ','), ''].join(';'));
+    rows.push(['', '', '', '', 'Suma netto:', totals.total.toFixed(2).replace('.', ','), '', ''].join(';'));
+    if (totals.totalDiscount > 0) {
+      rows.push(['', '', '', '', 'Rabat:', (-totals.totalDiscount).toFixed(2).replace('.', ','), '', ''].join(';'));
+    }
+    rows.push(['', '', '', '', 'VAT:', totals.totalVat.toFixed(2).replace('.', ','), '', ''].join(';'));
+    rows.push(['', '', '', '', 'BRUTTO:', totals.totalBrutto.toFixed(2).replace('.', ','), '', ''].join(';'));
 
     const blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -3171,7 +3249,7 @@ export const OffersPage: React.FC = () => {
                           Edytuj
                         </button>
                         <button
-                          onClick={() => handleSendOffer(selectedOffer)}
+                          onClick={() => setShowSendModal(true)}
                           className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                         >
                           <Send className="w-4 h-4" />
@@ -4201,7 +4279,7 @@ export const OffersPage: React.FC = () => {
               <button
                 onClick={async () => {
                   if (!confirm('Czy na pewno chcesz wysłać ofertę wybranymi kanałami?')) return;
-                  await handleSendOffer(selectedOffer);
+                  await handleSendOffer(selectedOffer, sendChannels, sendCoverLetter);
                   setShowSendModal(false);
                 }}
                 disabled={sendChannels.length === 0}
