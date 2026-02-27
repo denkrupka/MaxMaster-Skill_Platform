@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
-import { Project, Plan, PlanComponent, PlanMarkup, MarkupType } from '../../types';
+import { Project, Plan, PlanComponent } from '../../types';
 
 interface ComponentWithPlans extends PlanComponent {
   children?: ComponentWithPlans[];

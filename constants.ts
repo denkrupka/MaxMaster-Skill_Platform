@@ -788,7 +788,11 @@ export const APPROVAL_ENTITY_TYPE_LABELS: Record<ApprovalEntityType, string> = {
   document: 'Dokument',
   change_request: 'Wniosek o zmianę',
   offer: 'Oferta',
-  order: 'Zamówienie'
+  order: 'Zamówienie',
+  purchase_request: 'Zapotrzebowanie',
+  purchase_order: 'Zamówienie zakupu',
+  ticket: 'Zgłoszenie',
+  other: 'Inne'
 };
 
 // =============================================
@@ -851,6 +855,8 @@ export const MARKUP_TYPE_ICONS: Record<MarkupType, string> = {
 // =============================================
 
 export const CONSTRUCTION_ROLE_LABELS: Record<ConstructionRole, string> = {
+  [ConstructionRole.OWNER]: 'Właściciel',
+  [ConstructionRole.ADMIN]: 'Administrator',
   [ConstructionRole.PROJECT_MANAGER]: 'Kierownik projektu',
   [ConstructionRole.ESTIMATOR]: 'Kosztorysant',
   [ConstructionRole.FOREMAN]: 'Brygadzista',
@@ -860,6 +866,8 @@ export const CONSTRUCTION_ROLE_LABELS: Record<ConstructionRole, string> = {
 };
 
 export const CONSTRUCTION_ROLE_COLORS: Record<ConstructionRole, string> = {
+  [ConstructionRole.OWNER]: 'bg-purple-100 text-purple-700 border-purple-200',
+  [ConstructionRole.ADMIN]: 'bg-red-100 text-red-700 border-red-200',
   [ConstructionRole.PROJECT_MANAGER]: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   [ConstructionRole.ESTIMATOR]: 'bg-blue-100 text-blue-700 border-blue-200',
   [ConstructionRole.FOREMAN]: 'bg-amber-100 text-amber-700 border-amber-200',

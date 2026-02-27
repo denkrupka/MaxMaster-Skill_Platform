@@ -1048,6 +1048,7 @@ export interface Project {
   travel_paid?: boolean;
   travel_rate?: number;
   travel_hours?: number;
+  code?: string;
   start_date?: string;
   end_date?: string;
   created_at: string;
@@ -2547,6 +2548,8 @@ export interface Plan {
   status: PlanStatus;
   version?: string;
   file_name?: string;
+  file_url?: string;
+  thumbnail_url?: string;
   storage_path?: string;
   file_type?: string;
   file_size?: number;
@@ -2564,7 +2567,9 @@ export interface Plan {
 export interface PlanComponent {
   id: string;
   plan_id: string;
+  parent_id?: string;
   name: string;
+  description?: string;
   component_type: string;
   geometry: Record<string, any>;
   properties: Record<string, any>;
@@ -2605,6 +2610,8 @@ export interface DMSFolder {
   documents?: DMSDocument[];
 }
 
+export type DMSFile = DMSDocument;
+
 export interface DMSDocument {
   id: string;
   folder_id: string;
@@ -2613,6 +2620,10 @@ export interface DMSDocument {
   name: string;
   description?: string;
   file_name: string;
+  file_url?: string;
+  mime_type?: string;
+  size?: number;
+  thumbnail_url?: string;
   storage_path: string;
   file_type: string;
   file_size: number;
@@ -2624,6 +2635,7 @@ export interface DMSDocument {
   is_template: boolean;
   template_id?: string;
   uploaded_by_id: string;
+  created_by_id?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
@@ -2815,7 +2827,7 @@ export interface PurchaseOrderItem {
 // =====================================================
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
-export type ApprovalEntityType = 'document' | 'estimate' | 'offer' | 'purchase_request' | 'purchase_order' | 'ticket' | 'other';
+export type ApprovalEntityType = 'document' | 'estimate' | 'offer' | 'purchase_request' | 'purchase_order' | 'ticket' | 'other' | 'act' | 'change_request' | 'order';
 
 export interface ApprovalWorkflow {
   id: string;
@@ -3355,3 +3367,30 @@ export interface WholesalerIntegration {
   created_at: string;
   updated_at: string;
 }
+
+// =====================================================
+// MISSING TYPE DEFINITIONS (used by constants.ts)
+// =====================================================
+
+export type FinanceOperationType = 'income' | 'expense';
+export type FinanceOperationStatus = 'pending' | 'completed' | 'cancelled';
+
+export type ActStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
+export type ActPaymentStatus = 'unpaid' | 'partial' | 'paid';
+export type ActType = 'customer' | 'contractor';
+export type ActFormType = 'KS2' | 'KS6a' | 'free';
+
+export type ResourceRequestStatus = 'new' | 'partial' | 'ordered' | 'received' | 'cancelled';
+export type OrderStatus = 'draft' | 'sent' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+export type OrderDeliveryStatus = 'pending' | 'partial' | 'delivered';
+export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid';
+
+export type StockOperationType = 'receipt' | 'issue' | 'transfer' | 'inventory';
+
+export type ApprovalRequestStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'cancelled';
+export type ApprovalActionType = 'approved' | 'rejected' | 'returned' | 'delegated';
+
+export type DMSPermission = 'view' | 'download' | 'edit' | 'delete' | 'manage';
+export type DMSActivityAction = 'created' | 'viewed' | 'downloaded' | 'updated' | 'renamed' | 'moved' | 'deleted' | 'restored' | 'permission_changed' | 'version_created';
+
+export type MarkupType = 'line' | 'arrow' | 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'polyline' | 'freehand' | 'text' | 'measurement';
