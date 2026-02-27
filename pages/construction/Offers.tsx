@@ -1440,7 +1440,7 @@ export const OffersPage: React.FC = () => {
     try {
       const offerUrl = offer.public_url
         ? window.location.origin + offer.public_url
-        : `${window.location.origin}/#/offer/${offer.public_token || offer.id.substring(0, 8)}`;
+        : `${window.location.origin}/#/offer/${offer.public_token || offer.id?.substring(0, 8) || ''}`;
 
       // Generate public token if not exists
       if (!offer.public_token) {
@@ -1924,7 +1924,7 @@ export const OffersPage: React.FC = () => {
       items: s.items.map(i => {
         if (i.id === itemId) {
           const updated = { ...i, ...updates };
-          if (calculationMode === 'markup' && updated.cost_price && updated.markup_percent !== undefined) {
+          if (calculationMode === 'markup' && updated.cost_price !== undefined && updated.cost_price > 0 && updated.markup_percent !== undefined) {
             updated.unit_price = updated.cost_price * (1 + (updated.markup_percent || 0) / 100);
           }
           updated.total_price = updated.quantity * updated.unit_price;
@@ -1943,7 +1943,6 @@ export const OffersPage: React.FC = () => {
 
   const addComponent = (sectionId: string, itemId: string, component: Omit<OfferComponent, 'id'>) => {
     const newComp: OfferComponent = { ...component, id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` };
-    updateItem(sectionId, itemId, {});
     setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
       ...s,
       items: s.items.map(i => i.id === itemId ? { ...i, components: [...(i.components || []), newComp] } : i)
