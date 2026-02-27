@@ -2236,8 +2236,9 @@ export const OffersPage: React.FC = () => {
             <th style="padding:8px;text-align:left;">Jedn.</th>
             <th style="padding:8px;text-align:right;">Ilość</th>
             <th style="padding:8px;text-align:right;">Cena jedn.</th>
-            ${previewTemplate === 'rabat' ? '<th style="padding:8px;text-align:right;">Rabat</th>' : ''}
+            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? '<th style="padding:8px;text-align:right;">Rabat</th>' : ''}
             <th style="padding:8px;text-align:right;">Wartość</th>
+            ${previewTemplate === 'full' ? '<th style="padding:8px;text-align:right;">VAT</th>' : ''}
           </tr></thead><tbody>`;
         sec.items.forEach((item, idx) => {
           const val = item.quantity * item.unit_price;
@@ -2248,8 +2249,9 @@ export const OffersPage: React.FC = () => {
             <td style="padding:6px 8px;color:#64748b;">${item.unit || 'szt.'}</td>
             <td style="padding:6px 8px;text-align:right;">${item.quantity}</td>
             <td style="padding:6px 8px;text-align:right;">${fmtCur(item.unit_price)}</td>
-            ${previewTemplate === 'rabat' ? `<td style="padding:6px 8px;text-align:right;color:#dc2626;">${item.discount_percent ? `-${item.discount_percent}%` : '-'}</td>` : ''}
+            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<td style="padding:6px 8px;text-align:right;color:#dc2626;">${item.discount_percent ? `-${item.discount_percent}%` : '-'}</td>` : ''}
             <td style="padding:6px 8px;text-align:right;font-weight:500;">${fmtCur(val - disc)}</td>
+            ${previewTemplate === 'full' ? `<td style="padding:6px 8px;text-align:right;color:#64748b;">${item.vat_rate ?? 23}%</td>` : ''}
           </tr>`;
         });
         html += '</tbody></table>';
@@ -3161,7 +3163,7 @@ export const OffersPage: React.FC = () => {
             {/* Items table */}
             {section.items.length > 0 && (
               <div>
-                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
+                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
                   {editMode && showBulkBar && <div></div>}
                   <div>Nazwa</div>
                   <div className="text-center">Jedn.</div>
@@ -3233,7 +3235,7 @@ export const OffersPage: React.FC = () => {
     return (
       <div key={item.id} className={`${item.is_optional ? 'bg-yellow-50' : ''}`}>
         {/* Main row */}
-        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
+        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
           {editMode && showBulkBar && (
             <div>
               <input
@@ -4465,8 +4467,9 @@ export const OffersPage: React.FC = () => {
                               {previewTemplate !== 'no_prices' && (
                                 <>
                                   <th className="py-2 pr-4 text-right">Cena jedn.</th>
-                                  {previewTemplate === 'rabat' && <th className="py-2 pr-4 text-right">Rabat</th>}
-                                  <th className="py-2 text-right">Wartość</th>
+                                  {(previewTemplate === 'rabat' || previewTemplate === 'full') && <th className="py-2 pr-4 text-right">Rabat</th>}
+                                  <th className="py-2 pr-4 text-right">Wartość</th>
+                                  {previewTemplate === 'full' && <th className="py-2 text-right">VAT</th>}
                                 </>
                               )}
                             </tr>
@@ -4488,12 +4491,15 @@ export const OffersPage: React.FC = () => {
                                   {previewTemplate !== 'no_prices' && (
                                     <>
                                       <td className="py-2 pr-4 text-right">{formatCurrency(item.unit_price)}</td>
-                                      {previewTemplate === 'rabat' && (
+                                      {(previewTemplate === 'rabat' || previewTemplate === 'full') && (
                                         <td className="py-2 pr-4 text-right text-red-600">
                                           {item.discount_percent ? `-${item.discount_percent}%` : '-'}
                                         </td>
                                       )}
-                                      <td className="py-2 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                      <td className="py-2 pr-4 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                      {previewTemplate === 'full' && (
+                                        <td className="py-2 text-right text-xs text-slate-500">{item.vat_rate ?? 23}%</td>
+                                      )}
                                     </>
                                   )}
                                 </tr>
