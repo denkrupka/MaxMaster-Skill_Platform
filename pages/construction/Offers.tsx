@@ -5,7 +5,9 @@ import {
   DollarSign, User, Building2, MoreVertical, ArrowLeft, Clock,
   Mail, Link as LinkIcon, RefreshCw, ChevronDown, ChevronRight,
   Save, X, GripVertical, Percent, AlertCircle, FileSpreadsheet,
-  FolderPlus, Package, Star, UserPlus, Briefcase, MapPin
+  FolderPlus, Package, Star, UserPlus, Briefcase, MapPin,
+  ToggleLeft, ToggleRight, ListChecks, ChevronUp, Wrench, Hammer,
+  Zap, FolderOpen, Printer, MessageSquare, Phone, Globe
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -78,15 +80,37 @@ const isValidEmail = (email: string): boolean => {
 // ============================================
 // TYPES
 // ============================================
+type CalculationMode = 'markup' | 'fixed';
+
+interface OfferComponent {
+  id: string;
+  type: 'labor' | 'material' | 'equipment';
+  name: string;
+  code: string;
+  unit: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
 interface LocalOfferItem extends Omit<OfferItem, 'total_price'> {
   total_price: number;
   isEditing?: boolean;
   isNew?: boolean;
+  isExpanded?: boolean;
+  components?: OfferComponent[];
+  markup_percent?: number;
+  cost_price?: number;
+  discount_percent?: number;
+  vat_rate?: number;
+  selected?: boolean;
 }
 
 interface LocalOfferSection extends OfferSection {
   items: LocalOfferItem[];
   isExpanded?: boolean;
+  children?: LocalOfferSection[];
+  parent_id?: string;
 }
 
 // ============================================
@@ -169,6 +193,37 @@ export const OffersPage: React.FC = () => {
   });
   const [sections, setSections] = useState<LocalOfferSection[]>([]);
   const [savingOffer, setSavingOffer] = useState(false);
+
+  // Calculation mode & dates
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>('markup');
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Bulk operations
+  const [showBulkBar, setShowBulkBar] = useState(false);
+  const [showBulkRabatModal, setShowBulkRabatModal] = useState(false);
+  const [bulkRabatValue, setBulkRabatValue] = useState(0);
+  const [bulkVatRate, setBulkVatRate] = useState(23);
+
+  // Preview & Send
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<'netto' | 'rabat' | 'no_prices' | 'full'>('netto');
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendRepresentativeId, setSendRepresentativeId] = useState('');
+  const [sendCoverLetter, setSendCoverLetter] = useState('');
+  const [sendChannels, setSendChannels] = useState<string[]>(['email']);
+  const [generatingLetter, setGeneratingLetter] = useState(false);
+
+  // Kartoteka search modals
+  const [showSearchLabourModal, setShowSearchLabourModal] = useState(false);
+  const [showSearchMaterialModal, setShowSearchMaterialModal] = useState(false);
+  const [showSearchEquipmentModal, setShowSearchEquipmentModal] = useState(false);
+  const [searchComponentTarget, setSearchComponentTarget] = useState<{ sectionId: string; itemId: string; type: 'labor' | 'material' | 'equipment' } | null>(null);
+  const [searchPositionTarget, setSearchPositionTarget] = useState<{ sectionId: string } | null>(null);
+  const [kartotekaSearchText, setKartotekaSearchText] = useState('');
+  const [kartotekaData, setKartotekaData] = useState<any[]>([]);
+  const [kartotekaOwnData, setKartotekaOwnData] = useState<any[]>([]);
+  const [kartotekaTab, setKartotekaTab] = useState<'system' | 'own'>('own');
+  const [kartotekaLoading, setKartotekaLoading] = useState(false);
 
   // Import from estimate state
   const [selectedEstimateId, setSelectedEstimateId] = useState('');
@@ -844,27 +899,47 @@ export const OffersPage: React.FC = () => {
           name: offer.name,
           project_id: offer.project_id || '',
           client_id: offer.client_id || '',
-          valid_until: offer.valid_until || '',
+          valid_until: offer.valid_until ? offer.valid_until.split('T')[0] : '',
           discount_percent: offer.discount_percent || 0,
           discount_amount: offer.discount_amount || 0,
           notes: offer.notes || '',
           internal_notes: offer.internal_notes || ''
         });
         setSelectedOffer(offer);
+        setIssueDate(offer.created_at ? offer.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+
+        // Parse print_settings for saved state
+        const ps = offer.print_settings || {};
+        if (ps.calculation_mode) setCalculationMode(ps.calculation_mode);
+        if (ps.issue_date) setIssueDate(ps.issue_date);
+
+        const mapItem = (i: OfferItem): LocalOfferItem => ({
+          ...i,
+          isEditing: false,
+          isNew: false,
+          isExpanded: false,
+          components: [],
+          markup_percent: 0,
+          cost_price: 0,
+          discount_percent: 0,
+          vat_rate: 23,
+          selected: false
+        });
 
         // Map sections with items
         const sectionsList: LocalOfferSection[] = (sectionsRes.data || []).map(s => ({
           ...s,
           isExpanded: true,
+          children: [],
           items: (itemsRes.data || [])
             .filter((i: OfferItem) => i.section_id === s.id)
-            .map((i: OfferItem) => ({ ...i, isEditing: false, isNew: false }))
+            .map(mapItem)
         }));
 
         // Items without section
         const unsectionedItems = (itemsRes.data || [])
           .filter((i: OfferItem) => !i.section_id)
-          .map((i: OfferItem) => ({ ...i, isEditing: false, isNew: false }));
+          .map(mapItem);
 
         if (unsectionedItems.length > 0) {
           sectionsList.unshift({
@@ -874,12 +949,23 @@ export const OffersPage: React.FC = () => {
             sort_order: -1,
             isExpanded: true,
             items: unsectionedItems,
+            children: [],
             created_at: '',
             updated_at: ''
           });
         }
 
         setSections(sectionsList);
+
+        // Load client contacts for send modal
+        if (offer.client_id) {
+          const { data: contacts } = await supabase
+            .from('contractor_contacts')
+            .select('*')
+            .eq('contractor_id', offer.client_id)
+            .order('is_primary', { ascending: false });
+          setOfferClientContacts(contacts || []);
+        }
       }
     } catch (err) {
       console.error('Error loading offer details:', err);
@@ -912,16 +998,58 @@ export const OffersPage: React.FC = () => {
   // ============================================
   // CALCULATIONS
   // ============================================
+  // Flatten all items from sections (including nested children)
+  const getAllItems = useCallback((secs: LocalOfferSection[]): LocalOfferItem[] => {
+    const items: LocalOfferItem[] = [];
+    const collect = (sections: LocalOfferSection[]) => {
+      for (const sec of sections) {
+        items.push(...sec.items);
+        if (sec.children) collect(sec.children);
+      }
+    };
+    collect(secs);
+    return items;
+  }, []);
+
   const calculateTotals = useCallback(() => {
-    const total = sections.reduce((sum, sec) =>
-      sum + sec.items.reduce((s, i) => s + (i.quantity * i.unit_price), 0), 0);
-    const discountPct = total * (offerData.discount_percent / 100);
-    const discountFixed = offerData.discount_amount;
-    const final = total - discountPct - discountFixed;
-    return { total, discountPct, discountFixed, final: Math.max(0, final) };
-  }, [sections, offerData.discount_percent, offerData.discount_amount]);
+    const allItems = getAllItems(sections);
+    const totalNetto = allItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+    const totalCost = allItems.reduce((sum, i) => sum + (i.cost_price || 0) * i.quantity, 0);
+    const totalDiscount = allItems.reduce((sum, i) => {
+      const itemTotal = i.quantity * i.unit_price;
+      return sum + itemTotal * ((i.discount_percent || 0) / 100);
+    }, 0);
+    const nettoAfterDiscount = totalNetto - totalDiscount;
+    const profit = nettoAfterDiscount - totalCost;
+    const discountPercent = totalNetto > 0 ? (totalDiscount / totalNetto) * 100 : 0;
+    // VAT calculation (per-item rates or default 23%)
+    const totalVat = allItems.reduce((sum, i) => {
+      const itemTotal = i.quantity * i.unit_price;
+      const itemDiscount = itemTotal * ((i.discount_percent || 0) / 100);
+      const netItem = itemTotal - itemDiscount;
+      return sum + netItem * ((i.vat_rate ?? 23) / 100);
+    }, 0);
+    const totalBrutto = nettoAfterDiscount + totalVat;
+    return {
+      total: totalNetto,
+      totalCost,
+      totalDiscount,
+      discountPercent,
+      nettoAfterDiscount,
+      profit,
+      totalVat,
+      totalBrutto,
+      discountPct: totalDiscount,
+      discountFixed: offerData.discount_amount,
+      final: Math.max(0, nettoAfterDiscount)
+    };
+  }, [sections, offerData.discount_amount, getAllItems]);
 
   const totals = useMemo(() => calculateTotals(), [calculateTotals]);
+
+  const selectedItemsCount = useMemo(() => {
+    return getAllItems(sections).filter(i => i.selected).length;
+  }, [sections, getAllItems]);
 
   // ============================================
   // ACTIONS - OFFER CRUD
@@ -1030,7 +1158,11 @@ export const OffersPage: React.FC = () => {
           notes: notesLines.join('\n') || null,
           internal_notes: internalNotesLines.join('\n') || null,
           status: 'draft',
-          created_by_id: currentUser.id
+          created_by_id: currentUser.id,
+          print_settings: {
+            calculation_mode: calculationMode,
+            issue_date: issueDate
+          }
         })
         .select()
         .single();
@@ -1130,6 +1262,12 @@ export const OffersPage: React.FC = () => {
     if (!currentUser || !selectedOffer) return;
     setSavingOffer(true);
     try {
+      // Calculate final amount
+      const allItemsFlat = getAllItems(sections);
+      const totalNetto = allItemsFlat.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+      const totalDisc = allItemsFlat.reduce((sum, i) => sum + (i.quantity * i.unit_price) * ((i.discount_percent || 0) / 100), 0);
+      const finalAmount = totalNetto - totalDisc;
+
       // Update offer
       await supabase
         .from('offers')
@@ -1140,8 +1278,14 @@ export const OffersPage: React.FC = () => {
           valid_until: offerData.valid_until || null,
           discount_percent: offerData.discount_percent,
           discount_amount: offerData.discount_amount,
+          total_amount: totalNetto,
+          final_amount: finalAmount,
           notes: offerData.notes,
-          internal_notes: offerData.internal_notes
+          internal_notes: offerData.internal_notes,
+          print_settings: {
+            calculation_mode: calculationMode,
+            issue_date: issueDate
+          }
         })
         .eq('id', selectedOffer.id);
 
@@ -1149,38 +1293,48 @@ export const OffersPage: React.FC = () => {
       await supabase.from('offer_sections').delete().eq('offer_id', selectedOffer.id);
       await supabase.from('offer_items').delete().eq('offer_id', selectedOffer.id);
 
-      // Re-create sections and items (filter out items with empty names)
-      for (const section of sections.filter(s => s.id !== 'unsectioned')) {
-        const validItems = section.items.filter(item => item.name && item.name.trim());
-        if (validItems.length === 0 && !section.name) continue;
+      // Helper to save sections recursively (including children)
+      const saveSectionsRecursive = async (secs: LocalOfferSection[], parentSectionId?: string) => {
+        for (const section of secs.filter(s => s.id !== 'unsectioned')) {
+          const validItems = section.items.filter(item => item.name && item.name.trim());
+          if (validItems.length === 0 && !section.name && (!section.children || section.children.length === 0)) continue;
 
-        const { data: newSection } = await supabase
-          .from('offer_sections')
-          .insert({
-            offer_id: selectedOffer.id,
-            name: section.name || 'Sekcja',
-            description: section.description,
-            sort_order: section.sort_order
-          })
-          .select()
-          .single();
-
-        if (newSection && validItems.length > 0) {
-          await supabase
-            .from('offer_items')
-            .insert(validItems.map(item => ({
+          const { data: newSection } = await supabase
+            .from('offer_sections')
+            .insert({
               offer_id: selectedOffer.id,
-              section_id: newSection.id,
-              name: item.name.trim(),
-              description: item.description || null,
-              quantity: item.quantity || 1,
-              unit_price: item.unit_price || 0,
-              sort_order: item.sort_order,
-              is_optional: item.is_optional || false,
-              source_resource_id: item.source_resource_id || null
-            })));
+              name: section.name || 'Sekcja',
+              description: section.description,
+              sort_order: section.sort_order
+            })
+            .select()
+            .single();
+
+          if (newSection && validItems.length > 0) {
+            await supabase
+              .from('offer_items')
+              .insert(validItems.map(item => ({
+                offer_id: selectedOffer.id,
+                section_id: newSection.id,
+                name: item.name.trim(),
+                description: item.description || null,
+                quantity: item.quantity || 1,
+                unit_price: item.unit_price || 0,
+                sort_order: item.sort_order,
+                is_optional: item.is_optional || false,
+                source_resource_id: item.source_resource_id || null
+              })));
+          }
+
+          // Save children recursively
+          if (section.children && section.children.length > 0) {
+            await saveSectionsRecursive(section.children, newSection?.id);
+          }
         }
-      }
+      };
+
+      // Save all sections recursively (including nested children)
+      await saveSectionsRecursive(sections);
 
       // Unsectioned items
       const unsectioned = sections.find(s => s.id === 'unsectioned');
@@ -1592,28 +1746,60 @@ export const OffersPage: React.FC = () => {
   // ============================================
   // SECTION & ITEM MANAGEMENT
   // ============================================
-  const addSection = () => {
+  // Deep update helper for nested sections
+  const updateSectionsDeep = (secs: LocalOfferSection[], sectionId: string, updater: (s: LocalOfferSection) => LocalOfferSection | null): LocalOfferSection[] => {
+    return secs.reduce<LocalOfferSection[]>((acc, s) => {
+      if (s.id === sectionId) {
+        const result = updater(s);
+        if (result) acc.push(result);
+      } else {
+        const updatedChildren = s.children ? updateSectionsDeep(s.children, sectionId, updater) : s.children;
+        acc.push({ ...s, children: updatedChildren });
+      }
+      return acc;
+    }, []);
+  };
+
+  const addSection = (afterSectionId?: string, parentId?: string) => {
     const newSection: LocalOfferSection = {
       id: `new-section-${Date.now()}`,
       offer_id: '',
       name: 'Nowa sekcja',
       description: '',
-      sort_order: sections.length,
+      sort_order: 0,
       created_at: '',
       updated_at: '',
       isExpanded: true,
-      items: []
+      items: [],
+      children: [],
+      parent_id: parentId
     };
-    setSections([...sections, newSection]);
+
+    if (parentId) {
+      // Add as child of parent section
+      setSections(prev => updateSectionsDeep(prev, parentId, s => ({
+        ...s,
+        children: [...(s.children || []), newSection]
+      })));
+    } else if (afterSectionId) {
+      setSections(prev => {
+        const idx = prev.findIndex(s => s.id === afterSectionId);
+        const updated = [...prev];
+        updated.splice(idx + 1, 0, newSection);
+        return updated;
+      });
+    } else {
+      setSections(prev => [...prev, newSection]);
+    }
   };
 
   const updateSection = (sectionId: string, updates: Partial<LocalOfferSection>) => {
-    setSections(sections.map(s => s.id === sectionId ? { ...s, ...updates } : s));
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({ ...s, ...updates })));
   };
 
   const deleteSection = (sectionId: string) => {
     if (!confirm('Czy na pewno chcesz usunąć tę sekcję wraz z pozycjami?')) return;
-    setSections(sections.filter(s => s.id !== sectionId));
+    setSections(prev => updateSectionsDeep(prev, sectionId, () => null));
   };
 
   const addItem = (sectionId: string) => {
@@ -1631,43 +1817,119 @@ export const OffersPage: React.FC = () => {
       created_at: '',
       updated_at: '',
       isEditing: true,
-      isNew: true
+      isNew: true,
+      isExpanded: false,
+      components: [],
+      markup_percent: 0,
+      cost_price: 0,
+      discount_percent: 0,
+      vat_rate: 23,
+      selected: false
     };
-    setSections(sections.map(s => {
-      if (s.id === sectionId) {
-        return { ...s, items: [...s.items, newItem] };
-      }
-      return s;
-    }));
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s, items: [...s.items, newItem]
+    })));
   };
 
   const updateItem = (sectionId: string, itemId: string, updates: Partial<LocalOfferItem>) => {
-    setSections(sections.map(s => {
-      if (s.id === sectionId) {
-        return {
-          ...s,
-          items: s.items.map(i => {
-            if (i.id === itemId) {
-              const updated = { ...i, ...updates };
-              updated.total_price = updated.quantity * updated.unit_price;
-              return updated;
-            }
-            return i;
-          })
-        };
-      }
-      return s;
-    }));
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s,
+      items: s.items.map(i => {
+        if (i.id === itemId) {
+          const updated = { ...i, ...updates };
+          if (calculationMode === 'markup' && updated.cost_price && updated.markup_percent !== undefined) {
+            updated.unit_price = updated.cost_price * (1 + (updated.markup_percent || 0) / 100);
+          }
+          updated.total_price = updated.quantity * updated.unit_price;
+          return updated;
+        }
+        return i;
+      })
+    })));
   };
 
   const deleteItem = (sectionId: string, itemId: string) => {
-    setSections(sections.map(s => {
-      if (s.id === sectionId) {
-        return { ...s, items: s.items.filter(i => i.id !== itemId) };
-      }
-      return s;
-    }));
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s, items: s.items.filter(i => i.id !== itemId)
+    })));
   };
+
+  const addComponent = (sectionId: string, itemId: string, component: Omit<OfferComponent, 'id'>) => {
+    const newComp: OfferComponent = { ...component, id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` };
+    updateItem(sectionId, itemId, {});
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s,
+      items: s.items.map(i => i.id === itemId ? { ...i, components: [...(i.components || []), newComp] } : i)
+    })));
+  };
+
+  const deleteComponent = (sectionId: string, itemId: string, componentId: string) => {
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s,
+      items: s.items.map(i => i.id === itemId ? { ...i, components: (i.components || []).filter(c => c.id !== componentId) } : i)
+    })));
+  };
+
+  const toggleSelectAll = (selected: boolean) => {
+    const updateItems = (secs: LocalOfferSection[]): LocalOfferSection[] =>
+      secs.map(s => ({
+        ...s,
+        items: s.items.map(i => ({ ...i, selected })),
+        children: s.children ? updateItems(s.children) : s.children
+      }));
+    setSections(prev => updateItems(prev));
+  };
+
+  const applyBulkDiscount = () => {
+    const updateItems = (secs: LocalOfferSection[]): LocalOfferSection[] =>
+      secs.map(s => ({
+        ...s,
+        items: s.items.map(i => i.selected ? { ...i, discount_percent: bulkRabatValue } : i),
+        children: s.children ? updateItems(s.children) : s.children
+      }));
+    setSections(prev => updateItems(prev));
+    setShowBulkRabatModal(false);
+    setShowBulkBar(false);
+  };
+
+  const applyBulkVat = (rate: number) => {
+    const updateItems = (secs: LocalOfferSection[]): LocalOfferSection[] =>
+      secs.map(s => ({
+        ...s,
+        items: s.items.map(i => i.selected ? { ...i, vat_rate: rate } : i),
+        children: s.children ? updateItems(s.children) : s.children
+      }));
+    setSections(prev => updateItems(prev));
+  };
+
+  // Load kartoteka data when search modal opens
+  useEffect(() => {
+    if (!showSearchLabourModal && !showSearchMaterialModal && !showSearchEquipmentModal) return;
+    if (!currentUser) return;
+    const loadKartoteka = async () => {
+      setKartotekaLoading(true);
+      try {
+        const tableName = showSearchLabourModal ? 'kosztorys_own_labours' :
+          showSearchMaterialModal ? 'kosztorys_materials' : 'kosztorys_equipment';
+        const systemTableName = showSearchLabourModal ? 'kosztorys_system_labours' :
+          showSearchMaterialModal ? 'kosztorys_materials' : 'kosztorys_equipment';
+
+        const [ownRes, systemRes] = await Promise.all([
+          supabase.from(tableName).select('*').eq('company_id', currentUser.company_id).order('name'),
+          showSearchLabourModal
+            ? supabase.from(systemTableName).select('*').eq('is_active', true).order('name').limit(500)
+            : Promise.resolve({ data: [] })
+        ]);
+        setKartotekaOwnData(ownRes.data || []);
+        setKartotekaData((systemRes as any).data || []);
+      } catch (err) {
+        console.error('Error loading kartoteka:', err);
+      } finally {
+        setKartotekaLoading(false);
+      }
+    };
+    loadKartoteka();
+  }, [showSearchLabourModal, showSearchMaterialModal, showSearchEquipmentModal, currentUser]);
 
   const resetOfferForm = () => {
     setOfferData({
@@ -2518,13 +2780,356 @@ export const OffersPage: React.FC = () => {
   );
 
   // ============================================
+  // RENDER: SECTION (recursive for nested subsections)
+  // ============================================
+  const renderSection = (section: LocalOfferSection, depth: number): React.ReactNode => {
+    const sectionTotal = section.items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
+      + (section.children || []).reduce((s, child) => {
+        return s + child.items.reduce((si, i) => si + i.quantity * i.unit_price, 0);
+      }, 0);
+
+    return (
+      <div key={section.id} className={`border border-slate-200 rounded-lg overflow-hidden ${depth > 0 ? 'ml-6 mt-2' : ''}`}>
+        {/* Section header */}
+        <div className={`flex items-center gap-2 p-3 ${depth === 0 ? 'bg-slate-100' : 'bg-slate-50'} border-b border-slate-200`}>
+          <button
+            onClick={() => updateSection(section.id, { isExpanded: !section.isExpanded })}
+            className="p-1 hover:bg-slate-200 rounded"
+          >
+            {section.isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          {editMode ? (
+            <input
+              type="text"
+              value={section.name}
+              onChange={e => updateSection(section.id, { name: e.target.value })}
+              className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm font-medium bg-white"
+            />
+          ) : (
+            <span className="flex-1 font-medium text-slate-900">{section.name}</span>
+          )}
+          <span className="text-sm text-slate-500 mr-2">
+            {formatCurrency(sectionTotal)}
+          </span>
+          {editMode && (
+            <button
+              onClick={() => deleteSection(section.id)}
+              className="p-1 hover:bg-red-100 rounded text-red-600"
+              title="Usuń sekcję"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {section.isExpanded && (
+          <div>
+            {/* Items table */}
+            {section.items.length > 0 && (
+              <div>
+                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_80px_100px_100px_100px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_80px_100px_80px_100px_100px_60px_32px]' : 'grid-cols-[1fr_80px_100px_100px_60px_32px]') : 'grid-cols-[1fr_80px_100px_100px_60px]'}`}>
+                  {editMode && showBulkBar && <div></div>}
+                  <div>Nazwa</div>
+                  <div className="text-right">Ilość</div>
+                  {calculationMode === 'markup' && editMode && <div className="text-right">Koszt</div>}
+                  {calculationMode === 'markup' && editMode && <div className="text-right">Narzut %</div>}
+                  <div className="text-right">Cena jedn.</div>
+                  <div className="text-right">Wartość</div>
+                  <div className="text-right">VAT</div>
+                  {editMode && <div></div>}
+                </div>
+                {section.items.map(item => renderItem(section.id, item))}
+              </div>
+            )}
+
+            {/* Add position divider */}
+            {editMode && (
+              <div className="flex items-center gap-3 px-4 py-2">
+                <div className="flex-1 border-t border-dashed border-slate-200" />
+                <button
+                  onClick={() => addItem(section.id)}
+                  className="flex items-center gap-1 px-3 py-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full text-xs border border-dashed border-slate-300 hover:border-blue-300 transition"
+                >
+                  <Plus className="w-3 h-3" />
+                  Dodaj pozycję
+                </button>
+                <div className="flex-1 border-t border-dashed border-slate-200" />
+              </div>
+            )}
+
+            {/* Child subsections */}
+            {(section.children || []).map(child => renderSection(child, depth + 1))}
+
+            {/* Add subsection divider (inside section) */}
+            {editMode && (
+              <div className="flex items-center gap-3 px-4 py-2 ml-4">
+                <div className="flex-1 border-t border-dashed border-slate-200" />
+                <button
+                  onClick={() => addSection(undefined, section.id)}
+                  className="flex items-center gap-1 px-3 py-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full text-xs border border-dashed border-slate-200 hover:border-blue-300 transition"
+                >
+                  <FolderPlus className="w-3 h-3" />
+                  Dodaj podsekcję
+                </button>
+                <div className="flex-1 border-t border-dashed border-slate-200" />
+              </div>
+            )}
+
+            {section.items.length === 0 && (!section.children || section.children.length === 0) && !editMode && (
+              <div className="p-4 text-center text-slate-500 text-sm">
+                Brak pozycji w tej sekcji
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ============================================
+  // RENDER: ITEM (position row with expandable components)
+  // ============================================
+  const renderItem = (sectionId: string, item: LocalOfferItem): React.ReactNode => {
+    const itemTotal = item.quantity * item.unit_price;
+    const itemDiscount = itemTotal * ((item.discount_percent || 0) / 100);
+    const itemVat = (itemTotal - itemDiscount) * ((item.vat_rate ?? 23) / 100);
+
+    return (
+      <div key={item.id} className={`${item.is_optional ? 'bg-yellow-50' : ''}`}>
+        {/* Main row */}
+        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_80px_100px_100px_100px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_80px_100px_80px_100px_100px_60px_32px]' : 'grid-cols-[1fr_80px_100px_100px_60px_32px]') : 'grid-cols-[1fr_80px_100px_100px_60px]'}`}>
+          {editMode && showBulkBar && (
+            <div>
+              <input
+                type="checkbox"
+                checked={item.selected || false}
+                onChange={e => updateItem(sectionId, item.id, { selected: e.target.checked })}
+                className="w-4 h-4 text-blue-600 rounded"
+              />
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            {editMode && (
+              <button
+                onClick={() => updateItem(sectionId, item.id, { isExpanded: !item.isExpanded })}
+                className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+              >
+                {item.isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              </button>
+            )}
+            {editMode ? (
+              <div className="flex-1 flex items-center gap-1">
+                <input
+                  type="text"
+                  value={item.name}
+                  onChange={e => updateItem(sectionId, item.id, { name: e.target.value })}
+                  placeholder="Nazwa pozycji..."
+                  className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm"
+                />
+                <button
+                  onClick={() => {
+                    setSearchPositionTarget({ sectionId });
+                    setSearchComponentTarget({ sectionId, itemId: item.id, type: 'labor' });
+                    setKartotekaSearchText('');
+                    setShowSearchLabourModal(true);
+                  }}
+                  className="p-1 hover:bg-blue-50 rounded text-blue-500 shrink-0"
+                  title="Katalog robocizny"
+                >
+                  <FolderOpen className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="font-medium text-slate-900">{item.name}</p>
+                {item.description && <p className="text-xs text-slate-500">{item.description}</p>}
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            {editMode ? (
+              <input
+                type="number"
+                value={item.quantity}
+                onChange={e => updateItem(sectionId, item.id, { quantity: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-slate-200 rounded text-right text-sm"
+                step="0.01"
+              />
+            ) : (
+              <span>{item.quantity}</span>
+            )}
+          </div>
+          {calculationMode === 'markup' && editMode && (
+            <div className="text-right">
+              <input
+                type="number"
+                value={item.cost_price || 0}
+                onChange={e => updateItem(sectionId, item.id, { cost_price: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-slate-200 rounded text-right text-sm"
+                step="0.01"
+              />
+            </div>
+          )}
+          {calculationMode === 'markup' && editMode && (
+            <div className="text-right">
+              <input
+                type="number"
+                value={item.markup_percent || 0}
+                onChange={e => updateItem(sectionId, item.id, { markup_percent: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-slate-200 rounded text-right text-sm"
+                step="1"
+              />
+            </div>
+          )}
+          <div className="text-right">
+            {editMode && calculationMode === 'fixed' ? (
+              <input
+                type="number"
+                value={item.unit_price}
+                onChange={e => updateItem(sectionId, item.id, { unit_price: parseFloat(e.target.value) || 0 })}
+                className="w-full px-2 py-1 border border-slate-200 rounded text-right text-sm"
+                step="0.01"
+              />
+            ) : (
+              <span className={editMode ? 'text-slate-500' : ''}>{formatCurrency(item.unit_price)}</span>
+            )}
+          </div>
+          <div className="text-right font-medium text-slate-900">
+            {formatCurrency(itemTotal)}
+          </div>
+          <div className="text-right text-xs text-slate-500">
+            {item.vat_rate ?? 23}%
+          </div>
+          {editMode && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => deleteItem(sectionId, item.id)}
+                className="p-1 hover:bg-red-50 rounded text-red-500"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Expanded: components (Robocizna/Materiał/Sprzęt) + discount */}
+        {item.isExpanded && editMode && (
+          <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 space-y-3">
+            {/* Discount & VAT for this item */}
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Rabat:</span>
+                <input
+                  type="number"
+                  value={item.discount_percent || 0}
+                  onChange={e => updateItem(sectionId, item.id, { discount_percent: parseFloat(e.target.value) || 0 })}
+                  className="w-20 px-2 py-1 border border-slate-200 rounded text-right text-sm"
+                  step="1"
+                  min="0"
+                  max="100"
+                />
+                <span className="text-slate-400">%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">VAT:</span>
+                <select
+                  value={item.vat_rate ?? 23}
+                  onChange={e => updateItem(sectionId, item.id, { vat_rate: parseInt(e.target.value) })}
+                  className="px-2 py-1 border border-slate-200 rounded text-sm"
+                >
+                  <option value={23}>23%</option>
+                  <option value={8}>8%</option>
+                  <option value={5}>5%</option>
+                  <option value={0}>0%</option>
+                </select>
+              </div>
+              {item.discount_percent ? (
+                <span className="text-red-500 text-xs">-{formatCurrency(itemDiscount)}</span>
+              ) : null}
+            </div>
+
+            {/* Components list */}
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Składniki</div>
+              {(item.components || []).length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Brak składników</p>
+              ) : (
+                <div className="space-y-1">
+                  {(item.components || []).map(comp => (
+                    <div key={comp.id} className="flex items-center gap-3 text-sm bg-white rounded px-3 py-1.5 border border-slate-100">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase ${
+                        comp.type === 'labor' ? 'bg-purple-100 text-purple-700' :
+                        comp.type === 'material' ? 'bg-green-100 text-green-700' :
+                        'bg-orange-100 text-orange-700'
+                      }`}>
+                        {comp.type === 'labor' ? 'R' : comp.type === 'material' ? 'M' : 'S'}
+                      </span>
+                      <span className="text-xs text-slate-400">{comp.code}</span>
+                      <span className="flex-1 text-slate-700">{comp.name}</span>
+                      <span className="text-xs text-slate-500">{comp.quantity} {comp.unit}</span>
+                      <span className="text-sm font-medium">{formatCurrency(comp.unit_price)}</span>
+                      <button
+                        onClick={() => deleteComponent(sectionId, item.id, comp.id)}
+                        className="p-0.5 hover:bg-red-50 rounded text-red-400"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Add component buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'labor' });
+                  setKartotekaSearchText('');
+                  setShowSearchLabourModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100"
+              >
+                <Hammer className="w-3 h-3" />
+                Robocizna
+              </button>
+              <button
+                onClick={() => {
+                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'material' });
+                  setKartotekaSearchText('');
+                  setShowSearchMaterialModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-xs hover:bg-green-100"
+              >
+                <Package className="w-3 h-3" />
+                Materiał
+              </button>
+              <button
+                onClick={() => {
+                  setSearchComponentTarget({ sectionId, itemId: item.id, type: 'equipment' });
+                  setKartotekaSearchText('');
+                  setShowSearchEquipmentModal(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-600 border border-orange-200 rounded text-xs hover:bg-orange-100"
+              >
+                <Wrench className="w-3 h-3" />
+                Sprzęt
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ============================================
   // RENDER: OFFER DETAIL VIEW
   // ============================================
   const renderOfferDetail = () => {
     if (!selectedOffer) return null;
 
     return (
-      <div className="p-6">
+      <div className="p-6 pb-20">
         <button
           onClick={() => { setSelectedOffer(null); setEditMode(false); }}
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4"
@@ -2617,7 +3222,7 @@ export const OffersPage: React.FC = () => {
           </div>
 
           {/* Info cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 border-b border-slate-200">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6 border-b border-slate-200">
             <div className="p-4 bg-slate-50 rounded-lg">
               <p className="text-sm text-slate-500 mb-1">Klient</p>
               {editMode ? (
@@ -2653,7 +3258,20 @@ export const OffersPage: React.FC = () => {
               )}
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
-              <p className="text-sm text-slate-500 mb-1">Ważność</p>
+              <p className="text-sm text-slate-500 mb-1">Data wystawienia</p>
+              {editMode ? (
+                <input
+                  type="date"
+                  value={issueDate}
+                  onChange={e => setIssueDate(e.target.value)}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                />
+              ) : (
+                <p className="font-medium text-slate-900">{formatDate(issueDate)}</p>
+              )}
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <p className="text-sm text-slate-500 mb-1">Ważna do</p>
               {editMode ? (
                 <input
                   type="date"
@@ -2666,10 +3284,74 @@ export const OffersPage: React.FC = () => {
               )}
             </div>
             <div className="p-4 bg-slate-50 rounded-lg">
-              <p className="text-sm text-slate-500 mb-1">Wyświetlenia</p>
-              <p className="font-medium text-slate-900">{selectedOffer.viewed_count}</p>
+              <p className="text-sm text-slate-500 mb-1">Tryb kalkulacji</p>
+              {editMode ? (
+                <button
+                  onClick={() => setCalculationMode(prev => prev === 'markup' ? 'fixed' : 'markup')}
+                  className="flex items-center gap-2 w-full"
+                >
+                  {calculationMode === 'markup' ? (
+                    <ToggleLeft className="w-6 h-6 text-blue-600" />
+                  ) : (
+                    <ToggleRight className="w-6 h-6 text-green-600" />
+                  )}
+                  <span className="text-sm font-medium text-slate-900">
+                    {calculationMode === 'markup' ? 'Narzut' : 'Wartość stała'}
+                  </span>
+                </button>
+              ) : (
+                <p className="font-medium text-slate-900">
+                  {calculationMode === 'markup' ? 'Narzut' : 'Wartość stała'}
+                </p>
+              )}
             </div>
           </div>
+
+          {/* Bulk operations bar */}
+          {editMode && showBulkBar && (
+            <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedItemsCount > 0 && selectedItemsCount === getAllItems(sections).length}
+                  onChange={e => toggleSelectAll(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <span className="text-sm text-amber-900 font-medium">
+                  Zaznaczono: {selectedItemsCount} pozycji
+                </span>
+              </div>
+              <div className="flex gap-2 ml-auto">
+                <button
+                  onClick={() => setShowBulkRabatModal(true)}
+                  disabled={selectedItemsCount === 0}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm disabled:opacity-50"
+                >
+                  <Percent className="w-4 h-4" />
+                  Rabat
+                </button>
+                <select
+                  onChange={e => { if (e.target.value) applyBulkVat(Number(e.target.value)); }}
+                  disabled={selectedItemsCount === 0}
+                  className="px-3 py-1.5 border border-amber-300 rounded-lg text-sm bg-white disabled:opacity-50"
+                  defaultValue=""
+                >
+                  <option value="" disabled>VAT</option>
+                  <option value="23">23%</option>
+                  <option value="8">8%</option>
+                  <option value="5">5%</option>
+                  <option value="0">0%</option>
+                </select>
+                <button
+                  onClick={() => { setShowBulkBar(false); toggleSelectAll(false); }}
+                  className="flex items-center gap-1 px-3 py-1.5 border border-amber-300 rounded-lg hover:bg-amber-100 text-sm text-amber-900"
+                >
+                  <X className="w-4 h-4" />
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Sections & Items */}
           <div className="p-6 border-b border-slate-200">
@@ -2677,149 +3359,59 @@ export const OffersPage: React.FC = () => {
               <h2 className="text-lg font-semibold text-slate-900">Pozycje oferty</h2>
               <div className="flex gap-2">
                 {editMode && (
-                  <button
-                    onClick={addSection}
-                    className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
-                  >
-                    <FolderPlus className="w-4 h-4" />
-                    Dodaj sekcję
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowBulkBar(!showBulkBar)}
+                      className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm ${showBulkBar ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      <ListChecks className="w-4 h-4" />
+                      Zmiany masowe
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={exportToCSV}
-                  className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
-                >
-                  <Download className="w-4 h-4" />
-                  Eksport CSV
-                </button>
               </div>
             </div>
 
-            {sections.length === 0 ? (
+            {sections.length === 0 && !editMode ? (
               <div className="text-center py-8 text-slate-500">
                 <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                 <p>Brak pozycji w ofercie</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {sections.map(section => (
-                  <div key={section.id} className="border border-slate-200 rounded-lg overflow-hidden">
-                    <div className="flex items-center gap-2 p-3 bg-slate-50 border-b border-slate-200">
-                      <button
-                        onClick={() => updateSection(section.id, { isExpanded: !section.isExpanded })}
-                        className="p-1 hover:bg-slate-200 rounded"
-                      >
-                        {section.isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </button>
-                      {editMode ? (
-                        <input
-                          type="text"
-                          value={section.name}
-                          onChange={e => updateSection(section.id, { name: e.target.value })}
-                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm font-medium"
-                        />
-                      ) : (
-                        <span className="flex-1 font-medium text-slate-900">{section.name}</span>
-                      )}
-                      <span className="text-sm text-slate-500 mr-2">
-                        {formatCurrency(section.items.reduce((s, i) => s + i.quantity * i.unit_price, 0))}
-                      </span>
-                      {editMode && (
-                        <>
-                          <button
-                            onClick={() => addItem(section.id)}
-                            className="p-1 hover:bg-slate-200 rounded text-blue-600"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => deleteSection(section.id)}
-                            className="p-1 hover:bg-red-100 rounded text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
+              <div className="space-y-0">
+                {/* Initial add-section divider (before any sections) */}
+                {editMode && sections.length === 0 && (
+                  <div className="flex items-center gap-3 py-3">
+                    <div className="flex-1 border-t border-dashed border-slate-300" />
+                    <button
+                      onClick={() => addSection()}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-full text-sm hover:bg-blue-100 transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Dodaj sekcję
+                    </button>
+                    <div className="flex-1 border-t border-dashed border-slate-300" />
+                  </div>
+                )}
 
-                    {section.isExpanded && (
-                      <div className="divide-y divide-slate-100">
-                        {section.items.length === 0 ? (
-                          <div className="p-4 text-center text-slate-500 text-sm">
-                            Brak pozycji w tej sekcji
-                          </div>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50">
-                              <div className="col-span-5">Nazwa</div>
-                              <div className="col-span-2 text-right">Ilość</div>
-                              <div className="col-span-2 text-right">Cena jedn.</div>
-                              <div className="col-span-2 text-right">Wartość</div>
-                              {editMode && <div className="col-span-1"></div>}
-                            </div>
-                            {section.items.map(item => (
-                              <div key={item.id} className={`grid grid-cols-12 gap-2 px-4 py-2 items-center text-sm ${item.is_optional ? 'bg-yellow-50' : ''}`}>
-                                <div className="col-span-5">
-                                  {editMode ? (
-                                    <input
-                                      type="text"
-                                      value={item.name}
-                                      onChange={e => updateItem(section.id, item.id, { name: e.target.value })}
-                                      className="w-full px-2 py-1 border border-slate-200 rounded"
-                                    />
-                                  ) : (
-                                    <div>
-                                      <p className="font-medium text-slate-900">{item.name}</p>
-                                      {item.description && <p className="text-xs text-slate-500">{item.description}</p>}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="col-span-2 text-right">
-                                  {editMode ? (
-                                    <input
-                                      type="number"
-                                      value={item.quantity}
-                                      onChange={e => updateItem(section.id, item.id, { quantity: parseFloat(e.target.value) || 0 })}
-                                      className="w-full px-2 py-1 border border-slate-200 rounded text-right"
-                                      step="0.01"
-                                    />
-                                  ) : (
-                                    <span>{item.quantity}</span>
-                                  )}
-                                </div>
-                                <div className="col-span-2 text-right">
-                                  {editMode ? (
-                                    <input
-                                      type="number"
-                                      value={item.unit_price}
-                                      onChange={e => updateItem(section.id, item.id, { unit_price: parseFloat(e.target.value) || 0 })}
-                                      className="w-full px-2 py-1 border border-slate-200 rounded text-right"
-                                      step="0.01"
-                                    />
-                                  ) : (
-                                    <span>{formatCurrency(item.unit_price)}</span>
-                                  )}
-                                </div>
-                                <div className="col-span-2 text-right font-medium text-slate-900">
-                                  {formatCurrency(item.quantity * item.unit_price)}
-                                </div>
-                                {editMode && (
-                                  <div className="col-span-1 flex justify-end">
-                                    <button
-                                      onClick={() => deleteItem(section.id, item.id)}
-                                      className="p-1 hover:bg-red-50 rounded text-red-600"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </>
-                        )}
+                {sections.map((section, sIdx) => (
+                  <React.Fragment key={section.id}>
+                    {renderSection(section, 0)}
+                    {/* Divider after each section */}
+                    {editMode && (
+                      <div className="flex items-center gap-3 py-3">
+                        <div className="flex-1 border-t border-dashed border-slate-300" />
+                        <button
+                          onClick={() => addSection(section.id)}
+                          className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-full text-sm hover:bg-blue-100 transition"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Dodaj sekcję
+                        </button>
+                        <div className="flex-1 border-t border-dashed border-slate-300" />
                       </div>
                     )}
-                  </div>
+                  </React.Fragment>
                 ))}
               </div>
             )}
@@ -2828,57 +3420,40 @@ export const OffersPage: React.FC = () => {
           {/* Financial summary */}
           <div className="p-6 border-b border-slate-200">
             <h2 className="text-lg font-semibold text-slate-900 mb-4">Podsumowanie finansowe</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                {editMode && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-slate-500 mb-1">Rabat procentowy (%)</label>
-                      <input
-                        type="number"
-                        value={offerData.discount_percent}
-                        onChange={e => setOfferData({ ...offerData, discount_percent: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-slate-500 mb-1">Rabat kwotowy (PLN)</label>
-                      <input
-                        type="number"
-                        value={offerData.discount_amount}
-                        onChange={e => setOfferData({ ...offerData, discount_amount: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg"
-                        min="0"
-                        step="0.01"
-                      />
-                    </div>
-                  </div>
-                )}
+            <div className="bg-slate-50 rounded-lg p-5 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-slate-600">Suma pozycji netto:</span>
+                <span className="font-medium">{formatCurrency(totals.total)}</span>
               </div>
-              <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Suma pozycji:</span>
-                  <span className="font-medium">{formatCurrency(totals.total)}</span>
+              {totals.totalCost > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span className="text-sm">Koszt (wewnętrzny):</span>
+                  <span className="text-sm">{formatCurrency(totals.totalCost)}</span>
                 </div>
-                {(editMode ? offerData.discount_percent : selectedOffer.discount_percent) > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>Rabat {editMode ? offerData.discount_percent : selectedOffer.discount_percent}%:</span>
-                    <span>-{formatCurrency(totals.discountPct)}</span>
-                  </div>
-                )}
-                {(editMode ? offerData.discount_amount : selectedOffer.discount_amount) > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>Rabat kwotowy:</span>
-                    <span>-{formatCurrency(totals.discountFixed)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between pt-2 border-t border-slate-200">
-                  <span className="text-lg font-semibold">Do zapłaty:</span>
-                  <span className="text-xl font-bold text-blue-600">{formatCurrency(editMode ? totals.final : selectedOffer.final_amount)}</span>
+              )}
+              {totals.totalDiscount > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Rabat ({totals.discountPercent.toFixed(1)}%):</span>
+                  <span>-{formatCurrency(totals.totalDiscount)}</span>
                 </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-600 font-medium">Netto po rabacie:</span>
+                <span className="font-medium">{formatCurrency(totals.nettoAfterDiscount)}</span>
+              </div>
+              {totals.profit !== 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span className="text-sm">Zysk netto (wewnętrzny):</span>
+                  <span className={`text-sm font-medium ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totals.profit)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-slate-600">VAT:</span>
+                <span className="font-medium">{formatCurrency(totals.totalVat)}</span>
+              </div>
+              <div className="flex justify-between pt-3 border-t border-slate-300">
+                <span className="text-lg font-bold">Brutto:</span>
+                <span className="text-xl font-bold text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
               </div>
             </div>
           </div>
@@ -2947,17 +3522,92 @@ export const OffersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Actions footer */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-            <button
-              onClick={() => handleDeleteOffer(selectedOffer)}
-              className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm"
-            >
-              <Trash2 className="w-4 h-4" />
-              Usuń ofertę
-            </button>
-            <div className="text-sm text-slate-500">
-              Ostatnia aktualizacja: {formatDate(selectedOffer.updated_at)}
+          {/* Bottom action buttons */}
+          <div className="p-4 bg-slate-50 border-t border-slate-200">
+            <div className="flex justify-between items-center">
+              <button
+                onClick={() => handleDeleteOffer(selectedOffer)}
+                className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Usuń ofertę
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportToCSV}
+                  className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-100 text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Pobierz
+                </button>
+                <button
+                  onClick={() => setShowPreviewModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-100 text-sm"
+                >
+                  <Printer className="w-4 h-4" />
+                  Drukuj / podejrzyj
+                </button>
+                {editMode && (
+                  <button
+                    onClick={async () => { await handleUpdateOffer(); setShowPreviewModal(true); }}
+                    disabled={savingOffer}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+                  >
+                    {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Zapisz — przejdź dalej
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowSendModal(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                >
+                  <Send className="w-4 h-4" />
+                  Wyślij ofertę do klienta
+                </button>
+                <button
+                  onClick={() => { setSelectedOffer(null); setEditMode(false); }}
+                  className="flex items-center gap-1 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-sm"
+                >
+                  Zamknij
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sticky bottom summary bar */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-slate-300 shadow-lg z-40">
+          <div className="max-w-screen-xl mx-auto px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6 text-sm">
+                <div>
+                  <span className="text-slate-500">Koszt netto:</span>
+                  <span className="ml-1 font-medium text-slate-700">{formatCurrency(totals.totalCost)}</span>
+                </div>
+                <div className="h-4 w-px bg-slate-300" />
+                <div>
+                  <span className="text-slate-500">Suma netto:</span>
+                  <span className="ml-1 font-bold text-slate-900">{formatCurrency(totals.total)}</span>
+                </div>
+                <div className="h-4 w-px bg-slate-300" />
+                <div>
+                  <span className="text-slate-500">Rabat:</span>
+                  <span className="ml-1 font-medium text-red-600">
+                    {totals.discountPercent > 0 ? `${totals.discountPercent.toFixed(1)}% (${formatCurrency(totals.totalDiscount)})` : '-'}
+                  </span>
+                </div>
+                <div className="h-4 w-px bg-slate-300" />
+                <div>
+                  <span className="text-slate-500">Zysk netto:</span>
+                  <span className={`ml-1 font-medium ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(totals.profit)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-lg font-bold text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
+                <span className="text-xs text-slate-500">brutto</span>
+              </div>
             </div>
           </div>
         </div>
@@ -3159,6 +3809,587 @@ export const OffersPage: React.FC = () => {
               >
                 {savingOffer && <Loader2 className="w-4 h-4 animate-spin" />}
                 Zapisz zmiany
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Rabat Modal */}
+      {showBulkRabatModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl w-full max-w-sm">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Ustaw rabat masowo</h2>
+              <button onClick={() => setShowBulkRabatModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-slate-600">
+                Zastosuj rabat do {selectedItemsCount} zaznaczonych pozycji:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={bulkRabatValue}
+                  onChange={e => setBulkRabatValue(parseFloat(e.target.value) || 0)}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-lg text-center"
+                  min="0"
+                  max="100"
+                  step="1"
+                />
+                <span className="text-lg font-medium text-slate-600">%</span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button onClick={() => setShowBulkRabatModal(false)} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
+                Anuluj
+              </button>
+              <button
+                onClick={applyBulkDiscount}
+                className="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+              >
+                Zastosuj
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && selectedOffer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">Podgląd oferty</h2>
+              <button onClick={() => setShowPreviewModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Template selection */}
+            <div className="px-6 py-3 border-b border-slate-200 flex gap-2">
+              {[
+                { id: 'netto' as const, label: 'Tylko netto' },
+                { id: 'rabat' as const, label: 'Rabat od ceny katalogowej' },
+                { id: 'no_prices' as const, label: 'Bez cen' },
+                { id: 'full' as const, label: 'Wszystko' }
+              ].map(tmpl => (
+                <button
+                  key={tmpl.id}
+                  onClick={() => setPreviewTemplate(tmpl.id)}
+                  className={`px-4 py-2 rounded-lg text-sm transition ${
+                    previewTemplate === tmpl.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {tmpl.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Preview content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-lg shadow-sm p-8">
+                {/* Offer header */}
+                <div className="flex justify-between items-start mb-8">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">{selectedOffer.name}</h1>
+                    <p className="text-slate-500 mt-1">{selectedOffer.number}</p>
+                  </div>
+                  <div className="text-right text-sm text-slate-600">
+                    <p>Data wystawienia: {formatDate(issueDate)}</p>
+                    <p>Ważna do: {formatDate(selectedOffer.valid_until)}</p>
+                  </div>
+                </div>
+
+                {/* Client info */}
+                {(selectedOffer as any).client && (
+                  <div className="mb-6 p-4 bg-slate-50 rounded-lg">
+                    <p className="font-medium text-slate-900">{(selectedOffer as any).client.name}</p>
+                    {(selectedOffer as any).client.nip && <p className="text-sm text-slate-500">NIP: {(selectedOffer as any).client.nip}</p>}
+                  </div>
+                )}
+
+                {/* Sections preview */}
+                {sections.map(section => (
+                  <div key={section.id} className="mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200">
+                      {section.name}
+                    </h3>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 border-b">
+                          <th className="py-2 pr-4">Lp.</th>
+                          <th className="py-2 pr-4">Nazwa</th>
+                          <th className="py-2 pr-4 text-right">Ilość</th>
+                          {previewTemplate !== 'no_prices' && (
+                            <>
+                              <th className="py-2 pr-4 text-right">Cena jedn.</th>
+                              {previewTemplate === 'rabat' && <th className="py-2 pr-4 text-right">Rabat</th>}
+                              <th className="py-2 text-right">Wartość</th>
+                            </>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.items.map((item, idx) => {
+                          const val = item.quantity * item.unit_price;
+                          const disc = val * ((item.discount_percent || 0) / 100);
+                          return (
+                            <tr key={item.id} className="border-b border-slate-100">
+                              <td className="py-2 pr-4 text-slate-500">{idx + 1}</td>
+                              <td className="py-2 pr-4">{item.name}</td>
+                              <td className="py-2 pr-4 text-right">{item.quantity}</td>
+                              {previewTemplate !== 'no_prices' && (
+                                <>
+                                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unit_price)}</td>
+                                  {previewTemplate === 'rabat' && (
+                                    <td className="py-2 pr-4 text-right text-red-600">
+                                      {item.discount_percent ? `-${item.discount_percent}%` : '-'}
+                                    </td>
+                                  )}
+                                  <td className="py-2 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+
+                {/* Preview totals */}
+                {previewTemplate !== 'no_prices' && (
+                  <div className="mt-8 pt-4 border-t-2 border-slate-300 space-y-2">
+                    <div className="flex justify-between">
+                      <span>Suma netto:</span>
+                      <span className="font-medium">{formatCurrency(totals.total)}</span>
+                    </div>
+                    {totals.totalDiscount > 0 && previewTemplate !== 'netto' && (
+                      <div className="flex justify-between text-red-600">
+                        <span>Rabat:</span>
+                        <span>-{formatCurrency(totals.totalDiscount)}</span>
+                      </div>
+                    )}
+                    {previewTemplate === 'full' && (
+                      <div className="flex justify-between">
+                        <span>Netto po rabacie:</span>
+                        <span className="font-medium">{formatCurrency(totals.nettoAfterDiscount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>VAT:</span>
+                      <span>{formatCurrency(totals.totalVat)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-300">
+                      <span>Brutto:</span>
+                      <span className="text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Preview footer */}
+            <div className="p-4 border-t border-slate-200 flex justify-between items-center">
+              <button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
+                Zamknij
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                  <Printer className="w-4 h-4" />
+                  Drukuj
+                </button>
+                <button
+                  onClick={() => { setShowPreviewModal(false); setShowSendModal(true); }}
+                  className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Send className="w-4 h-4" />
+                  Wyślij ofertę do klienta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send Offer Modal */}
+      {showSendModal && selectedOffer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900">Wyślij ofertę do klienta</h2>
+              <button onClick={() => setShowSendModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Representative selection */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <User className="w-5 h-5 text-slate-400" />
+                  Przedstawiciel klienta
+                </h3>
+                {offerClientContacts.length > 0 ? (
+                  <div className="space-y-2">
+                    {offerClientContacts.map((contact: any) => (
+                      <label
+                        key={contact.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                          sendRepresentativeId === contact.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="representative"
+                          checked={sendRepresentativeId === contact.id}
+                          onChange={() => setSendRepresentativeId(contact.id)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{contact.first_name} {contact.last_name}</p>
+                          <p className="text-xs text-slate-500">{contact.email} • {contact.phone}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="grid grid-cols-2 gap-3 flex-1">
+                      <input type="text" placeholder="Imię" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="text" placeholder="Nazwisko" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="email" placeholder="E-mail" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="tel" placeholder="Telefon" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cover letter */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-slate-400" />
+                    List przewodni
+                  </h3>
+                  <button
+                    onClick={async () => {
+                      setGeneratingLetter(true);
+                      try {
+                        // Generate cover letter using Claude API via edge function
+                        const offerSummary = `Oferta "${selectedOffer.name}" (${selectedOffer.number}) zawiera ${getAllItems(sections).length} pozycji. Wartość netto: ${formatCurrency(totals.total)}.`;
+                        const { data } = await supabase.functions.invoke('generate-cover-letter', {
+                          body: { offer_summary: offerSummary, client_name: (selectedOffer as any).client?.name || 'Klient' }
+                        });
+                        if (data?.letter) {
+                          setSendCoverLetter(data.letter);
+                        } else {
+                          setSendCoverLetter(`Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} - ${selectedOffer.name}.\n\nOferta obejmuje ${getAllItems(sections).length} pozycji.\n\nZ poważaniem`);
+                        }
+                      } catch {
+                        setSendCoverLetter(`Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} - ${selectedOffer.name}.\n\nOferta obejmuje ${getAllItems(sections).length} pozycji.\n\nZ poważaniem`);
+                      } finally {
+                        setGeneratingLetter(false);
+                      }
+                    }}
+                    disabled={generatingLetter}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 rounded-lg text-sm hover:bg-purple-100 disabled:opacity-50"
+                  >
+                    {generatingLetter ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    Generuj z AI
+                  </button>
+                </div>
+                <textarea
+                  value={sendCoverLetter}
+                  onChange={e => setSendCoverLetter(e.target.value)}
+                  rows={6}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  placeholder="Treść listu przewodniego..."
+                />
+              </div>
+
+              {/* Communication channels */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-slate-400" />
+                  Kanały komunikacji
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'email', icon: Mail, label: 'E-mail', desc: 'List przewodni + oferta w załączniku', color: 'blue' },
+                    { id: 'sms', icon: Phone, label: 'SMS', desc: 'Krótka informacja + link do oferty', color: 'green' },
+                    { id: 'whatsapp', icon: MessageSquare, label: 'WhatsApp', desc: 'Wiadomość + plik oferty na numer klienta', color: 'emerald' },
+                    { id: 'telegram', icon: Send, label: 'Telegram', desc: 'Wiadomość + plik oferty przez Telegram', color: 'sky' }
+                  ].map(channel => (
+                    <label
+                      key={channel.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                        sendChannels.includes(channel.id) ? `border-${channel.color}-400 bg-${channel.color}-50` : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={sendChannels.includes(channel.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setSendChannels([...sendChannels, channel.id]);
+                          } else {
+                            setSendChannels(sendChannels.filter(c => c !== channel.id));
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 mt-0.5"
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <channel.icon className="w-4 h-4 text-slate-600" />
+                          <span className="font-medium text-sm">{channel.label}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{channel.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unique offer link */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-slate-400" />
+                  Link do oferty
+                </h3>
+                <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <LinkIcon className="w-5 h-5 text-blue-600 shrink-0" />
+                  <input
+                    type="text"
+                    readOnly
+                    value={selectedOffer.public_url
+                      ? window.location.origin + selectedOffer.public_url
+                      : `${window.location.origin}/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`}
+                    className="flex-1 px-3 py-1.5 bg-white border border-blue-200 rounded text-sm"
+                  />
+                  <button
+                    onClick={() => {
+                      const url = selectedOffer.public_url
+                        ? window.location.origin + selectedOffer.public_url
+                        : `${window.location.origin}/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`;
+                      navigator.clipboard.writeText(url);
+                    }}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Unikalny link do strony z ofertą. Klient może go otworzyć w przeglądarce.
+                </p>
+              </div>
+            </div>
+
+            {/* Send footer */}
+            <div className="p-4 border-t border-slate-200 flex justify-between items-center">
+              <button onClick={() => setShowSendModal(false)} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
+                Anuluj
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('Czy na pewno chcesz wysłać ofertę wybranymi kanałami?')) return;
+                  await handleSendOffer(selectedOffer);
+                  setShowSendModal(false);
+                }}
+                disabled={sendChannels.length === 0}
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                Wyślij ofertę
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Kartoteka Search Modal (Labour/Material/Equipment) */}
+      {(showSearchLabourModal || showSearchMaterialModal || showSearchEquipmentModal) && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">
+                {showSearchLabourModal ? 'Kartoteka — Robocizna' :
+                 showSearchMaterialModal ? 'Kartoteka — Materiały' :
+                 'Kartoteka — Sprzęt'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowSearchLabourModal(false);
+                  setShowSearchMaterialModal(false);
+                  setShowSearchEquipmentModal(false);
+                  setSearchComponentTarget(null);
+                }}
+                className="p-1 hover:bg-slate-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-4 py-2 border-b border-slate-200 flex gap-2">
+              <button
+                onClick={() => setKartotekaTab('own')}
+                className={`px-4 py-2 rounded-lg text-sm ${kartotekaTab === 'own' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                Katalog własny
+              </button>
+              <button
+                onClick={() => setKartotekaTab('system')}
+                className={`px-4 py-2 rounded-lg text-sm ${kartotekaTab === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                Katalog systemowy
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-4 py-3 border-b border-slate-200">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={kartotekaSearchText}
+                  onChange={e => setKartotekaSearchText(e.target.value)}
+                  placeholder="Szukaj po nazwie lub kodzie..."
+                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto">
+              {kartotekaLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">KOD</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">NAZWA</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">JEDN.</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">CENA</th>
+                      <th className="px-4 py-2 w-12"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData)
+                      .filter(item => {
+                        if (!kartotekaSearchText) return true;
+                        const q = kartotekaSearchText.toLowerCase();
+                        return (item.name || '').toLowerCase().includes(q) || (item.code || '').toLowerCase().includes(q);
+                      })
+                      .slice(0, 100)
+                      .map((item: any) => (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-2 text-slate-500">{item.code || '-'}</td>
+                          <td className="px-4 py-2">{item.name}</td>
+                          <td className="px-4 py-2 text-slate-500">{item.unit || '-'}</td>
+                          <td className="px-4 py-2 text-right font-medium">
+                            {formatCurrency(item.price || item.default_price || item.price_unit || 0)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <button
+                              onClick={() => {
+                                const price = item.price || item.default_price || item.price_unit || 0;
+                                if (searchComponentTarget) {
+                                  // Add as component to an item
+                                  const compType = showSearchLabourModal ? 'labor' : showSearchMaterialModal ? 'material' : 'equipment';
+                                  addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+                                    type: compType,
+                                    name: item.name,
+                                    code: item.code || '',
+                                    unit: item.unit || 'szt.',
+                                    quantity: 1,
+                                    unit_price: price,
+                                    total_price: price
+                                  });
+
+                                  // If own labour has linked materials/equipment, add them too
+                                  if (kartotekaTab === 'own' && showSearchLabourModal) {
+                                    if (item.materials && Array.isArray(item.materials)) {
+                                      item.materials.forEach((m: any) => {
+                                        addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+                                          type: 'material',
+                                          name: m.name || m.material_name || '',
+                                          code: m.code || m.material_code || '',
+                                          unit: m.unit || 'szt.',
+                                          quantity: m.quantity || 1,
+                                          unit_price: m.price || m.default_price || 0,
+                                          total_price: (m.quantity || 1) * (m.price || m.default_price || 0)
+                                        });
+                                      });
+                                    }
+                                    if (item.equipment && Array.isArray(item.equipment)) {
+                                      item.equipment.forEach((e: any) => {
+                                        addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+                                          type: 'equipment',
+                                          name: e.name || e.equipment_name || '',
+                                          code: e.code || e.equipment_code || '',
+                                          unit: e.unit || 'szt.',
+                                          quantity: e.quantity || 1,
+                                          unit_price: e.price || e.default_price || 0,
+                                          total_price: (e.quantity || 1) * (e.price || e.default_price || 0)
+                                        });
+                                      });
+                                    }
+                                  }
+
+                                  // If adding position from labor catalog (not component)
+                                  if (searchPositionTarget && !searchComponentTarget.itemId) {
+                                    addItem(searchPositionTarget.sectionId);
+                                  }
+                                }
+                                setShowSearchLabourModal(false);
+                                setShowSearchMaterialModal(false);
+                                setShowSearchEquipmentModal(false);
+                                setSearchComponentTarget(null);
+                                setSearchPositionTarget(null);
+                              }}
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
+                              title="Dodaj"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    {(kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData).length === 0 && !kartotekaLoading && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                          Brak danych w kartotece
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowSearchLabourModal(false);
+                  setShowSearchMaterialModal(false);
+                  setShowSearchEquipmentModal(false);
+                  setSearchComponentTarget(null);
+                }}
+                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Zamknij
               </button>
             </div>
           </div>
