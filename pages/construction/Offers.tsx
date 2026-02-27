@@ -4172,14 +4172,14 @@ export const OffersPage: React.FC = () => {
                     readOnly
                     value={selectedOffer.public_url
                       ? window.location.origin + selectedOffer.public_url
-                      : `${window.location.origin}/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`}
+                      : `${window.location.origin}/#/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`}
                     className="flex-1 px-3 py-1.5 bg-white border border-blue-200 rounded text-sm"
                   />
                   <button
                     onClick={() => {
                       const url = selectedOffer.public_url
                         ? window.location.origin + selectedOffer.public_url
-                        : `${window.location.origin}/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`;
+                        : `${window.location.origin}/#/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`;
                       navigator.clipboard.writeText(url);
                     }}
                     className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
