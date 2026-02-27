@@ -55,6 +55,7 @@ export enum UserStatus {
   DATA_REQUESTED = 'data_requested',
   DATA_SUBMITTED = 'data_submitted',
   PORTAL_BLOCKED = 'portal_blocked',
+  PENDING = 'pending',
   TRIAL = 'trial',
   ACTIVE = 'active',
   INACTIVE = 'inactive',
@@ -89,6 +90,7 @@ export enum VerificationType {
 export enum SkillStatus {
   LOCKED = 'locked',
   PENDING = 'pending',
+  VERIFIED = 'verified',
   THEORY_PASSED = 'theory_passed',
   PRACTICE_PENDING = 'practice_pending',
   CONFIRMED = 'confirmed',
@@ -194,6 +196,8 @@ export interface User {
   invitation_expires_at?: string;
   invited_by?: string;
   available_modules?: string[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 // =====================================================
@@ -494,6 +498,8 @@ export interface EmployeeBadge {
     author_id: string;
     month: string;
     type: string;
+    badge_name?: string;
+    message?: string;
     description: string;
     visible_to_employee: boolean;
     created_at: string;
@@ -1106,6 +1112,7 @@ export interface ProjectTask {
   id: string;
   company_id: string;
   project_id?: string;
+  name?: string;
   title: string;
   description?: string;
   status: TaskStatus_Project;
@@ -3356,6 +3363,9 @@ export interface KosztorysCostEstimateCalculationResult {
     totalMaterial: number;
     totalEquipment: number;
     totalValue: number;
+    laborTotal?: number;
+    materialTotal?: number;
+    equipmentTotal?: number;
   }>;
   positions: Record<string, KosztorysPositionCalculationResult>;
 }
@@ -3438,10 +3448,15 @@ export interface ResourceRequest {
   id: string;
   company_id: string;
   project_id?: string;
+  name?: string;
   title: string;
   description?: string;
   status: ResourceRequestStatus;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
+  priority: 'low' | 'normal' | 'medium' | 'high' | 'urgent';
+  resource_type?: string;
+  needed_at?: string;
+  volume_required?: number;
+  is_over_budget?: boolean;
   requested_by_id: string;
   approved_by_id?: string;
   items?: any[];
@@ -3455,11 +3470,16 @@ export interface Order {
   project_id?: string;
   request_id?: string;
   supplier_id?: string;
+  number?: string;
   order_number?: string;
+  order_date?: string;
+  expected_delivery?: string;
   status: OrderStatus;
   delivery_status?: OrderDeliveryStatus;
   payment_status?: OrderPaymentStatus;
+  total?: number;
   total_amount?: number;
+  nds_amount?: number;
   notes?: string;
   items?: any[];
   created_at: string;
@@ -3471,6 +3491,7 @@ export interface Stock {
   company_id: string;
   project_id?: string;
   name: string;
+  address?: string;
   location?: string;
   type?: string;
   is_active: boolean;
@@ -3483,10 +3504,12 @@ export interface StockBalance {
   stock_id: string;
   material_id?: string;
   equipment_id?: string;
+  name?: string;
   item_name: string;
   item_code?: string;
   unit?: string;
   quantity: number;
   min_quantity?: number;
+  total_value?: number;
   last_operation_at?: string;
 }
