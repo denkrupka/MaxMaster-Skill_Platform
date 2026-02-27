@@ -13,7 +13,7 @@ import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
 import { fetchCompanyByNip, validateNip, normalizeNip } from '../../lib/gusApi';
 import { searchAddress, OSMAddress, createDebouncedSearch } from '../../lib/osmAutocomplete';
-import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, Estimate, EstimateStage, EstimateTask, EstimateResource, KosztorysRequestSource, KosztorysObjectType, KosztorysInstallationType, User as UserType } from '../../types';
+import { Project, Offer, OfferStatus, OfferSection, OfferItem, Contractor, EstimateStage, EstimateTask, EstimateResource, KosztorysRequestSource, KosztorysObjectType, KosztorysInstallationType, User as UserType } from '../../types';
 import { OFFER_STATUS_LABELS, OFFER_STATUS_COLORS } from '../../constants';
 
 const OFFER_SOURCE_LABELS: Record<KosztorysRequestSource, string> = {
@@ -170,7 +170,6 @@ export const OffersPage: React.FC = () => {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [contractors, setContractors] = useState<Contractor[]>([]);
-  const [estimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<OfferStatus | 'all'>('all');
@@ -206,8 +205,6 @@ export const OffersPage: React.FC = () => {
   const [showBulkBar, setShowBulkBar] = useState(false);
   const [showBulkRabatModal, setShowBulkRabatModal] = useState(false);
   const [bulkRabatValue, setBulkRabatValue] = useState(0);
-  const [bulkVatRate, setBulkVatRate] = useState(23);
-
   // Preview & Send
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<'netto' | 'rabat' | 'no_prices' | 'full'>('netto');
@@ -216,7 +213,6 @@ export const OffersPage: React.FC = () => {
   const [sendRepresentativeId, setSendRepresentativeId] = useState('');
   const [sendCoverLetter, setSendCoverLetter] = useState('');
   const [sendChannels, setSendChannels] = useState<string[]>(['email']);
-  const [generatingLetter, setGeneratingLetter] = useState(false);
   const [sendingOffer, setSendingOffer] = useState(false);
 
   // Auto-generate cover letter when send modal opens
@@ -1956,7 +1952,7 @@ export const OffersPage: React.FC = () => {
           setSections(normalizedSections);
         }
       } catch (importErr) {
-        console.log('No items to import, continuing with client data only');
+        // No items to import, continuing with client data only
       }
 
       setImportedKosztorysName(investmentName + (clientName ? ` — ${clientName}` : ''));

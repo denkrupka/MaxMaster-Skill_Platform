@@ -2354,6 +2354,7 @@ export interface Offer {
   sent_at?: string;
   accepted_at?: string;
   rejected_at?: string;
+  rejection_reason?: string;
   created_by_id: string;
   created_at: string;
   updated_at: string;

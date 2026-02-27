@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import {
-  FileText, CheckCircle, Clock, Building2, Calendar,
+  FileText, CheckCircle, XCircle, Clock, Building2, Calendar,
   Download, Loader2, ExternalLink, Shield, Star, Phone, Mail
 } from 'lucide-react';
 
@@ -61,6 +61,11 @@ export const OfferLandingPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
+  const [rejected, setRejected] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (token) loadOffer(token);
@@ -127,11 +132,10 @@ export const OfferLandingPage: React.FC = () => {
 
       setOffer({
         ...offerData,
-        client: clientRes.data as any,
+        client: clientRes.data as { name: string } | null,
         sections
       });
     } catch (err) {
-      console.error('Error loading public offer:', err);
       setError('Wystąpił błąd podczas ładowania oferty.');
     } finally {
       setLoading(false);
@@ -140,14 +144,45 @@ export const OfferLandingPage: React.FC = () => {
 
   const handleAccept = async () => {
     if (!offer) return;
-    await supabase
-      .from('offers')
-      .update({
-        status: 'accepted',
-        accepted_at: new Date().toISOString()
-      })
-      .eq('id', offer.id);
-    setAccepted(true);
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const { error: updateErr } = await supabase
+        .from('offers')
+        .update({
+          status: 'accepted',
+          accepted_at: new Date().toISOString()
+        })
+        .eq('id', offer.id);
+      if (updateErr) throw updateErr;
+      setAccepted(true);
+    } catch (err: any) {
+      setActionError('Nie udało się zaakceptować oferty. Spróbuj ponownie.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!offer) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const { error: updateErr } = await supabase
+        .from('offers')
+        .update({
+          status: 'rejected',
+          rejection_reason: rejectionReason || null
+        })
+        .eq('id', offer.id);
+      if (updateErr) throw updateErr;
+      setRejected(true);
+      setShowRejectForm(false);
+    } catch (err: any) {
+      setActionError('Nie udało się odrzucić oferty. Spróbuj ponownie.');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -217,11 +252,14 @@ export const OfferLandingPage: React.FC = () => {
             <div className="text-right">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
                 accepted || offer.status === 'accepted' ? 'bg-green-500/20 text-green-100' :
+                rejected || offer.status === 'rejected' ? 'bg-red-500/20 text-red-200' :
                 isExpired ? 'bg-red-500/20 text-red-200' :
                 'bg-white/20 text-white'
               }`}>
                 {accepted || offer.status === 'accepted' ? (
                   <><CheckCircle className="w-4 h-4" /> Zaakceptowana</>
+                ) : rejected || offer.status === 'rejected' ? (
+                  <><XCircle className="w-4 h-4" /> Odrzucona</>
                 ) : isExpired ? (
                   <><Clock className="w-4 h-4" /> Wygasła</>
                 ) : (
@@ -346,16 +384,48 @@ export const OfferLandingPage: React.FC = () => {
             </div>
           )}
 
-          {/* Accept button */}
-          {!accepted && offer.status !== 'accepted' && offer.status !== 'rejected' && !isExpired && (
+          {/* Action buttons */}
+          {!accepted && !rejected && offer.status !== 'accepted' && offer.status !== 'rejected' && !isExpired && (
             <div className="p-8 border-t border-slate-100 text-center">
-              <button
-                onClick={handleAccept}
-                className="px-8 py-3 bg-green-600 text-white rounded-xl text-lg font-semibold hover:bg-green-700 transition shadow-lg shadow-green-200"
-              >
-                <CheckCircle className="w-5 h-5 inline-block mr-2 -mt-0.5" />
-                Akceptuję ofertę
-              </button>
+              {actionError && (
+                <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">{actionError}</div>
+              )}
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={handleAccept}
+                  disabled={actionLoading}
+                  className="px-8 py-3 bg-green-600 text-white rounded-xl text-lg font-semibold hover:bg-green-700 transition shadow-lg shadow-green-200 disabled:opacity-50"
+                >
+                  {actionLoading ? <Loader2 className="w-5 h-5 inline-block mr-2 -mt-0.5 animate-spin" /> : <CheckCircle className="w-5 h-5 inline-block mr-2 -mt-0.5" />}
+                  Akceptuję ofertę
+                </button>
+                <button
+                  onClick={() => setShowRejectForm(!showRejectForm)}
+                  disabled={actionLoading}
+                  className="px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  Odrzuć
+                </button>
+              </div>
+              {showRejectForm && (
+                <div className="mt-4 max-w-md mx-auto">
+                  <textarea
+                    value={rejectionReason}
+                    onChange={e => setRejectionReason(e.target.value)}
+                    placeholder="Powód odrzucenia (opcjonalnie)..."
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-red-200 focus:border-red-400"
+                    rows={3}
+                  />
+                  <button
+                    onClick={handleReject}
+                    disabled={actionLoading}
+                    className="mt-2 px-6 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50"
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 inline-block mr-1 animate-spin" /> : null}
+                    Potwierdź odrzucenie
+                  </button>
+                </div>
+              )}
               <p className="text-xs text-slate-400 mt-3">Klikając powyższy przycisk, akceptujesz warunki przedstawione w ofercie.</p>
             </div>
           )}
@@ -365,6 +435,14 @@ export const OfferLandingPage: React.FC = () => {
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
               <h3 className="text-xl font-bold text-green-800">Oferta zaakceptowana!</h3>
               <p className="text-green-600 mt-1">Dziękujemy za akceptację. Skontaktujemy się z Tobą wkrótce.</p>
+            </div>
+          )}
+
+          {rejected && (
+            <div className="p-8 border-t border-slate-100 text-center bg-red-50">
+              <XCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+              <h3 className="text-xl font-bold text-red-800">Oferta odrzucona</h3>
+              <p className="text-red-600 mt-1">Dziękujemy za informację. Skontaktujemy się, aby omówić alternatywne rozwiązania.</p>
             </div>
           )}
         </div>
