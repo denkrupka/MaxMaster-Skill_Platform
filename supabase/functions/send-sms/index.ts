@@ -3,7 +3,7 @@
 
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SMSAPI_TOKEN = Deno.env.get('SMSAPI_TOKEN');
 const SMSAPI_SENDER_NAME = Deno.env.get('SMSAPI_SENDER_NAME') || 'MAXMASTER';

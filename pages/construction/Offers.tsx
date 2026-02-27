@@ -207,13 +207,14 @@ export const OffersPage: React.FC = () => {
   const [bulkRabatValue, setBulkRabatValue] = useState(0);
   // Preview & Send
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [previewTemplate, setPreviewTemplate] = useState<'netto' | 'rabat' | 'no_prices' | 'full'>('netto');
+  const [previewTemplate, setPreviewTemplate] = useState<'netto' | 'brutto' | 'rabat' | 'no_prices' | 'full'>('netto');
   const [showLogoInPreview, setShowLogoInPreview] = useState(true);
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendRepresentativeId, setSendRepresentativeId] = useState('');
   const [sendCoverLetter, setSendCoverLetter] = useState('');
   const [sendChannels, setSendChannels] = useState<string[]>(['email']);
   const [sendingOffer, setSendingOffer] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [sendManualContact, setSendManualContact] = useState({ first_name: '', last_name: '', email: '', phone: '' });
 
   // Auto-generate cover letter when send modal opens
@@ -1026,6 +1027,22 @@ export const OffersPage: React.FC = () => {
 
         setSections(sectionsList);
 
+        // Populate client data for edit mode
+        if (offer.client) {
+          const c = offer.client as any;
+          setOfferClientData(prev => ({
+            ...prev,
+            client_name: c.name || '',
+            nip: c.nip || '',
+            company_street: c.street || '',
+            company_street_number: c.building_number || c.street_number || '',
+            company_city: c.city || '',
+            company_postal_code: c.postal_code || '',
+            company_country: c.country || 'Polska'
+          }));
+          setOfferClientSelected(true);
+        }
+
         // Load client contacts for send modal
         if (offer.client_id) {
           const { data: contacts } = await supabase
@@ -1213,6 +1230,9 @@ export const OffersPage: React.FC = () => {
       if (offerClientData.internal_notes) internalNotesLines.push(offerClientData.internal_notes);
       if (offerClientData.notes) internalNotesLines.push(offerClientData.notes);
 
+      // Generate public token for sharing
+      const publicToken = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+
       const { data: newOffer, error } = await supabase
         .from('offers')
         .insert({
@@ -1228,6 +1248,8 @@ export const OffersPage: React.FC = () => {
           internal_notes: internalNotesLines.join('\n') || null,
           status: 'draft',
           created_by_id: currentUser.id,
+          public_token: publicToken,
+          public_url: `/#/offer/${publicToken}`,
           print_settings: {
             calculation_mode: calculationMode,
             issue_date: issueDate
@@ -1712,10 +1734,12 @@ export const OffersPage: React.FC = () => {
   };
 
   const copyPublicLink = (offer: Offer) => {
-    if (offer.public_url) {
-      navigator.clipboard.writeText(window.location.origin + offer.public_url);
-      alert('Link skopiowany do schowka!');
-    }
+    const url = offer.public_url
+      ? window.location.origin + offer.public_url
+      : `${window.location.origin}/#/offer/${offer.public_token || offer.id.substring(0, 8)}`;
+    navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   // ============================================
@@ -2224,54 +2248,59 @@ export const OffersPage: React.FC = () => {
 
   const generateOfferHTML = (): string => {
     if (!selectedOffer) return '';
-    const companyName = state.currentCompany?.name || '';
-    const companyLogo = (state.currentCompany as any)?.logo_url || '';
+    const company = state.currentCompany as any;
+    const companyName = company?.name || '';
+    const companyLogo = company?.logo_url || '';
+    const companyNip = company?.nip || '';
+    const companyAddress = [company?.street, company?.building_number].filter(Boolean).join(' ');
+    const companyCity = [company?.postal_code, company?.city].filter(Boolean).join(' ');
+    const companyPhone = company?.phone || '';
+    const companyEmail = company?.email || '';
     const client = (selectedOffer as any).client;
-    const fmtCur = (v: number) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(v);
+    const fmtCur = (v: number) => v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const isBrutto = previewTemplate === 'brutto';
+    const priceLabel = isBrutto ? 'brutto' : 'netto';
 
     const renderSectionHTML = (sec: LocalOfferSection, depth: number = 0): string => {
-      let html = `<h${depth === 0 ? 3 : 4} style="margin:${depth === 0 ? '24px' : '16px'} 0 8px ${depth * 20}px;font-size:${depth === 0 ? '16px' : '14px'};">${sec.name}</h${depth === 0 ? 3 : 4}>`;
+      let html = '';
       if (sec.items.length > 0 && previewTemplate !== 'no_prices') {
-        html += `<table style="width:100%;border-collapse:collapse;margin-left:${depth * 20}px;font-size:13px;">
-          <thead><tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
-            <th style="padding:8px;text-align:left;">Lp.</th>
-            <th style="padding:8px;text-align:left;">Nazwa</th>
-            <th style="padding:8px;text-align:left;">Jedn.</th>
-            <th style="padding:8px;text-align:right;">Ilość</th>
-            <th style="padding:8px;text-align:right;">Cena jedn.</th>
-            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? '<th style="padding:8px;text-align:right;">Rabat</th>' : ''}
-            <th style="padding:8px;text-align:right;">Wartość</th>
-            ${previewTemplate === 'full' ? '<th style="padding:8px;text-align:right;">VAT</th>' : ''}
+        const headerBg = '#2c3e50';
+        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+          <thead><tr style="background:${headerBg};color:white;">
+            <th style="padding:10px 8px;text-align:left;font-weight:600;">Produkty/Usługi</th>
+            <th style="padding:10px 8px;text-align:right;font-weight:600;">Ilość</th>
+            <th style="padding:10px 8px;text-align:right;font-weight:600;">Cena ${priceLabel}<br/>[zł]</th>
+            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<th style="padding:10px 8px;text-align:right;font-weight:600;">Rabat</th>` : ''}
+            <th style="padding:10px 8px;text-align:right;font-weight:600;">Wartość ${priceLabel}<br/>[zł]</th>
+            ${previewTemplate === 'full' ? `<th style="padding:10px 8px;text-align:right;font-weight:600;">VAT</th>` : ''}
           </tr></thead><tbody>`;
-        sec.items.forEach((item, idx) => {
+        sec.items.forEach((item) => {
           const val = item.quantity * item.unit_price;
           const disc = val * ((item.discount_percent || 0) / 100);
-          html += `<tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:6px 8px;color:#64748b;">${idx + 1}</td>
-            <td style="padding:6px 8px;">${item.name}${item.is_optional ? ' <span style="background:#fef9c3;color:#a16207;font-size:10px;padding:1px 4px;border-radius:3px;">opcja</span>' : ''}</td>
-            <td style="padding:6px 8px;color:#64748b;">${item.unit || 'szt.'}</td>
-            <td style="padding:6px 8px;text-align:right;">${item.quantity}</td>
-            <td style="padding:6px 8px;text-align:right;">${fmtCur(item.unit_price)}</td>
-            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<td style="padding:6px 8px;text-align:right;color:#dc2626;">${item.discount_percent ? `-${item.discount_percent}%` : '-'}</td>` : ''}
-            <td style="padding:6px 8px;text-align:right;font-weight:500;">${fmtCur(val - disc)}</td>
-            ${previewTemplate === 'full' ? `<td style="padding:6px 8px;text-align:right;color:#64748b;">${item.vat_rate ?? 23}%</td>` : ''}
+          const netVal = val - disc;
+          const vatMult = 1 + (item.vat_rate ?? 23) / 100;
+          const displayPrice = isBrutto ? item.unit_price * vatMult : item.unit_price;
+          const displayVal = isBrutto ? netVal * vatMult : netVal;
+          html += `<tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:10px 8px;">${item.name}${item.is_optional ? ' <span style="background:#fef9c3;color:#a16207;font-size:10px;padding:1px 4px;border-radius:3px;">opcja</span>' : ''}</td>
+            <td style="padding:10px 8px;text-align:right;">${item.quantity}</td>
+            <td style="padding:10px 8px;text-align:right;">${fmtCur(displayPrice)}</td>
+            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<td style="padding:10px 8px;text-align:right;color:#dc2626;">${item.discount_percent ? `-${item.discount_percent}%` : '-'}</td>` : ''}
+            <td style="padding:10px 8px;text-align:right;font-weight:500;">${fmtCur(displayVal)}</td>
+            ${previewTemplate === 'full' ? `<td style="padding:10px 8px;text-align:right;color:#64748b;">${item.vat_rate ?? 23}%</td>` : ''}
           </tr>`;
         });
         html += '</tbody></table>';
       } else if (sec.items.length > 0) {
-        html += `<table style="width:100%;border-collapse:collapse;margin-left:${depth * 20}px;font-size:13px;">
-          <thead><tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
-            <th style="padding:8px;text-align:left;">Lp.</th>
-            <th style="padding:8px;text-align:left;">Nazwa</th>
-            <th style="padding:8px;text-align:left;">Jedn.</th>
-            <th style="padding:8px;text-align:right;">Ilość</th>
+        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+          <thead><tr style="background:#2c3e50;color:white;">
+            <th style="padding:10px 8px;text-align:left;font-weight:600;">Produkty/Usługi</th>
+            <th style="padding:10px 8px;text-align:right;font-weight:600;">Ilość</th>
           </tr></thead><tbody>`;
-        sec.items.forEach((item, idx) => {
-          html += `<tr style="border-bottom:1px solid #f1f5f9;">
-            <td style="padding:6px 8px;color:#64748b;">${idx + 1}</td>
-            <td style="padding:6px 8px;">${item.name}</td>
-            <td style="padding:6px 8px;color:#64748b;">${item.unit || 'szt.'}</td>
-            <td style="padding:6px 8px;text-align:right;">${item.quantity}</td>
+        sec.items.forEach((item) => {
+          html += `<tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:10px 8px;">${item.name}</td>
+            <td style="padding:10px 8px;text-align:right;">${item.quantity}</td>
           </tr>`;
         });
         html += '</tbody></table>';
@@ -2282,44 +2311,75 @@ export const OffersPage: React.FC = () => {
 
     let totalsSectionHTML = '';
     if (previewTemplate !== 'no_prices') {
-      totalsSectionHTML = `
-        <div style="margin-top:32px;padding-top:16px;border-top:2px solid #cbd5e1;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Suma netto:</span><span style="font-weight:500;">${fmtCur(totals.total)}</span></div>
-          ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<div style="display:flex;justify-content:space-between;color:#dc2626;margin-bottom:4px;"><span>Rabat:</span><span>-${fmtCur(totals.totalDiscount)}</span></div>` : ''}
-          ${previewTemplate === 'full' ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Netto po rabacie:</span><span style="font-weight:500;">${fmtCur(totals.nettoAfterDiscount)}</span></div>` : ''}
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>VAT:</span><span>${fmtCur(totals.totalVat)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:bold;padding-top:8px;border-top:1px solid #cbd5e1;"><span>Brutto:</span><span>${fmtCur(totals.totalBrutto)}</span></div>
-        </div>`;
+      if (isBrutto) {
+        totalsSectionHTML = `
+          <div style="margin-top:24px;padding-top:12px;border-top:2px solid #2c3e50;text-align:right;">
+            <div style="font-size:16px;font-weight:bold;">Suma brutto: ${fmtCur(totals.totalBrutto)} zł</div>
+          </div>`;
+      } else {
+        totalsSectionHTML = `
+          <div style="margin-top:24px;padding-top:12px;border-top:2px solid #2c3e50;">
+            <table style="width:300px;margin-left:auto;font-size:13px;">
+              <tr><td style="padding:3px 0;">Suma netto:</td><td style="padding:3px 0;text-align:right;font-weight:500;">${fmtCur(totals.total)} zł</td></tr>
+              ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<tr style="color:#dc2626;"><td style="padding:3px 0;">Rabat:</td><td style="padding:3px 0;text-align:right;">-${fmtCur(totals.totalDiscount)} zł</td></tr>` : ''}
+              ${previewTemplate === 'full' ? `<tr><td style="padding:3px 0;">Netto po rabacie:</td><td style="padding:3px 0;text-align:right;font-weight:500;">${fmtCur(totals.nettoAfterDiscount)} zł</td></tr>` : ''}
+              <tr><td style="padding:3px 0;">VAT:</td><td style="padding:3px 0;text-align:right;">${fmtCur(totals.totalVat)} zł</td></tr>
+              <tr style="font-weight:bold;font-size:15px;border-top:1px solid #cbd5e1;"><td style="padding:6px 0;">Brutto:</td><td style="padding:6px 0;text-align:right;">${fmtCur(totals.totalBrutto)} zł</td></tr>
+            </table>
+          </div>`;
+      }
     }
+
+    // Client address parts
+    const clientAddress = client ? [client.street, client.building_number].filter(Boolean).join(' ') : '';
+    const clientCity = client ? [client.postal_code, client.city].filter(Boolean).join(' ') : '';
 
     return `<!DOCTYPE html>
 <html lang="pl">
 <head><meta charset="UTF-8"><title>Oferta ${selectedOffer.number}</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;margin:40px;color:#1e293b;font-size:14px;max-width:800px;margin:40px auto;}
-@media print{body{margin:20px;}}</style></head>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e293b;font-size:13px;}
+@media print{body{padding:15px 20px;}}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;}
+.info-table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+.info-table td{padding:10px 12px;vertical-align:top;border:1px solid #e2e8f0;}
+.info-table .label{background:#2c3e50;color:white;font-weight:600;text-align:center;padding:8px;}
+</style></head>
 <body>
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;">
+  <div class="header">
     <div>
-      ${showLogoInPreview && companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:60px;margin-bottom:8px;" />` : ''}
-      <h1 style="margin:0;font-size:24px;">${companyName}</h1>
+      <h2 style="margin:0 0 4px;font-size:18px;">${selectedOffer.name}</h2>
+      <p style="margin:0;color:#64748b;font-size:12px;">Data wystawienia oferty: ${formatDate(issueDate)}</p>
+      <p style="margin:0;color:#64748b;font-size:12px;">Oferta ważna do: ${formatDate(selectedOffer.valid_until)}</p>
     </div>
-    <div style="text-align:right;font-size:13px;color:#64748b;">
-      <p style="margin:2px 0;">Data wystawienia: ${formatDate(issueDate)}</p>
-      <p style="margin:2px 0;">Ważna do: ${formatDate(selectedOffer.valid_until)}</p>
-    </div>
+    ${showLogoInPreview && companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:50px;" />` : ''}
   </div>
-  <h2 style="font-size:20px;margin-bottom:4px;">${selectedOffer.name}</h2>
-  <p style="color:#64748b;margin-top:0;">${selectedOffer.number}</p>
-  ${client ? `<div style="background:#f8fafc;padding:16px;border-radius:8px;margin-bottom:24px;">
-    <p style="font-weight:600;margin:0;">${client.name}</p>
-    ${client.nip ? `<p style="font-size:13px;color:#64748b;margin:4px 0 0;">NIP: ${client.nip}</p>` : ''}
-  </div>` : ''}
+
+  <table class="info-table">
+    <tr>
+      <td class="label" style="width:50%;">Dane klienta</td>
+      <td class="label" style="width:50%;">Sprzedawca</td>
+    </tr>
+    <tr>
+      <td>
+        ${client ? `<strong>${client.name}</strong><br/>
+        ${clientAddress ? `${clientAddress}<br/>` : ''}
+        ${clientCity ? `${clientCity}<br/>` : ''}
+        ${client.regon ? `REGON ${client.regon}<br/>` : ''}
+        ${client.nip ? `NIP ${client.nip}` : ''}` : '<em>Brak danych klienta</em>'}
+      </td>
+      <td>
+        <strong>${companyName}</strong><br/>
+        ${companyNip ? `NIP: ${companyNip}<br/>` : ''}
+        ${companyCity ? `${companyCity}${companyAddress ? `, ${companyAddress}` : ''}<br/>` : ''}
+        ${companyPhone ? `tel. ${companyPhone}` : ''}${companyEmail ? `, email: ${companyEmail}` : ''}
+      </td>
+    </tr>
+  </table>
+
   ${sections.map(sec => renderSectionHTML(sec)).join('')}
   ${totalsSectionHTML}
-  ${selectedOffer.notes ? `<div style="margin-top:32px;padding:16px;background:#f8fafc;border-radius:8px;font-size:13px;"><p style="font-weight:600;margin:0 0 4px;">Uwagi:</p><p style="margin:0;white-space:pre-wrap;">${selectedOffer.notes}</p></div>` : ''}
-  <div style="margin-top:40px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;padding-top:16px;">
-    <p>Wygenerowano w MaxMaster</p>
-  </div>
+  ${selectedOffer.notes ? `<div style="margin-top:24px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:12px;"><strong>Uwagi:</strong><br/><span style="white-space:pre-wrap;">${selectedOffer.notes}</span></div>` : ''}
 </body></html>`;
   };
 
@@ -4166,8 +4226,8 @@ export const OffersPage: React.FC = () => {
         </div>
 
         {/* Sticky bottom summary bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-slate-300 shadow-lg z-40">
-          <div className="max-w-screen-xl mx-auto px-6 py-3">
+        <div className="fixed bottom-0 left-64 right-0 bg-white border-t-2 border-slate-300 shadow-lg z-40">
+          <div className="px-6 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6 text-sm">
                 <div>
@@ -4474,6 +4534,7 @@ export const OffersPage: React.FC = () => {
               <span className="text-sm font-medium text-slate-500">Szablony:</span>
               {[
                 { id: 'netto' as const, label: 'Tylko netto' },
+                { id: 'brutto' as const, label: 'Tylko brutto' },
                 { id: 'rabat' as const, label: 'Rabat od ceny katalogowej' },
                 { id: 'no_prices' as const, label: 'Bez cen' },
                 { id: 'full' as const, label: 'Wszystko' }
@@ -4542,9 +4603,9 @@ export const OffersPage: React.FC = () => {
                               <th className="py-2 pr-4 text-right">Ilość</th>
                               {previewTemplate !== 'no_prices' && (
                                 <>
-                                  <th className="py-2 pr-4 text-right">Cena jedn.</th>
+                                  <th className="py-2 pr-4 text-right">{previewTemplate === 'brutto' ? 'Cena brutto' : 'Cena jedn.'}</th>
                                   {(previewTemplate === 'rabat' || previewTemplate === 'full') && <th className="py-2 pr-4 text-right">Rabat</th>}
-                                  <th className="py-2 pr-4 text-right">Wartość</th>
+                                  <th className="py-2 pr-4 text-right">{previewTemplate === 'brutto' ? 'Wartość brutto' : 'Wartość'}</th>
                                   {previewTemplate === 'full' && <th className="py-2 text-right">VAT</th>}
                                 </>
                               )}
@@ -4566,13 +4627,21 @@ export const OffersPage: React.FC = () => {
                                   <td className="py-2 pr-4 text-right">{item.quantity}</td>
                                   {previewTemplate !== 'no_prices' && (
                                     <>
-                                      <td className="py-2 pr-4 text-right">{formatCurrency(item.unit_price)}</td>
+                                      <td className="py-2 pr-4 text-right">
+                                        {previewTemplate === 'brutto'
+                                          ? formatCurrency(item.unit_price * (1 + (item.vat_rate ?? 23) / 100))
+                                          : formatCurrency(item.unit_price)}
+                                      </td>
                                       {(previewTemplate === 'rabat' || previewTemplate === 'full') && (
                                         <td className="py-2 pr-4 text-right text-red-600">
                                           {item.discount_percent ? `-${item.discount_percent}%` : '-'}
                                         </td>
                                       )}
-                                      <td className="py-2 pr-4 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                      <td className="py-2 pr-4 text-right font-medium">
+                                        {previewTemplate === 'brutto'
+                                          ? formatCurrency((val - disc) * (1 + (item.vat_rate ?? 23) / 100))
+                                          : formatCurrency(val - disc)}
+                                      </td>
                                       {previewTemplate === 'full' && (
                                         <td className="py-2 text-right text-xs text-slate-500">{item.vat_rate ?? 23}%</td>
                                       )}
@@ -4593,30 +4662,39 @@ export const OffersPage: React.FC = () => {
                 {/* Preview totals */}
                 {previewTemplate !== 'no_prices' && (
                   <div className="mt-8 pt-4 border-t-2 border-slate-300 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Suma netto:</span>
-                      <span className="font-medium">{formatCurrency(totals.total)}</span>
-                    </div>
-                    {totals.totalDiscount > 0 && previewTemplate !== 'netto' && (
-                      <div className="flex justify-between text-red-600">
-                        <span>Rabat:</span>
-                        <span>-{formatCurrency(totals.totalDiscount)}</span>
+                    {previewTemplate === 'brutto' ? (
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Suma brutto:</span>
+                        <span className="text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
                       </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Suma netto:</span>
+                          <span className="font-medium">{formatCurrency(totals.total)}</span>
+                        </div>
+                        {totals.totalDiscount > 0 && previewTemplate !== 'netto' && (
+                          <div className="flex justify-between text-red-600">
+                            <span>Rabat:</span>
+                            <span>-{formatCurrency(totals.totalDiscount)}</span>
+                          </div>
+                        )}
+                        {previewTemplate === 'full' && (
+                          <div className="flex justify-between">
+                            <span>Netto po rabacie:</span>
+                            <span className="font-medium">{formatCurrency(totals.nettoAfterDiscount)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span>VAT:</span>
+                          <span>{formatCurrency(totals.totalVat)}</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-300">
+                          <span>Brutto:</span>
+                          <span className="text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
+                        </div>
+                      </>
                     )}
-                    {previewTemplate === 'full' && (
-                      <div className="flex justify-between">
-                        <span>Netto po rabacie:</span>
-                        <span className="font-medium">{formatCurrency(totals.nettoAfterDiscount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span>VAT:</span>
-                      <span>{formatCurrency(totals.totalVat)}</span>
-                    </div>
-                    <div className="flex justify-between text-lg font-bold pt-2 border-t border-slate-300">
-                      <span>Brutto:</span>
-                      <span className="text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
-                    </div>
                   </div>
                 )}
               </div>
@@ -4631,18 +4709,21 @@ export const OffersPage: React.FC = () => {
                 <button
                   onClick={() => {
                     const html = generateOfferHTML();
-                    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${selectedOffer.number || 'oferta'}.html`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(html);
+                      printWindow.document.close();
+                      printWindow.focus();
+                      setTimeout(() => {
+                        printWindow.print();
+                      }, 500);
+                    }
                   }}
                   className="flex items-center gap-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  title="Pobierz jako PDF (Drukuj > Zapisz jako PDF)"
                 >
                   <Download className="w-4 h-4" />
-                  Pobierz
+                  Pobierz PDF
                 </button>
                 <button
                   onClick={() => {
@@ -4815,11 +4896,14 @@ export const OffersPage: React.FC = () => {
                         ? window.location.origin + selectedOffer.public_url
                         : `${window.location.origin}/#/offer/${selectedOffer.public_token || selectedOffer.id.substring(0, 8)}`;
                       navigator.clipboard.writeText(url);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
                     }}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                    className={`px-3 py-1.5 rounded text-sm ${linkCopied ? 'bg-green-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
                   >
-                    <Copy className="w-4 h-4" />
+                    {linkCopied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </button>
+                  {linkCopied && <span className="text-xs text-green-600 ml-1">Skopiowano!</span>}
                 </div>
                 <p className="text-xs text-slate-500">
                   Unikalny link do strony z ofertą. Klient może go otworzyć w przeglądarce.
@@ -4982,203 +5066,281 @@ export const OffersPage: React.FC = () => {
           })
         );
 
-        return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold">
-                  {kartotekaMode === 'fill_item' ? 'Kartoteka — Wybierz pozycję' :
-                   showSearchLabourModal ? 'Kartoteka — Robocizna' :
-                   showSearchMaterialModal ? 'Kartoteka — Materiały' :
-                   'Kartoteka — Sprzęt'}
-                </h2>
-                {kartotekaMode === 'fill_item' && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Wypełnij pozycję</span>
-                )}
-              </div>
-              <button onClick={closeKartoteka} className="p-1 hover:bg-slate-100 rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        const kartotekaTypeLabel = showSearchLabourModal ? 'robocizny' :
+          showSearchMaterialModal ? 'materiałów' : 'sprzętu';
+        const kartotekaTypeAddLabel = showSearchLabourModal ? 'Dodaj robociznę' :
+          showSearchMaterialModal ? 'Dodaj materiał' : 'Dodaj sprzęt';
 
-            {/* Tabs + Search + View toggle */}
-            <div className="px-4 py-2 border-b border-slate-200 flex items-center gap-3">
-              <div className="flex gap-1">
+        return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-[90vw] h-[90vh] overflow-hidden flex flex-col">
+
+            {/* Tabs bar (like Dictionaries) */}
+            <div className="px-6 pt-4 pb-0 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => setKartotekaTab('own')}
-                  className={`px-3 py-1.5 rounded text-sm ${kartotekaTab === 'own' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${kartotekaTab === 'own' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                 >
-                  Katalog własny
+                  Własny katalog
                 </button>
                 <button
                   onClick={() => setKartotekaTab('system')}
-                  className={`px-3 py-1.5 rounded text-sm ${kartotekaTab === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition ${kartotekaTab === 'system' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
                 >
                   Katalog systemowy
                 </button>
               </div>
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={kartotekaSearchText}
-                  onChange={e => setKartotekaSearchText(e.target.value)}
-                  placeholder="Szukaj po nazwie lub kodzie..."
-                  className="w-full pl-10 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm"
-                />
-              </div>
-              <div className="flex border border-slate-200 rounded overflow-hidden">
-                <button
-                  onClick={() => setKartotekaViewMode('list')}
-                  className={`px-2 py-1 text-xs ${kartotekaViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                >
-                  <ListChecks className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setKartotekaViewMode('grid')}
-                  className={`px-2 py-1 text-xs ${kartotekaViewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                </button>
-              </div>
+              <button onClick={closeKartoteka} className="p-1.5 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-400" />
+              </button>
             </div>
 
             {/* Body: sidebar + content */}
             <div className="flex-1 flex overflow-hidden">
               {/* Category sidebar */}
-              {kartotekaCategories.length > 0 && (
-                <div className="w-56 border-r border-slate-200 overflow-y-auto p-2 space-y-0.5 bg-slate-50/50">
+              <div className="w-64 border-r border-slate-200 overflow-y-auto flex flex-col">
+                <div className="px-4 py-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kategorie</span>
+                  <button className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="px-2 pb-2 space-y-0.5 flex-1 overflow-y-auto">
                   <button
                     onClick={() => setKartotekaSelectedCategory(null)}
-                    className={`w-full text-left px-2 py-1.5 rounded text-sm font-medium transition ${
-                      !kartotekaSelectedCategory ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-600'
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition ${
+                      !kartotekaSelectedCategory ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-50 text-slate-600'
                     }`}
                   >
-                    Wszystkie ({currentData.length})
+                    <FolderOpen className="w-4 h-4 shrink-0" />
+                    <span className="flex-1">Wszystkie</span>
+                    <span className={`text-xs ${!kartotekaSelectedCategory ? 'text-blue-500' : 'text-slate-400'}`}>{currentData.length}</span>
                   </button>
-                  {renderCatTree(rootCats)}
-                </div>
-              )}
-
-              {/* Content area */}
-              <div className="flex-1 overflow-y-auto">
-                {kartotekaLoading ? (
-                  <div className="flex items-center justify-center h-40">
-                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                  </div>
-                ) : kartotekaDetailItem ? (
-                  /* Detail view */
-                  <div className="p-6 space-y-4">
-                    <button
-                      onClick={() => setKartotekaDetailItem(null)}
-                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      Powrót do listy
-                    </button>
-                    <div className="bg-slate-50 rounded-lg p-6 space-y-3">
-                      <h3 className="text-xl font-bold text-slate-900">{kartotekaDetailItem.name}</h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div><span className="text-slate-500">Kod:</span> <span className="font-medium">{kartotekaDetailItem.code || '-'}</span></div>
-                        <div><span className="text-slate-500">Jednostka:</span> <span className="font-medium">{kartotekaDetailItem.unit || '-'}</span></div>
-                        <div><span className="text-slate-500">Cena:</span> <span className="font-bold text-blue-600">{formatCurrency(kartotekaDetailItem.price || kartotekaDetailItem.default_price || kartotekaDetailItem.price_unit || 0)}</span></div>
-                        {kartotekaDetailItem.description && (
-                          <div className="col-span-2"><span className="text-slate-500">Opis:</span> <span>{kartotekaDetailItem.description}</span></div>
+                  {rootCats.map(cat => {
+                    const children = childCatsOf(cat.id);
+                    const isExpanded = kartotekaExpandedCats.has(cat.id);
+                    const count = catCounts[cat.id] || 0;
+                    return (
+                      <div key={cat.id}>
+                        <button
+                          onClick={() => {
+                            setKartotekaSelectedCategory(kartotekaSelectedCategory === cat.id ? null : cat.id);
+                            if (children.length > 0) {
+                              setKartotekaExpandedCats(prev => {
+                                const next = new Set(prev);
+                                if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                                return next;
+                              });
+                            }
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 group transition ${
+                            kartotekaSelectedCategory === cat.id
+                              ? 'bg-blue-50 text-blue-700 font-medium'
+                              : 'hover:bg-slate-50 text-slate-600'
+                          }`}
+                        >
+                          {children.length > 0 ? (
+                            isExpanded ? <ChevronDown className="w-3.5 h-3.5 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <FolderOpen className="w-4 h-4 shrink-0 text-slate-400" />
+                          )}
+                          <span className="flex-1 truncate">{cat.name}</span>
+                          {count > 0 && <span className="text-xs text-slate-400">{count}</span>}
+                        </button>
+                        {isExpanded && children.length > 0 && (
+                          <div className="ml-4 space-y-0.5">
+                            {children.map((child: any) => (
+                              <button
+                                key={child.id}
+                                onClick={() => setKartotekaSelectedCategory(kartotekaSelectedCategory === child.id ? null : child.id)}
+                                className={`w-full text-left px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 transition ${
+                                  kartotekaSelectedCategory === child.id
+                                    ? 'bg-blue-50 text-blue-700 font-medium'
+                                    : 'hover:bg-slate-50 text-slate-500'
+                                }`}
+                              >
+                                <FolderOpen className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                                <span className="flex-1 truncate">{child.name}</span>
+                                <span className="text-xs text-slate-400">{catCounts[child.id] || 0}</span>
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleKartotekaSelect(kartotekaDetailItem)}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        {kartotekaMode === 'fill_item' ? 'Wybierz tę pozycję' : 'Dodaj jako składnik'}
-                      </button>
-                    </div>
+                    );
+                  })}
+                  {kartotekaCategories.length === 0 && (
+                    <div className="px-3 py-4 text-xs text-slate-400 text-center">Brak kategorii</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Content area */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Search + view toggle + count + add button */}
+                <div className="px-4 py-3 flex items-center gap-3 border-b border-slate-100">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={kartotekaSearchText}
+                      onChange={e => setKartotekaSearchText(e.target.value)}
+                      placeholder={`Szukaj ${kartotekaTypeLabel}...`}
+                      className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
-                ) : kartotekaViewMode === 'grid' ? (
-                  /* Grid view */
-                  <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {filteredKartotekaItems.map((item: any) => (
-                      <div
-                        key={item.id}
-                        className="border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-sm cursor-pointer transition group"
-                        onClick={() => setKartotekaDetailItem(item)}
+                  <div className="flex border border-slate-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setKartotekaViewMode('grid')}
+                      className={`px-2.5 py-2 ${kartotekaViewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setKartotekaViewMode('list')}
+                      className={`px-2.5 py-2 ${kartotekaViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+                    >
+                      <ListChecks className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <span className="text-sm text-slate-500 whitespace-nowrap">{filteredKartotekaItems.length} {kartotekaTypeLabel}</span>
+                  <button
+                    onClick={closeKartoteka}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {kartotekaTypeAddLabel}
+                  </button>
+                </div>
+
+                {/* Items area */}
+                <div className="flex-1 overflow-y-auto">
+                  {kartotekaLoading ? (
+                    <div className="flex items-center justify-center h-40">
+                      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    </div>
+                  ) : kartotekaDetailItem ? (
+                    /* Detail view */
+                    <div className="p-6 space-y-4">
+                      <button
+                        onClick={() => setKartotekaDetailItem(null)}
+                        className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
                       >
-                        <div className="text-xs text-slate-400 mb-1">{item.code || '-'}</div>
-                        <div className="text-sm font-medium text-slate-900 mb-2 line-clamp-2">{item.name}</div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs text-slate-500">{item.unit || '-'}</span>
-                          <span className="text-sm font-bold text-blue-600">{formatCurrency(item.price || item.default_price || item.price_unit || 0)}</span>
+                        <ArrowLeft className="w-4 h-4" />
+                        Powrót do listy
+                      </button>
+                      <div className="bg-slate-50 rounded-xl p-6 space-y-4">
+                        {kartotekaDetailItem.image_url && (
+                          <img src={kartotekaDetailItem.image_url} alt="" className="w-48 h-48 object-contain rounded-lg border border-slate-200 bg-white" />
+                        )}
+                        <h3 className="text-xl font-bold text-slate-900">{kartotekaDetailItem.name}</h3>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div><span className="text-slate-500">Kod:</span> <span className="font-medium">{kartotekaDetailItem.code || '-'}</span></div>
+                          <div><span className="text-slate-500">Jednostka:</span> <span className="font-medium">{kartotekaDetailItem.unit || '-'}</span></div>
+                          <div><span className="text-slate-500">Cena:</span> <span className="font-bold text-blue-600">{formatCurrency(kartotekaDetailItem.price || kartotekaDetailItem.default_price || kartotekaDetailItem.price_unit || 0)}</span></div>
+                          {kartotekaDetailItem.manufacturer && (
+                            <div><span className="text-slate-500">Producent:</span> <span className="font-medium">{kartotekaDetailItem.manufacturer}</span></div>
+                          )}
+                          {kartotekaDetailItem.description && (
+                            <div className="col-span-2"><span className="text-slate-500">Opis:</span> <span>{kartotekaDetailItem.description}</span></div>
+                          )}
                         </div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleKartotekaSelect(item); }}
-                          className="mt-2 w-full py-1 bg-blue-50 text-blue-600 rounded text-xs font-medium hover:bg-blue-100 opacity-0 group-hover:opacity-100 transition"
+                          onClick={() => handleKartotekaSelect(kartotekaDetailItem)}
+                          className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                         >
-                          {kartotekaMode === 'fill_item' ? 'Wybierz' : 'Dodaj'}
+                          <Plus className="w-4 h-4" />
+                          {kartotekaMode === 'fill_item' ? 'Wybierz tę pozycję' : 'Dodaj jako składnik'}
                         </button>
                       </div>
-                    ))}
-                    {filteredKartotekaItems.length === 0 && (
-                      <div className="col-span-full py-8 text-center text-slate-500 text-sm">
-                        Brak wyników
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* List view (table) */
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">KOD</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">NAZWA</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">JEDN.</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">CENA</th>
-                        <th className="px-4 py-2 w-20"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    </div>
+                  ) : kartotekaViewMode === 'grid' ? (
+                    /* Grid view — cards with images */
+                    <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {filteredKartotekaItems.map((item: any) => (
-                        <tr
+                        <div
                           key={item.id}
-                          className="hover:bg-slate-50 cursor-pointer"
-                          onClick={() => setKartotekaDetailItem(item)}
+                          className="border border-slate-200 rounded-xl overflow-hidden hover:border-blue-300 hover:shadow-md cursor-pointer transition group bg-white"
+                          onClick={() => handleKartotekaSelect(item)}
                         >
-                          <td className="px-4 py-2 text-slate-500">{item.code || '-'}</td>
-                          <td className="px-4 py-2">{item.name}</td>
-                          <td className="px-4 py-2 text-slate-500">{item.unit || '-'}</td>
-                          <td className="px-4 py-2 text-right font-medium">
-                            {formatCurrency(item.price || item.default_price || item.price_unit || 0)}
-                          </td>
-                          <td className="px-4 py-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleKartotekaSelect(item); }}
-                              className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs hover:bg-blue-100"
-                            >
-                              {kartotekaMode === 'fill_item' ? 'Wybierz' : 'Dodaj'}
-                            </button>
-                          </td>
-                        </tr>
+                          {/* Image */}
+                          <div className="h-36 bg-slate-50 flex items-center justify-center border-b border-slate-100">
+                            {item.image_url ? (
+                              <img src={item.image_url} alt="" className="max-h-full max-w-full object-contain p-2" />
+                            ) : (
+                              <Package className="w-12 h-12 text-slate-200" />
+                            )}
+                          </div>
+                          {/* Info */}
+                          <div className="p-3 space-y-1">
+                            <div className="text-xs text-slate-400 font-mono">{item.code || '-'}</div>
+                            <div className="text-sm font-medium text-slate-900 line-clamp-2 min-h-[2.5rem]">{item.name}</div>
+                            {item.manufacturer && (
+                              <div className="text-xs text-slate-400">{item.manufacturer}</div>
+                            )}
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-100 mt-2">
+                              <span className="text-sm font-bold text-blue-600">
+                                {(item.price || item.default_price || item.price_unit || 0).toFixed(2)} <span className="text-xs font-normal text-slate-400">zł</span>
+                              </span>
+                              <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Aktywny</span>
+                            </div>
+                          </div>
+                        </div>
                       ))}
                       {filteredKartotekaItems.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                            Brak danych w kartotece
-                          </td>
-                        </tr>
+                        <div className="col-span-full py-16 text-center text-slate-400 text-sm">
+                          Brak wyników
+                        </div>
                       )}
-                    </tbody>
-                  </table>
-                )}
+                    </div>
+                  ) : (
+                    /* List view (table) */
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Kod</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Nazwa</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Jedn.</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 uppercase">Cena</th>
+                          <th className="px-4 py-2.5 w-20"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredKartotekaItems.map((item: any) => (
+                          <tr
+                            key={item.id}
+                            className="hover:bg-blue-50/50 cursor-pointer transition"
+                            onClick={() => handleKartotekaSelect(item)}
+                          >
+                            <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{item.code || '-'}</td>
+                            <td className="px-4 py-2.5 font-medium">{item.name}</td>
+                            <td className="px-4 py-2.5 text-slate-500">{item.unit || '-'}</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-blue-600">
+                              {formatCurrency(item.price || item.default_price || item.price_unit || 0)}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleKartotekaSelect(item); }}
+                                className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                              >
+                                {kartotekaMode === 'fill_item' ? 'Wybierz' : 'Dodaj'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredKartotekaItems.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-16 text-center text-slate-400">
+                              Brak danych w kartotece
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-3 border-t border-slate-200 flex justify-end">
-              <button onClick={closeKartoteka} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
-                Zamknij
-              </button>
             </div>
           </div>
         </div>

@@ -30,11 +30,15 @@ export const sendSMS = async ({
   templateCode,
 }: SendSMSParams): Promise<SMSResponse> => {
   try {
+    // Get current session token for auth
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || SUPABASE_ANON_KEY;
+
     const response = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${token}`,
         'apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({

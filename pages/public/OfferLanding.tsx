@@ -24,6 +24,12 @@ interface PublicOffer {
     name: string;
     logo_url: string | null;
     nip: string;
+    phone: string | null;
+    email: string | null;
+    street: string | null;
+    building_number: string | null;
+    city: string | null;
+    postal_code: string | null;
   } | null;
   client: {
     name: string;
@@ -77,7 +83,7 @@ export const OfferLandingPage: React.FC = () => {
       // Find offer by public token or ID prefix
       const { data: offerData, error: offerErr } = await supabase
         .from('offers')
-        .select('*, company:companies(id, name, logo_url, nip)')
+        .select('*, company:companies(id, name, logo_url, nip, phone, email, street, building_number, city, postal_code)')
         .or(`public_token.eq.${publicToken},id.ilike.${publicToken}%`)
         .is('deleted_at', null)
         .single();
@@ -210,6 +216,51 @@ export const OfferLandingPage: React.FC = () => {
 
   const issueDate = offer.print_settings?.issue_date || offer.created_at;
   const isExpired = offer.valid_until && new Date(offer.valid_until) < new Date();
+
+  // Show expired page with company contact info
+  if (isExpired && offer.status !== 'accepted') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-lg text-center space-y-6">
+          <Clock className="w-16 h-16 text-red-400 mx-auto" />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Oferta nieważna</h1>
+            <p className="text-slate-500">
+              Oferta <strong>{offer.number}</strong> straciła ważność dnia {formatDate(offer.valid_until)}.
+            </p>
+          </div>
+          {offer.company && (
+            <div className="bg-slate-50 rounded-xl p-6 text-left space-y-3">
+              <p className="text-sm text-slate-500">Skontaktuj się z:</p>
+              <p className="text-lg font-bold text-slate-900">{offer.company.name}</p>
+              {offer.company.nip && (
+                <p className="text-sm text-slate-600">NIP: {offer.company.nip}</p>
+              )}
+              {(offer.company.street || offer.company.city) && (
+                <p className="text-sm text-slate-600 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                  {[offer.company.street, offer.company.building_number].filter(Boolean).join(' ')}
+                  {offer.company.city && `, ${[offer.company.postal_code, offer.company.city].filter(Boolean).join(' ')}`}
+                </p>
+              )}
+              {offer.company.email && (
+                <p className="text-sm text-slate-600 flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                  <a href={`mailto:${offer.company.email}`} className="text-blue-600 hover:underline">{offer.company.email}</a>
+                </p>
+              )}
+              {offer.company.phone && (
+                <p className="text-sm text-slate-600 flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                  <a href={`tel:${offer.company.phone}`} className="text-blue-600 hover:underline">{offer.company.phone}</a>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   const totalNetto = offer.sections.reduce((sum, s) =>
     sum + s.items.reduce((si, i) => si + i.quantity * i.unit_price, 0), 0);
   const totalDiscount = offer.sections.reduce((sum, s) =>
