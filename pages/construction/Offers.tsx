@@ -214,6 +214,7 @@ export const OffersPage: React.FC = () => {
   const [sendCoverLetter, setSendCoverLetter] = useState('');
   const [sendChannels, setSendChannels] = useState<string[]>(['email']);
   const [sendingOffer, setSendingOffer] = useState(false);
+  const [sendManualContact, setSendManualContact] = useState({ first_name: '', last_name: '', email: '', phone: '' });
 
   // Auto-generate cover letter when send modal opens
   useEffect(() => {
@@ -224,6 +225,7 @@ export const OffersPage: React.FC = () => {
       const validUntil = selectedOffer.valid_until ? formatDate(selectedOffer.valid_until) : '';
       const letter = `Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} — ${selectedOffer.name}.\nOferta obejmuje ${itemCount} pozycji o wartości ${formatCurrency(totals.total)} netto.${validUntil ? `\nWażność: do ${validUntil}.` : ''}\n\nW razie pytań pozostaję do dyspozycji.\n\nZ poważaniem,\n${userName}${companyName ? `\n${companyName}` : ''}`;
       setSendCoverLetter(letter);
+      setSendManualContact({ first_name: '', last_name: '', email: '', phone: '' });
     }
   }, [showSendModal]);
 
@@ -887,7 +889,7 @@ export const OffersPage: React.FC = () => {
           c.is_primary = i === index;
         });
       } else {
-        (newContacts[index] as any)[field] = value;
+        newContacts[index] = { ...newContacts[index], [field]: value };
       }
       return newContacts;
     });
@@ -1582,10 +1584,10 @@ export const OffersPage: React.FC = () => {
       const activeChannels = channels || sendChannels;
       const letter = coverLetter || sendCoverLetter;
 
-      // Find representative contact
+      // Find representative contact (fallback to manual input)
       const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
-      const repEmail = rep?.email || '';
-      const repPhone = rep?.phone?.replace(/\s/g, '') || '';
+      const repEmail = rep?.email || sendManualContact.email || '';
+      const repPhone = (rep?.phone || sendManualContact.phone || '').replace(/\s/g, '');
 
       // Send via selected channels
       for (const channel of activeChannels) {
@@ -4631,12 +4633,21 @@ export const OffersPage: React.FC = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="grid grid-cols-2 gap-3 flex-1">
-                      <input type="text" placeholder="Imię" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-                      <input type="text" placeholder="Nazwisko" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-                      <input type="email" placeholder="E-mail" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
-                      <input type="tel" placeholder="Telefon" className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500 mb-2">Brak zapisanych kontaktów. Wprowadź dane ręcznie:</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input type="text" placeholder="Imię" value={sendManualContact.first_name}
+                        onChange={e => setSendManualContact(prev => ({ ...prev, first_name: e.target.value }))}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="text" placeholder="Nazwisko" value={sendManualContact.last_name}
+                        onChange={e => setSendManualContact(prev => ({ ...prev, last_name: e.target.value }))}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="email" placeholder="E-mail" value={sendManualContact.email}
+                        onChange={e => setSendManualContact(prev => ({ ...prev, email: e.target.value }))}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                      <input type="tel" placeholder="Telefon" value={sendManualContact.phone}
+                        onChange={e => setSendManualContact(prev => ({ ...prev, phone: e.target.value }))}
+                        className="px-3 py-2 border border-slate-200 rounded-lg text-sm" />
                     </div>
                   </div>
                 )}
