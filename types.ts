@@ -123,6 +123,7 @@ export interface Question {
 export interface Skill {
   id: string;
   name_pl: string;
+  title_pl?: string;
   category: string; // Changed from enum to string for dynamic support
   description_pl: string;
   verification_type: VerificationType;
@@ -205,7 +206,7 @@ export interface User {
 // =====================================================
 
 export type CompanyStatus = 'active' | 'suspended' | 'cancelled' | 'trial';
-export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled';
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'cancelled' | 'none';
 
 export interface Company {
   id: string;

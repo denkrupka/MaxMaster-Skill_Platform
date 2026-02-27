@@ -320,6 +320,9 @@ export const OffersPage: React.FC = () => {
   const [offerWorkTypes, setOfferWorkTypes] = useState<{ id: string; code: string; name: string }[]>([]);
   const [offerSelectedWorkTypes, setOfferSelectedWorkTypes] = useState<string[]>([]);
   const [offerShowWorkTypesDropdown, setOfferShowWorkTypesDropdown] = useState(false);
+  const [offerShowAddWorkType, setOfferShowAddWorkType] = useState(false);
+  const [offerNewWorkTypeCode, setOfferNewWorkTypeCode] = useState('');
+  const [offerNewWorkTypeName, setOfferNewWorkTypeName] = useState('');
   const [offerShowAddSource, setOfferShowAddSource] = useState(false);
   const [offerNewSourceOption, setOfferNewSourceOption] = useState('');
   const [offerCustomSources, setOfferCustomSources] = useState<string[]>([]);
@@ -2699,21 +2702,31 @@ export const OffersPage: React.FC = () => {
           <div className="col-span-2 relative">
             <label className="block text-sm font-medium text-slate-700 mb-1">Rodzaj prac *</label>
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setOfferShowWorkTypesDropdown(!offerShowWorkTypesDropdown)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
-              >
-                <span className={offerSelectedWorkTypes.length === 0 ? 'text-slate-400' : 'text-slate-900'}>
-                  {offerSelectedWorkTypes.length === 0
-                    ? 'Wybierz rodzaj prac...'
-                    : offerWorkTypes
-                        .filter(wt => offerSelectedWorkTypes.includes(wt.id))
-                        .map(wt => wt.code)
-                        .join(', ')}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${offerShowWorkTypesDropdown ? 'rotate-180' : ''}`} />
-              </button>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setOfferShowWorkTypesDropdown(!offerShowWorkTypesDropdown)}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between"
+                >
+                  <span className={offerSelectedWorkTypes.length === 0 ? 'text-slate-400' : 'text-slate-900'}>
+                    {offerSelectedWorkTypes.length === 0
+                      ? 'Wybierz rodzaj prac...'
+                      : offerWorkTypes
+                          .filter(wt => offerSelectedWorkTypes.includes(wt.id))
+                          .map(wt => wt.code)
+                          .join(', ')}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${offerShowWorkTypesDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setOfferShowAddWorkType(true); setOfferShowWorkTypesDropdown(false); }}
+                  className="px-2 py-2 text-blue-600 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 flex-shrink-0"
+                  title="Dodaj nowy rodzaj prac"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
               {offerShowWorkTypesDropdown && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
                   {offerWorkTypes.map(wt => (
@@ -2739,6 +2752,69 @@ export const OffersPage: React.FC = () => {
                   {offerWorkTypes.length === 0 && (
                     <div className="px-3 py-2 text-sm text-slate-500">Brak typów prac</div>
                   )}
+                </div>
+              )}
+              {offerShowAddWorkType && (
+                <div className="flex gap-1 mt-1">
+                  <input
+                    type="text"
+                    value={offerNewWorkTypeCode}
+                    onChange={e => setOfferNewWorkTypeCode(e.target.value.toUpperCase())}
+                    placeholder="Kod (np. IE)"
+                    className="w-20 px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                    autoFocus
+                  />
+                  <input
+                    type="text"
+                    value={offerNewWorkTypeName}
+                    onChange={e => setOfferNewWorkTypeName(e.target.value)}
+                    placeholder="Nazwa (np. Elektryka)"
+                    className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-sm"
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter' && offerNewWorkTypeCode.trim() && offerNewWorkTypeName.trim()) {
+                        const fullName = `${offerNewWorkTypeCode.trim()} - ${offerNewWorkTypeName.trim()}`;
+                        const { data } = await supabase.from('kosztorys_work_types').insert({
+                          code: offerNewWorkTypeCode.trim(),
+                          name: fullName,
+                          company_id: currentUser?.company_id,
+                          is_active: true
+                        }).select('id, code, name').single();
+                        if (data) {
+                          setOfferWorkTypes(prev => [...prev, data]);
+                          setOfferSelectedWorkTypes(prev => [...prev, data.id]);
+                        }
+                        setOfferNewWorkTypeCode('');
+                        setOfferNewWorkTypeName('');
+                        setOfferShowAddWorkType(false);
+                      }
+                      if (e.key === 'Escape') { setOfferShowAddWorkType(false); setOfferNewWorkTypeCode(''); setOfferNewWorkTypeName(''); }
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      if (offerNewWorkTypeCode.trim() && offerNewWorkTypeName.trim()) {
+                        const fullName = `${offerNewWorkTypeCode.trim()} - ${offerNewWorkTypeName.trim()}`;
+                        const { data } = await supabase.from('kosztorys_work_types').insert({
+                          code: offerNewWorkTypeCode.trim(),
+                          name: fullName,
+                          company_id: currentUser?.company_id,
+                          is_active: true
+                        }).select('id, code, name').single();
+                        if (data) {
+                          setOfferWorkTypes(prev => [...prev, data]);
+                          setOfferSelectedWorkTypes(prev => [...prev, data.id]);
+                        }
+                      }
+                      setOfferNewWorkTypeCode('');
+                      setOfferNewWorkTypeName('');
+                      setOfferShowAddWorkType(false);
+                    }}
+                    className="px-2 py-1.5 bg-blue-600 text-white rounded-lg text-xs"
+                  >OK</button>
+                  <button
+                    onClick={() => { setOfferShowAddWorkType(false); setOfferNewWorkTypeCode(''); setOfferNewWorkTypeName(''); }}
+                    className="px-2 py-1.5 text-slate-600 border border-slate-200 rounded-lg text-xs"
+                  >✕</button>
                 </div>
               )}
             </div>
