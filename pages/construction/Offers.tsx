@@ -221,7 +221,7 @@ export const OffersPage: React.FC = () => {
 
   // Auto-generate cover letter when send modal opens
   useEffect(() => {
-    if (showSendModal && selectedOffer && !sendCoverLetter) {
+    if (showSendModal && selectedOffer) {
       const itemCount = getAllItems(sections).length;
       const userName = currentUser ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() : '';
       const companyName = state.currentCompany?.name || '';
@@ -982,15 +982,15 @@ export const OffersPage: React.FC = () => {
 
         const mapItem = (i: OfferItem): LocalOfferItem => ({
           ...i,
-          unit: (i as any).unit || 'szt.',
+          unit: i.unit || 'szt.',
           isEditing: false,
           isNew: false,
           isExpanded: false,
           components: componentsByItem[i.id] || [],
           markup_percent: 0,
           cost_price: 0,
-          discount_percent: (i as any).discount_percent || 0,
-          vat_rate: (i as any).vat_rate ?? 23,
+          discount_percent: i.discount_percent || 0,
+          vat_rate: i.vat_rate ?? 23,
           selected: false
         });
 
@@ -4462,6 +4462,7 @@ export const OffersPage: React.FC = () => {
                             <tr className="text-left text-slate-500 border-b">
                               <th className="py-2 pr-4">Lp.</th>
                               <th className="py-2 pr-4">Nazwa</th>
+                              <th className="py-2 pr-4 text-center">Jedn.</th>
                               <th className="py-2 pr-4 text-right">Ilość</th>
                               {previewTemplate !== 'no_prices' && (
                                 <>
@@ -4484,6 +4485,7 @@ export const OffersPage: React.FC = () => {
                                     {item.description && <p className="text-xs text-slate-400 mt-0.5">{item.description}</p>}
                                     {item.is_optional && <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded">opcja</span>}
                                   </td>
+                                  <td className="py-2 pr-4 text-center text-slate-500">{item.unit || 'szt.'}</td>
                                   <td className="py-2 pr-4 text-right">{item.quantity}</td>
                                   {previewTemplate !== 'no_prices' && (
                                     <>
