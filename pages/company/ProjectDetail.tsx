@@ -375,7 +375,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
     if (currentUser && project) loadProjectData();
   }, [currentUser, project?.id]);
 
-  const safeQuery = (promise: Promise<any>) => promise.then(r => r.data || []).catch(() => []);
+  const safeQuery = (promise: PromiseLike<any>) => Promise.resolve(promise).then(r => r.data || []).catch(() => []);
 
   const loadProjectData = async () => {
     if (!currentUser) return;
@@ -395,7 +395,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
         project.contractor_client_id
           ? safeQuery(supabase.from('contractor_client_contacts').select('*').eq('client_id', project.contractor_client_id))
           : Promise.resolve([]),
-        supabase.from('project_task_categories').select('*').eq('company_id', currentUser.company_id).order('name').then(r => r.data || []).catch(() => [] as any[]),
+        Promise.resolve(supabase.from('project_task_categories').select('*').eq('company_id', currentUser.company_id).order('name')).then(r => r.data || []).catch(() => [] as any[]),
       ]);
       setTasks(tasks);
       setMembers(members);

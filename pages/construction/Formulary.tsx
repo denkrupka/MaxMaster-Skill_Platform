@@ -875,7 +875,7 @@ export const FormularyPage: React.FC<FormularyPageProps> = ({ requestId: propReq
 
         // Expand all groups
         if (formsMap[firstWorkType].template) {
-          const allGroups = new Set(formsMap[firstWorkType].template.room_groups.map((g: any) => g.code));
+          const allGroups = new Set<string>(formsMap[firstWorkType].template.room_groups.map((g: any) => g.code));
           setExpandedGroups(allGroups);
         }
 

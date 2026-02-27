@@ -153,9 +153,9 @@ export const CompanyProjectsPage: React.FC = () => {
       // Extended queries (tables/columns from migrations - may not exist yet, ignore errors)
       const companyProjectIds = new Set((projRes.data || []).map((p: any) => p.id));
       const [costsRes, incomeRes, membersRes] = await Promise.all([
-        supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id).then(r => r.data || []).catch(() => []),
-        supabase.from('project_income').select('*').eq('company_id', currentUser.company_id).then(r => r.data || []).catch(() => []),
-        supabase.from('project_members').select('*').then(r => r.data || []).catch(() => []),
+        Promise.resolve(supabase.from('project_costs').select('*').eq('company_id', currentUser.company_id)).then(r => r.data || []).catch(() => []),
+        Promise.resolve(supabase.from('project_income').select('*').eq('company_id', currentUser.company_id)).then(r => r.data || []).catch(() => []),
+        Promise.resolve(supabase.from('project_members').select('*')).then(r => r.data || []).catch(() => []),
       ]);
       setProjectCosts(costsRes as ProjectCost[]);
       setProjectIncome(incomeRes as ProjectIncome[]);

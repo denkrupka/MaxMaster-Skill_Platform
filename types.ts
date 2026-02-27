@@ -122,6 +122,7 @@ export interface Question {
 
 export interface Skill {
   id: string;
+  name: string;
   name_pl: string;
   title_pl?: string;
   category: string; // Changed from enum to string for dynamic support
@@ -633,7 +634,8 @@ export enum ActivityType {
   EMAIL = 'email',
   MEETING = 'meeting',
   NOTE = 'note',
-  TASK = 'task'
+  TASK = 'task',
+  STATUS_CHANGE = 'status_change'
 }
 
 export interface CRMCompany {
@@ -706,6 +708,7 @@ export interface CRMActivity {
   activity_type: ActivityType;
   subject: string;
   description?: string;
+  location?: string;
   crm_company_id?: string;
   contact_id?: string;
   deal_id?: string;
@@ -919,6 +922,9 @@ export interface TimeOffType {
   is_subtype?: boolean;
   parent_type_id?: string;
   count_weekends?: boolean;
+  count_holidays?: boolean;
+  carry_over?: boolean;
+  auto_approve?: boolean;
   require_advance?: boolean;
   default_comment?: string;
   requires_approval: boolean;
@@ -2740,14 +2746,18 @@ export interface FinanceTransaction {
   project_id?: string;
   category_id?: string;
   contractor_id?: string;
+  account_id?: string;
   transaction_type: TransactionType;
+  operation_type?: string;
   amount: number;
   currency_id: number;
   exchange_rate: number;
   amount_base: number;
   description?: string;
   reference_number?: string;
+  document_number?: string;
   transaction_date: string;
+  operation_date?: string;
   due_date?: string;
   status: TransactionStatus;
   payment_method?: PaymentMethod;
@@ -2776,6 +2786,47 @@ export interface FinanceBudget {
   created_at: string;
   updated_at: string;
   category?: FinanceCategory;
+}
+
+export interface FinanceAccount {
+  id: string;
+  company_id: string;
+  name: string;
+  type: string;
+  account_type?: string;
+  account_number?: string;
+  bank_name?: string;
+  balance: number;
+  current_balance?: number;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type FinanceOperation = FinanceTransaction;
+
+export interface FinanceAct {
+  id: string;
+  company_id: string;
+  project_id?: string;
+  contractor_id?: string;
+  name?: string;
+  number: string;
+  type: string;
+  status: string;
+  payment_status?: string;
+  amount: number;
+  total?: number;
+  paid_amount?: number;
+  nds_amount?: number;
+  date: string;
+  act_date?: string;
+  period_start?: string;
+  period_end?: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // =====================================================
@@ -2869,7 +2920,7 @@ export interface PurchaseOrderItem {
 // МОДУЛЬ: СОГЛАСОВАНИЯ (UZGODNIENIA)
 // =====================================================
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export type ApprovalStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'cancelled';
 export type ApprovalEntityType = 'document' | 'estimate' | 'offer' | 'purchase_request' | 'purchase_order' | 'ticket' | 'other' | 'act' | 'change_request' | 'order';
 
 export interface ApprovalWorkflow {
@@ -2878,6 +2929,7 @@ export interface ApprovalWorkflow {
   name: string;
   description?: string;
   entity_type: ApprovalEntityType;
+  entity_types?: ApprovalEntityType[];
   is_active: boolean;
   is_default: boolean;
   settings: Record<string, any>;
@@ -2903,9 +2955,13 @@ export interface Approval {
   id: string;
   company_id: string;
   workflow_id?: string;
+  workflow_template_id?: string;
   entity_type: ApprovalEntityType;
   entity_id: string;
   entity_name: string;
+  subject?: string;
+  description?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   status: ApprovalStatus;
   current_step: number;
   initiated_by_id: string;
@@ -2929,6 +2985,11 @@ export interface ApprovalStep {
   created_at: string;
   approver?: User;
 }
+
+// Aliases for backward compatibility
+export type ApprovalRequest = Approval;
+export type ApprovalWorkflowTemplate = ApprovalWorkflow;
+export type ApprovalAction = ApprovalStep;
 
 // =====================================================
 // РОЛИ СТРОИТЕЛЬСТВА
@@ -2987,7 +3048,7 @@ export type KosztorysNormType = 'absolute' | 'relative';
 export type KosztorysRoundingMethod = 'default' | 'PN-70/N-02120';
 
 // Шаблон расчёта
-export type KosztorysCalculationTemplate = 'overhead-on-top' | 'overhead-included';
+export type KosztorysCalculationTemplate = 'overhead-on-top' | 'overhead-included' | 'overhead-cascade' | 'simple';
 
 // Тип источника индекса
 export type KosztorysOriginIndexType = 'ETO' | 'KNNR' | 'KNR' | 'KSNR' | 'custom' | 'knr' | 'knnr' | 'ksnr';
@@ -3471,6 +3532,7 @@ export interface Order {
   project_id?: string;
   request_id?: string;
   supplier_id?: string;
+  contractor_id?: string;
   number?: string;
   order_number?: string;
   order_date?: string;
@@ -3492,6 +3554,7 @@ export interface Stock {
   company_id: string;
   project_id?: string;
   name: string;
+  description?: string;
   address?: string;
   location?: string;
   type?: string;
@@ -3510,6 +3573,7 @@ export interface StockBalance {
   item_code?: string;
   unit?: string;
   quantity: number;
+  available_quantity?: number;
   min_quantity?: number;
   total_value?: number;
   last_operation_at?: string;

@@ -342,7 +342,8 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
   [ActivityType.EMAIL]: 'Email',
   [ActivityType.MEETING]: 'Spotkanie',
   [ActivityType.NOTE]: 'Notatka',
-  [ActivityType.TASK]: 'Zadanie'
+  [ActivityType.TASK]: 'Zadanie',
+  [ActivityType.STATUS_CHANGE]: 'Zmiana statusu'
 };
 
 export const ACTIVITY_TYPE_ICONS: Record<ActivityType, string> = {
@@ -350,7 +351,8 @@ export const ACTIVITY_TYPE_ICONS: Record<ActivityType, string> = {
   [ActivityType.EMAIL]: 'Mail',
   [ActivityType.MEETING]: 'Calendar',
   [ActivityType.NOTE]: 'FileText',
-  [ActivityType.TASK]: 'CheckSquare'
+  [ActivityType.TASK]: 'CheckSquare',
+  [ActivityType.STATUS_CHANGE]: 'RefreshCw'
 };
 
 export const INDUSTRY_OPTIONS = [

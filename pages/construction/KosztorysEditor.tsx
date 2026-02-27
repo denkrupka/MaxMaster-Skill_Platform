@@ -57,6 +57,7 @@ import type {
   KosztorysPositionCalculationResult,
   KosztorysCostEstimateCalculationResult,
   KosztorysResourceType,
+  KosztorysCalculationTemplate,
   KosztorysType,
   WholesalerIntegration,
   KosztorysMaterial,
@@ -3462,9 +3463,9 @@ export const KosztorysEditorPage: React.FC = () => {
 
     newData.sections = {
       ...newData.sections,
-      [targetSectionForPosition]: {
-        ...newData.sections[targetSectionForPosition],
-        positionIds: [...newData.sections[targetSectionForPosition].positionIds, newPosition.id],
+      [effectiveTargetSectionId]: {
+        ...newData.sections[effectiveTargetSectionId],
+        positionIds: [...newData.sections[effectiveTargetSectionId].positionIds, newPosition.id],
       },
     };
 
@@ -3476,7 +3477,7 @@ export const KosztorysEditorPage: React.FC = () => {
       selectedItemId: newPosition.id,
       selectedItemType: 'position',
       expandedPositions: new Set([...prev.expandedPositions, newPosition.id]),
-      expandedSections: new Set([...prev.expandedSections, targetSectionForPosition]),
+      expandedSections: new Set([...prev.expandedSections, effectiveTargetSectionId]),
     }));
   };
 
@@ -3495,8 +3496,9 @@ export const KosztorysEditorPage: React.FC = () => {
       waste: 'Odpady',
     };
 
+    const safeType = (resourceType === 'waste' ? 'material' : resourceType) || 'labor';
     const newResource = createNewResource(
-      resourceType || 'labor',
+      safeType as 'labor' | 'material' | 'equipment',
       resourceNames[resourceType || 'labor'] || 'Nowy nakład',
       1,
       0,
@@ -3538,6 +3540,13 @@ export const KosztorysEditorPage: React.FC = () => {
     }, 2000);
 
     showNotificationMessage(`Dodano nakład: ${resourceNames[resourceType || 'labor']}`, 'success');
+  };
+
+  // Confirm add resource from modal
+  const confirmAddResource = () => {
+    if (!editorState.selectedItemId) return;
+    handleAddResource(editorState.selectedItemId, newResourceForm.type);
+    setShowAddResourceModal(false);
   };
 
   // Update selected item
@@ -4823,7 +4832,7 @@ export const KosztorysEditorPage: React.FC = () => {
         const resourceName = norm.name ||
           (norm.type === 'labor' ? 'Robotnicy' : norm.type === 'equipment' ? 'Sprzęt' : 'Materiał');
         const resource = createNewResource(
-          norm.type,
+          (norm.type === 'waste' ? 'material' : norm.type) as 'labor' | 'material' | 'equipment',
           resourceName,
           norm.value,
           0, // Price will be set later
@@ -8220,8 +8229,8 @@ export const KosztorysEditorPage: React.FC = () => {
                       value={estimate.settings.calculationTemplate}
                       onChange={(e) => setEstimate(prev => prev ? {
                         ...prev,
-                        settings: { ...prev.settings, calculationTemplate: e.target.value }
-                      } : null)}
+                        settings: { ...prev.settings, calculationTemplate: e.target.value as KosztorysCalculationTemplate }
+                      } : prev)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     >
                       <option value="overhead-on-top">Narzuty „od góry" - liczenie od kosztów bezpośrednich</option>
@@ -8698,7 +8707,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 min-h-[800px] ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -8826,7 +8835,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -8903,7 +8912,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -8993,7 +9002,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9094,7 +9103,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9166,7 +9175,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9238,7 +9247,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9293,7 +9302,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9447,7 +9456,7 @@ export const KosztorysEditorPage: React.FC = () => {
                     return (
                       <div
                         key={page.id}
-                        ref={el => sectionRefs.current[page.id] = el}
+                        ref={el => { sectionRefs.current[page.id] = el; }}
                         className={`print-section p-12 border-b-4 border-dashed border-gray-300 ${activeExportSection === page.id ? 'ring-2 ring-blue-500' : ''}`}
                         onClick={() => setActiveExportSection(page.id)}
                       >
@@ -9800,8 +9809,8 @@ export const KosztorysEditorPage: React.FC = () => {
                       value={estimate.settings.calculationTemplate}
                       onChange={(e) => setEstimate(prev => prev ? {
                         ...prev,
-                        settings: { ...prev.settings, calculationTemplate: e.target.value }
-                      } : null)}
+                        settings: { ...prev.settings, calculationTemplate: e.target.value as KosztorysCalculationTemplate }
+                      } : prev)}
                       className="w-full px-2 py-2 border border-gray-300 rounded-lg text-xs"
                     >
                       <option value="overhead-on-top">Narzuty liczone dla kosztorysu</option>

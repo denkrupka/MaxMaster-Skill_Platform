@@ -450,7 +450,7 @@ export const EstimatesPage: React.FC = () => {
         .eq('company_id', currentUser.company_id)
         .in('role', ['company_admin', 'hr', 'coordinator', 'employee'])
         .order('first_name');
-      if (data) setUsers(data);
+      if (data) setUsers(data as any);
     } catch (err) {
       console.error('Error loading users:', err);
     }

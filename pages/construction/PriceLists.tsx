@@ -383,7 +383,7 @@ export const PriceListsPage: React.FC = () => {
         material_id: materialId,
         item_code: material.code,
         item_name: material.name,
-        unit: material.unit,
+        unit: String(material.unit || ''),
         price: material.default_price,
       });
     }
@@ -397,7 +397,7 @@ export const PriceListsPage: React.FC = () => {
         equipment_id: equipmentId,
         item_code: eq.code,
         item_name: eq.name,
-        unit: eq.unit,
+        unit: String(eq.unit || ''),
         price: eq.default_price,
       });
     }

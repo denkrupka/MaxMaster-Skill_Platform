@@ -546,7 +546,7 @@ export const ProcurementPage: React.FC = () => {
                       {RESOURCE_REQUEST_STATUS_LABELS[req.status]}
                     </span>
                     {req.is_over_budget && (
-                      <AlertCircle className="w-5 h-5 text-red-500" title="Przekroczony budżet" />
+                      <span title="Przekroczony budżet"><AlertCircle className="w-5 h-5 text-red-500" /></span>
                     )}
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                       {req.status === 'new' && (
@@ -562,13 +562,13 @@ export const ProcurementPage: React.FC = () => {
                         onClick={() => {
                           setEditingRequest(req);
                           setRequestForm({
-                            project_id: req.project_id,
-                            name: req.name,
+                            project_id: req.project_id || '',
+                            name: req.name || '',
                             description: req.description || '',
-                            resource_type: req.resource_type,
-                            volume_required: req.volume_required,
+                            resource_type: (req.resource_type || 'material') as 'labor' | 'material' | 'equipment' | 'overhead',
+                            volume_required: req.volume_required || 1,
                             needed_at: req.needed_at?.split('T')[0] || '',
-                            priority: req.priority
+                            priority: (req.priority === 'normal' ? 'medium' : req.priority) as 'low' | 'medium' | 'high' | 'urgent'
                           });
                           setShowRequestModal(true);
                         }}

@@ -121,7 +121,7 @@ export const redirectToCheckout = async (sessionId: string): Promise<void> => {
     throw new Error('Stripe not initialized. Check VITE_STRIPE_PUBLISHABLE_KEY.');
   }
 
-  const { error } = await stripe.redirectToCheckout({ sessionId });
+  const { error } = await (stripe as any).redirectToCheckout({ sessionId });
   if (error) {
     throw new Error(error.message || 'Failed to redirect to checkout');
   }

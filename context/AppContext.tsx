@@ -48,6 +48,10 @@ interface AppState {
 
   // SuperAdmin role simulation
   simulatedRole: Role | null;
+
+  // Misc
+  language: string;
+  allUsers: User[];
 }
 
 interface AppContextType {
@@ -167,7 +171,11 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
 
   // Referral program defaults
   referralMinPaymentAmount: 100,
-  referralBonusAmount: 50
+  referralBonusAmount: 50,
+
+  // Sales config defaults
+  salesMaxDiscountPercent: 15,
+  salesMaxFreeExtensionDays: 14
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -205,7 +213,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     crmActivities: [],
 
     // SuperAdmin role simulation
-    simulatedRole: null
+    simulatedRole: null,
+
+    // Global
+    language: 'pl',
+    allUsers: []
   });
 
   // Track if we're in the initial auth setup to prevent duplicate refreshData calls

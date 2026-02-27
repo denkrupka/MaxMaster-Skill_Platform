@@ -293,6 +293,7 @@ export const HRTestsPage = () => {
                     // Create new skill automatically
                     try {
                         const newSkill: Omit<Skill, 'id'> = {
+                            name: skillName,
                             name_pl: skillName,
                             category: categoryName as SkillCategory,
                             description_pl: `Automatycznie utworzona z importu: ${skillName}`,

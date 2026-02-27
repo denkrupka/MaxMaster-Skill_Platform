@@ -989,9 +989,8 @@ export const TrialDashboard = () => {
                 isOpen={fileViewer.isOpen}
                 urls={fileViewer.urls}
                 title={fileViewer.title}
-                currentIndex={fileViewer.index}
+                initialIndex={fileViewer.index}
                 onClose={() => setFileViewer({ isOpen: false, urls: [], title: '', index: 0 })}
-                onNavigate={(newIndex) => setFileViewer(prev => ({ ...prev, index: newIndex }))}
             />
         </div>
     );

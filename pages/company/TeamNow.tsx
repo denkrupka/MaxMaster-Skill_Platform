@@ -12,7 +12,7 @@ import { SectionTabs } from '../../components/SectionTabs';
 // Access: COMPANY_ADMIN, HR (all), COORDINATOR (own dept), BRIGADIR (own brigade)
 // =====================================================
 
-interface WorkerStateWithUser extends WorkerState {
+interface WorkerStateWithUser extends Omit<WorkerState, 'user' | 'department'> {
   user?: {
     id: string;
     first_name: string;

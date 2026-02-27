@@ -470,7 +470,7 @@ export const OffersPage: React.FC = () => {
         .eq('company_id', currentUser.company_id)
         .in('role', ['company_admin', 'hr', 'coordinator', 'employee'])
         .order('first_name');
-      if (data) setOfferUsers(data);
+      if (data) setOfferUsers(data as any);
     } catch (err) {
       console.error('Error loading users:', err);
     }

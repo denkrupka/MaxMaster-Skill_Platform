@@ -535,7 +535,7 @@ export const FinancePage: React.FC = () => {
                             project_id: op.project_id || '',
                             account_id: op.account_id || '',
                             contractor_id: op.contractor_id || '',
-                            operation_type: op.operation_type,
+                            operation_type: op.operation_type as FinanceOperationType,
                             amount: op.amount,
                             description: op.description || '',
                             operation_date: op.operation_date?.split('T')[0] || '',
@@ -606,7 +606,7 @@ export const FinancePage: React.FC = () => {
                             period_end: act.period_end?.split('T')[0] || '',
                             total: act.total,
                             nds_amount: act.nds_amount,
-                            payment_status: act.payment_status
+                            payment_status: (act.payment_status || 'pending') as 'pending' | 'partial' | 'paid'
                           });
                           setShowActModal(true);
                         }}
@@ -664,7 +664,7 @@ export const FinancePage: React.FC = () => {
                             setEditingAccount(account);
                             setAccountForm({
                               name: account.name,
-                              account_type: account.account_type,
+                              account_type: (account.account_type || 'bank') as 'bank' | 'cash' | 'card',
                               bank_name: account.bank_name || '',
                               account_number: account.account_number || '',
                               current_balance: account.current_balance
