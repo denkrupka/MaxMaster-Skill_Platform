@@ -2860,11 +2860,13 @@ export const OffersPage: React.FC = () => {
   // ============================================
   // RENDER: SECTION (recursive for nested subsections)
   // ============================================
+  const calcSectionTotal = (sec: LocalOfferSection): number => {
+    return sec.items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
+      + (sec.children || []).reduce((s, child) => s + calcSectionTotal(child), 0);
+  };
+
   const renderSection = (section: LocalOfferSection, depth: number): React.ReactNode => {
-    const sectionTotal = section.items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
-      + (section.children || []).reduce((s, child) => {
-        return s + child.items.reduce((si, i) => si + i.quantity * i.unit_price, 0);
-      }, 0);
+    const sectionTotal = calcSectionTotal(section);
 
     return (
       <div key={section.id} className={`border border-slate-200 rounded-lg overflow-hidden ${depth > 0 ? 'ml-6 mt-2' : ''}`}>
@@ -3021,6 +3023,9 @@ export const OffersPage: React.FC = () => {
               <div>
                 <p className="font-medium text-slate-900">{item.name}</p>
                 {item.description && <p className="text-xs text-slate-500">{item.description}</p>}
+                {(item.discount_percent || 0) > 0 && (
+                  <span className="text-xs text-red-500 ml-1">-{item.discount_percent}%</span>
+                )}
               </div>
             )}
           </div>
@@ -3193,6 +3198,26 @@ export const OffersPage: React.FC = () => {
                 <Wrench className="w-3 h-3" />
                 Sprzęt
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* View mode: show components read-only */}
+        {!editMode && (item.components || []).length > 0 && (
+          <div className="bg-slate-50/30 border-t border-slate-100 px-6 py-2">
+            <div className="flex flex-wrap gap-2">
+              {(item.components || []).map(comp => (
+                <span key={comp.id} className="inline-flex items-center gap-1.5 text-xs bg-white rounded px-2 py-1 border border-slate-100">
+                  <span className={`px-1 py-0.5 rounded text-[9px] font-medium uppercase ${
+                    comp.type === 'labor' ? 'bg-purple-100 text-purple-700' :
+                    comp.type === 'material' ? 'bg-green-100 text-green-700' :
+                    'bg-orange-100 text-orange-700'
+                  }`}>
+                    {comp.type === 'labor' ? 'R' : comp.type === 'material' ? 'M' : 'S'}
+                  </span>
+                  <span className="text-slate-600">{comp.name}</span>
+                </span>
+              ))}
             </div>
           </div>
         )}
@@ -3991,54 +4016,64 @@ export const OffersPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Sections preview */}
-                {sections.map(section => (
-                  <div key={section.id} className="mb-6">
-                    <h3 className="text-lg font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200">
-                      {section.name}
-                    </h3>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-slate-500 border-b">
-                          <th className="py-2 pr-4">Lp.</th>
-                          <th className="py-2 pr-4">Nazwa</th>
-                          <th className="py-2 pr-4 text-right">Ilość</th>
-                          {previewTemplate !== 'no_prices' && (
-                            <>
-                              <th className="py-2 pr-4 text-right">Cena jedn.</th>
-                              {previewTemplate === 'rabat' && <th className="py-2 pr-4 text-right">Rabat</th>}
-                              <th className="py-2 text-right">Wartość</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {section.items.map((item, idx) => {
-                          const val = item.quantity * item.unit_price;
-                          const disc = val * ((item.discount_percent || 0) / 100);
-                          return (
-                            <tr key={item.id} className="border-b border-slate-100">
-                              <td className="py-2 pr-4 text-slate-500">{idx + 1}</td>
-                              <td className="py-2 pr-4">{item.name}</td>
-                              <td className="py-2 pr-4 text-right">{item.quantity}</td>
+                {/* Sections preview (recursive) */}
+                {(() => {
+                  const renderPreviewSection = (sec: LocalOfferSection, depth: number = 0) => (
+                    <div key={sec.id} className={`mb-6 ${depth > 0 ? 'ml-6' : ''}`}>
+                      <h3 className={`font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200 ${depth === 0 ? 'text-lg' : 'text-base'}`}>
+                        {sec.name}
+                      </h3>
+                      {sec.items.length > 0 && (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-slate-500 border-b">
+                              <th className="py-2 pr-4">Lp.</th>
+                              <th className="py-2 pr-4">Nazwa</th>
+                              <th className="py-2 pr-4 text-right">Ilość</th>
                               {previewTemplate !== 'no_prices' && (
                                 <>
-                                  <td className="py-2 pr-4 text-right">{formatCurrency(item.unit_price)}</td>
-                                  {previewTemplate === 'rabat' && (
-                                    <td className="py-2 pr-4 text-right text-red-600">
-                                      {item.discount_percent ? `-${item.discount_percent}%` : '-'}
-                                    </td>
-                                  )}
-                                  <td className="py-2 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                  <th className="py-2 pr-4 text-right">Cena jedn.</th>
+                                  {previewTemplate === 'rabat' && <th className="py-2 pr-4 text-right">Rabat</th>}
+                                  <th className="py-2 text-right">Wartość</th>
                                 </>
                               )}
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
+                          </thead>
+                          <tbody>
+                            {sec.items.map((item, idx) => {
+                              const val = item.quantity * item.unit_price;
+                              const disc = val * ((item.discount_percent || 0) / 100);
+                              return (
+                                <tr key={item.id} className="border-b border-slate-100">
+                                  <td className="py-2 pr-4 text-slate-500">{idx + 1}</td>
+                                  <td className="py-2 pr-4">
+                                    <span>{item.name}</span>
+                                    {item.description && <p className="text-xs text-slate-400 mt-0.5">{item.description}</p>}
+                                    {item.is_optional && <span className="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded">opcja</span>}
+                                  </td>
+                                  <td className="py-2 pr-4 text-right">{item.quantity}</td>
+                                  {previewTemplate !== 'no_prices' && (
+                                    <>
+                                      <td className="py-2 pr-4 text-right">{formatCurrency(item.unit_price)}</td>
+                                      {previewTemplate === 'rabat' && (
+                                        <td className="py-2 pr-4 text-right text-red-600">
+                                          {item.discount_percent ? `-${item.discount_percent}%` : '-'}
+                                        </td>
+                                      )}
+                                      <td className="py-2 text-right font-medium">{formatCurrency(val - disc)}</td>
+                                    </>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                      {(sec.children || []).map(child => renderPreviewSection(child, depth + 1))}
+                    </div>
+                  );
+                  return sections.map(sec => renderPreviewSection(sec));
+                })()}
 
                 {/* Preview totals */}
                 {previewTemplate !== 'no_prices' && (
