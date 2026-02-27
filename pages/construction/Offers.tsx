@@ -1798,7 +1798,22 @@ export const OffersPage: React.FC = () => {
         const { convertEstimateToOfferData } = await import('../../lib/proposalGenerator');
         const result = await convertEstimateToOfferData(selectedKosztorysId);
         if (result && result.sections.length > 0) {
-          setSections(result.sections);
+          const normalizedSections = result.sections.map((s: any) => ({
+            ...s,
+            children: [],
+            items: (s.items || []).map((i: any) => ({
+              ...i,
+              isEditing: false,
+              isExpanded: false,
+              components: [],
+              markup_percent: 0,
+              cost_price: 0,
+              discount_percent: 0,
+              vat_rate: 23,
+              selected: false
+            }))
+          }));
+          setSections(normalizedSections);
         }
       } catch (importErr) {
         console.log('No items to import, continuing with client data only');
@@ -4237,15 +4252,15 @@ export const OffersPage: React.FC = () => {
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { id: 'email', icon: Mail, label: 'E-mail', desc: 'List przewodni + oferta w załączniku', color: 'blue' },
-                    { id: 'sms', icon: Phone, label: 'SMS', desc: 'Krótka informacja + link do oferty', color: 'green' },
-                    { id: 'whatsapp', icon: MessageSquare, label: 'WhatsApp', desc: 'Wiadomość + plik oferty na numer klienta', color: 'emerald' },
-                    { id: 'telegram', icon: Send, label: 'Telegram', desc: 'Wiadomość + plik oferty przez Telegram', color: 'sky' }
+                    { id: 'email', icon: Mail, label: 'E-mail', desc: 'List przewodni + oferta w załączniku', activeClass: 'border-blue-400 bg-blue-50' },
+                    { id: 'sms', icon: Phone, label: 'SMS', desc: 'Krótka informacja + link do oferty', activeClass: 'border-green-400 bg-green-50' },
+                    { id: 'whatsapp', icon: MessageSquare, label: 'WhatsApp', desc: 'Wiadomość + plik oferty na numer klienta', activeClass: 'border-emerald-400 bg-emerald-50' },
+                    { id: 'telegram', icon: Send, label: 'Telegram', desc: 'Wiadomość + plik oferty przez Telegram', activeClass: 'border-sky-400 bg-sky-50' }
                   ].map(channel => (
                     <label
                       key={channel.id}
                       className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${
-                        sendChannels.includes(channel.id) ? `border-${channel.color}-400 bg-${channel.color}-50` : 'border-slate-200 hover:bg-slate-50'
+                        sendChannels.includes(channel.id) ? channel.activeClass : 'border-slate-200 hover:bg-slate-50'
                       }`}
                     >
                       <input
