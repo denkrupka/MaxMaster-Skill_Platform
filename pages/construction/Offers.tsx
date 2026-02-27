@@ -3968,6 +3968,57 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
             </div>
           </div>
 
+          {/* Object info block */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-6 py-4 border-b border-slate-200 bg-slate-50/50">
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Obiekt</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={offerClientData.investment_name}
+                  onChange={e => setOfferClientData(prev => ({ ...prev, investment_name: e.target.value }))}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="Nazwa obiektu..."
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">{offerClientData.investment_name || selectedOffer.notes?.match(/Inwestycja: (.+)/)?.[1] || '-'}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Kod obiektu</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={offerClientData.object_code}
+                  onChange={e => setOfferClientData(prev => ({ ...prev, object_code: e.target.value }))}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="Kod obiektu..."
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">{offerClientData.object_code || selectedOffer.notes?.match(/Kod obiektu: (.+)/)?.[1] || '-'}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Adres obiektu</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={[offerClientData.object_street, offerClientData.object_street_number, offerClientData.object_postal_code, offerClientData.object_city].filter(Boolean).join(', ')}
+                  onChange={e => {
+                    // Simple: put everything in street
+                    setOfferClientData(prev => ({ ...prev, object_street: e.target.value, object_street_number: '', object_postal_code: '', object_city: '' }));
+                  }}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="Adres obiektu..."
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">
+                  {[offerClientData.object_street, offerClientData.object_street_number, offerClientData.object_postal_code, offerClientData.object_city].filter(Boolean).join(', ') || selectedOffer.notes?.match(/Adres obiektu: (.+)/)?.[1] || '-'}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Bulk operations bar */}
           {editMode && showBulkBar && (
             <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-4">
