@@ -217,8 +217,15 @@ export interface Company {
   address_city?: string;
   address_postal_code?: string;
   address_country?: string;
+  street?: string;
+  building_number?: string;
+  apartment_number?: string;
+  city?: string;
+  postal_code?: string;
 
   // Contact data
+  email?: string;
+  phone?: string;
   contact_email?: string;
   contact_phone?: string;
   billing_email?: string;
@@ -235,6 +242,9 @@ export interface Company {
   // Subscription
   trial_ends_at?: string;
   subscription_status: SubscriptionStatus;
+  subscription_tier?: string;
+  subscription_start?: string;
+  subscription_end?: string;
 
   // Stripe
   stripe_customer_id?: string;
@@ -891,9 +901,19 @@ export interface TimeOffType {
   id: string;
   company_id: string;
   name: string;
+  shortcut?: string;
   color: string;
   icon: string;
   is_paid: boolean;
+  pay_rate?: number;
+  is_limited?: boolean;
+  limit_days?: number;
+  is_daily?: boolean;
+  is_subtype?: boolean;
+  parent_type_id?: string;
+  count_weekends?: boolean;
+  require_advance?: boolean;
+  default_comment?: string;
   requires_approval: boolean;
   allows_half_day: boolean;
   allows_hourly: boolean;
@@ -1821,7 +1841,7 @@ export interface KosztorysRoom {
 export interface KosztorysWorkCategory {
   code: string;
   name: string;
-  work_types: KosztorysWorkType[];
+  work_types: Partial<KosztorysWorkType>[];
 }
 
 // Вид работ
@@ -1830,16 +1850,18 @@ export interface KosztorysWorkType {
   company_id: string;
   code: string;
   name: string;
+  description?: string;
   category: string;
   subcategory?: string;
   unit_id: number;
+  unit?: string | UnitMeasure;
   task_description?: string;
   expected_result?: string;
+  labor_hours?: number;
   labor_hours_per_unit?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  unit?: UnitMeasure;
 }
 
 // Системный каталог робочизны (из Excel, read-only)
@@ -1976,8 +1998,10 @@ export interface KosztorysTemplateTask {
   company_id: string;
   code: string;
   name: string;
+  description?: string;
   work_type_id: string;
   unit_id: number;
+  base_quantity?: number;
   labor_hours?: number;
   expected_result?: string;
   is_active: boolean;
@@ -2014,10 +2038,14 @@ export interface KosztorysMappingRule {
   form_type: KosztorysFormType;
   room_code: string;
   room_group: string;
+  work_code?: string;
   work_type_code: string;
   work_category: string;
   template_task_id: string;
   coefficient: number;
+  multiplier?: number;
+  priority?: number;
+  conditions?: Record<string, any>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -2029,6 +2057,7 @@ export interface KosztorysPriceList {
   id: string;
   company_id: string;
   name: string;
+  description?: string;
   valid_from: string;
   valid_to?: string;
   is_active: boolean;
@@ -2041,9 +2070,15 @@ export interface KosztorysPriceList {
 export interface KosztorysPriceListItem {
   id: string;
   price_list_id: string;
-  item_type: 'work' | 'material' | 'equipment';
+  item_type: 'work' | 'material' | 'equipment' | 'labor';
   item_id: string;
+  item_code?: string;
+  item_name?: string;
+  unit?: string;
   unit_price: number;
+  price?: number;
+  material_id?: string;
+  equipment_id?: string;
 }
 
 // Смета (Kosztorys)
@@ -2932,7 +2967,7 @@ export type KosztorysType = 'investor' | 'contractor' | 'offer';
 export type KosztorysCurrency = 'PLN' | 'EUR' | 'USD';
 
 // Тип ресурса
-export type KosztorysResourceType = 'labor' | 'material' | 'equipment';
+export type KosztorysResourceType = 'labor' | 'material' | 'equipment' | 'waste';
 
 // Тип накладных
 export type KosztorysOverheadType = 'percentage' | 'fixed';
@@ -2947,7 +2982,7 @@ export type KosztorysRoundingMethod = 'default' | 'PN-70/N-02120';
 export type KosztorysCalculationTemplate = 'overhead-on-top' | 'overhead-included';
 
 // Тип источника индекса
-export type KosztorysOriginIndexType = 'ETO' | 'KNNR' | 'KNR' | 'KSNR' | 'custom';
+export type KosztorysOriginIndexType = 'ETO' | 'KNNR' | 'KNR' | 'KSNR' | 'custom' | 'knr' | 'knnr' | 'ksnr';
 
 // =====================================================
 // Настройки точности (Precision Settings)
@@ -3394,3 +3429,64 @@ export type DMSPermission = 'view' | 'download' | 'edit' | 'delete' | 'manage';
 export type DMSActivityAction = 'created' | 'viewed' | 'downloaded' | 'updated' | 'renamed' | 'moved' | 'deleted' | 'restored' | 'permission_changed' | 'version_created';
 
 export type MarkupType = 'line' | 'arrow' | 'rectangle' | 'circle' | 'ellipse' | 'polygon' | 'polyline' | 'freehand' | 'text' | 'measurement';
+
+// =====================================================
+// PROCUREMENT TYPES
+// =====================================================
+
+export interface ResourceRequest {
+  id: string;
+  company_id: string;
+  project_id?: string;
+  title: string;
+  description?: string;
+  status: ResourceRequestStatus;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  requested_by_id: string;
+  approved_by_id?: string;
+  items?: any[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Order {
+  id: string;
+  company_id: string;
+  project_id?: string;
+  request_id?: string;
+  supplier_id?: string;
+  order_number?: string;
+  status: OrderStatus;
+  delivery_status?: OrderDeliveryStatus;
+  payment_status?: OrderPaymentStatus;
+  total_amount?: number;
+  notes?: string;
+  items?: any[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Stock {
+  id: string;
+  company_id: string;
+  project_id?: string;
+  name: string;
+  location?: string;
+  type?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StockBalance {
+  id: string;
+  stock_id: string;
+  material_id?: string;
+  equipment_id?: string;
+  item_name: string;
+  item_code?: string;
+  unit?: string;
+  quantity: number;
+  min_quantity?: number;
+  last_operation_at?: string;
+}
