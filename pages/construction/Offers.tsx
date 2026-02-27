@@ -24,6 +24,10 @@ const OFFER_SOURCE_LABELS: Record<KosztorysRequestSource, string> = {
   other: 'Inne'
 };
 
+const DEFAULT_UNITS = [
+  'szt.', 'm', 'm²', 'm³', 'kg', 'kpl.', 'godz.', 'mb', 'op.', 'l', 't'
+];
+
 const OBJECT_TYPE_LABELS: Record<KosztorysObjectType, string> = {
   industrial: 'Przemysłowe',
   residential: 'Mieszkaniowe',
@@ -207,11 +211,47 @@ export const OffersPage: React.FC = () => {
   // Preview & Send
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<'netto' | 'rabat' | 'no_prices' | 'full'>('netto');
+  const [showLogoInPreview, setShowLogoInPreview] = useState(true);
   const [showSendModal, setShowSendModal] = useState(false);
   const [sendRepresentativeId, setSendRepresentativeId] = useState('');
   const [sendCoverLetter, setSendCoverLetter] = useState('');
   const [sendChannels, setSendChannels] = useState<string[]>(['email']);
   const [generatingLetter, setGeneratingLetter] = useState(false);
+  const [sendingOffer, setSendingOffer] = useState(false);
+
+  // Auto-generate cover letter when send modal opens
+  useEffect(() => {
+    if (showSendModal && selectedOffer && !sendCoverLetter) {
+      const itemCount = getAllItems(sections).length;
+      const userName = currentUser ? `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() : '';
+      const companyName = state.currentCompany?.name || '';
+      const validUntil = selectedOffer.valid_until ? formatDate(selectedOffer.valid_until) : '';
+      const letter = `Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} — ${selectedOffer.name}.\nOferta obejmuje ${itemCount} pozycji o wartości ${formatCurrency(totals.total)} netto.${validUntil ? `\nWażność: do ${validUntil}.` : ''}\n\nW razie pytań pozostaję do dyspozycji.\n\nZ poważaniem,\n${userName}${companyName ? `\n${companyName}` : ''}`;
+      setSendCoverLetter(letter);
+    }
+  }, [showSendModal]);
+
+  // Load client data when entering edit mode
+  useEffect(() => {
+    if (editMode && selectedOffer) {
+      loadOfferExistingClients();
+      // Populate client form data from selected offer's client
+      const client = (selectedOffer as any).client;
+      if (client) {
+        setOfferClientData(prev => ({
+          ...prev,
+          client_name: client.name || '',
+          nip: client.nip || '',
+          company_street: client.address_street || '',
+          company_street_number: '',
+          company_city: client.address_city || '',
+          company_postal_code: client.address_postal_code || '',
+          company_country: client.address_country || 'Polska'
+        }));
+        setOfferClientSelected(true);
+      }
+    }
+  }, [editMode, selectedOffer?.id]);
 
   // Kartoteka search modals
   const [showSearchLabourModal, setShowSearchLabourModal] = useState(false);
@@ -224,6 +264,12 @@ export const OffersPage: React.FC = () => {
   const [kartotekaOwnData, setKartotekaOwnData] = useState<any[]>([]);
   const [kartotekaTab, setKartotekaTab] = useState<'system' | 'own'>('own');
   const [kartotekaLoading, setKartotekaLoading] = useState(false);
+  const [kartotekaMode, setKartotekaMode] = useState<'fill_item' | 'add_component'>('add_component');
+  const [kartotekaCategories, setKartotekaCategories] = useState<any[]>([]);
+  const [kartotekaSelectedCategory, setKartotekaSelectedCategory] = useState<string | null>(null);
+  const [kartotekaExpandedCats, setKartotekaExpandedCats] = useState<Set<string>>(new Set());
+  const [kartotekaViewMode, setKartotekaViewMode] = useState<'list' | 'grid'>('list');
+  const [kartotekaDetailItem, setKartotekaDetailItem] = useState<any | null>(null);
 
   // Import from estimate state
   const [selectedEstimateId, setSelectedEstimateId] = useState('');
@@ -936,14 +982,15 @@ export const OffersPage: React.FC = () => {
 
         const mapItem = (i: OfferItem): LocalOfferItem => ({
           ...i,
+          unit: (i as any).unit || 'szt.',
           isEditing: false,
           isNew: false,
           isExpanded: false,
           components: componentsByItem[i.id] || [],
           markup_percent: 0,
           cost_price: 0,
-          discount_percent: 0,
-          vat_rate: 23,
+          discount_percent: (i as any).discount_percent || 0,
+          vat_rate: (i as any).vat_rate ?? 23,
           selected: false
         });
 
@@ -1223,8 +1270,11 @@ export const OffersPage: React.FC = () => {
                   section_id: newSection.id,
                   name: item.name,
                   description: item.description || null,
+                  unit: item.unit || 'szt.',
                   quantity: item.quantity || 1,
                   unit_price: item.unit_price || 0,
+                  discount_percent: item.discount_percent || 0,
+                  vat_rate: item.vat_rate ?? 23,
                   sort_order: item.sort_order ?? idx,
                   is_optional: item.is_optional || false
                 })));
@@ -1253,8 +1303,11 @@ export const OffersPage: React.FC = () => {
                   section_id: null,
                   name: item.name,
                   description: item.description || null,
+                  unit: item.unit || 'szt.',
                   quantity: item.quantity || 1,
                   unit_price: item.unit_price || 0,
+                  discount_percent: item.discount_percent || 0,
+                  vat_rate: item.vat_rate ?? 23,
                   sort_order: item.sort_order ?? idx,
                   is_optional: item.is_optional || false
                 })));
@@ -1339,8 +1392,11 @@ export const OffersPage: React.FC = () => {
                 section_id: newSection.id,
                 name: item.name.trim(),
                 description: item.description || null,
+                unit: item.unit || 'szt.',
                 quantity: item.quantity || 1,
                 unit_price: item.unit_price || 0,
+                discount_percent: item.discount_percent || 0,
+                vat_rate: item.vat_rate ?? 23,
                 sort_order: item.sort_order,
                 is_optional: item.is_optional || false,
                 source_resource_id: item.source_resource_id || null
@@ -1396,8 +1452,11 @@ export const OffersPage: React.FC = () => {
               section_id: null,
               name: item.name.trim(),
               description: item.description || null,
+              unit: item.unit || 'szt.',
               quantity: item.quantity || 1,
               unit_price: item.unit_price || 0,
+              discount_percent: item.discount_percent || 0,
+              vat_rate: item.vat_rate ?? 23,
               sort_order: item.sort_order,
               is_optional: item.is_optional || false,
               source_resource_id: item.source_resource_id || null
@@ -1510,8 +1569,9 @@ export const OffersPage: React.FC = () => {
     }
   };
 
-  const handleSendOffer = async (offer: Offer, channels?: string[], coverLetter?: string) => {
-    if (!currentUser) return;
+  const handleSendOffer = async (offer: Offer, channels?: string[], coverLetter?: string): Promise<{ success: boolean; errors: string[] }> => {
+    if (!currentUser) return { success: false, errors: ['Brak zalogowanego użytkownika'] };
+    const errors: string[] = [];
     try {
       const offerUrl = offer.public_url
         ? window.location.origin + offer.public_url
@@ -1530,7 +1590,6 @@ export const OffersPage: React.FC = () => {
       const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
       const repEmail = rep?.email || '';
       const repPhone = rep?.phone?.replace(/\s/g, '') || '';
-      const repName = rep ? `${rep.first_name} ${rep.last_name}` : '';
 
       // Send via selected channels
       for (const channel of activeChannels) {
@@ -1560,8 +1619,10 @@ export const OffersPage: React.FC = () => {
               }
             });
           } catch (e) {
-            console.error('Email send error:', e);
+            errors.push(`E-mail: ${e instanceof Error ? e.message : 'błąd wysyłki'}`);
           }
+        } else if (channel === 'email' && !repEmail) {
+          errors.push('E-mail: brak adresu e-mail przedstawiciela');
         }
 
         if (channel === 'sms' && repPhone) {
@@ -1571,8 +1632,10 @@ export const OffersPage: React.FC = () => {
               body: { phoneNumber: repPhone, message: smsText }
             });
           } catch (e) {
-            console.error('SMS send error:', e);
+            errors.push(`SMS: ${e instanceof Error ? e.message : 'błąd wysyłki'}`);
           }
+        } else if (channel === 'sms' && !repPhone) {
+          errors.push('SMS: brak numeru telefonu przedstawiciela');
         }
 
         if (channel === 'whatsapp' && repPhone) {
@@ -1600,8 +1663,10 @@ export const OffersPage: React.FC = () => {
       if (selectedOffer?.id === offer.id) {
         await loadOfferDetails(offer.id);
       }
+      return { success: errors.length === 0, errors };
     } catch (err) {
       console.error('Error sending offer:', err);
+      return { success: false, errors: [err instanceof Error ? err.message : 'Nieznany błąd'] };
     }
   };
 
@@ -1971,6 +2036,7 @@ export const OffersPage: React.FC = () => {
       section_id: sectionId === 'unsectioned' ? undefined : sectionId,
       name: '',
       description: '',
+      unit: 'szt.',
       quantity: 1,
       unit_price: 0,
       total_price: 0,
@@ -2075,14 +2141,16 @@ export const OffersPage: React.FC = () => {
         const systemTableName = showSearchLabourModal ? 'kosztorys_system_labours' :
           showSearchMaterialModal ? 'kosztorys_materials' : 'kosztorys_equipment';
 
-        const [ownRes, systemRes] = await Promise.all([
+        const [ownRes, systemRes, categoriesRes] = await Promise.all([
           supabase.from(tableName).select('*').eq('company_id', currentUser.company_id).order('name'),
           showSearchLabourModal
             ? supabase.from(systemTableName).select('*').eq('is_active', true).order('name').limit(500)
-            : Promise.resolve({ data: [] })
+            : Promise.resolve({ data: [] }),
+          supabase.from('kosztorys_custom_categories').select('*').eq('company_id', currentUser.company_id).order('sort_order')
         ]);
         setKartotekaOwnData(ownRes.data || []);
         setKartotekaData((systemRes as any).data || []);
+        setKartotekaCategories(categoriesRes.data || []);
       } catch (err) {
         console.error('Error loading kartoteka:', err);
       } finally {
@@ -2151,6 +2219,105 @@ export const OffersPage: React.FC = () => {
     a.download = `${selectedOffer.number || 'oferta'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const generateOfferHTML = (): string => {
+    if (!selectedOffer) return '';
+    const companyName = state.currentCompany?.name || '';
+    const companyLogo = (state.currentCompany as any)?.logo_url || '';
+    const client = (selectedOffer as any).client;
+    const fmtCur = (v: number) => new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' }).format(v);
+
+    const renderSectionHTML = (sec: LocalOfferSection, depth: number = 0): string => {
+      let html = `<h${depth === 0 ? 3 : 4} style="margin:${depth === 0 ? '24px' : '16px'} 0 8px ${depth * 20}px;font-size:${depth === 0 ? '16px' : '14px'};">${sec.name}</h${depth === 0 ? 3 : 4}>`;
+      if (sec.items.length > 0 && previewTemplate !== 'no_prices') {
+        html += `<table style="width:100%;border-collapse:collapse;margin-left:${depth * 20}px;font-size:13px;">
+          <thead><tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+            <th style="padding:8px;text-align:left;">Lp.</th>
+            <th style="padding:8px;text-align:left;">Nazwa</th>
+            <th style="padding:8px;text-align:left;">Jedn.</th>
+            <th style="padding:8px;text-align:right;">Ilość</th>
+            <th style="padding:8px;text-align:right;">Cena jedn.</th>
+            ${previewTemplate === 'rabat' ? '<th style="padding:8px;text-align:right;">Rabat</th>' : ''}
+            <th style="padding:8px;text-align:right;">Wartość</th>
+          </tr></thead><tbody>`;
+        sec.items.forEach((item, idx) => {
+          const val = item.quantity * item.unit_price;
+          const disc = val * ((item.discount_percent || 0) / 100);
+          html += `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:6px 8px;color:#64748b;">${idx + 1}</td>
+            <td style="padding:6px 8px;">${item.name}${item.is_optional ? ' <span style="background:#fef9c3;color:#a16207;font-size:10px;padding:1px 4px;border-radius:3px;">opcja</span>' : ''}</td>
+            <td style="padding:6px 8px;color:#64748b;">${item.unit || 'szt.'}</td>
+            <td style="padding:6px 8px;text-align:right;">${item.quantity}</td>
+            <td style="padding:6px 8px;text-align:right;">${fmtCur(item.unit_price)}</td>
+            ${previewTemplate === 'rabat' ? `<td style="padding:6px 8px;text-align:right;color:#dc2626;">${item.discount_percent ? `-${item.discount_percent}%` : '-'}</td>` : ''}
+            <td style="padding:6px 8px;text-align:right;font-weight:500;">${fmtCur(val - disc)}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+      } else if (sec.items.length > 0) {
+        html += `<table style="width:100%;border-collapse:collapse;margin-left:${depth * 20}px;font-size:13px;">
+          <thead><tr style="background:#f1f5f9;border-bottom:2px solid #e2e8f0;">
+            <th style="padding:8px;text-align:left;">Lp.</th>
+            <th style="padding:8px;text-align:left;">Nazwa</th>
+            <th style="padding:8px;text-align:left;">Jedn.</th>
+            <th style="padding:8px;text-align:right;">Ilość</th>
+          </tr></thead><tbody>`;
+        sec.items.forEach((item, idx) => {
+          html += `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:6px 8px;color:#64748b;">${idx + 1}</td>
+            <td style="padding:6px 8px;">${item.name}</td>
+            <td style="padding:6px 8px;color:#64748b;">${item.unit || 'szt.'}</td>
+            <td style="padding:6px 8px;text-align:right;">${item.quantity}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+      }
+      (sec.children || []).forEach(child => { html += renderSectionHTML(child, depth + 1); });
+      return html;
+    };
+
+    let totalsSectionHTML = '';
+    if (previewTemplate !== 'no_prices') {
+      totalsSectionHTML = `
+        <div style="margin-top:32px;padding-top:16px;border-top:2px solid #cbd5e1;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Suma netto:</span><span style="font-weight:500;">${fmtCur(totals.total)}</span></div>
+          ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<div style="display:flex;justify-content:space-between;color:#dc2626;margin-bottom:4px;"><span>Rabat:</span><span>-${fmtCur(totals.totalDiscount)}</span></div>` : ''}
+          ${previewTemplate === 'full' ? `<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Netto po rabacie:</span><span style="font-weight:500;">${fmtCur(totals.nettoAfterDiscount)}</span></div>` : ''}
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>VAT:</span><span>${fmtCur(totals.totalVat)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:bold;padding-top:8px;border-top:1px solid #cbd5e1;"><span>Brutto:</span><span>${fmtCur(totals.totalBrutto)}</span></div>
+        </div>`;
+    }
+
+    return `<!DOCTYPE html>
+<html lang="pl">
+<head><meta charset="UTF-8"><title>Oferta ${selectedOffer.number}</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;margin:40px;color:#1e293b;font-size:14px;max-width:800px;margin:40px auto;}
+@media print{body{margin:20px;}}</style></head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;">
+    <div>
+      ${showLogoInPreview && companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:60px;margin-bottom:8px;" />` : ''}
+      <h1 style="margin:0;font-size:24px;">${companyName}</h1>
+    </div>
+    <div style="text-align:right;font-size:13px;color:#64748b;">
+      <p style="margin:2px 0;">Data wystawienia: ${formatDate(issueDate)}</p>
+      <p style="margin:2px 0;">Ważna do: ${formatDate(selectedOffer.valid_until)}</p>
+    </div>
+  </div>
+  <h2 style="font-size:20px;margin-bottom:4px;">${selectedOffer.name}</h2>
+  <p style="color:#64748b;margin-top:0;">${selectedOffer.number}</p>
+  ${client ? `<div style="background:#f8fafc;padding:16px;border-radius:8px;margin-bottom:24px;">
+    <p style="font-weight:600;margin:0;">${client.name}</p>
+    ${client.nip ? `<p style="font-size:13px;color:#64748b;margin:4px 0 0;">NIP: ${client.nip}</p>` : ''}
+  </div>` : ''}
+  ${sections.map(sec => renderSectionHTML(sec)).join('')}
+  ${totalsSectionHTML}
+  ${selectedOffer.notes ? `<div style="margin-top:32px;padding:16px;background:#f8fafc;border-radius:8px;font-size:13px;"><p style="font-weight:600;margin:0 0 4px;">Uwagi:</p><p style="margin:0;white-space:pre-wrap;">${selectedOffer.notes}</p></div>` : ''}
+  <div style="margin-top:40px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #e2e8f0;padding-top:16px;">
+    <p>Wygenerowano w MaxMaster</p>
+  </div>
+</body></html>`;
   };
 
   // ============================================
@@ -2996,14 +3163,16 @@ export const OffersPage: React.FC = () => {
             {/* Items table */}
             {section.items.length > 0 && (
               <div>
-                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_80px_100px_100px_100px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_80px_100px_80px_100px_100px_60px_32px]' : 'grid-cols-[1fr_80px_100px_100px_60px_32px]') : 'grid-cols-[1fr_80px_100px_100px_60px]'}`}>
+                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
                   {editMode && showBulkBar && <div></div>}
                   <div>Nazwa</div>
+                  <div className="text-center">Jedn.</div>
                   <div className="text-right">Ilość</div>
                   {calculationMode === 'markup' && editMode && <div className="text-right">Koszt</div>}
                   {calculationMode === 'markup' && editMode && <div className="text-right">Narzut %</div>}
                   <div className="text-right">Cena jedn.</div>
                   <div className="text-right">Wartość</div>
+                  <div className="text-right">Rabat%</div>
                   <div className="text-right">VAT</div>
                   {editMode && <div></div>}
                 </div>
@@ -3066,7 +3235,7 @@ export const OffersPage: React.FC = () => {
     return (
       <div key={item.id} className={`${item.is_optional ? 'bg-yellow-50' : ''}`}>
         {/* Main row */}
-        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_80px_100px_100px_100px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_80px_100px_80px_100px_100px_60px_32px]' : 'grid-cols-[1fr_80px_100px_100px_60px_32px]') : 'grid-cols-[1fr_80px_100px_100px_60px]'}`}>
+        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]' : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
           {editMode && showBulkBar && (
             <div>
               <input
@@ -3097,13 +3266,15 @@ export const OffersPage: React.FC = () => {
                 />
                 <button
                   onClick={() => {
+                    setKartotekaMode('fill_item');
                     setSearchPositionTarget({ sectionId });
                     setSearchComponentTarget({ sectionId, itemId: item.id, type: 'labor' });
                     setKartotekaSearchText('');
+                    setKartotekaDetailItem(null);
                     setShowSearchLabourModal(true);
                   }}
                   className="p-1 hover:bg-blue-50 rounded text-blue-500 shrink-0"
-                  title="Katalog robocizny"
+                  title="Wybierz z kartoteki"
                 >
                   <FolderOpen className="w-4 h-4" />
                 </button>
@@ -3112,10 +3283,21 @@ export const OffersPage: React.FC = () => {
               <div>
                 <p className="font-medium text-slate-900">{item.name}</p>
                 {item.description && <p className="text-xs text-slate-500">{item.description}</p>}
-                {(item.discount_percent || 0) > 0 && (
-                  <span className="text-xs text-red-500 ml-1">-{item.discount_percent}%</span>
-                )}
               </div>
+            )}
+          </div>
+          {/* Unit column */}
+          <div className="text-center">
+            {editMode ? (
+              <select
+                value={item.unit || 'szt.'}
+                onChange={e => updateItem(sectionId, item.id, { unit: e.target.value })}
+                className="w-full px-1 py-1 border border-slate-200 rounded text-xs"
+              >
+                {DEFAULT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            ) : (
+              <span className="text-xs text-slate-500">{item.unit || 'szt.'}</span>
             )}
           </div>
           <div className="text-right">
@@ -3169,8 +3351,42 @@ export const OffersPage: React.FC = () => {
           <div className="text-right font-medium text-slate-900">
             {formatCurrency(itemTotal)}
           </div>
+          {/* Rabat% column */}
+          <div className="text-right">
+            {editMode ? (
+              <input
+                type="number"
+                value={item.discount_percent || 0}
+                onChange={e => updateItem(sectionId, item.id, { discount_percent: parseFloat(e.target.value) || 0 })}
+                className="w-full px-1 py-1 border border-slate-200 rounded text-right text-xs"
+                step="1"
+                min="0"
+                max="100"
+              />
+            ) : (
+              <span className={`text-xs ${(item.discount_percent || 0) > 0 ? 'text-red-500 font-medium' : 'text-slate-400'}`}>
+                {(item.discount_percent || 0) > 0 ? `${item.discount_percent}%` : '-'}
+              </span>
+            )}
+          </div>
+          {/* VAT column — click to cycle in edit mode */}
           <div className="text-right text-xs text-slate-500">
-            {item.vat_rate ?? 23}%
+            {editMode ? (
+              <button
+                onClick={() => {
+                  const current = item.vat_rate ?? 23;
+                  const cycle = [23, 8, 5, 0];
+                  const nextIdx = (cycle.indexOf(current) + 1) % cycle.length;
+                  updateItem(sectionId, item.id, { vat_rate: cycle[nextIdx] });
+                }}
+                className="px-2 py-1 rounded hover:bg-slate-100 cursor-pointer text-xs font-medium"
+                title="Kliknij aby zmienić stawkę VAT"
+              >
+                {item.vat_rate ?? 23}%
+              </button>
+            ) : (
+              <span>{item.vat_rate ?? 23}%</span>
+            )}
           </div>
           {editMode && (
             <div className="flex justify-end">
@@ -3187,39 +3403,6 @@ export const OffersPage: React.FC = () => {
         {/* Expanded: components (Robocizna/Materiał/Sprzęt) + discount */}
         {item.isExpanded && editMode && (
           <div className="bg-slate-50/50 border-t border-slate-100 px-6 py-3 space-y-3">
-            {/* Discount & VAT for this item */}
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Rabat:</span>
-                <input
-                  type="number"
-                  value={item.discount_percent || 0}
-                  onChange={e => updateItem(sectionId, item.id, { discount_percent: parseFloat(e.target.value) || 0 })}
-                  className="w-20 px-2 py-1 border border-slate-200 rounded text-right text-sm"
-                  step="1"
-                  min="0"
-                  max="100"
-                />
-                <span className="text-slate-400">%</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">VAT:</span>
-                <select
-                  value={item.vat_rate ?? 23}
-                  onChange={e => updateItem(sectionId, item.id, { vat_rate: parseInt(e.target.value) })}
-                  className="px-2 py-1 border border-slate-200 rounded text-sm"
-                >
-                  <option value={23}>23%</option>
-                  <option value={8}>8%</option>
-                  <option value={5}>5%</option>
-                  <option value={0}>0%</option>
-                </select>
-              </div>
-              {item.discount_percent ? (
-                <span className="text-red-500 text-xs">-{formatCurrency(itemDiscount)}</span>
-              ) : null}
-            </div>
-
             {/* Components list */}
             <div className="space-y-1">
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Składniki</div>
@@ -3256,8 +3439,10 @@ export const OffersPage: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={() => {
+                  setKartotekaMode('add_component');
                   setSearchComponentTarget({ sectionId, itemId: item.id, type: 'labor' });
                   setKartotekaSearchText('');
+                  setKartotekaDetailItem(null);
                   setShowSearchLabourModal(true);
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-600 border border-purple-200 rounded text-xs hover:bg-purple-100"
@@ -3267,8 +3452,10 @@ export const OffersPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  setKartotekaMode('add_component');
                   setSearchComponentTarget({ sectionId, itemId: item.id, type: 'material' });
                   setKartotekaSearchText('');
+                  setKartotekaDetailItem(null);
                   setShowSearchMaterialModal(true);
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-xs hover:bg-green-100"
@@ -3278,8 +3465,10 @@ export const OffersPage: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  setKartotekaMode('add_component');
                   setSearchComponentTarget({ sectionId, itemId: item.id, type: 'equipment' });
                   setKartotekaSearchText('');
+                  setKartotekaDetailItem(null);
                   setShowSearchEquipmentModal(true);
                 }}
                 className="flex items-center gap-1 px-2.5 py-1 bg-orange-50 text-orange-600 border border-orange-200 rounded text-xs hover:bg-orange-100"
@@ -3413,25 +3602,167 @@ export const OffersPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Client search block (edit mode) */}
+          {editMode && (
+            <div className="p-6 border-b border-slate-200 space-y-4">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-slate-400" />
+                Dane klienta
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* NIP + GUS */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">NIP</label>
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={offerClientData.nip}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setOfferClientData(prev => ({ ...prev, nip: val }));
+                        setOfferGusError(null);
+                        setOfferGusSuccess(null);
+                        // Search clients by NIP
+                        if (val.replace(/\D/g, '').length >= 3) {
+                          const q = val.replace(/\D/g, '');
+                          const filtered = offerExistingClients.filter(c => c.nip && c.nip.replace(/\D/g, '').includes(q));
+                          setOfferFilteredClients(filtered);
+                          setOfferShowClientDropdown(filtered.length > 0);
+                        }
+                      }}
+                      className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-sm"
+                      placeholder="NIP..."
+                    />
+                    <button
+                      type="button"
+                      onClick={handleOfferFetchGus}
+                      disabled={offerGusLoading || !offerClientData.nip || offerExistingClients.some(c => c.nip && c.nip.replace(/\D/g, '') === offerClientData.nip.replace(/\D/g, ''))}
+                      className="px-2 py-1.5 bg-green-600 text-white rounded text-xs hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 whitespace-nowrap"
+                    >
+                      {offerGusLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                      GUS
+                    </button>
+                  </div>
+                  {offerGusError && <p className="text-xs text-red-600 mt-1">{offerGusError}</p>}
+                  {offerGusSuccess && <p className="text-xs text-green-600 mt-1">{offerGusSuccess}</p>}
+                </div>
+
+                {/* Company name with search */}
+                <div className="relative">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Nazwa firmy</label>
+                  <input
+                    type="text"
+                    value={offerClientData.client_name}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setOfferClientData(prev => ({ ...prev, client_name: val }));
+                      setOfferClientSearchQuery(val);
+                      if (val.length >= 2) {
+                        const q = val.toLowerCase();
+                        const filtered = offerExistingClients.filter(c =>
+                          c.client_name.toLowerCase().includes(q) ||
+                          (c.nip && c.nip.includes(q)) ||
+                          (c.company_city && c.company_city.toLowerCase().includes(q))
+                        );
+                        setOfferFilteredClients(filtered);
+                        setOfferShowClientDropdown(filtered.length > 0);
+                      } else {
+                        setOfferShowClientDropdown(false);
+                      }
+                    }}
+                    onBlur={() => setTimeout(() => setOfferShowClientDropdown(false), 200)}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm"
+                    placeholder="Wyszukaj lub wpisz..."
+                  />
+                  {offerShowClientDropdown && offerFilteredClients.length > 0 && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {offerFilteredClients.slice(0, 10).map((client, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            selectOfferExistingClient(client);
+                            // Also set client_id in offerData
+                            if (client.contractor_id) {
+                              setOfferData(prev => ({ ...prev, client_id: client.contractor_id || '' }));
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0"
+                        >
+                          <div className="font-medium text-sm text-slate-900">{client.client_name}</div>
+                          <div className="text-xs text-slate-500 flex gap-2">
+                            {client.nip && <span>NIP: {client.nip}</span>}
+                            {client.company_city && <span>{client.company_city}</span>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Adres</label>
+                  <input
+                    type="text"
+                    value={[offerClientData.company_street, offerClientData.company_street_number, offerClientData.company_postal_code, offerClientData.company_city].filter(Boolean).join(', ') || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      // Simple search by address
+                      if (val.length >= 2) {
+                        const q = val.toLowerCase();
+                        const filtered = offerExistingClients.filter(c =>
+                          (c.company_city && c.company_city.toLowerCase().includes(q)) ||
+                          (c.company_street && c.company_street.toLowerCase().includes(q))
+                        );
+                        setOfferFilteredClients(filtered);
+                        setOfferShowClientDropdown(filtered.length > 0);
+                      }
+                    }}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded text-sm bg-slate-50"
+                    placeholder="Adres..."
+                    readOnly={offerClientSelected}
+                  />
+                </div>
+              </div>
+
+              {/* Representative block — show when client is selected */}
+              {offerClientSelected && offerClientContacts.length > 0 && (
+                <div className="pt-3 border-t border-slate-200">
+                  <p className="text-xs font-medium text-slate-500 mb-2">Przedstawiciel</p>
+                  <div className="flex flex-wrap gap-2">
+                    {offerClientContacts.map((contact: any) => (
+                      <button
+                        key={contact.id}
+                        onClick={() => setSendRepresentativeId(contact.id)}
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+                          sendRepresentativeId === contact.id
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        {contact.first_name} {contact.last_name}
+                        <span className="text-xs text-slate-400 ml-1">
+                          {contact.email && `• ${contact.email}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Info cards */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 p-6 border-b border-slate-200">
-            <div className="p-4 bg-slate-50 rounded-lg">
-              <p className="text-sm text-slate-500 mb-1">Klient</p>
-              {editMode ? (
-                <select
-                  value={offerData.client_id}
-                  onChange={e => setOfferData({ ...offerData, client_id: e.target.value })}
-                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
-                >
-                  <option value="">-- Wybierz --</option>
-                  {contractors.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              ) : (
+          <div className={`grid grid-cols-1 ${editMode ? 'md:grid-cols-4' : 'md:grid-cols-5'} gap-4 p-6 border-b border-slate-200`}>
+            {!editMode && (
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-sm text-slate-500 mb-1">Klient</p>
                 <p className="font-medium text-slate-900">
                   {(selectedOffer as any).client?.name || 'Nie przypisano'}
                 </p>
-              )}
-            </div>
+              </div>
+            )}
             <div className="p-4 bg-slate-50 rounded-lg">
               <p className="text-sm text-slate-500 mb-1">Projekt</p>
               {editMode ? (
@@ -3441,7 +3772,9 @@ export const OffersPage: React.FC = () => {
                   className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
                 >
                   <option value="">-- Wybierz --</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {projects
+                    .filter(p => !offerData.client_id || (p as any).contractor_client_id === offerData.client_id || !(p as any).contractor_client_id)
+                    .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               ) : (
                 <p className="font-medium text-slate-900">
@@ -3619,7 +3952,7 @@ export const OffersPage: React.FC = () => {
               </div>
               {totals.totalCost > 0 && (
                 <div className="flex justify-between text-slate-500">
-                  <span className="text-sm">Koszt (wewnętrzny):</span>
+                  <span className="text-sm">Koszty:</span>
                   <span className="text-sm">{formatCurrency(totals.totalCost)}</span>
                 </div>
               )}
@@ -3630,13 +3963,13 @@ export const OffersPage: React.FC = () => {
                 </div>
               )}
               <div className="flex justify-between">
-                <span className="text-slate-600 font-medium">Netto po rabacie:</span>
-                <span className="font-medium">{formatCurrency(totals.nettoAfterDiscount)}</span>
+                <span className="text-slate-600 font-bold">Netto po rabacie:</span>
+                <span className="font-bold text-blue-600">{formatCurrency(totals.nettoAfterDiscount)}</span>
               </div>
               {totals.profit !== 0 && (
                 <div className="flex justify-between text-slate-500">
-                  <span className="text-sm">Zysk netto (wewnętrzny):</span>
-                  <span className={`text-sm font-medium ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totals.profit)}</span>
+                  <span className="text-sm">Zysk netto:</span>
+                  <span className={`text-sm font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totals.profit)}</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -3644,8 +3977,8 @@ export const OffersPage: React.FC = () => {
                 <span className="font-medium">{formatCurrency(totals.totalVat)}</span>
               </div>
               <div className="flex justify-between pt-3 border-t border-slate-300">
-                <span className="text-lg font-bold">Brutto:</span>
-                <span className="text-xl font-bold text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
+                <span className="text-lg font-medium">Brutto:</span>
+                <span className="text-lg font-medium text-slate-900">{formatCurrency(totals.totalBrutto)}</span>
               </div>
             </div>
           </div>
@@ -3726,29 +4059,18 @@ export const OffersPage: React.FC = () => {
               </button>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={exportToCSV}
-                  className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-100 text-sm"
+                  onClick={async () => {
+                    if (editMode) {
+                      await handleUpdateOffer();
+                    }
+                    setShowPreviewModal(true);
+                  }}
+                  disabled={savingOffer}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4" />
-                  Pobierz
+                  {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                  Przejdź dalej
                 </button>
-                <button
-                  onClick={() => setShowPreviewModal(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-100 text-sm"
-                >
-                  <Printer className="w-4 h-4" />
-                  Drukuj / podejrzyj
-                </button>
-                {editMode && (
-                  <button
-                    onClick={async () => { await handleUpdateOffer(); setShowPreviewModal(true); }}
-                    disabled={savingOffer}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
-                  >
-                    {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Zapisz — przejdź dalej
-                  </button>
-                )}
                 <button
                   onClick={() => setShowSendModal(true)}
                   className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
@@ -3773,13 +4095,13 @@ export const OffersPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-6 text-sm">
                 <div>
-                  <span className="text-slate-500">Koszt netto:</span>
+                  <span className="text-slate-500">Koszty:</span>
                   <span className="ml-1 font-medium text-slate-700">{formatCurrency(totals.totalCost)}</span>
                 </div>
                 <div className="h-4 w-px bg-slate-300" />
                 <div>
                   <span className="text-slate-500">Suma netto:</span>
-                  <span className="ml-1 font-bold text-slate-900">{formatCurrency(totals.total)}</span>
+                  <span className="ml-1 font-bold text-blue-600">{formatCurrency(totals.total)}</span>
                 </div>
                 <div className="h-4 w-px bg-slate-300" />
                 <div>
@@ -3791,13 +4113,13 @@ export const OffersPage: React.FC = () => {
                 <div className="h-4 w-px bg-slate-300" />
                 <div>
                   <span className="text-slate-500">Zysk netto:</span>
-                  <span className={`ml-1 font-medium ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={`ml-1 font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(totals.profit)}
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-lg font-bold text-blue-600">{formatCurrency(totals.totalBrutto)}</span>
+                <span className="text-sm font-medium text-slate-700">{formatCurrency(totals.totalBrutto)}</span>
                 <span className="text-xs text-slate-500">brutto</span>
               </div>
             </div>
@@ -4060,8 +4382,20 @@ export const OffersPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Template selection */}
-            <div className="px-6 py-3 border-b border-slate-200 flex gap-2">
+            {/* Template selection + logo toggle */}
+            <div className="px-6 py-3 border-b border-slate-200 flex items-center gap-3">
+              {/* Logo toggle */}
+              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer mr-2">
+                <input
+                  type="checkbox"
+                  checked={showLogoInPreview}
+                  onChange={e => setShowLogoInPreview(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                Pokazywać logo
+              </label>
+              <div className="h-4 w-px bg-slate-300" />
+              <span className="text-sm font-medium text-slate-500">Szablony:</span>
               {[
                 { id: 'netto' as const, label: 'Tylko netto' },
                 { id: 'rabat' as const, label: 'Rabat od ceny katalogowej' },
@@ -4085,9 +4419,19 @@ export const OffersPage: React.FC = () => {
             {/* Preview content */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="max-w-3xl mx-auto bg-white border border-slate-200 rounded-lg shadow-sm p-8">
-                {/* Offer header */}
+                {/* Offer header with optional logo */}
                 <div className="flex justify-between items-start mb-8">
                   <div>
+                    {showLogoInPreview && (state.currentCompany as any)?.logo_url && (
+                      <img
+                        src={(state.currentCompany as any).logo_url}
+                        alt=""
+                        className="h-12 mb-2 object-contain"
+                      />
+                    )}
+                    {showLogoInPreview && state.currentCompany?.name && (
+                      <p className="text-sm font-semibold text-slate-700 mb-2">{state.currentCompany.name}</p>
+                    )}
                     <h1 className="text-2xl font-bold text-slate-900">{selectedOffer.name}</h1>
                     <p className="text-slate-500 mt-1">{selectedOffer.number}</p>
                   </div>
@@ -4203,7 +4547,32 @@ export const OffersPage: React.FC = () => {
               </button>
               <div className="flex gap-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    const html = generateOfferHTML();
+                    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${selectedOffer.number || 'oferta'}.html`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="flex items-center gap-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                  <Download className="w-4 h-4" />
+                  Pobierz
+                </button>
+                <button
+                  onClick={() => {
+                    const html = generateOfferHTML();
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(html);
+                      printWindow.document.close();
+                      printWindow.focus();
+                      setTimeout(() => printWindow.print(), 500);
+                    }
+                  }}
                   className="flex items-center gap-1 px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
                 >
                   <Printer className="w-4 h-4" />
@@ -4277,42 +4646,14 @@ export const OffersPage: React.FC = () => {
 
               {/* Cover letter */}
               <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                    <Mail className="w-5 h-5 text-slate-400" />
-                    List przewodni
-                  </h3>
-                  <button
-                    onClick={async () => {
-                      setGeneratingLetter(true);
-                      try {
-                        // Generate cover letter using Claude API via edge function
-                        const offerSummary = `Oferta "${selectedOffer.name}" (${selectedOffer.number}) zawiera ${getAllItems(sections).length} pozycji. Wartość netto: ${formatCurrency(totals.total)}.`;
-                        const { data } = await supabase.functions.invoke('generate-cover-letter', {
-                          body: { offer_summary: offerSummary, client_name: (selectedOffer as any).client?.name || 'Klient' }
-                        });
-                        if (data?.letter) {
-                          setSendCoverLetter(data.letter);
-                        } else {
-                          setSendCoverLetter(`Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} - ${selectedOffer.name}.\n\nOferta obejmuje ${getAllItems(sections).length} pozycji.\n\nZ poważaniem`);
-                        }
-                      } catch {
-                        setSendCoverLetter(`Szanowni Państwo,\n\nW załączeniu przesyłam ofertę ${selectedOffer.number} - ${selectedOffer.name}.\n\nOferta obejmuje ${getAllItems(sections).length} pozycji.\n\nZ poważaniem`);
-                      } finally {
-                        setGeneratingLetter(false);
-                      }
-                    }}
-                    disabled={generatingLetter}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-purple-50 text-purple-600 border border-purple-200 rounded-lg text-sm hover:bg-purple-100 disabled:opacity-50"
-                  >
-                    {generatingLetter ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                    Generuj z AI
-                  </button>
-                </div>
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-slate-400" />
+                  List przewodni
+                </h3>
                 <textarea
                   value={sendCoverLetter}
                   onChange={e => setSendCoverLetter(e.target.value)}
-                  rows={6}
+                  rows={8}
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                   placeholder="Treść listu przewodniego..."
                 />
@@ -4403,14 +4744,22 @@ export const OffersPage: React.FC = () => {
               <button
                 onClick={async () => {
                   if (!confirm('Czy na pewno chcesz wysłać ofertę wybranymi kanałami?')) return;
-                  await handleSendOffer(selectedOffer, sendChannels, sendCoverLetter);
-                  setShowSendModal(false);
+                  setSendingOffer(true);
+                  const result = await handleSendOffer(selectedOffer, sendChannels, sendCoverLetter);
+                  setSendingOffer(false);
+                  if (result.success) {
+                    alert('Oferta została wysłana!');
+                    setShowSendModal(false);
+                  } else if (result.errors.length > 0) {
+                    alert(`Wysyłka zakończona z błędami:\n${result.errors.join('\n')}`);
+                    setShowSendModal(false);
+                  }
                 }}
-                disabled={sendChannels.length === 0}
+                disabled={sendChannels.length === 0 || sendingOffer}
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                <Send className="w-4 h-4" />
-                Wyślij ofertę
+                {sendingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {sendingOffer ? 'Wysyłanie...' : 'Wyślij ofertę'}
               </button>
             </div>
           </div>
@@ -4418,85 +4767,293 @@ export const OffersPage: React.FC = () => {
       )}
 
       {/* Kartoteka Search Modal (Labour/Material/Equipment) */}
-      {(showSearchLabourModal || showSearchMaterialModal || showSearchEquipmentModal) && (
+      {(showSearchLabourModal || showSearchMaterialModal || showSearchEquipmentModal) && (() => {
+        const closeKartoteka = () => {
+          setShowSearchLabourModal(false);
+          setShowSearchMaterialModal(false);
+          setShowSearchEquipmentModal(false);
+          setSearchComponentTarget(null);
+          setSearchPositionTarget(null);
+          setKartotekaDetailItem(null);
+        };
+
+        const handleKartotekaSelect = (item: any) => {
+          const price = item.price || item.default_price || item.price_unit || 0;
+
+          if (kartotekaMode === 'fill_item' && searchComponentTarget) {
+            // Fill the item itself (name, unit, unit_price)
+            updateItem(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+              name: item.name,
+              unit: item.unit || 'szt.',
+              unit_price: price
+            });
+          } else if (kartotekaMode === 'add_component' && searchComponentTarget) {
+            // Add as component
+            const compType = showSearchLabourModal ? 'labor' : showSearchMaterialModal ? 'material' : 'equipment';
+            addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+              type: compType,
+              name: item.name,
+              code: item.code || '',
+              unit: item.unit || 'szt.',
+              quantity: 1,
+              unit_price: price,
+              total_price: price
+            });
+
+            // If own labour has linked materials/equipment, add them too
+            if (kartotekaTab === 'own' && showSearchLabourModal) {
+              if (item.materials && Array.isArray(item.materials)) {
+                item.materials.forEach((m: any) => {
+                  addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+                    type: 'material',
+                    name: m.name || m.material_name || '',
+                    code: m.code || m.material_code || '',
+                    unit: m.unit || 'szt.',
+                    quantity: m.quantity || 1,
+                    unit_price: m.price || m.default_price || 0,
+                    total_price: (m.quantity || 1) * (m.price || m.default_price || 0)
+                  });
+                });
+              }
+              if (item.equipment && Array.isArray(item.equipment)) {
+                item.equipment.forEach((eq: any) => {
+                  addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
+                    type: 'equipment',
+                    name: eq.name || eq.equipment_name || '',
+                    code: eq.code || eq.equipment_code || '',
+                    unit: eq.unit || 'szt.',
+                    quantity: eq.quantity || 1,
+                    unit_price: eq.price || eq.default_price || 0,
+                    total_price: (eq.quantity || 1) * (eq.price || eq.default_price || 0)
+                  });
+                });
+              }
+            }
+          }
+          closeKartoteka();
+        };
+
+        // Build category tree
+        const rootCats = kartotekaCategories.filter(c => !c.parent_id);
+        const childCatsOf = (parentId: string) => kartotekaCategories.filter(c => c.parent_id === parentId);
+
+        // Filter items by search + category
+        const currentData = kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData;
+        const filteredKartotekaItems = currentData.filter(item => {
+          const matchesSearch = !kartotekaSearchText ||
+            (item.name || '').toLowerCase().includes(kartotekaSearchText.toLowerCase()) ||
+            (item.code || '').toLowerCase().includes(kartotekaSearchText.toLowerCase());
+          const matchesCategory = !kartotekaSelectedCategory ||
+            item.category_id === kartotekaSelectedCategory;
+          return matchesSearch && matchesCategory;
+        }).slice(0, 100);
+
+        // Count items per category
+        const catCounts = kartotekaCategories.reduce((acc: Record<string, number>, cat: any) => {
+          acc[cat.id] = currentData.filter(i => i.category_id === cat.id).length;
+          return acc;
+        }, {} as Record<string, number>);
+
+        const renderCatTree = (cats: any[], depth: number = 0) => (
+          cats.map(cat => {
+            const children = childCatsOf(cat.id);
+            const isExpanded = kartotekaExpandedCats.has(cat.id);
+            const count = catCounts[cat.id] || 0;
+            return (
+              <div key={cat.id}>
+                <button
+                  onClick={() => {
+                    setKartotekaSelectedCategory(kartotekaSelectedCategory === cat.id ? null : cat.id);
+                    if (children.length > 0) {
+                      setKartotekaExpandedCats(prev => {
+                        const next = new Set(prev);
+                        if (next.has(cat.id)) next.delete(cat.id); else next.add(cat.id);
+                        return next;
+                      });
+                    }
+                  }}
+                  className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-1 transition ${
+                    kartotekaSelectedCategory === cat.id
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'hover:bg-slate-100 text-slate-700'
+                  }`}
+                  style={{ paddingLeft: `${8 + depth * 16}px` }}
+                >
+                  {children.length > 0 && (
+                    isExpanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />
+                  )}
+                  <span className="flex-1 truncate">{cat.name}</span>
+                  {count > 0 && <span className="text-xs text-slate-400">{count}</span>}
+                </button>
+                {isExpanded && children.length > 0 && renderCatTree(children, depth + 1)}
+              </div>
+            );
+          })
+        );
+
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-lg font-semibold">
-                {showSearchLabourModal ? 'Kartoteka — Robocizna' :
-                 showSearchMaterialModal ? 'Kartoteka — Materiały' :
-                 'Kartoteka — Sprzęt'}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowSearchLabourModal(false);
-                  setShowSearchMaterialModal(false);
-                  setShowSearchEquipmentModal(false);
-                  setSearchComponentTarget(null);
-                }}
-                className="p-1 hover:bg-slate-100 rounded"
-              >
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold">
+                  {kartotekaMode === 'fill_item' ? 'Kartoteka — Wybierz pozycję' :
+                   showSearchLabourModal ? 'Kartoteka — Robocizna' :
+                   showSearchMaterialModal ? 'Kartoteka — Materiały' :
+                   'Kartoteka — Sprzęt'}
+                </h2>
+                {kartotekaMode === 'fill_item' && (
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">Wypełnij pozycję</span>
+                )}
+              </div>
+              <button onClick={closeKartoteka} className="p-1 hover:bg-slate-100 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Tabs */}
-            <div className="px-4 py-2 border-b border-slate-200 flex gap-2">
-              <button
-                onClick={() => setKartotekaTab('own')}
-                className={`px-4 py-2 rounded-lg text-sm ${kartotekaTab === 'own' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                Katalog własny
-              </button>
-              <button
-                onClick={() => setKartotekaTab('system')}
-                className={`px-4 py-2 rounded-lg text-sm ${kartotekaTab === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                Katalog systemowy
-              </button>
-            </div>
-
-            {/* Search */}
-            <div className="px-4 py-3 border-b border-slate-200">
-              <div className="relative">
+            {/* Tabs + Search + View toggle */}
+            <div className="px-4 py-2 border-b border-slate-200 flex items-center gap-3">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setKartotekaTab('own')}
+                  className={`px-3 py-1.5 rounded text-sm ${kartotekaTab === 'own' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Katalog własny
+                </button>
+                <button
+                  onClick={() => setKartotekaTab('system')}
+                  className={`px-3 py-1.5 rounded text-sm ${kartotekaTab === 'system' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  Katalog systemowy
+                </button>
+              </div>
+              <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   value={kartotekaSearchText}
                   onChange={e => setKartotekaSearchText(e.target.value)}
                   placeholder="Szukaj po nazwie lub kodzie..."
-                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm"
+                  className="w-full pl-10 pr-4 py-1.5 border border-slate-200 rounded-lg text-sm"
                 />
+              </div>
+              <div className="flex border border-slate-200 rounded overflow-hidden">
+                <button
+                  onClick={() => setKartotekaViewMode('list')}
+                  className={`px-2 py-1 text-xs ${kartotekaViewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <ListChecks className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setKartotekaViewMode('grid')}
+                  className={`px-2 py-1 text-xs ${kartotekaViewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto">
-              {kartotekaLoading ? (
-                <div className="flex items-center justify-center h-40">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            {/* Body: sidebar + content */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Category sidebar */}
+              {kartotekaCategories.length > 0 && (
+                <div className="w-56 border-r border-slate-200 overflow-y-auto p-2 space-y-0.5 bg-slate-50/50">
+                  <button
+                    onClick={() => setKartotekaSelectedCategory(null)}
+                    className={`w-full text-left px-2 py-1.5 rounded text-sm font-medium transition ${
+                      !kartotekaSelectedCategory ? 'bg-blue-100 text-blue-700' : 'hover:bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Wszystkie ({currentData.length})
+                  </button>
+                  {renderCatTree(rootCats)}
                 </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">KOD</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">NAZWA</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">JEDN.</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">CENA</th>
-                      <th className="px-4 py-2 w-12"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {(kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData)
-                      .filter(item => {
-                        if (!kartotekaSearchText) return true;
-                        const q = kartotekaSearchText.toLowerCase();
-                        return (item.name || '').toLowerCase().includes(q) || (item.code || '').toLowerCase().includes(q);
-                      })
-                      .slice(0, 100)
-                      .map((item: any) => (
-                        <tr key={item.id} className="hover:bg-slate-50">
+              )}
+
+              {/* Content area */}
+              <div className="flex-1 overflow-y-auto">
+                {kartotekaLoading ? (
+                  <div className="flex items-center justify-center h-40">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                  </div>
+                ) : kartotekaDetailItem ? (
+                  /* Detail view */
+                  <div className="p-6 space-y-4">
+                    <button
+                      onClick={() => setKartotekaDetailItem(null)}
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Powrót do listy
+                    </button>
+                    <div className="bg-slate-50 rounded-lg p-6 space-y-3">
+                      <h3 className="text-xl font-bold text-slate-900">{kartotekaDetailItem.name}</h3>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div><span className="text-slate-500">Kod:</span> <span className="font-medium">{kartotekaDetailItem.code || '-'}</span></div>
+                        <div><span className="text-slate-500">Jednostka:</span> <span className="font-medium">{kartotekaDetailItem.unit || '-'}</span></div>
+                        <div><span className="text-slate-500">Cena:</span> <span className="font-bold text-blue-600">{formatCurrency(kartotekaDetailItem.price || kartotekaDetailItem.default_price || kartotekaDetailItem.price_unit || 0)}</span></div>
+                        {kartotekaDetailItem.description && (
+                          <div className="col-span-2"><span className="text-slate-500">Opis:</span> <span>{kartotekaDetailItem.description}</span></div>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleKartotekaSelect(kartotekaDetailItem)}
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        {kartotekaMode === 'fill_item' ? 'Wybierz tę pozycję' : 'Dodaj jako składnik'}
+                      </button>
+                    </div>
+                  </div>
+                ) : kartotekaViewMode === 'grid' ? (
+                  /* Grid view */
+                  <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {filteredKartotekaItems.map((item: any) => (
+                      <div
+                        key={item.id}
+                        className="border border-slate-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-sm cursor-pointer transition group"
+                        onClick={() => setKartotekaDetailItem(item)}
+                      >
+                        <div className="text-xs text-slate-400 mb-1">{item.code || '-'}</div>
+                        <div className="text-sm font-medium text-slate-900 mb-2 line-clamp-2">{item.name}</div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-slate-500">{item.unit || '-'}</span>
+                          <span className="text-sm font-bold text-blue-600">{formatCurrency(item.price || item.default_price || item.price_unit || 0)}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleKartotekaSelect(item); }}
+                          className="mt-2 w-full py-1 bg-blue-50 text-blue-600 rounded text-xs font-medium hover:bg-blue-100 opacity-0 group-hover:opacity-100 transition"
+                        >
+                          {kartotekaMode === 'fill_item' ? 'Wybierz' : 'Dodaj'}
+                        </button>
+                      </div>
+                    ))}
+                    {filteredKartotekaItems.length === 0 && (
+                      <div className="col-span-full py-8 text-center text-slate-500 text-sm">
+                        Brak wyników
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* List view (table) */
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">KOD</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">NAZWA</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">JEDN.</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-slate-500">CENA</th>
+                        <th className="px-4 py-2 w-20"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredKartotekaItems.map((item: any) => (
+                        <tr
+                          key={item.id}
+                          className="hover:bg-slate-50 cursor-pointer"
+                          onClick={() => setKartotekaDetailItem(item)}
+                        >
                           <td className="px-4 py-2 text-slate-500">{item.code || '-'}</td>
                           <td className="px-4 py-2">{item.name}</td>
                           <td className="px-4 py-2 text-slate-500">{item.unit || '-'}</td>
@@ -4505,98 +5062,37 @@ export const OffersPage: React.FC = () => {
                           </td>
                           <td className="px-4 py-2">
                             <button
-                              onClick={() => {
-                                const price = item.price || item.default_price || item.price_unit || 0;
-                                if (searchComponentTarget) {
-                                  // Add as component to an item
-                                  const compType = showSearchLabourModal ? 'labor' : showSearchMaterialModal ? 'material' : 'equipment';
-                                  addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
-                                    type: compType,
-                                    name: item.name,
-                                    code: item.code || '',
-                                    unit: item.unit || 'szt.',
-                                    quantity: 1,
-                                    unit_price: price,
-                                    total_price: price
-                                  });
-
-                                  // If own labour has linked materials/equipment, add them too
-                                  if (kartotekaTab === 'own' && showSearchLabourModal) {
-                                    if (item.materials && Array.isArray(item.materials)) {
-                                      item.materials.forEach((m: any) => {
-                                        addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
-                                          type: 'material',
-                                          name: m.name || m.material_name || '',
-                                          code: m.code || m.material_code || '',
-                                          unit: m.unit || 'szt.',
-                                          quantity: m.quantity || 1,
-                                          unit_price: m.price || m.default_price || 0,
-                                          total_price: (m.quantity || 1) * (m.price || m.default_price || 0)
-                                        });
-                                      });
-                                    }
-                                    if (item.equipment && Array.isArray(item.equipment)) {
-                                      item.equipment.forEach((e: any) => {
-                                        addComponent(searchComponentTarget.sectionId, searchComponentTarget.itemId, {
-                                          type: 'equipment',
-                                          name: e.name || e.equipment_name || '',
-                                          code: e.code || e.equipment_code || '',
-                                          unit: e.unit || 'szt.',
-                                          quantity: e.quantity || 1,
-                                          unit_price: e.price || e.default_price || 0,
-                                          total_price: (e.quantity || 1) * (e.price || e.default_price || 0)
-                                        });
-                                      });
-                                    }
-                                  }
-
-                                  // If adding position from labor catalog (not component)
-                                  if (searchPositionTarget && !searchComponentTarget.itemId) {
-                                    addItem(searchPositionTarget.sectionId);
-                                  }
-                                }
-                                setShowSearchLabourModal(false);
-                                setShowSearchMaterialModal(false);
-                                setShowSearchEquipmentModal(false);
-                                setSearchComponentTarget(null);
-                                setSearchPositionTarget(null);
-                              }}
-                              className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"
-                              title="Dodaj"
+                              onClick={(e) => { e.stopPropagation(); handleKartotekaSelect(item); }}
+                              className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs hover:bg-blue-100"
                             >
-                              <Plus className="w-4 h-4" />
+                              {kartotekaMode === 'fill_item' ? 'Wybierz' : 'Dodaj'}
                             </button>
                           </td>
                         </tr>
                       ))}
-                    {(kartotekaTab === 'own' ? kartotekaOwnData : kartotekaData).length === 0 && !kartotekaLoading && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                          Brak danych w kartotece
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
+                      {filteredKartotekaItems.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                            Brak danych w kartotece
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
 
+            {/* Footer */}
             <div className="p-3 border-t border-slate-200 flex justify-end">
-              <button
-                onClick={() => {
-                  setShowSearchLabourModal(false);
-                  setShowSearchMaterialModal(false);
-                  setShowSearchEquipmentModal(false);
-                  setSearchComponentTarget(null);
-                }}
-                className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50"
-              >
+              <button onClick={closeKartoteka} className="px-4 py-2 border border-slate-200 rounded-lg hover:bg-slate-50">
                 Zamknij
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </>
   );
 };

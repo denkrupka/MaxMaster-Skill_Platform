@@ -36,9 +36,13 @@ interface PublicOffer {
       id: string;
       name: string;
       description: string;
+      unit: string;
       quantity: number;
       unit_price: number;
+      discount_percent: number;
+      vat_rate: number;
       sort_order: number;
+      is_optional: boolean;
     }[];
   }[];
 }
@@ -173,8 +177,19 @@ export const OfferLandingPage: React.FC = () => {
   const isExpired = offer.valid_until && new Date(offer.valid_until) < new Date();
   const totalNetto = offer.sections.reduce((sum, s) =>
     sum + s.items.reduce((si, i) => si + i.quantity * i.unit_price, 0), 0);
-  const vatAmount = totalNetto * 0.23;
-  const brutto = totalNetto + vatAmount;
+  const totalDiscount = offer.sections.reduce((sum, s) =>
+    sum + s.items.reduce((si, i) => {
+      const itemTotal = i.quantity * i.unit_price;
+      return si + itemTotal * ((i.discount_percent || 0) / 100);
+    }, 0), 0);
+  const nettoAfterDiscount = totalNetto - totalDiscount;
+  const vatAmount = offer.sections.reduce((sum, s) =>
+    sum + s.items.reduce((si, i) => {
+      const itemTotal = i.quantity * i.unit_price;
+      const itemDiscount = itemTotal * ((i.discount_percent || 0) / 100);
+      return si + (itemTotal - itemDiscount) * ((i.vat_rate ?? 23) / 100);
+    }, 0), 0);
+  const brutto = nettoAfterDiscount + vatAmount;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -257,26 +272,36 @@ export const OfferLandingPage: React.FC = () => {
                     <tr className="text-left text-sm text-slate-500">
                       <th className="pb-3 pr-4 w-10">Lp.</th>
                       <th className="pb-3 pr-4">Nazwa</th>
+                      <th className="pb-3 pr-4 text-center w-16">Jedn.</th>
                       <th className="pb-3 pr-4 text-right w-20">Ilość</th>
-                      <th className="pb-3 pr-4 text-right w-32">Cena jedn.</th>
-                      <th className="pb-3 text-right w-32">Wartość</th>
+                      <th className="pb-3 pr-4 text-right w-28">Cena jedn.</th>
+                      <th className="pb-3 text-right w-28">Wartość</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {section.items.map((item, idx) => (
-                      <tr key={item.id} className="border-t border-slate-50 hover:bg-slate-50/50">
-                        <td className="py-3 pr-4 text-sm text-slate-400">{idx + 1}</td>
-                        <td className="py-3 pr-4">
-                          <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                          {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
-                        </td>
-                        <td className="py-3 pr-4 text-sm text-right text-slate-600">{item.quantity}</td>
-                        <td className="py-3 pr-4 text-sm text-right text-slate-600">{formatCurrency(item.unit_price)}</td>
-                        <td className="py-3 text-sm text-right font-medium text-slate-900">
-                          {formatCurrency(item.quantity * item.unit_price)}
-                        </td>
-                      </tr>
-                    ))}
+                    {section.items.map((item, idx) => {
+                      const itemTotal = item.quantity * item.unit_price;
+                      const itemDiscount = itemTotal * ((item.discount_percent || 0) / 100);
+                      return (
+                        <tr key={item.id} className="border-t border-slate-50 hover:bg-slate-50/50">
+                          <td className="py-3 pr-4 text-sm text-slate-400">{idx + 1}</td>
+                          <td className="py-3 pr-4">
+                            <p className="text-sm font-medium text-slate-900">{item.name}</p>
+                            {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
+                            {item.is_optional && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded ml-1">opcja</span>}
+                            {(item.discount_percent || 0) > 0 && (
+                              <span className="text-xs text-red-500 ml-1">-{item.discount_percent}%</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-sm text-center text-slate-500">{item.unit || 'szt.'}</td>
+                          <td className="py-3 pr-4 text-sm text-right text-slate-600">{item.quantity}</td>
+                          <td className="py-3 pr-4 text-sm text-right text-slate-600">{formatCurrency(item.unit_price)}</td>
+                          <td className="py-3 text-sm text-right font-medium text-slate-900">
+                            {formatCurrency(itemTotal - itemDiscount)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -290,8 +315,20 @@ export const OfferLandingPage: React.FC = () => {
                 <span className="text-slate-600">Suma netto:</span>
                 <span className="font-medium">{formatCurrency(totalNetto)}</span>
               </div>
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Rabat:</span>
+                  <span>-{formatCurrency(totalDiscount)}</span>
+                </div>
+              )}
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Netto po rabacie:</span>
+                  <span className="font-medium">{formatCurrency(nettoAfterDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600">VAT (23%):</span>
+                <span className="text-slate-600">VAT:</span>
                 <span className="font-medium">{formatCurrency(vatAmount)}</span>
               </div>
               <div className="flex justify-between pt-3 border-t-2 border-blue-200">

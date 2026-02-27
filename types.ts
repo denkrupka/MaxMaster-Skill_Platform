@@ -2384,11 +2384,14 @@ export interface OfferItem {
   name: string;
   description?: string;
   unit_measure_id?: number;
+  unit?: string;
   quantity: number;
   unit_price: number;
   total_price: number;
   sort_order: number;
   is_optional: boolean;
+  discount_percent?: number;
+  vat_rate?: number;
   created_at: string;
   updated_at: string;
   unit_measure?: UnitMeasure;
