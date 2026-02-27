@@ -893,6 +893,12 @@ export const OffersPage: React.FC = () => {
           .order('sort_order')
       ]);
 
+      // Load components for all items
+      const itemIds = (itemsRes.data || []).map((i: any) => i.id);
+      const componentsRes = itemIds.length > 0
+        ? await supabase.from('offer_item_components').select('*').in('offer_item_id', itemIds).order('sort_order')
+        : { data: [] };
+
       if (offerRes.data) {
         const offer = offerRes.data;
         setOfferData({
@@ -913,12 +919,27 @@ export const OffersPage: React.FC = () => {
         if (ps.calculation_mode) setCalculationMode(ps.calculation_mode);
         if (ps.issue_date) setIssueDate(ps.issue_date);
 
+        const componentsByItem = (componentsRes.data || []).reduce((acc: Record<string, OfferComponent[]>, c: any) => {
+          if (!acc[c.offer_item_id]) acc[c.offer_item_id] = [];
+          acc[c.offer_item_id].push({
+            id: c.id,
+            type: c.type,
+            name: c.name,
+            code: c.code || '',
+            unit: c.unit || '',
+            quantity: c.quantity || 1,
+            unit_price: c.unit_price || 0,
+            total_price: c.total_price || 0
+          });
+          return acc;
+        }, {});
+
         const mapItem = (i: OfferItem): LocalOfferItem => ({
           ...i,
           isEditing: false,
           isNew: false,
           isExpanded: false,
-          components: [],
+          components: componentsByItem[i.id] || [],
           markup_percent: 0,
           cost_price: 0,
           discount_percent: 0,
@@ -1311,7 +1332,7 @@ export const OffersPage: React.FC = () => {
             .single();
 
           if (newSection && validItems.length > 0) {
-            await supabase
+            const { data: savedItems } = await supabase
               .from('offer_items')
               .insert(validItems.map(item => ({
                 offer_id: selectedOffer.id,
@@ -1323,7 +1344,34 @@ export const OffersPage: React.FC = () => {
                 sort_order: item.sort_order,
                 is_optional: item.is_optional || false,
                 source_resource_id: item.source_resource_id || null
-              })));
+              })))
+              .select('id, sort_order');
+
+            // Save components for each item
+            if (savedItems) {
+              const allComponents: any[] = [];
+              for (const savedItem of savedItems) {
+                const localItem = validItems.find(vi => vi.sort_order === savedItem.sort_order);
+                if (localItem?.components && localItem.components.length > 0) {
+                  localItem.components.forEach((comp, ci) => {
+                    allComponents.push({
+                      offer_item_id: savedItem.id,
+                      type: comp.type,
+                      name: comp.name,
+                      code: comp.code || '',
+                      unit: comp.unit || '',
+                      quantity: comp.quantity || 1,
+                      unit_price: comp.unit_price || 0,
+                      total_price: comp.total_price || 0,
+                      sort_order: ci
+                    });
+                  });
+                }
+              }
+              if (allComponents.length > 0) {
+                await supabase.from('offer_item_components').insert(allComponents);
+              }
+            }
           }
 
           // Save children recursively
@@ -1341,7 +1389,7 @@ export const OffersPage: React.FC = () => {
       if (unsectioned) {
         const validItems = unsectioned.items.filter(item => item.name && item.name.trim());
         if (validItems.length > 0) {
-          await supabase
+          const { data: savedUnsectioned } = await supabase
             .from('offer_items')
             .insert(validItems.map(item => ({
               offer_id: selectedOffer.id,
@@ -1353,7 +1401,34 @@ export const OffersPage: React.FC = () => {
               sort_order: item.sort_order,
               is_optional: item.is_optional || false,
               source_resource_id: item.source_resource_id || null
-            })));
+            })))
+            .select('id, sort_order');
+
+          // Save components for unsectioned items
+          if (savedUnsectioned) {
+            const allComponents: any[] = [];
+            for (const savedItem of savedUnsectioned) {
+              const localItem = validItems.find(vi => vi.sort_order === savedItem.sort_order);
+              if (localItem?.components && localItem.components.length > 0) {
+                localItem.components.forEach((comp, ci) => {
+                  allComponents.push({
+                    offer_item_id: savedItem.id,
+                    type: comp.type,
+                    name: comp.name,
+                    code: comp.code || '',
+                    unit: comp.unit || '',
+                    quantity: comp.quantity || 1,
+                    unit_price: comp.unit_price || 0,
+                    total_price: comp.total_price || 0,
+                    sort_order: ci
+                  });
+                });
+              }
+            }
+            if (allComponents.length > 0) {
+              await supabase.from('offer_item_components').insert(allComponents);
+            }
+          }
         }
       }
 
