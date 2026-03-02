@@ -2583,7 +2583,7 @@ export interface TicketAttachment {
 }
 
 // =====================================================
-// МОДУЛЬ: ЧЕРТЕЖИ / ПЛАНЫ (RYSUNKI)
+// МОДУЛЬ: PLANY I RZUTY
 // =====================================================
 
 export type PlanStatus = 'draft' | 'active' | 'archived';

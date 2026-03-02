@@ -496,61 +496,68 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
   const data = await loadProposalData(estimateId);
   if (!data) return null;
 
-  // Group items by room
-  const itemsByRoom = data.items.reduce((acc: any, item: any) => {
-    const room = item.room_group || item.room_name || 'Inne';
-    if (!acc[room]) acc[room] = [];
-    acc[room].push(item);
-    return acc;
-  }, {});
+  // Try to load data_json from estimate for proper section structure
+  const { data: estimateRow } = await supabase
+    .from('kosztorys_estimates')
+    .select('data_json')
+    .eq('id', estimateId)
+    .single();
 
-  // Build sections
-  const sections = Object.entries(itemsByRoom).map(([room, items]: [string, any], sIndex: number) => ({
-    id: `kosztorys-section-${sIndex}`,
-    offer_id: '',
-    name: room,
-    description: '',
-    sort_order: sIndex,
-    created_at: '',
-    updated_at: '',
-    isExpanded: true,
-    items: (items as any[]).map((item: any, iIndex: number) => {
-      // Build components from work and material data
+  const dataJson = estimateRow?.data_json;
+  let sections: any[] = [];
+
+  if (dataJson && dataJson.sections && dataJson.positions && dataJson.root) {
+    // Use data_json hierarchical structure (sections → positions)
+    const buildItemFromPosition = (pos: any, sIndex: number, iIndex: number) => {
       const components: any[] = [];
-      if (item.unit_price_work && item.unit_price_work > 0) {
-        components.push({
-          type: 'labor',
-          name: item.task_description || item.work_name || 'Robocizna',
-          code: item.work_code || '',
-          unit: item.unit || 'szt.',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price_work,
-          total_price: item.total_work || (item.quantity || 1) * item.unit_price_work,
+      // Extract labor and material resources from position
+      if (pos.resources) {
+        pos.resources.forEach((res: any) => {
+          if (res.type === 'labor' || res.type === 'R') {
+            components.push({
+              type: 'labor',
+              name: res.name || 'Robocizna',
+              code: res.code || '',
+              unit: res.unit?.label || 'r-g',
+              quantity: res.norma || 1,
+              unit_price: res.unitPrice?.value || 0,
+              total_price: (res.norma || 1) * (res.unitPrice?.value || 0),
+            });
+          } else if (res.type === 'material' || res.type === 'M') {
+            components.push({
+              type: 'material',
+              name: res.name || 'Materiał',
+              code: res.code || '',
+              unit: res.unit?.label || 'szt.',
+              quantity: res.norma || 1,
+              unit_price: res.unitPrice?.value || 0,
+              total_price: (res.norma || 1) * (res.unitPrice?.value || 0),
+            });
+          } else if (res.type === 'equipment' || res.type === 'S') {
+            components.push({
+              type: 'equipment',
+              name: res.name || 'Sprzęt',
+              code: res.code || '',
+              unit: res.unit?.label || 'mg',
+              quantity: res.norma || 1,
+              unit_price: res.unitPrice?.value || 0,
+              total_price: (res.norma || 1) * (res.unitPrice?.value || 0),
+            });
+          }
         });
       }
-      if (item.material_name && item.unit_price_material && item.unit_price_material > 0) {
-        components.push({
-          type: 'material',
-          name: item.material_name,
-          code: '',
-          unit: item.unit || 'szt.',
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price_material,
-          total_price: item.total_material || (item.quantity || 1) * item.unit_price_material,
-        });
-      }
-      const totalPrice = item.total_item || item.total_price || ((item.total_work || 0) + (item.total_material || 0));
-      const unitPrice = item.unit_price || (item.quantity ? totalPrice / item.quantity : 0);
+      const quantity = pos.measurements?.finalQuantity || pos.measurements?.expressionResult || 1;
+      const unitPrice = pos.unitPrice?.value || 0;
       return {
         id: `kosztorys-item-${sIndex}-${iIndex}`,
         offer_id: '',
         section_id: `kosztorys-section-${sIndex}`,
-        name: item.task_description || item.work_name || item.installation_element || item.work_code || `Pozycja ${iIndex + 1}`,
-        description: item.installation_element || item.work_code || '',
-        quantity: item.quantity,
-        unit: item.unit,
+        name: pos.name || `Pozycja ${iIndex + 1}`,
+        description: pos.base || '',
+        quantity,
+        unit: pos.unit?.label || 'szt.',
         unit_price: unitPrice,
-        total_price: totalPrice,
+        total_price: quantity * unitPrice,
         sort_order: iIndex,
         is_optional: false,
         created_at: '',
@@ -558,8 +565,106 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
         isNew: true,
         components,
       };
-    }),
-  }));
+    };
+
+    // Recursively build sections from data_json hierarchy
+    const buildSection = (sectionId: string, sIndex: number): any => {
+      const sec = dataJson.sections[sectionId];
+      if (!sec) return null;
+      const items = (sec.positionIds || []).map((posId: string, iIndex: number) => {
+        const pos = dataJson.positions[posId];
+        if (!pos) return null;
+        return buildItemFromPosition(pos, sIndex, iIndex);
+      }).filter(Boolean);
+
+      const children = (sec.subsectionIds || []).map((subId: string, subIdx: number) =>
+        buildSection(subId, sIndex * 100 + subIdx + 1)
+      ).filter(Boolean);
+
+      return {
+        id: `kosztorys-section-${sIndex}`,
+        offer_id: '',
+        name: sec.name || `Sekcja ${sIndex + 1}`,
+        description: sec.description || '',
+        sort_order: sIndex,
+        created_at: '',
+        updated_at: '',
+        isExpanded: true,
+        items,
+        children,
+      };
+    };
+
+    sections = (dataJson.root.sectionIds || []).map((sId: string, idx: number) =>
+      buildSection(sId, idx)
+    ).filter(Boolean);
+
+    // Also add root-level positions (if any)
+    if (dataJson.root.positionIds && dataJson.root.positionIds.length > 0) {
+      const rootItems = dataJson.root.positionIds.map((posId: string, iIdx: number) => {
+        const pos = dataJson.positions[posId];
+        if (!pos) return null;
+        return buildItemFromPosition(pos, 999, iIdx);
+      }).filter(Boolean);
+      if (rootItems.length > 0) {
+        sections.push({
+          id: 'kosztorys-root-positions',
+          offer_id: '',
+          name: 'Pozycje ogólne',
+          description: '',
+          sort_order: sections.length,
+          created_at: '',
+          updated_at: '',
+          isExpanded: true,
+          items: rootItems,
+          children: [],
+        });
+      }
+    }
+  } else {
+    // Fallback: group flat items by room_group
+    const itemsByRoom = data.items.reduce((acc: any, item: any) => {
+      const room = item.room_group || item.room_name || 'Inne';
+      if (!acc[room]) acc[room] = [];
+      acc[room].push(item);
+      return acc;
+    }, {});
+
+    sections = Object.entries(itemsByRoom).map(([room, items]: [string, any], sIndex: number) => ({
+      id: `kosztorys-section-${sIndex}`,
+      offer_id: '',
+      name: room,
+      description: '',
+      sort_order: sIndex,
+      created_at: '',
+      updated_at: '',
+      isExpanded: true,
+      items: (items as any[]).map((item: any, iIndex: number) => {
+        const components: any[] = [];
+        if (item.unit_price_work && item.unit_price_work > 0) {
+          components.push({
+            type: 'labor', name: item.task_description || 'Robocizna', code: '', unit: item.unit || 'szt.',
+            quantity: item.quantity || 1, unit_price: item.unit_price_work, total_price: item.total_work || 0,
+          });
+        }
+        if (item.material_name && item.unit_price_material && item.unit_price_material > 0) {
+          components.push({
+            type: 'material', name: item.material_name, code: '', unit: item.unit || 'szt.',
+            quantity: item.quantity || 1, unit_price: item.unit_price_material, total_price: item.total_material || 0,
+          });
+        }
+        const totalPrice = item.total_item || item.total_price || ((item.total_work || 0) + (item.total_material || 0));
+        const unitPrice = item.unit_price || (item.quantity ? totalPrice / item.quantity : 0);
+        return {
+          id: `kosztorys-item-${sIndex}-${iIndex}`, offer_id: '', section_id: `kosztorys-section-${sIndex}`,
+          name: item.task_description || item.work_name || item.installation_element || `Pozycja ${iIndex + 1}`,
+          description: item.installation_element || '', quantity: item.quantity, unit: item.unit,
+          unit_price: unitPrice, total_price: totalPrice, sort_order: iIndex, is_optional: false,
+          created_at: '', updated_at: '', isNew: true, components,
+        };
+      }),
+    }));
+  }
 
   // Add equipment as separate section
   if (data.equipment.length > 0) {
@@ -573,21 +678,11 @@ export async function convertEstimateToOfferData(estimateId: string): Promise<{
       updated_at: '',
       isExpanded: true,
       items: data.equipment.map((eq: any, eIndex: number) => ({
-        id: `kosztorys-eq-${eIndex}`,
-        offer_id: '',
-        section_id: 'kosztorys-equipment-section',
+        id: `kosztorys-eq-${eIndex}`, offer_id: '', section_id: 'kosztorys-equipment-section',
         name: eq.equipment_name || eq.equipment_code || `Sprzęt ${eIndex + 1}`,
-        description: eq.equipment_code || '',
-        quantity: eq.quantity,
-        unit: eq.unit,
-        unit_price: eq.unit_price,
-        total_price: eq.total_price,
-        sort_order: eIndex,
-        is_optional: false,
-        created_at: '',
-        updated_at: '',
-        isNew: true,
-        components: [],
+        description: eq.equipment_code || '', quantity: eq.quantity, unit: eq.unit,
+        unit_price: eq.unit_price, total_price: eq.total_price, sort_order: eIndex,
+        is_optional: false, created_at: '', updated_at: '', isNew: true, components: [],
       })),
     });
   }

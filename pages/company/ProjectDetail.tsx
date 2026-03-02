@@ -1332,7 +1332,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({
               className="flex items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
             >
               <PenTool className="w-4 h-4 text-purple-600" />
-              <span className="text-sm font-medium text-gray-700">Rysunki</span>
+              <span className="text-sm font-medium text-gray-700">Plany i rzuty</span>
             </Link>
             <Link
               to={`/construction/dms?project=${project.id}`}

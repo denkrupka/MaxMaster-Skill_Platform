@@ -2388,6 +2388,21 @@ export const OffersPage: React.FC = () => {
     const companyPhone = company?.phone || '';
     const companyEmail = company?.email || '';
     const client = (selectedOffer as any).client;
+    const ps = selectedOffer.print_settings || {};
+    const cd = ps.client_data || {};
+    const clientName = client?.name || cd.client_name || offerClientData.client_name || '';
+    const clientNip = client?.nip || cd.nip || offerClientData.nip || '';
+    const clientStreet = cd.company_street || offerClientData.company_street || client?.address_street || '';
+    const clientStreetNum = cd.company_street_number || offerClientData.company_street_number || '';
+    const clientPostal = cd.company_postal_code || offerClientData.company_postal_code || client?.address_postal_code || '';
+    const clientCity = cd.company_city || offerClientData.company_city || client?.address_city || '';
+    const clientFullAddress = [clientStreet, clientStreetNum, clientPostal, clientCity].filter(Boolean).join(', ');
+    // Find representative
+    const repId = cd.representative_id || sendRepresentativeId;
+    const representative = repId ? offerClientContacts.find((c: any) => c.id === repId) : null;
+    const repName = representative ? `${representative.first_name || ''} ${representative.last_name || ''}`.trim() : '';
+    const repEmail = representative?.email || '';
+    const repPhone = representative?.phone || '';
     const fmtCur = (v: number) => v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     const isBrutto = previewTemplate === 'brutto';
     const priceLabel = isBrutto ? 'brutto' : 'netto';
@@ -2461,10 +2476,6 @@ export const OffersPage: React.FC = () => {
       }
     }
 
-    // Client address parts
-    const clientAddress = client ? [client.street, client.building_number].filter(Boolean).join(' ') : '';
-    const clientCity = client ? [client.postal_code, client.city].filter(Boolean).join(' ') : '';
-
     return `<!DOCTYPE html>
 <html lang="pl">
 <head><meta charset="UTF-8"><title>Oferta ${selectedOffer.number}</title>
@@ -2491,22 +2502,25 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
 
   <table class="info-table">
     <tr>
-      <td class="label" style="width:50%;">Dane klienta</td>
-      <td class="label" style="width:50%;">Sprzedawca</td>
+      <td class="label" style="width:50%;">Zamawiający</td>
+      <td class="label" style="width:50%;">Wykonawca</td>
     </tr>
     <tr>
       <td>
-        ${client ? `<strong>${client.name}</strong><br/>
-        ${clientAddress ? `${clientAddress}<br/>` : ''}
-        ${clientCity ? `${clientCity}<br/>` : ''}
-        ${client.regon ? `REGON ${client.regon}<br/>` : ''}
-        ${client.nip ? `NIP ${client.nip}` : ''}` : '<em>Brak danych klienta</em>'}
+        ${clientName ? `<strong>${clientName}</strong><br/>
+        ${clientNip ? `NIP: ${clientNip}<br/>` : ''}
+        ${clientFullAddress ? `${clientFullAddress}<br/>` : ''}
+        ${repName ? `<br/>Przedstawiciel: ${repName}<br/>` : ''}
+        ${repEmail ? `email: ${repEmail}<br/>` : ''}
+        ${repPhone ? `tel. ${repPhone}` : ''}` : '<em>Brak danych klienta</em>'}
       </td>
       <td>
         <strong>${companyName}</strong><br/>
         ${companyNip ? `NIP: ${companyNip}<br/>` : ''}
-        ${companyCity ? `${companyCity}${companyAddress ? `, ${companyAddress}` : ''}<br/>` : ''}
-        ${companyPhone ? `tel. ${companyPhone}` : ''}${companyEmail ? `, email: ${companyEmail}` : ''}
+        ${companyAddress ? `${companyAddress}<br/>` : ''}
+        ${companyCity ? `${companyCity}<br/>` : ''}
+        ${companyPhone ? `tel. ${companyPhone}<br/>` : ''}
+        ${companyEmail ? `email: ${companyEmail}` : ''}
       </td>
     </tr>
   </table>
@@ -3441,8 +3455,8 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
                   {calculationMode === 'markup' && editMode && <div className="text-right">Koszt</div>}
                   {calculationMode === 'markup' && editMode && <div className="text-right">Narzut %</div>}
                   <div className="text-right">Cena jedn.</div>
-                  <div className="text-right">Wartość</div>
                   <div className="text-right">Rabat%</div>
+                  <div className="text-right">Wartość</div>
                   <div className="text-right">VAT</div>
                   {editMode && <div></div>}
                 </div>
@@ -3618,9 +3632,6 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
               <span className={editMode ? 'text-slate-500' : ''}>{formatCurrency(item.unit_price)}</span>
             )}
           </div>
-          <div className="text-right font-medium text-slate-900">
-            {formatCurrency(itemTotal)}
-          </div>
           {/* Rabat% column */}
           <div className="text-right">
             {editMode ? (
@@ -3638,6 +3649,10 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
                 {(item.discount_percent || 0) > 0 ? `${item.discount_percent}%` : '-'}
               </span>
             )}
+          </div>
+          {/* Wartość (after discount) */}
+          <div className="text-right font-medium text-slate-900">
+            {formatCurrency(itemTotal - itemDiscount)}
           </div>
           {/* VAT column — click to cycle in edit mode */}
           <div className="text-right text-xs text-slate-500">
@@ -4037,9 +4052,23 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
             {!editMode && (
               <div className="p-4 bg-slate-50 rounded-lg">
                 <p className="text-sm text-slate-500 mb-1">Klient</p>
-                <p className="font-medium text-slate-900">
-                  {(selectedOffer as any).client?.name || 'Nie przypisano'}
-                </p>
+                {(selectedOffer as any).client ? (
+                  <div>
+                    <p className="font-medium text-slate-900">{(selectedOffer as any).client.name}</p>
+                    {(selectedOffer as any).client.nip && <p className="text-xs text-slate-500">NIP: {(selectedOffer as any).client.nip}</p>}
+                    {(selectedOffer as any).client.legal_address && <p className="text-xs text-slate-500">{(selectedOffer as any).client.legal_address}</p>}
+                  </div>
+                ) : offerClientData.client_name ? (
+                  <div>
+                    <p className="font-medium text-slate-900">{offerClientData.client_name}</p>
+                    {offerClientData.nip && <p className="text-xs text-slate-500">NIP: {offerClientData.nip}</p>}
+                    {(offerClientData.company_street || offerClientData.company_city) && (
+                      <p className="text-xs text-slate-500">{[offerClientData.company_street, offerClientData.company_street_number, offerClientData.company_postal_code, offerClientData.company_city].filter(Boolean).join(', ')}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="font-medium text-slate-900">Nie przypisano</p>
+                )}
               </div>
             )}
             <div className="p-4 bg-slate-50 rounded-lg">

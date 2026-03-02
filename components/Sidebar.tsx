@@ -289,7 +289,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <CollapsibleNavGroup groupId="hr-construction" icon={HardHat} label="Budowlanka">
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
-                   <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                   <NavItem to="/construction/drawings" icon={PenTool} label="Plany i rzuty" />
                    <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                    <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
@@ -319,7 +319,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                  <CollapsibleNavGroup groupId="construction-modules" icon={HardHat} label="Budowlanka">
                    <NavItem to="/construction/estimates" icon={Calculator} label="Kosztorys" />
                    <NavItem to="/construction/offers" icon={FileSpreadsheet} label="Ofertowanie" />
-                   <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                   <NavItem to="/construction/drawings" icon={PenTool} label="Plany i rzuty" />
                    <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                    <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
                    <NavItem to="/construction/finance" icon={Wallet} label="Finanse" />
@@ -415,7 +415,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     </CollapsibleNavGroup>
                     <div className="my-2 border-t border-slate-100"></div>
                     <CollapsibleNavGroup groupId="coordinator-construction" icon={HardHat} label="Budowlanka">
-                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Plany i rzuty" />
                       <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                       <NavItem to="/construction/gantt" icon={GanttChartSquare} label="Harmonogram" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
@@ -463,7 +463,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" matchPaths={['/employee/time-off', '/company/time-off']} />
                     <div className="my-2 border-t border-slate-100"></div>
                     <CollapsibleNavGroup groupId="brigadir-construction" icon={HardHat} label="Budowlanka">
-                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Plany i rzuty" />
                       <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                       <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />
@@ -487,7 +487,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                     <NavItem to="/company/time-off" icon={CalendarDays} label="Urlopy" matchPaths={['/employee/time-off', '/company/time-off']} />
                     <div className="my-2 border-t border-slate-100"></div>
                     <CollapsibleNavGroup groupId="brigadir-real-construction" icon={HardHat} label="Budowlanka">
-                      <NavItem to="/construction/drawings" icon={PenTool} label="Rysunki" />
+                      <NavItem to="/construction/drawings" icon={PenTool} label="Plany i rzuty" />
                       <NavItem to="/construction/dms" icon={FolderOpen} label="Dokumenty" />
                       <NavItem to="/construction/procurement" icon={ShoppingCart} label="Zaopatrzenie" />
                       <NavItem to="/construction/approvals" icon={ClipboardCheck} label="Uzgodnienia" />

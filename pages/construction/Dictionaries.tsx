@@ -542,7 +542,7 @@ export const DictionariesPage: React.FC = () => {
         .from('wholesaler_integrations')
         .select('*')
         .eq('company_id', currentUser.company_id);
-      if (!error) setIntegrations((data || []).filter(i => i.wholesaler_id !== 'speckable'));
+      if (!error) setIntegrations(data || []);
     } catch (err) {
       console.error('Error loading integrations:', err);
     }

@@ -37,6 +37,8 @@ interface PublicOffer {
   } | null;
   client: {
     name: string;
+    nip: string | null;
+    legal_address: string | null;
   } | null;
   sections: {
     id: string;
@@ -151,7 +153,7 @@ export const OfferLandingPage: React.FC = () => {
           .eq('offer_id', offerData.id)
           .order('sort_order'),
         offerData.client_id
-          ? supabase.from('contractors').select('name').eq('id', offerData.client_id).single()
+          ? supabase.from('contractors').select('name, nip, legal_address').eq('id', offerData.client_id).single()
           : Promise.resolve({ data: null })
       ]);
 
@@ -402,6 +404,48 @@ export const OfferLandingPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Zamawiający / Wykonawca */}
+          {(offer.client || offer.company) && (
+            <div className="px-8 py-6 border-b border-slate-100">
+              <div className="grid grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Zamawiający</h4>
+                  {offer.client ? (
+                    <div className="text-sm text-slate-700 space-y-0.5">
+                      <p className="font-semibold text-slate-900">{offer.client.name}</p>
+                      {offer.client.nip && <p>NIP: {offer.client.nip}</p>}
+                      {offer.client.legal_address && <p>{offer.client.legal_address}</p>}
+                      {(() => {
+                        const cd = offer.print_settings?.client_data;
+                        if (!cd) return null;
+                        const addr = [cd.company_street, cd.company_street_number, cd.company_postal_code, cd.company_city].filter(Boolean).join(', ');
+                        return addr && !offer.client.legal_address ? <p>{addr}</p> : null;
+                      })()}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic">Brak danych</p>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Wykonawca</h4>
+                  {offer.company ? (
+                    <div className="text-sm text-slate-700 space-y-0.5">
+                      <p className="font-semibold text-slate-900">{offer.company.name}</p>
+                      {offer.company.nip && <p>NIP: {offer.company.nip}</p>}
+                      {(offer.company.street || offer.company.city) && (
+                        <p>{[offer.company.street, offer.company.building_number, offer.company.postal_code, offer.company.city].filter(Boolean).join(', ')}</p>
+                      )}
+                      {offer.company.phone && <p>tel. {offer.company.phone}</p>}
+                      {offer.company.email && <p>email: {offer.company.email}</p>}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic">Brak danych</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Sections & Items */}
           <div className="p-8">
             {offer.sections.map(section => (
@@ -560,7 +604,7 @@ export const OfferLandingPage: React.FC = () => {
             <Star className="w-3 h-3 text-amber-400" />
           </div>
           <p className="text-xs text-slate-400 mt-3">
-            Profesjonalne narzędzie do zarządzania firmą budowlano-instalacyjną
+            Profesjonalne narzędzie do zarządzania firmą
           </p>
         </div>
       </div>

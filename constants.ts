@@ -581,17 +581,17 @@ export const TICKET_PRIORITY_ICONS: Record<TicketPriorityType, string> = {
 // =============================================
 
 export const GANTT_DEPENDENCY_LABELS: Record<GanttDependencyType, string> = {
-  FS: 'Zakończenie-Początek (FS)',
-  FF: 'Zakończenie-Zakończenie (FF)',
-  SS: 'Początek-Początek (SS)',
-  SF: 'Początek-Zakończenie (SF)'
+  FS: 'Zakończenie-rozpoczęcie (ZR)',
+  SS: 'Rozpoczęcie-rozpoczęcie (RR)',
+  FF: 'Zakończenie-zakończenie (ZZ)',
+  SF: 'Rozpoczęcie-zakończenie (RZ)'
 };
 
 export const GANTT_DEPENDENCY_SHORT_LABELS: Record<GanttDependencyType, string> = {
-  FS: 'FS',
-  FF: 'FF',
-  SS: 'SS',
-  SF: 'SF'
+  FS: 'ZR',
+  SS: 'RR',
+  FF: 'ZZ',
+  SF: 'RZ'
 };
 
 // =============================================
@@ -885,7 +885,7 @@ export const CONSTRUCTION_ROLE_COLORS: Record<ConstructionRole, string> = {
 export const CONSTRUCTION_MODULE_LABELS: Record<string, string> = {
   'estimates': 'Kosztorysowanie',
   'offers': 'Ofertowanie',
-  'drawings': 'Rysunki techniczne',
+  'drawings': 'Plany i rzuty',
   'dms': 'Dokumenty',
   'gantt': 'Harmonogram',
   'finance': 'Finanse',
@@ -896,7 +896,7 @@ export const CONSTRUCTION_MODULE_LABELS: Record<string, string> = {
 export const CONSTRUCTION_MODULE_DESCRIPTIONS: Record<string, string> = {
   'estimates': 'Kosztorysowanie projektów z hierarchiczną strukturą etapów, pozycji i zasobów',
   'offers': 'Tworzenie i zarządzanie ofertami handlowymi z szablonami i śledzeniem',
-  'drawings': 'Zarządzanie rysunkami technicznymi z adnotacjami i znacznikami',
+  'drawings': 'Zarządzanie planami i rzutami z adnotacjami i znacznikami',
   'dms': 'System zarządzania dokumentami z wersjonowaniem i uprawnieniami',
   'gantt': 'Harmonogramowanie projektów z wykresem Gantta i zależnościami',
   'finance': 'Operacje finansowe, rozliczenia i akty wykonawcze',
