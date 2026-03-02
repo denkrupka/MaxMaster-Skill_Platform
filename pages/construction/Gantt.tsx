@@ -213,8 +213,17 @@ export const GanttPage: React.FC = () => {
   const [workingDays, setWorkingDays] = useState<boolean[]>([true, true, true, true, true, false, false]);
   const [harmonogramStart, setHarmonogramStart] = useState('');
 
+  // Drag state for Gantt bars
+  const [dragState, setDragState] = useState<{
+    taskId: string; mode: 'move' | 'resize-end';
+    startX: number; origLeft: number; origWidth: number;
+    origStartDate: string; origEndDate: string;
+  } | null>(null);
+  const dragRef = useRef<typeof dragState>(null);
+  const [dragPreview, setDragPreview] = useState<{ taskId: string; left: number; width: number } | null>(null);
+
   // Splitter
-  const [leftPanelWidth, setLeftPanelWidth] = useState(550);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(680);
   const splitterRef = useRef<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -301,39 +310,16 @@ export const GanttPage: React.FC = () => {
     finally { setLoading(false); }
   };
 
-  // Kept for backward compatibility reference - now uses imported buildTree
-  const buildTaskTree = (tasksData: GanttTask[]): GanttTaskWithChildren[] => {
-    const taskMap = new Map<string, GanttTaskWithChildren>();
-    tasksData.forEach(task => taskMap.set(task.id, { ...task, children: [], isExpanded: true, level: 0 }));
-    tasksData.forEach(task => {
-      if (task.parent_id && taskMap.has(task.parent_id)) {
-        const parent = taskMap.get(task.parent_id)!;
-        const child = taskMap.get(task.id)!;
-        child.level = (parent.level || 0) + 1;
-        parent.children!.push(child);
-      }
-    });
-    const roots = tasksData.filter(t => !t.parent_id).map(t => taskMap.get(t.id)!);
-    const assignWbs = (items: GanttTaskWithChildren[], prefix: string) => {
-      items.forEach((item, i) => {
-        item.wbs = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
-        if (item.children && item.children.length > 0) assignWbs(item.children, item.wbs);
-      });
-    };
-    assignWbs(roots, '');
-    return roots;
-  };
-
-  const flattenTasks = (items: GanttTaskWithChildren[], result: GanttTaskWithChildren[] = []): GanttTaskWithChildren[] => {
+  const flattenTasksFiltered = (items: GanttTaskWithChildren[], result: GanttTaskWithChildren[] = []): GanttTaskWithChildren[] => {
     items.forEach(task => {
       if (hideClosedTasks && task.progress >= 100) return;
       result.push(task);
-      if (task.isExpanded && task.children && task.children.length > 0) flattenTasks(task.children, result);
+      if (task.isExpanded && task.children && task.children.length > 0) flattenTasksFiltered(task.children, result);
     });
     return result;
   };
 
-  const flatTasks = useMemo(() => flattenTasks(tasks), [tasks, hideClosedTasks]);
+  const flatTasks = useMemo(() => flattenTasksFiltered(tasks), [tasks, hideClosedTasks]);
   const allFlatTasks = useMemo(() => {
     const flatten = (items: GanttTaskWithChildren[], result: GanttTaskWithChildren[] = []): GanttTaskWithChildren[] => {
       items.forEach(t => { result.push(t); if (t.children?.length) flatten(t.children, result); });
@@ -378,9 +364,6 @@ export const GanttPage: React.FC = () => {
 
   const getTaskTitle = (task: GanttTaskWithChildren): string => task.title || 'Bez nazwy';
   const isParentTask = (task: GanttTaskWithChildren) => task.children && task.children.length > 0;
-
-  const getDaysBetween = (start: Date, end: Date) => Math.ceil((end.getTime() - start.getTime()) / 86400000);
-
   const formatDuration = fmtDuration;
 
   const ROW_HEIGHT = 40;
@@ -654,9 +637,197 @@ export const GanttPage: React.FC = () => {
     const startWidth = leftPanelWidth;
     const onMove = (ev: MouseEvent) => {
       if (!splitterRef.current) return;
-      setLeftPanelWidth(Math.max(300, Math.min(800, startWidth + ev.clientX - startX)));
+      setLeftPanelWidth(Math.max(400, Math.min(900, startWidth + ev.clientX - startX)));
     };
     const onUp = () => { splitterRef.current = false; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  // ========== AUTO-SCHEDULE ==========
+  const handleAutoSchedule = async () => {
+    if (!selectedProject || allFlatTasks.length === 0) return;
+    if (!confirm('Automatyczne planowanie przeliczy daty wszystkich zadań na podstawie zależności. Kontynuować?')) return;
+    setSaving(true);
+    try {
+      const result = autoSchedule(
+        tasks as GanttTaskNode[],
+        dependencies as GanttDepRecord[],
+        workingDays,
+        harmonogramStart || new Date().toISOString().split('T')[0]
+      );
+      for (const [taskId, dates] of result) {
+        const task = allFlatTasks.find(t => t.id === taskId);
+        if (!task || isParentTask(task)) continue;
+        const duration = getDaysBetween(new Date(dates.start_date), new Date(dates.end_date));
+        await supabase.from('gantt_tasks').update({
+          start_date: dates.start_date,
+          end_date: dates.end_date,
+          duration: Math.max(duration, 1)
+        }).eq('id', taskId);
+      }
+      showSuccess('Harmonogram przeliczony automatycznie.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd planowania: ' + (err?.message || err)); }
+    finally { setSaving(false); }
+  };
+
+  // ========== IMPORT / EXPORT ==========
+  const handleExportJSON = () => {
+    const data = { tasks: allFlatTasks.map(t => ({
+      id: t.id, title: t.title, parent_id: t.parent_id, wbs: t.wbs,
+      start_date: t.start_date, end_date: t.end_date, duration: t.duration,
+      progress: t.progress, is_milestone: t.is_milestone, sort_order: t.sort_order
+    })), dependencies: dependencies.map(d => ({
+      predecessor_id: d.predecessor_id, successor_id: d.successor_id,
+      dependency_type: d.dependency_type, lag: d.lag
+    })) };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `harmonogram_${selectedProject?.name || 'export'}_${new Date().toISOString().split('T')[0]}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleExportCSV = () => {
+    const rows = [['SPP', 'Nazwa', 'Faza nadrzędna', 'Data rozpoczęcia', 'Data zakończenia', 'Czas trwania', 'Postęp %', 'Kamień milowy'].join(';')];
+    allFlatTasks.forEach(t => {
+      rows.push([
+        t.wbs || '', `"${(t.title || '').replace(/"/g, '""')}"`,
+        t.parent_id || '', t.start_date?.split('T')[0] || '',
+        t.end_date?.split('T')[0] || '', String(t.duration || ''),
+        String(t.progress || 0), t.is_milestone ? 'Tak' : 'Nie'
+      ].join(';'));
+    });
+    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url;
+    a.download = `harmonogram_${selectedProject?.name || 'export'}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleImportJSON = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0];
+      if (!file || !selectedProject) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data.tasks?.length) { showError('Plik nie zawiera zadań.'); return; }
+        if (!confirm(`Importować ${data.tasks.length} zadań? Istniejące zadania zostaną usunięte.`)) return;
+        setSaving(true);
+        await supabase.from('gantt_dependencies').delete().eq('project_id', selectedProject.id);
+        await supabase.from('gantt_tasks').delete().eq('project_id', selectedProject.id);
+        const idMap = new Map<string, string>();
+        for (const t of data.tasks) {
+          const { data: inserted } = await supabase.from('gantt_tasks').insert({
+            project_id: selectedProject.id, title: t.title, parent_id: null,
+            start_date: t.start_date || null, end_date: t.end_date || null,
+            duration: t.duration || null, progress: t.progress || 0,
+            is_milestone: t.is_milestone || false, sort_order: t.sort_order || 0,
+            source: 'manual', color: '#3b82f6'
+          }).select('id').single();
+          if (inserted) idMap.set(t.id, inserted.id);
+        }
+        // Update parent references
+        for (const t of data.tasks) {
+          if (t.parent_id && idMap.has(t.id) && idMap.has(t.parent_id)) {
+            await supabase.from('gantt_tasks').update({ parent_id: idMap.get(t.parent_id) }).eq('id', idMap.get(t.id));
+          }
+        }
+        // Import dependencies
+        if (data.dependencies?.length) {
+          for (const d of data.dependencies) {
+            if (idMap.has(d.predecessor_id) && idMap.has(d.successor_id)) {
+              await supabase.from('gantt_dependencies').insert({
+                project_id: selectedProject.id,
+                predecessor_id: idMap.get(d.predecessor_id),
+                successor_id: idMap.get(d.successor_id),
+                dependency_type: d.dependency_type || 'FS',
+                lag: d.lag || 0
+              });
+            }
+          }
+        }
+        showSuccess(`Zaimportowano ${data.tasks.length} zadań.`);
+        await loadGanttData();
+      } catch (err: any) { showError('Błąd importu: ' + (err?.message || err)); }
+      finally { setSaving(false); }
+    };
+    input.click();
+  };
+
+  // ========== DRAG HANDLERS FOR GANTT BARS ==========
+  const handleBarMouseDown = (e: React.MouseEvent, task: GanttTaskWithChildren, mode: 'move' | 'resize-end') => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!task.start_date || isParentTask(task)) return;
+    const pos = getTaskPosition(task);
+    const state = {
+      taskId: task.id, mode, startX: e.clientX,
+      origLeft: pos.left, origWidth: pos.width,
+      origStartDate: task.start_date!.split('T')[0],
+      origEndDate: (task.end_date || task.start_date)!.split('T')[0]
+    };
+    dragRef.current = state;
+    setDragState(state);
+
+    const onMove = (ev: MouseEvent) => {
+      const ds = dragRef.current;
+      if (!ds) return;
+      const dx = ev.clientX - ds.startX;
+      if (ds.mode === 'move') {
+        setDragPreview({ taskId: ds.taskId, left: ds.origLeft + dx, width: ds.origWidth });
+      } else {
+        const newWidth = Math.max(dayWidth, ds.origWidth + dx);
+        setDragPreview({ taskId: ds.taskId, left: ds.origLeft, width: newWidth });
+      }
+    };
+
+    const onUp = async (ev: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const ds = dragRef.current;
+      dragRef.current = null;
+      setDragState(null);
+      setDragPreview(null);
+      if (!ds || !selectedProject) return;
+      const dx = ev.clientX - ds.startX;
+      if (Math.abs(dx) < 3) return; // threshold
+
+      try {
+        if (ds.mode === 'move') {
+          const daysDelta = Math.round(dx / dayWidth);
+          if (daysDelta === 0) return;
+          const newStart = new Date(ds.origStartDate);
+          newStart.setDate(newStart.getDate() + daysDelta);
+          const newEnd = new Date(ds.origEndDate);
+          newEnd.setDate(newEnd.getDate() + daysDelta);
+          await supabase.from('gantt_tasks').update({
+            start_date: newStart.toISOString().split('T')[0],
+            end_date: newEnd.toISOString().split('T')[0]
+          }).eq('id', ds.taskId);
+        } else {
+          const daysDelta = Math.round(dx / dayWidth);
+          if (daysDelta === 0) return;
+          const newEnd = new Date(ds.origEndDate);
+          newEnd.setDate(newEnd.getDate() + daysDelta);
+          if (newEnd < new Date(ds.origStartDate)) return;
+          const duration = getDaysBetween(new Date(ds.origStartDate), newEnd);
+          await supabase.from('gantt_tasks').update({
+            end_date: newEnd.toISOString().split('T')[0],
+            duration: Math.max(duration, 1)
+          }).eq('id', ds.taskId);
+        }
+        // Recalc parent
+        const task = allFlatTasks.find(t => t.id === ds.taskId);
+        if (task?.parent_id) await recalcAndSaveParent(task.parent_id);
+        await loadGanttData();
+      } catch (err: any) { showError('Błąd aktualizacji: ' + (err?.message || err)); }
+    };
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   };
@@ -789,18 +960,6 @@ export const GanttPage: React.FC = () => {
     }
   };
 
-  const getNextWorkingDay = (date: Date, wd: boolean[]): Date => {
-    const d = new Date(date);
-    for (let i = 0; i < 14; i++) { const dow = d.getDay(); if (wd[dow === 0 ? 6 : dow - 1]) return d; d.setDate(d.getDate() + 1); }
-    return d;
-  };
-
-  const addWorkingDays = (start: Date, days: number, wd: boolean[]): Date => {
-    const d = new Date(start); let added = 0;
-    while (added < days) { d.setDate(d.getDate() + 1); const dow = d.getDay(); if (wd[dow === 0 ? 6 : dow - 1]) added++; }
-    return d;
-  };
-
   const handleCreateHarmonogram = async () => {
     if (!currentUser || !hasAnySelection) return;
     setWizardSaving(true);
@@ -835,7 +994,7 @@ export const GanttPage: React.FC = () => {
           const stageTasks = estimateItems.filter((t: any) => t.stage_id === stage.id);
           const duration = Math.max(stageTasks.length * 2, 5);
           const stageStart = getNextWorkingDay(currentDate, wd);
-          const stageEnd = addWorkingDays(stageStart, duration, wd);
+          const stageEnd = addWD(stageStart, duration, wd);
           await supabase.from('gantt_tasks').insert({
             project_id: projectId, title: stage.name, start_date: stageStart.toISOString().split('T')[0],
             end_date: stageEnd.toISOString().split('T')[0], duration, progress: 0, is_milestone: false,
@@ -859,7 +1018,7 @@ export const GanttPage: React.FC = () => {
           for (const task of stageTasks) {
             const taskDuration = Math.max(task.duration || 1, 1);
             const taskStart = getNextWorkingDay(childDate, wd);
-            const taskEnd = addWorkingDays(taskStart, taskDuration, wd);
+            const taskEnd = addWD(taskStart, taskDuration, wd);
             await supabase.from('gantt_tasks').insert({
               project_id: projectId, title: task.name, parent_id: parentId,
               start_date: taskStart.toISOString().split('T')[0], end_date: taskEnd.toISOString().split('T')[0],
@@ -1180,6 +1339,14 @@ export const GanttPage: React.FC = () => {
           className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
           <Plus className="w-3.5 h-3.5" /> Utwórz fazę
         </button>
+        <button onClick={() => openCreateDep()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium">
+          <LinkIcon className="w-3.5 h-3.5" /> Zależność
+        </button>
+        <button onClick={handleAutoSchedule} disabled={saving || allFlatTasks.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-medium">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} Planuj
+        </button>
         <div className="h-5 w-px bg-slate-200" />
         <span className="text-sm font-semibold text-slate-800 truncate">{selectedProject.name}</span>
         <span className="text-xs text-slate-400 ml-1">{allFlatTasks.length} faz</span>
@@ -1225,6 +1392,20 @@ export const GanttPage: React.FC = () => {
                 className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Edytuj dni robocze
               </button>
+              <div className="border-t border-slate-100 my-1" />
+              <div className="px-4 py-1.5 text-xs font-semibold text-slate-400 uppercase">Import / Eksport</div>
+              <button onClick={() => { handleExportJSON(); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                <FileDown className="w-4 h-4" /> Eksportuj JSON
+              </button>
+              <button onClick={() => { handleExportCSV(); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                <Download className="w-4 h-4" /> Eksportuj CSV
+              </button>
+              <button onClick={() => { handleImportJSON(); setShowSettingsMenu(false); }}
+                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                <Upload className="w-4 h-4" /> Importuj z JSON
+              </button>
             </div>
           )}
         </div>
@@ -1257,8 +1438,11 @@ export const GanttPage: React.FC = () => {
             {/* Table header */}
             <div className="sticky top-0 z-20 bg-slate-100 border-b border-slate-300 flex items-center text-xs font-semibold text-slate-500 uppercase" style={{ height: 56 }}>
               <div className="w-14 text-center shrink-0 px-2">SPP</div>
-              <div className="flex-1 px-2">Nazwa</div>
-              <div className="w-28 px-2">Data rozpocz.</div>
+              <div className="flex-1 px-2 min-w-[120px]">Nazwa</div>
+              <div className="w-24 px-1 text-center">Czas trw.</div>
+              <div className="w-24 px-1 text-center">Rozpocz.</div>
+              <div className="w-24 px-1 text-center">Zakończ.</div>
+              <div className="w-20 px-1 text-center">Postęp</div>
               <div className="w-10 flex items-center justify-center">
                 <button onClick={() => setShowSettingsMenu(!showSettingsMenu)} className="p-1 hover:bg-slate-200 rounded">
                   <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -1278,11 +1462,12 @@ export const GanttPage: React.FC = () => {
               filteredFlatTasks.map(task => {
                 const title = getTaskTitle(task);
                 const isParent = isParentTask(task);
+                const progress = task.progress || 0;
                 return (
                   <div key={task.id} className="flex items-center border-b border-slate-100 group hover:bg-blue-50/30 cursor-pointer"
                     style={{ height: ROW_HEIGHT }} onClick={() => openEditPhase(task)}>
                     <div className="w-14 text-center text-xs text-slate-500 shrink-0 font-medium px-2">{task.wbs}</div>
-                    <div className="flex-1 flex items-center gap-1.5 px-2 min-w-0" style={{ paddingLeft: `${8 + (task.level || 0) * 20}px` }}>
+                    <div className="flex-1 flex items-center gap-1.5 px-2 min-w-[120px]" style={{ paddingLeft: `${8 + (task.level || 0) * 20}px` }}>
                       {isParent ? (
                         <button onClick={(e) => { e.stopPropagation(); toggleTaskExpand(task.id); }}
                           className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 bg-blue-600 text-white hover:bg-blue-700">
@@ -1295,8 +1480,17 @@ export const GanttPage: React.FC = () => {
                       )}
                       <span className={`text-sm truncate ${isParent ? 'font-semibold text-slate-800' : 'text-slate-700'}`}>{title}</span>
                     </div>
-                    <div className="w-28 px-2 text-xs text-slate-500">
-                      {task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '–'}
+                    <div className="w-24 px-1 text-center text-xs text-slate-500">{task.duration ? `${task.duration} d.` : '–'}</div>
+                    <div className="w-24 px-1 text-center text-xs text-slate-500">{task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '–'}</div>
+                    <div className="w-24 px-1 text-center text-xs text-slate-500">{task.end_date ? new Date(task.end_date).toLocaleDateString('pl-PL') : '–'}</div>
+                    <div className="w-20 px-1" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${progress >= 100 ? 'bg-green-500' : progress > 0 ? 'bg-blue-500' : ''}`}
+                            style={{ width: `${Math.min(progress, 100)}%` }} />
+                        </div>
+                        <span className="text-[10px] text-slate-400 w-7 text-right">{progress}%</span>
+                      </div>
                     </div>
                     <div className="w-10 flex items-center justify-center" onClick={e => e.stopPropagation()}>
                       <button onClick={(e) => handleContextMenu(e, task)} className="p-1 hover:bg-slate-200 rounded opacity-0 group-hover:opacity-100">
@@ -1382,11 +1576,29 @@ export const GanttPage: React.FC = () => {
                             <div className="absolute right-0 bottom-0 w-2.5 h-3" style={{ backgroundColor: PARENT_COLOR, clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
                           </div>
                         ) : (
-                          <div className="absolute z-10 rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                            style={{ left: pos.left, width: Math.max(pos.width, 4), top: (ROW_HEIGHT - 20) / 2, height: 20, backgroundColor: criticalPathIds.has(task.id) ? '#fca5a5' : '#93c5fd' }}>
+                          <div className="absolute z-10 rounded overflow-hidden shadow-sm hover:shadow-md transition-shadow group/bar"
+                            style={{
+                              left: dragPreview?.taskId === task.id ? dragPreview.left : pos.left,
+                              width: Math.max(dragPreview?.taskId === task.id ? dragPreview.width : pos.width, 4),
+                              top: (ROW_HEIGHT - 20) / 2, height: 20,
+                              backgroundColor: criticalPathIds.has(task.id) ? '#fca5a5' : (task.color || '#93c5fd'),
+                              cursor: dragState?.taskId === task.id ? 'grabbing' : 'grab',
+                              opacity: dragPreview?.taskId === task.id ? 0.85 : 1
+                            }}
+                            onMouseDown={(e) => handleBarMouseDown(e, task, 'move')}
+                            title={`${title}\n${task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : ''} → ${task.end_date ? new Date(task.end_date).toLocaleDateString('pl-PL') : ''}\nCzas trwania: ${task.duration || '–'} d.\nPostęp: ${task.progress || 0}%`}>
                             {task.progress > 0 && (
-                              <div className="absolute left-0 top-0 bottom-0 rounded" style={{ width: `${task.progress}%`, backgroundColor: '#3b82f6' }} />
+                              <div className="absolute left-0 top-0 bottom-0 rounded" style={{ width: `${Math.min(task.progress, 100)}%`, backgroundColor: criticalPathIds.has(task.id) ? '#ef4444' : '#3b82f6' }} />
                             )}
+                            {/* Progress text on wider bars */}
+                            {(dragPreview?.taskId === task.id ? dragPreview.width : pos.width) > 60 && (
+                              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white drop-shadow-sm pointer-events-none z-10">
+                                {task.progress > 0 ? `${task.progress}%` : ''}
+                              </span>
+                            )}
+                            {/* Resize handle (right edge) */}
+                            <div className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize opacity-0 group-hover/bar:opacity-100 bg-white/30 hover:bg-white/60"
+                              onMouseDown={(e) => { e.stopPropagation(); handleBarMouseDown(e, task, 'resize-end'); }} />
                           </div>
                         )}
                         {/* Label next to bar */}
