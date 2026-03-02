@@ -7,7 +7,7 @@ import {
   Save, X, GripVertical, Percent, AlertCircle, FileSpreadsheet,
   FolderPlus, Package, Star, UserPlus, Briefcase, MapPin,
   ToggleLeft, ToggleRight, ListChecks, ChevronUp, Wrench, Hammer,
-  FolderOpen, Printer, MessageSquare, Phone, Globe, Store
+  FolderOpen, Printer, MessageSquare, Phone, Globe, Store, Settings
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -213,6 +213,25 @@ export const OffersPage: React.FC = () => {
   const [objectAddress, setObjectAddress] = useState('');
   const [workStartDate, setWorkStartDate] = useState('');
   const [workEndDate, setWorkEndDate] = useState('');
+
+  // Warunki istotne
+  const [paymentTerm, setPaymentTerm] = useState('');
+  const [invoiceFrequency, setInvoiceFrequency] = useState('');
+  const [warrantyPeriod, setWarrantyPeriod] = useState('');
+
+  // Koszty powiązane
+  interface RelatedCost { id: string; name: string; value: number; }
+  const [relatedCosts, setRelatedCosts] = useState<RelatedCost[]>([
+    { id: 'koszty_budowy', name: 'Koszty budowy', value: 0 },
+    { id: 'kaucja_gwarancyjna', name: 'Kaucja Gwarancyjna', value: 0 },
+    { id: 'polisa_oc', name: 'Polisa OC', value: 0 },
+    { id: 'wynajem_konteneru', name: 'Wynajem Konteneru', value: 0 }
+  ]);
+
+  // Settings modal
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'dodatki' | 'wid'>('dodatki');
+  const [showComponentsInPrint, setShowComponentsInPrint] = useState(false);
 
   // Bulk operations
   const [showBulkBar, setShowBulkBar] = useState(false);
@@ -994,6 +1013,13 @@ export const OffersPage: React.FC = () => {
         const ps = offer.print_settings || {};
         if (ps.calculation_mode) setCalculationMode(ps.calculation_mode);
         if (ps.issue_date) setIssueDate(ps.issue_date);
+        if (ps.warunki) {
+          setPaymentTerm(ps.warunki.payment_term || '');
+          setInvoiceFrequency(ps.warunki.invoice_frequency || '');
+          setWarrantyPeriod(ps.warunki.warranty_period || '');
+        }
+        if (ps.related_costs) setRelatedCosts(ps.related_costs);
+        if (ps.show_components_in_print !== undefined) setShowComponentsInPrint(ps.show_components_in_print);
 
         // Restore client data from saved print_settings and contractor
         const client = offer.client;
@@ -1320,7 +1346,14 @@ export const OffersPage: React.FC = () => {
               object_postal_code: offerClientData.object_postal_code,
               representative_id: sendRepresentativeId || null,
               work_type_ids: offerSelectedWorkTypes
-            }
+            },
+            warunki: {
+              payment_term: paymentTerm,
+              invoice_frequency: invoiceFrequency,
+              warranty_period: warrantyPeriod
+            },
+            related_costs: relatedCosts,
+            show_components_in_print: showComponentsInPrint
           }
         })
         .select()
@@ -1472,7 +1505,14 @@ export const OffersPage: React.FC = () => {
               object_postal_code: offerClientData.object_postal_code,
               representative_id: sendRepresentativeId || null,
               work_type_ids: offerSelectedWorkTypes
-            }
+            },
+            warunki: {
+              payment_term: paymentTerm,
+              invoice_frequency: invoiceFrequency,
+              warranty_period: warrantyPeriod
+            },
+            related_costs: relatedCosts,
+            show_components_in_print: showComponentsInPrint
           }
         })
         .eq('id', selectedOffer.id);
@@ -2209,6 +2249,21 @@ export const OffersPage: React.FC = () => {
     setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
       ...s,
       items: s.items.map(i => i.id === itemId ? { ...i, components: [...(i.components || []), newComp] } : i)
+    })));
+  };
+
+  const updateComponent = (sectionId: string, itemId: string, componentId: string, updates: Partial<OfferComponent>) => {
+    setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
+      ...s,
+      items: s.items.map(i => i.id === itemId ? {
+        ...i,
+        components: (i.components || []).map(c => {
+          if (c.id !== componentId) return c;
+          const upd = { ...c, ...updates };
+          upd.total_price = upd.quantity * upd.unit_price;
+          return upd;
+        })
+      } : i)
     })));
   };
 
@@ -3447,8 +3502,9 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
             {/* Items table */}
             {section.items.length > 0 && (
               <div>
-                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
+                <div className={`grid gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-50/50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_50px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_50px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[50px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[50px_1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[50px_1fr_60px_80px_100px_100px_60px_60px]'}`}>
                   {editMode && showBulkBar && <div></div>}
+                  <div></div>
                   <div>Nazwa</div>
                   <div className="text-center">Jedn.</div>
                   <div className="text-right">Ilość</div>
@@ -3519,7 +3575,7 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
     return (
       <div key={item.id} className={`${item.is_optional ? 'bg-yellow-50' : (item.quantity === 0 || item.unit_price === 0) ? 'bg-red-50' : ''}`}>
         {/* Main row */}
-        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[1fr_60px_80px_100px_100px_60px_60px]'}`}>
+        <div className={`grid gap-2 px-4 py-2 items-center text-sm border-b border-slate-50 ${editMode && showBulkBar ? (calculationMode === 'markup' ? 'grid-cols-[24px_50px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[24px_50px_1fr_60px_80px_100px_100px_60px_60px_32px]') : editMode ? (calculationMode === 'markup' ? 'grid-cols-[50px_1fr_60px_80px_100px_80px_100px_100px_60px_60px_32px]' : 'grid-cols-[50px_1fr_60px_80px_100px_100px_60px_60px_32px]') : 'grid-cols-[50px_1fr_60px_80px_100px_100px_60px_60px]'}`}>
           {editMode && showBulkBar && (
             <div>
               <input
@@ -3530,6 +3586,18 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
               />
             </div>
           )}
+          {/* Components column - R/M/S icons */}
+          <div className="flex gap-0.5">
+            {(item.components || []).some(c => c.type === 'labor') && (
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">R</span>
+            )}
+            {(item.components || []).some(c => c.type === 'material') && (
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">M</span>
+            )}
+            {(item.components || []).some(c => c.type === 'equipment') && (
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700">S</span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             {editMode && (
               <button
@@ -3695,19 +3763,67 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
                 <p className="text-xs text-slate-400 italic">Brak składników</p>
               ) : (
                 <div className="space-y-1">
+                  {/* Component header row */}
+                  <div className="grid grid-cols-[28px_1fr_60px_70px_90px_90px_90px_28px] gap-1 px-2 py-1 text-[10px] text-slate-400 font-medium uppercase">
+                    <div></div>
+                    <div>Nazwa</div>
+                    <div className="text-center">Jedn.</div>
+                    <div className="text-right">Ilość</div>
+                    {calculationMode === 'markup' ? (
+                      <>
+                        <div className="text-right">Koszt</div>
+                        <div className="text-right">Narzut %</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-right">Cena jedn.</div>
+                        <div></div>
+                      </>
+                    )}
+                    <div className="text-right">Wartość</div>
+                    <div></div>
+                  </div>
                   {(item.components || []).map(comp => (
-                    <div key={comp.id} className="flex items-center gap-3 text-sm bg-white rounded px-3 py-1.5 border border-slate-100">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase ${
+                    <div key={comp.id} className="grid grid-cols-[28px_1fr_60px_70px_90px_90px_90px_28px] gap-1 items-center text-sm bg-white rounded px-2 py-1 border border-slate-100">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase text-center ${
                         comp.type === 'labor' ? 'bg-purple-100 text-purple-700' :
                         comp.type === 'material' ? 'bg-green-100 text-green-700' :
                         'bg-orange-100 text-orange-700'
                       }`}>
                         {comp.type === 'labor' ? 'R' : comp.type === 'material' ? 'M' : 'S'}
                       </span>
-                      <span className="text-xs text-slate-400">{comp.code}</span>
-                      <span className="flex-1 text-slate-700">{comp.name}</span>
-                      <span className="text-xs text-slate-500">{comp.quantity} {comp.unit}</span>
-                      <span className="text-sm font-medium">{formatCurrency(comp.unit_price)}</span>
+                      <span className="text-xs text-slate-700 truncate" title={comp.name}>{comp.name}</span>
+                      <div className="text-center">
+                        <select
+                          value={comp.unit || 'szt.'}
+                          onChange={e => updateComponent(sectionId, item.id, comp.id, { unit: e.target.value })}
+                          className="w-full px-0.5 py-0.5 border border-slate-200 rounded text-[10px]"
+                        >
+                          {DEFAULT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div className="text-right">
+                        <input
+                          type="number"
+                          value={comp.quantity}
+                          onChange={e => updateComponent(sectionId, item.id, comp.id, { quantity: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-1 py-0.5 border border-slate-200 rounded text-right text-xs"
+                          step="0.01"
+                        />
+                      </div>
+                      <div className="text-right">
+                        <input
+                          type="number"
+                          value={comp.unit_price}
+                          onChange={e => updateComponent(sectionId, item.id, comp.id, { unit_price: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-1 py-0.5 border border-slate-200 rounded text-right text-xs"
+                          step="0.01"
+                        />
+                      </div>
+                      <div className="text-right text-xs text-slate-400">
+                        {calculationMode === 'markup' ? '-' : ''}
+                      </div>
+                      <div className="text-right text-xs font-medium">{formatCurrency(comp.quantity * comp.unit_price)}</div>
                       <button
                         onClick={() => deleteComponent(sectionId, item.id, comp.id)}
                         className="p-0.5 hover:bg-red-50 rounded text-red-400"
@@ -3767,21 +3883,25 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
           </div>
         )}
 
-        {/* View mode: show components read-only */}
+        {/* View mode: show components read-only with full fields */}
         {!editMode && (item.components || []).length > 0 && (
           <div className="bg-slate-50/30 border-t border-slate-100 px-6 py-2">
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-0.5">
               {(item.components || []).map(comp => (
-                <span key={comp.id} className="inline-flex items-center gap-1.5 text-xs bg-white rounded px-2 py-1 border border-slate-100">
-                  <span className={`px-1 py-0.5 rounded text-[9px] font-medium uppercase ${
+                <div key={comp.id} className="grid grid-cols-[28px_1fr_50px_60px_80px_80px] gap-2 items-center text-xs py-0.5">
+                  <span className={`px-1 py-0.5 rounded text-[9px] font-medium uppercase text-center ${
                     comp.type === 'labor' ? 'bg-purple-100 text-purple-700' :
                     comp.type === 'material' ? 'bg-green-100 text-green-700' :
                     'bg-orange-100 text-orange-700'
                   }`}>
                     {comp.type === 'labor' ? 'R' : comp.type === 'material' ? 'M' : 'S'}
                   </span>
-                  <span className="text-slate-600">{comp.name}</span>
-                </span>
+                  <span className="text-slate-600 truncate">{comp.name}</span>
+                  <span className="text-slate-400 text-center">{comp.unit}</span>
+                  <span className="text-right text-slate-600">{comp.quantity}</span>
+                  <span className="text-right text-slate-600">{formatCurrency(comp.unit_price)}</span>
+                  <span className="text-right font-medium text-slate-700">{formatCurrency(comp.quantity * comp.unit_price)}</span>
+                </div>
               ))}
             </div>
           </div>
@@ -3834,6 +3954,13 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
               </div>
               <div className="flex items-center gap-3">
                 <StatusBadge status={selectedOffer.status} />
+                <button
+                  onClick={() => setShowSettingsModal(true)}
+                  className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50"
+                  title="Ustawienia oferty"
+                >
+                  <Settings className="w-4 h-4 text-slate-500" />
+                </button>
                 {selectedOffer.status === 'draft' && (
                   <div className="flex gap-2">
                     {!editMode ? (
@@ -4200,6 +4327,52 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
             </div>
           </div>
 
+          {/* Warunki istotne block */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-6 py-4 border-b border-slate-200">
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Termin płatności</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={paymentTerm}
+                  onChange={e => setPaymentTerm(e.target.value)}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="np. 30 dni"
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">{paymentTerm || '-'}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Wystawienie faktur</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={invoiceFrequency}
+                  onChange={e => setInvoiceFrequency(e.target.value)}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="np. co 30 dni"
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">{invoiceFrequency || '-'}</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">Okres gwarancyjny</p>
+              {editMode ? (
+                <input
+                  type="text"
+                  value={warrantyPeriod}
+                  onChange={e => setWarrantyPeriod(e.target.value)}
+                  className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                  placeholder="np. 24 miesiące"
+                />
+              ) : (
+                <p className="text-sm font-medium text-slate-900">{warrantyPeriod || '-'}</p>
+              )}
+            </div>
+          </div>
+
           {/* Bulk operations bar */}
           {editMode && showBulkBar && (
             <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-4">
@@ -4308,6 +4481,61 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Koszty powiązane */}
+          <div className="p-6 border-b border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Koszty powiązane</h2>
+            <div className="space-y-2">
+              {relatedCosts.map(cost => (
+                <div key={cost.id} className="flex items-center gap-3">
+                  {editMode ? (
+                    <>
+                      <input
+                        type="text"
+                        value={cost.name}
+                        onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, name: e.target.value } : c))}
+                        className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-sm"
+                      />
+                      <input
+                        type="number"
+                        value={cost.value}
+                        onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, value: parseFloat(e.target.value) || 0 } : c))}
+                        className="w-32 px-2 py-1.5 border border-slate-200 rounded text-right text-sm"
+                        step="0.01"
+                      />
+                      <span className="text-sm text-slate-500">zł</span>
+                      <button
+                        onClick={() => setRelatedCosts(prev => prev.filter(c => c.id !== cost.id))}
+                        className="p-1 hover:bg-red-50 rounded text-red-400"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm text-slate-700">{cost.name}</span>
+                      <span className="text-sm font-medium text-slate-900">{formatCurrency(cost.value)}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+              {editMode && (
+                <button
+                  onClick={() => setRelatedCosts(prev => [...prev, { id: `custom_${Date.now()}`, name: '', value: 0 }])}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded border border-dashed border-blue-300"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Dodaj koszt
+                </button>
+              )}
+              {relatedCosts.some(c => c.value > 0) && (
+                <div className="flex justify-between pt-2 border-t border-slate-200">
+                  <span className="text-sm font-medium text-slate-700">Suma kosztów powiązanych:</span>
+                  <span className="text-sm font-bold text-slate-900">{formatCurrency(relatedCosts.reduce((s, c) => s + c.value, 0))}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Financial summary */}
@@ -4698,6 +4926,95 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
       )}
 
       {/* Bulk Rabat Modal */}
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold">Ustawienia oferty</h2>
+              <button onClick={() => setShowSettingsModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200">
+              <button
+                onClick={() => setSettingsTab('dodatki')}
+                className={`flex-1 py-3 text-sm font-medium text-center ${settingsTab === 'dodatki' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Dodatki
+              </button>
+              <button
+                onClick={() => setSettingsTab('wid')}
+                className={`flex-1 py-3 text-sm font-medium text-center ${settingsTab === 'wid' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                WID
+              </button>
+            </div>
+            <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+              {settingsTab === 'dodatki' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">Dodatki i dopłaty wpływające na końcową wartość oferty.</p>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Dopłata za termin płatności</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={0}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        placeholder="0"
+                        step="0.1"
+                      />
+                      <span className="text-sm text-slate-500">%</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Naliczana gdy termin płatności przekracza standard</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Dopłata za gwarancję</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={0}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                        placeholder="0"
+                        step="0.1"
+                      />
+                      <span className="text-sm text-slate-500">%</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Naliczana za wydłużony okres gwarancyjny</p>
+                  </div>
+                </div>
+              )}
+              {settingsTab === 'wid' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">Widoczność elementów w druku i generacji dokumentu.</p>
+                  <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
+                    <input
+                      type="checkbox"
+                      checked={showComponentsInPrint}
+                      onChange={e => setShowComponentsInPrint(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Pokaż składniki (R/M/S) w druku</p>
+                      <p className="text-xs text-slate-500">Wyświetla robociznę, materiały i sprzęt pod pozycjami</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                Zamknij
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBulkRabatModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-xl w-full max-w-sm">
@@ -4951,16 +5268,52 @@ body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e
                   {showDownloadDropdown && (
                     <div className="absolute bottom-full mb-1 right-0 bg-white border border-slate-200 rounded-lg shadow-lg z-10 min-w-[160px]">
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setShowDownloadDropdown(false);
                           const html = generateOfferHTML();
-                          const printWindow = window.open('', '_blank');
-                          if (printWindow) {
-                            printWindow.document.write(html);
-                            printWindow.document.close();
-                            printWindow.focus();
-                            setTimeout(() => printWindow.print(), 500);
+                          // Create hidden iframe to render HTML for PDF
+                          const iframe = document.createElement('iframe');
+                          iframe.style.position = 'fixed';
+                          iframe.style.left = '-9999px';
+                          iframe.style.top = '0';
+                          iframe.style.width = '210mm';
+                          iframe.style.height = '297mm';
+                          document.body.appendChild(iframe);
+                          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                          if (!iframeDoc) { document.body.removeChild(iframe); return; }
+                          iframeDoc.open();
+                          iframeDoc.write(html);
+                          iframeDoc.close();
+                          // Wait for rendering
+                          await new Promise(r => setTimeout(r, 800));
+                          const body = iframeDoc.body;
+                          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                          const pageW = 210;
+                          const pageH = 297;
+                          const margin = 10;
+                          const contentW = pageW - margin * 2;
+                          try {
+                            const html2canvas = (await import('html2canvas')).default;
+                            const canvas = await html2canvas(body, { scale: 2, useCORS: true, width: body.scrollWidth, windowWidth: body.scrollWidth });
+                            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                            const imgW = contentW;
+                            const imgH = (canvas.height * imgW) / canvas.width;
+                            let yOffset = 0;
+                            const usableH = pageH - margin * 2;
+                            while (yOffset < imgH) {
+                              if (yOffset > 0) pdf.addPage();
+                              pdf.addImage(imgData, 'JPEG', margin, margin - yOffset, imgW, imgH);
+                              yOffset += usableH;
+                            }
+                          } catch {
+                            // Fallback: simple text-based PDF
+                            pdf.setFontSize(12);
+                            pdf.text(`Oferta ${selectedOffer?.number || ''}`, margin, 20);
+                            pdf.setFontSize(10);
+                            pdf.text(selectedOffer?.name || '', margin, 30);
                           }
+                          pdf.save(`${selectedOffer?.number || 'oferta'}.pdf`);
+                          document.body.removeChild(iframe);
                         }}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left hover:bg-slate-50 rounded-t-lg"
                       >
