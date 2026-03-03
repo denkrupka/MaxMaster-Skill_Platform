@@ -286,6 +286,23 @@ export const OffersPage: React.FC = () => {
   const [linkCopied, setLinkCopied] = useState(false);
   const [sendManualContact, setSendManualContact] = useState({ first_name: '', last_name: '', email: '', phone: '' });
 
+  // Toast notification system
+  interface ToastMessage { id: number; text: string; type: 'success' | 'error' | 'info'; }
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastIdRef = useRef(0);
+  const showToast = useCallback((text: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, text, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  // Confirmation modal system
+  interface ConfirmModalState { show: boolean; title: string; message: string; onConfirm: (inputValue?: string) => void; confirmLabel?: string; destructive?: boolean; showInput?: boolean; inputPlaceholder?: string; inputValue?: string; }
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalState>({ show: false, title: '', message: '', onConfirm: () => {} });
+  const showConfirm = useCallback((opts: Omit<ConfirmModalState, 'show'>) => {
+    setConfirmModal({ ...opts, show: true });
+  }, []);
+
   // Auto-generate cover letter when send modal opens
   useEffect(() => {
     if (showSendModal && selectedOffer) {
@@ -298,6 +315,33 @@ export const OffersPage: React.FC = () => {
       setSendManualContact({ first_name: '', last_name: '', email: '', phone: '' });
     }
   }, [showSendModal]);
+
+  // Keyboard shortcuts: Ctrl+S to save, Escape to close modals/exit edit
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S — save offer
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editMode && selectedOffer && !savingOffer) {
+          handleUpdateOffer();
+        }
+      }
+      // Escape — close topmost modal or exit edit mode
+      if (e.key === 'Escape') {
+        if (confirmModal.show) { setConfirmModal(prev => ({ ...prev, show: false })); return; }
+        if (showSettingsModal) { setShowSettingsModal(false); return; }
+        if (showBulkRabatModal) { setShowBulkRabatModal(false); return; }
+        if (showPreviewModal) { setShowPreviewModal(false); return; }
+        if (showSendModal) { setShowSendModal(false); return; }
+        if (showImportFromEstimate) { setShowImportFromEstimate(false); return; }
+        if (showEditModal) { setShowEditModal(false); setEditingOffer(null); return; }
+        if (showCreateModal) { setShowCreateModal(false); resetOfferForm(); return; }
+        if (editMode) { setEditMode(false); return; }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editMode, selectedOffer, savingOffer, confirmModal.show, showSettingsModal, showBulkRabatModal, showPreviewModal, showSendModal, showImportFromEstimate, showEditModal, showCreateModal]);
 
   // Load client data when entering edit mode
   useEffect(() => {
@@ -1818,26 +1862,115 @@ export const OffersPage: React.FC = () => {
       await loadData();
       setEditMode(false);
       await loadOfferDetails(selectedOffer.id);
+      showToast('Oferta została zapisana', 'success');
     } catch (err) {
       console.error('Error updating offer:', err);
+      showToast('Błąd podczas zapisywania oferty', 'error');
     } finally {
       setSavingOffer(false);
     }
   };
 
   const handleDeleteOffer = async (offer: Offer) => {
-    if (!confirm('Czy na pewno chcesz usunąć tę ofertę?')) return;
-    try {
-      await supabase
-        .from('offers')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', offer.id);
-      await loadData();
-      if (selectedOffer?.id === offer.id) {
-        setSelectedOffer(null);
+    showConfirm({
+      title: 'Usunąć ofertę?',
+      message: `Oferta "${offer.name}" zostanie przeniesiona do kosza.`,
+      confirmLabel: 'Usuń',
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await supabase
+            .from('offers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', offer.id);
+          await loadData();
+          if (selectedOffer?.id === offer.id) {
+            setSelectedOffer(null);
+          }
+          showToast('Oferta została usunięta', 'success');
+        } catch (err) {
+          console.error('Error deleting offer:', err);
+          showToast('Błąd podczas usuwania oferty', 'error');
+        }
       }
+    });
+  };
+
+  const handleDuplicateOffer = async (offer: Offer) => {
+    try {
+      // Generate new number
+      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const newNumber = `OF-${dateStr}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+
+      // Create new offer as draft copy
+      const { data: newOffer, error } = await supabase
+        .from('offers')
+        .insert({
+          company_id: offer.company_id,
+          name: `${offer.name} (kopia)`,
+          number: newNumber,
+          project_id: offer.project_id,
+          client_id: offer.client_id,
+          status: 'draft',
+          valid_until: offer.valid_until,
+          discount_percent: offer.discount_percent,
+          discount_amount: offer.discount_amount,
+          notes: offer.notes,
+          internal_notes: offer.internal_notes,
+          print_settings: offer.print_settings
+        })
+        .select()
+        .single();
+
+      if (error || !newOffer) throw error;
+
+      // Copy sections and items
+      const { data: srcSections } = await supabase
+        .from('offer_sections')
+        .select('*')
+        .eq('offer_id', offer.id)
+        .order('sort_order');
+
+      if (srcSections && srcSections.length > 0) {
+        for (const sec of srcSections) {
+          const { data: newSec } = await supabase
+            .from('offer_sections')
+            .insert({ offer_id: newOffer.id, name: sec.name, sort_order: sec.sort_order, parent_id: null })
+            .select()
+            .single();
+
+          if (newSec) {
+            const { data: srcItems } = await supabase
+              .from('offer_items')
+              .select('*')
+              .eq('section_id', sec.id)
+              .order('sort_order');
+
+            if (srcItems && srcItems.length > 0) {
+              await supabase.from('offer_items').insert(
+                srcItems.map(item => ({
+                  offer_id: newOffer.id,
+                  section_id: newSec.id,
+                  name: item.name,
+                  description: item.description,
+                  unit: item.unit,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  discount_percent: item.discount_percent,
+                  vat_rate: item.vat_rate,
+                  sort_order: item.sort_order
+                }))
+              );
+            }
+          }
+        }
+      }
+
+      await loadData();
+      showToast('Oferta została zduplikowana', 'success');
     } catch (err) {
-      console.error('Error deleting offer:', err);
+      console.error('Error duplicating offer:', err);
+      showToast('Błąd podczas duplikowania oferty', 'error');
     }
   };
 
@@ -1995,43 +2128,65 @@ export const OffersPage: React.FC = () => {
   };
 
   const handleAcceptOffer = async (offer: Offer) => {
-    try {
-      await supabase
-        .from('offers')
-        .update({
-          status: 'accepted',
-          accepted_at: new Date().toISOString()
-        })
-        .eq('id', offer.id);
-      await loadData();
-      if (selectedOffer?.id === offer.id) {
-        await loadOfferDetails(offer.id);
+    showConfirm({
+      title: 'Zaakceptować ofertę?',
+      message: `Status oferty "${offer.name}" zostanie zmieniony na "Zaakceptowana".`,
+      confirmLabel: 'Zaakceptuj',
+      onConfirm: async () => {
+        try {
+          await supabase
+            .from('offers')
+            .update({
+              status: 'accepted',
+              accepted_at: new Date().toISOString()
+            })
+            .eq('id', offer.id);
+          await loadData();
+          if (selectedOffer?.id === offer.id) {
+            await loadOfferDetails(offer.id);
+          }
+          showToast('Oferta została zaakceptowana', 'success');
+        } catch (err) {
+          console.error('Error accepting offer:', err);
+          showToast('Błąd podczas akceptacji oferty', 'error');
+        }
       }
-    } catch (err) {
-      console.error('Error accepting offer:', err);
-    }
+    });
   };
 
   const handleRejectOffer = async (offer: Offer) => {
-    const reason = prompt('Podaj powód odrzucenia (opcjonalnie):');
-    try {
-      await supabase
-        .from('offers')
-        .update({
-          status: 'rejected',
-          rejected_at: new Date().toISOString(),
-          internal_notes: offer.internal_notes
-            ? `${offer.internal_notes}\n\nPowód odrzucenia: ${reason || 'Brak'}`
-            : `Powód odrzucenia: ${reason || 'Brak'}`
-        })
-        .eq('id', offer.id);
-      await loadData();
-      if (selectedOffer?.id === offer.id) {
-        await loadOfferDetails(offer.id);
+    showConfirm({
+      title: 'Odrzucić ofertę?',
+      message: 'Podaj powód odrzucenia (opcjonalnie):',
+      confirmLabel: 'Odrzuć',
+      destructive: true,
+      showInput: true,
+      inputPlaceholder: 'Powód odrzucenia...',
+      inputValue: '',
+      onConfirm: async (inputVal?: string) => {
+        const reason = inputVal || '';
+        try {
+          await supabase
+            .from('offers')
+            .update({
+              status: 'rejected',
+              rejected_at: new Date().toISOString(),
+              internal_notes: offer.internal_notes
+                ? `${offer.internal_notes}\n\nPowód odrzucenia: ${reason || 'Brak'}`
+                : `Powód odrzucenia: ${reason || 'Brak'}`
+            })
+            .eq('id', offer.id);
+          await loadData();
+          if (selectedOffer?.id === offer.id) {
+            await loadOfferDetails(offer.id);
+          }
+          showToast('Oferta została odrzucona', 'info');
+        } catch (err) {
+          console.error('Error rejecting offer:', err);
+          showToast('Błąd podczas odrzucania oferty', 'error');
+        }
       }
-    } catch (err) {
-      console.error('Error rejecting offer:', err);
-    }
+    });
   };
 
   const copyPublicLink = (offer: Offer) => {
@@ -2058,7 +2213,7 @@ export const OffersPage: React.FC = () => {
         .single();
 
       if (!estimate) {
-        alert('Nie znaleziono kosztorysu');
+        showToast('Nie znaleziono kosztorysu', 'error');
         setImportLoading(false);
         return;
       }
@@ -2178,7 +2333,7 @@ export const OffersPage: React.FC = () => {
       setSelectedEstimateId('');
     } catch (err) {
       console.error('Error importing from estimate:', err);
-      alert('Błąd podczas importu z kosztorysu');
+      showToast('Błąd podczas importu z kosztorysu', 'error');
     } finally {
       setImportLoading(false);
     }
@@ -2199,7 +2354,7 @@ export const OffersPage: React.FC = () => {
 
       if (estError || !estimate) {
         console.error('Error loading estimate:', estError);
-        alert('Nie można załadować kosztorysu');
+        showToast('Nie można załadować kosztorysu', 'error');
         setImportLoading(false);
         return;
       }
@@ -2296,7 +2451,7 @@ export const OffersPage: React.FC = () => {
       setSelectedKosztorysId('');
     } catch (err) {
       console.error('Error importing from kosztorys:', err);
-      alert('Błąd podczas importu z modułu kosztorysowania');
+      showToast('Błąd podczas importu z modułu kosztorysowania', 'error');
     } finally {
       setImportLoading(false);
     }
@@ -2321,7 +2476,7 @@ export const OffersPage: React.FC = () => {
 
   const addSection = (afterSectionId?: string, parentId?: string) => {
     const newSection: LocalOfferSection = {
-      id: `new-section-${Date.now()}`,
+      id: `new-section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       offer_id: '',
       name: 'Nowa sekcja',
       description: '',
@@ -2357,13 +2512,21 @@ export const OffersPage: React.FC = () => {
   };
 
   const deleteSection = (sectionId: string) => {
-    if (!confirm('Czy na pewno chcesz usunąć tę sekcję wraz z pozycjami?')) return;
-    setSections(prev => updateSectionsDeep(prev, sectionId, () => null));
+    showConfirm({
+      title: 'Usunąć sekcję?',
+      message: 'Sekcja wraz ze wszystkimi pozycjami zostanie usunięta.',
+      confirmLabel: 'Usuń',
+      destructive: true,
+      onConfirm: () => {
+        setSections(prev => updateSectionsDeep(prev, sectionId, () => null));
+        showToast('Sekcja została usunięta', 'success');
+      }
+    });
   };
 
   const addItem = (sectionId: string) => {
     const newItem: LocalOfferItem = {
-      id: `new-item-${Date.now()}`,
+      id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       offer_id: '',
       section_id: sectionId === 'unsectioned' ? undefined : sectionId,
       name: '',
@@ -2415,7 +2578,7 @@ export const OffersPage: React.FC = () => {
   };
 
   const addComponent = (sectionId: string, itemId: string, component: Omit<OfferComponent, 'id'>) => {
-    const newComp: OfferComponent = { ...component, id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` };
+    const newComp: OfferComponent = { ...component, id: `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
     setSections(prev => updateSectionsDeep(prev, sectionId, s => ({
       ...s,
       items: s.items.map(i => i.id === itemId ? { ...i, components: [...(i.components || []), newComp] } : i)
@@ -3098,6 +3261,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       type="button"
                       onClick={() => offerRemoveContact(index)}
                       className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      title="Usuń kontakt"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -3535,7 +3699,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b border-slate-200 flex justify-between items-center">
           <h2 className="text-xl font-bold text-slate-900">Nowa oferta</h2>
-          <button onClick={() => { setShowCreateModal(false); resetOfferForm(); }} className="p-2 hover:bg-slate-100 rounded-lg">
+          <button onClick={() => { setShowCreateModal(false); resetOfferForm(); }} className="p-2 hover:bg-slate-100 rounded-lg" title="Zamknij">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -3651,7 +3815,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
       <div className="bg-white rounded-xl w-full max-w-lg">
         <div className="p-4 border-b border-slate-200 flex justify-between items-center">
           <h2 className="text-lg font-semibold">Importuj z kosztorysu</h2>
-          <button onClick={() => setShowImportFromEstimate(false)} className="p-1 hover:bg-slate-100 rounded">
+          <button onClick={() => setShowImportFromEstimate(false)} className="p-1 hover:bg-slate-100 rounded" title="Zamknij">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -3732,6 +3896,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           <button
             onClick={() => updateSection(section.id, { isExpanded: !section.isExpanded })}
             className="p-1 hover:bg-slate-200 rounded"
+            title={section.isExpanded ? 'Zwiń sekcję' : 'Rozwiń sekcję'}
           >
             {section.isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
@@ -3749,13 +3914,32 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             {formatCurrency(sectionTotal)}
           </span>
           {editMode && (
-            <button
-              onClick={() => deleteSection(section.id)}
-              className="p-1 hover:bg-red-100 rounded text-red-600"
-              title="Usuń sekcję"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  const cloneItems = (items: LocalOfferItem[]): LocalOfferItem[] =>
+                    items.map(item => ({ ...item, id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, components: item.components ? item.components.map(c => ({ ...c, id: `new-comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` })) : [] }));
+                  const cloneSec = (sec: LocalOfferSection): LocalOfferSection => ({
+                    ...sec, id: `new-sec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, name: `${sec.name} (kopia)`,
+                    items: cloneItems(sec.items), children: sec.children ? sec.children.map(cloneSec) : []
+                  });
+                  const newSec = cloneSec(section);
+                  setSections(prev => { const idx = prev.findIndex(s => s.id === section.id); const arr = [...prev]; arr.splice(idx + 1, 0, newSec); return arr; });
+                  showToast('Sekcja została zduplikowana', 'success');
+                }}
+                className="p-1 hover:bg-blue-100 rounded text-blue-600"
+                title="Duplikuj sekcję"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => deleteSection(section.id)}
+                className="p-1 hover:bg-red-100 rounded text-red-600"
+                title="Usuń sekcję"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
           )}
         </div>
 
@@ -3851,13 +4035,13 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           {/* Components column - R/M/S icons */}
           <div className="flex gap-0.5">
             {(item.components || []).some(c => c.type === 'labor') && (
-              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700">R</span>
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700" title="Robocizna">R</span>
             )}
             {(item.components || []).some(c => c.type === 'material') && (
-              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">M</span>
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700" title="Materiał">M</span>
             )}
             {(item.components || []).some(c => c.type === 'equipment') && (
-              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700">S</span>
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700" title="Sprzęt">S</span>
             )}
           </div>
           <div className="flex items-center gap-1">
@@ -3865,6 +4049,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <button
                 onClick={() => updateItem(sectionId, item.id, { isExpanded: !item.isExpanded })}
                 className="p-0.5 hover:bg-slate-100 rounded text-slate-400"
+                title={item.isExpanded ? 'Zwiń składniki' : 'Rozwiń składniki'}
               >
                 {item.isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </button>
@@ -4008,6 +4193,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <button
                 onClick={() => deleteItem(sectionId, item.id)}
                 className="p-1 hover:bg-red-50 rounded text-red-500"
+                title="Usuń pozycję"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -4108,6 +4294,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       <button
                         onClick={() => deleteComponent(sectionId, item.id, comp.id)}
                         className="p-0.5 hover:bg-red-50 rounded text-red-400"
+                        title="Usuń składnik"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -4274,6 +4461,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           onClick={handleUpdateOffer}
                           disabled={savingOffer}
                           className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                          title="Zapisz ofertę (Ctrl+S)"
                         >
                           {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           Zapisz
@@ -4753,7 +4941,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           <span className={`text-[10px] font-medium ${cw.apply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
                         </label>
                         {editMode && (
-                          <button onClick={() => setCustomWarunki(prev => prev.filter(w => w.id !== cw.id))} className="p-0.5 hover:bg-red-50 rounded text-red-400"><X className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setCustomWarunki(prev => prev.filter(w => w.id !== cw.id))} className="p-0.5 hover:bg-red-50 rounded text-red-400" title="Usuń warunek"><X className="w-3.5 h-3.5" /></button>
                         )}
                       </div>
                     </div>
@@ -4775,7 +4963,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             )}
             {editMode && (
               <button
-                onClick={() => setCustomWarunki(prev => [...prev, { id: `cw_${Date.now()}`, name: '', value: '', surcharge: 0, apply: true }])}
+                onClick={() => setCustomWarunki(prev => [...prev, { id: `cw_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`, name: '', value: '', surcharge: 0, apply: true }])}
                 className="mt-3 flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded border border-dashed border-blue-300"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -4835,11 +5023,29 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-slate-900">Pozycje oferty</h2>
               <div className="flex gap-2">
+                {sections.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const allExpanded = sections.every(s => s.isExpanded);
+                      setSections(prev => {
+                        const toggleAll = (secs: LocalOfferSection[]): LocalOfferSection[] =>
+                          secs.map(s => ({ ...s, isExpanded: !allExpanded, children: s.children ? toggleAll(s.children) : [] }));
+                        return toggleAll(prev);
+                      });
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
+                    title={sections.every(s => s.isExpanded) ? 'Zwiń wszystkie sekcje' : 'Rozwiń wszystkie sekcje'}
+                  >
+                    {sections.every(s => s.isExpanded) ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {sections.every(s => s.isExpanded) ? 'Zwiń' : 'Rozwiń'} wszystko
+                  </button>
+                )}
                 {editMode && (
                   <>
                     <button
                       onClick={() => setShowBulkBar(!showBulkBar)}
                       className={`flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm ${showBulkBar ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-slate-200 hover:bg-slate-50'}`}
+                      title="Zaznacz pozycje do edycji masowej"
                     >
                       <ListChecks className="w-4 h-4" />
                       Zmiany masowe
@@ -4850,9 +5056,19 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             </div>
 
             {sections.length === 0 && !editMode ? (
-              <div className="text-center py-8 text-slate-500">
-                <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p>Brak pozycji w ofercie</p>
+              <div className="text-center py-12 text-slate-500">
+                <Package className="w-16 h-16 mx-auto mb-4 text-slate-200" />
+                <p className="text-lg font-medium text-slate-600 mb-1">Brak pozycji w ofercie</p>
+                <p className="text-sm text-slate-400 mb-4">Przejdź do trybu edycji, aby dodać sekcje i pozycje.</p>
+                {selectedOffer.status === 'draft' && (
+                  <button
+                    onClick={() => setEditMode(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Rozpocznij edycję
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-0">
@@ -5128,13 +5344,24 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           {/* Bottom action buttons */}
           <div className="p-4 bg-slate-50 border-t border-slate-200">
             <div className="flex justify-between items-center">
-              <button
-                onClick={() => handleDeleteOffer(selectedOffer)}
-                className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Usuń ofertę
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteOffer(selectedOffer)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm"
+                  title="Usuń ofertę"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Usuń
+                </button>
+                <button
+                  onClick={() => handleDuplicateOffer(selectedOffer)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+                  title="Utwórz kopię oferty"
+                >
+                  <Copy className="w-4 h-4" />
+                  Duplikuj
+                </button>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={async () => {
@@ -5147,7 +5374,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
                 >
                   {savingOffer ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-                  Przejdź dalej
+                  Podgląd i wysyłka
                 </button>
                 <button
                   onClick={() => setShowSendModal(true)}
@@ -5295,13 +5522,15 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           </div>
         ) : filteredOffers.length === 0 ? (
           <div className="text-center py-12">
-            <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">Brak ofert do wyświetlenia</p>
+            <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+            <p className="text-lg font-medium text-slate-600 mb-1">Brak ofert</p>
+            <p className="text-sm text-slate-400 mb-4">Utwórz swoją pierwszą ofertę, aby rozpocząć ofertowanie.</p>
             <button
               onClick={() => { resetOfferForm(); setShowCreateModal(true); }}
-              className="mt-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition text-sm font-medium"
             >
-              Utwórz pierwszą ofertę
+              <Plus className="w-4 h-4" />
+              Utwórz ofertę
             </button>
           </div>
         ) : (
@@ -5344,6 +5573,13 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         title="Edytuj"
                       >
                         <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDuplicateOffer(offer)}
+                        className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded"
+                        title="Duplikuj ofertę"
+                      >
+                        <Copy className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteOffer(offer)}
@@ -5454,7 +5690,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Ustawienia oferty</h2>
-              <button onClick={() => setShowSettingsModal(false)} className="p-1 hover:bg-slate-100 rounded">
+              <button onClick={() => setShowSettingsModal(false)} className="p-1 hover:bg-slate-100 rounded" title="Zamknij">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -5503,7 +5739,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           <span className={`text-xs ${rule.surcharge > 0 ? 'text-red-500' : rule.surcharge < 0 ? 'text-green-500' : 'text-slate-400'}`}>
                             {rule.surcharge > 0 ? 'narzut' : rule.surcharge < 0 ? 'rabat' : '-'}
                           </span>
-                          <button onClick={() => setPaymentTermRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto">
+                          <button onClick={() => setPaymentTermRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto" title="Usuń regułę">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -5559,7 +5795,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           <span className={`text-xs ${rule.surcharge > 0 ? 'text-red-500' : rule.surcharge < 0 ? 'text-green-500' : 'text-slate-400'}`}>
                             {rule.surcharge > 0 ? 'narzut' : rule.surcharge < 0 ? 'rabat' : '-'}
                           </span>
-                          <button onClick={() => setWarrantyRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto">
+                          <button onClick={() => setWarrantyRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto" title="Usuń regułę">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -5610,7 +5846,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           <span className={`text-xs ${rule.surcharge > 0 ? 'text-red-500' : rule.surcharge < 0 ? 'text-green-500' : 'text-slate-400'}`}>
                             {rule.surcharge > 0 ? 'narzut' : rule.surcharge < 0 ? 'rabat' : '-'}
                           </span>
-                          <button onClick={() => setInvoiceFreqRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto">
+                          <button onClick={() => setInvoiceFreqRules(prev => prev.filter((_, i) => i !== idx))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-auto" title="Usuń regułę">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -5672,7 +5908,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           <div className="bg-white rounded-xl w-full max-w-sm">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Ustaw rabat masowo</h2>
-              <button onClick={() => setShowBulkRabatModal(false)} className="p-1 hover:bg-slate-100 rounded">
+              <button onClick={() => setShowBulkRabatModal(false)} className="p-1 hover:bg-slate-100 rounded" title="Zamknij">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -6346,18 +6582,24 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 Anuluj
               </button>
               <button
-                onClick={async () => {
-                  if (!confirm('Czy na pewno chcesz wysłać ofertę wybranymi kanałami?')) return;
-                  setSendingOffer(true);
-                  const result = await handleSendOffer(selectedOffer, sendChannels, sendCoverLetter);
-                  setSendingOffer(false);
-                  if (result.success) {
-                    alert('Oferta została wysłana!');
-                    setShowSendModal(false);
-                  } else if (result.errors.length > 0) {
-                    alert(`Wysyłka zakończona z błędami:\n${result.errors.join('\n')}`);
-                    setShowSendModal(false);
-                  }
+                onClick={() => {
+                  showConfirm({
+                    title: 'Wysłać ofertę?',
+                    message: `Oferta zostanie wysłana przez: ${sendChannels.join(', ')}.`,
+                    confirmLabel: 'Wyślij',
+                    onConfirm: async () => {
+                      setSendingOffer(true);
+                      const result = await handleSendOffer(selectedOffer, sendChannels, sendCoverLetter);
+                      setSendingOffer(false);
+                      if (result.success) {
+                        showToast('Oferta została wysłana!', 'success');
+                        setShowSendModal(false);
+                      } else if (result.errors.length > 0) {
+                        showToast(`Wysyłka zakończona z błędami: ${result.errors.join(', ')}`, 'error');
+                        setShowSendModal(false);
+                      }
+                    }
+                  });
                 }}
                 disabled={sendChannels.length === 0 || sendingOffer}
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
@@ -6567,7 +6809,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   </button>
                 )}
               </div>
-              <button onClick={closeKartoteka} className="p-1.5 hover:bg-slate-100 rounded-lg">
+              <button onClick={closeKartoteka} className="p-1.5 hover:bg-slate-100 rounded-lg" title="Zamknij kartotekę">
                 <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
@@ -6625,7 +6867,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="w-64 border-r border-slate-200 overflow-y-auto flex flex-col">
                 <div className="px-4 py-3 flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Kategorie</span>
-                  <button className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600">
+                  <button className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="Dodaj kategorię">
                     <Plus className="w-4 h-4" />
                   </button>
                 </div>
@@ -6896,6 +7138,65 @@ tr{page-break-inside:avoid;page-break-after:auto;}
         </div>
         );
       })()}
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2">
+          {toasts.map(toast => (
+            <div
+              key={toast.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm transition-all duration-300 ${
+                toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+                toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+                'bg-blue-50 border-blue-200 text-blue-800'
+              }`}
+            >
+              {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-green-500 shrink-0" /> :
+               toast.type === 'error' ? <AlertCircle className="w-5 h-5 text-red-500 shrink-0" /> :
+               <AlertCircle className="w-5 h-5 text-blue-500 shrink-0" />}
+              <span className="text-sm font-medium">{toast.text}</span>
+              <button onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))} className="p-0.5 hover:bg-black/10 rounded ml-2" title="Zamknij">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Confirmation modal */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90] p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+            <div className="p-5 space-y-3">
+              <h3 className="text-lg font-semibold text-slate-900">{confirmModal.title}</h3>
+              <p className="text-sm text-slate-600">{confirmModal.message}</p>
+              {confirmModal.showInput && (
+                <input
+                  type="text"
+                  value={confirmModal.inputValue || ''}
+                  onChange={e => setConfirmModal(prev => ({ ...prev, inputValue: e.target.value }))}
+                  placeholder={confirmModal.inputPlaceholder}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                />
+              )}
+            </div>
+            <div className="px-5 pb-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={() => { confirmModal.onConfirm(confirmModal.inputValue); setConfirmModal(prev => ({ ...prev, show: false })); }}
+                className={`px-4 py-2 rounded-lg text-sm text-white ${confirmModal.destructive ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {confirmModal.confirmLabel || 'Potwierdź'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

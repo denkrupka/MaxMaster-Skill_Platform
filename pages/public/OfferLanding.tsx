@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import {
   FileText, CheckCircle, XCircle, Clock, Building2, Calendar,
   Download, Loader2, ExternalLink, Shield, Star, Phone, Mail,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, MapPin
 } from 'lucide-react';
 
 interface PublicOffer {
@@ -460,7 +460,7 @@ export const OfferLandingPage: React.FC = () => {
                 )}
                 {offer.object_address && (
                   <div className="flex items-center gap-2 justify-end">
-                    <ExternalLink className="w-4 h-4" />
+                    <MapPin className="w-4 h-4" />
                     <span>{offer.object_address}</span>
                   </div>
                 )}
@@ -478,7 +478,7 @@ export const OfferLandingPage: React.FC = () => {
           <div className="px-8 py-6 border-b border-slate-100">
           {(offer.client || offer.company || offer.print_settings?.client_data) && (
             <div>
-              <div className="grid grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 <div>
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Zamawiający</h4>
                   {(() => {
@@ -525,7 +525,24 @@ export const OfferLandingPage: React.FC = () => {
           </div>
 
           {/* Sections & Items */}
-          <div className="p-8">
+          <div className="p-4 sm:p-8">
+            {offer.sections.length > 1 && (
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => {
+                    if (collapsedSections.size === 0) {
+                      setCollapsedSections(new Set(offer.sections.map(s => s.id)));
+                    } else {
+                      setCollapsedSections(new Set());
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                >
+                  {collapsedSections.size === 0 ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  {collapsedSections.size === 0 ? 'Zwiń wszystkie' : 'Rozwiń wszystkie'}
+                </button>
+              </div>
+            )}
             {offer.sections.map(section => {
               const sectionTotal = section.items.reduce((s, i) => {
                 const val = i.quantity * i.unit_price;
@@ -553,7 +570,8 @@ export const OfferLandingPage: React.FC = () => {
                   <span className="text-sm font-medium text-slate-500">{formatCurrency(sectionTotal)}</span>
                 </button>
                 {!isCollapsed && (
-                <table className="w-full">
+                <div className="overflow-x-auto -mx-2 px-2">
+                <table className="w-full min-w-[600px]">
                   <thead>
                     <tr className="text-left text-sm text-slate-500">
                       <th className="pb-3 pr-4 w-10">Lp.</th>
@@ -625,6 +643,7 @@ export const OfferLandingPage: React.FC = () => {
                     })}
                   </tbody>
                 </table>
+                </div>
                 )}
               </div>
               );
