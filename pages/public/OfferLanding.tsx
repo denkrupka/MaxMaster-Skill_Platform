@@ -623,11 +623,6 @@ export const OfferLandingPage: React.FC = () => {
                         </React.Fragment>
                       );
                     })}
-                    {/* Section subtotal */}
-                    <tr className="bg-slate-100 border-t-2 border-slate-200">
-                      <td colSpan={5} className="py-2.5 pr-4 text-sm font-semibold text-slate-700 text-right">Razem {section.name}:</td>
-                      <td className="py-2.5 text-sm text-right font-bold text-slate-900">{formatCurrency(sectionTotal)}</td>
-                    </tr>
                   </tbody>
                 </table>
                 )}

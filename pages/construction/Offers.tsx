@@ -829,6 +829,7 @@ export const OffersPage: React.FC = () => {
       const mainContact = contactsList.find((c: any) => c.is_main_contact === true);
       if (mainContact) {
         setOfferSelectedContactId(mainContact.id);
+        setSendRepresentativeId(mainContact.id);
         setOfferContacts([{
           first_name: mainContact.first_name || '',
           last_name: mainContact.last_name || '',
@@ -838,6 +839,9 @@ export const OffersPage: React.FC = () => {
           is_primary: true
         }]);
         setOfferShowAddContactForm(false);
+      } else if (contactsList.length > 0) {
+        // Auto-select first contact as representative
+        setSendRepresentativeId(contactsList[0].id);
       }
     } catch (err) {
       console.error('Error loading client contacts:', err);
@@ -2632,25 +2636,35 @@ export const OffersPage: React.FC = () => {
     const priceLabel = isBrutto ? 'brutto' : 'netto';
 
     const colCount = previewTemplate === 'no_prices' ? 2 : (previewTemplate === 'full' ? 6 : (previewTemplate === 'rabat' ? 5 : 4));
+    const calcHtmlSecTotal = (sec: LocalOfferSection): number => {
+      let total = sec.items.reduce((s, item) => {
+        const val = item.quantity * item.unit_price;
+        const disc = val * ((item.discount_percent || 0) / 100);
+        const netVal = val - disc;
+        return s + (isBrutto ? netVal * (1 + (item.vat_rate ?? 23) / 100) : netVal);
+      }, 0);
+      (sec.children || []).forEach(child => { total += calcHtmlSecTotal(child); });
+      return total;
+    };
     const renderSectionHTML = (sec: LocalOfferSection, depth: number = 0): string => {
       let html = '';
-      const hLevel = depth === 0 ? 'h3' : 'h4';
       const hSize = depth === 0 ? '14px' : '12px';
       const hBorder = depth === 0 ? 'border-bottom:2px solid #2c3e50;' : 'border-bottom:1px solid #cbd5e1;';
       const indent = depth > 0 ? `margin-left:${depth * 16}px;` : '';
-      html += `<${hLevel} style="font-size:${hSize};font-weight:600;color:#2c3e50;margin:${depth > 0 ? '12px' : '20px'} 0 8px;padding-bottom:4px;${hBorder}${indent}">${sec.name}</${hLevel}>`;
+      const secTotal = calcHtmlSecTotal(sec);
+      const totalLabel = previewTemplate !== 'no_prices' ? `<span style="float:right;font-size:12px;color:#475569;">${fmtCur(secTotal)} zł</span>` : '';
+      html += `<div style="font-size:${hSize};font-weight:600;color:#2c3e50;margin:${depth > 0 ? '8px' : '16px'} 0 6px;padding-bottom:3px;${hBorder}${indent}">${sec.name}${totalLabel}</div>`;
       if (sec.items.length > 0 && previewTemplate !== 'no_prices') {
         const headerBg = depth === 0 ? '#2c3e50' : '#475569';
         html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;${indent}">
           <thead><tr style="background:${headerBg};color:white;">
-            <th style="padding:10px 8px;text-align:left;font-weight:600;">Produkty/Usługi</th>
-            <th style="padding:10px 8px;text-align:right;font-weight:600;">Ilość</th>
-            <th style="padding:10px 8px;text-align:right;font-weight:600;">Cena ${priceLabel}<br/>[zł]</th>
-            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<th style="padding:10px 8px;text-align:right;font-weight:600;">Rabat</th>` : ''}
-            <th style="padding:10px 8px;text-align:right;font-weight:600;">Wartość ${priceLabel}<br/>[zł]</th>
-            ${previewTemplate === 'full' ? `<th style="padding:10px 8px;text-align:right;font-weight:600;">VAT</th>` : ''}
+            <th style="padding:8px 6px;text-align:left;font-weight:600;">Produkty/Usługi</th>
+            <th style="padding:8px 6px;text-align:right;font-weight:600;">Ilość</th>
+            <th style="padding:8px 6px;text-align:right;font-weight:600;">Cena ${priceLabel}<br/>[zł]</th>
+            ${previewTemplate === 'rabat' || previewTemplate === 'full' ? `<th style="padding:8px 6px;text-align:right;font-weight:600;">Rabat</th>` : ''}
+            <th style="padding:8px 6px;text-align:right;font-weight:600;">Wartość ${priceLabel}<br/>[zł]</th>
+            ${previewTemplate === 'full' ? `<th style="padding:8px 6px;text-align:right;font-weight:600;">VAT</th>` : ''}
           </tr></thead><tbody>`;
-        let sectionTotal = 0;
         sec.items.forEach((item) => {
           const val = item.quantity * item.unit_price;
           const disc = val * ((item.discount_percent || 0) / 100);
@@ -2658,7 +2672,6 @@ export const OffersPage: React.FC = () => {
           const vatMult = 1 + (item.vat_rate ?? 23) / 100;
           const displayPrice = isBrutto ? item.unit_price * vatMult : item.unit_price;
           const displayVal = isBrutto ? netVal * vatMult : netVal;
-          sectionTotal += displayVal;
           html += `<tr style="border-bottom:1px solid #e2e8f0;">
             <td style="padding:10px 8px;">${item.name}${item.is_optional ? ' <span style="background:#fef9c3;color:#a16207;font-size:10px;padding:1px 4px;border-radius:3px;">opcja</span>' : ''}</td>
             <td style="padding:10px 8px;text-align:right;">${item.quantity}</td>
@@ -2683,11 +2696,6 @@ export const OffersPage: React.FC = () => {
             });
           }
         });
-        // Section subtotal row
-        html += `<tr style="background:#f1f5f9;border-top:2px solid #cbd5e1;">
-          <td style="padding:8px;font-weight:600;font-size:12px;color:#334155;" colspan="${colCount - 1}">Razem ${sec.name}:</td>
-          <td style="padding:8px;text-align:right;font-weight:700;font-size:12px;color:#1e293b;">${fmtCur(sectionTotal)} zł</td>
-        </tr>`;
         html += '</tbody></table>';
       } else if (sec.items.length > 0) {
         html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;${indent}">
@@ -2734,10 +2742,10 @@ export const OffersPage: React.FC = () => {
 <html lang="pl">
 <head><meta charset="UTF-8"><title>Oferta ${selectedOffer.number}</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:30px 40px;color:#1e293b;font-size:13px;}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px 28px;color:#1e293b;font-size:13px;}
 @media print{
-  body{padding:10mm 15mm 15mm 15mm;}
-  @page{margin:10mm 15mm 15mm 15mm;size:A4;}
+  body{padding:0;}
+  @page{margin:12mm 15mm;size:A4;}
 }
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;}
 .info-table{width:100%;border-collapse:collapse;margin-bottom:24px;}
@@ -4659,7 +4667,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Termin płatności</p>
-                  {paymentTerm && paymentTermRules.some(r => r.surcharge !== 0) && (
+                  {paymentTerm && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={paymentTermApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={paymentTermApply} onChange={e => setPaymentTermApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${paymentTermApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4683,7 +4691,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fakturowanie</p>
-                  {invoiceFrequency && invoiceFreqRules.some(r => r.surcharge !== 0) && (
+                  {invoiceFrequency && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={invoiceFreqApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={invoiceFreqApply} onChange={e => setInvoiceFreqApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${invoiceFreqApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4707,7 +4715,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gwarancja</p>
-                  {warrantyPeriod && warrantyRules.some(r => r.surcharge !== 0) && (
+                  {warrantyPeriod && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={warrantyApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={warrantyApply} onChange={e => setWarrantyApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${warrantyApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4735,13 +4743,19 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <div key={cw.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100">
                     <div className="flex items-center justify-between mb-2">
                       {editMode ? (
-                        <input type="text" value={cw.name} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, name: e.target.value } : w))} className="text-xs font-semibold text-slate-500 uppercase tracking-wider bg-transparent border-none p-0 w-full focus:outline-none" placeholder="Nazwa warunku..." />
+                        <input type="text" value={cw.name} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, name: e.target.value } : w))} className="text-xs font-semibold text-slate-500 uppercase tracking-wider bg-transparent border-none p-0 flex-1 focus:outline-none" placeholder="Nazwa warunku..." />
                       ) : (
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{cw.name}</p>
                       )}
-                      {editMode && (
-                        <button onClick={() => setCustomWarunki(prev => prev.filter(w => w.id !== cw.id))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-1 shrink-0"><X className="w-3.5 h-3.5" /></button>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        <label className="flex items-center gap-1.5 cursor-pointer" title={cw.apply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
+                          <input type="checkbox" checked={cw.apply} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, apply: e.target.checked } : w))} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
+                          <span className={`text-[10px] font-medium ${cw.apply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
+                        </label>
+                        {editMode && (
+                          <button onClick={() => setCustomWarunki(prev => prev.filter(w => w.id !== cw.id))} className="p-0.5 hover:bg-red-50 rounded text-red-400"><X className="w-3.5 h-3.5" /></button>
+                        )}
+                      </div>
                     </div>
                     {editMode ? (
                       <div className="flex gap-2">
@@ -5797,19 +5811,25 @@ tr{page-break-inside:avoid;page-break-after:auto;}
 
                 {/* Sections preview (recursive) */}
                 {(() => {
-                  const renderPreviewSection = (sec: LocalOfferSection, depth: number = 0) => {
+                  const calcPreviewSecTotal = (sec: LocalOfferSection): number => {
                     const isBruttoP = previewTemplate === 'brutto';
-                    const secTotal = sec.items.reduce((s, item) => {
+                    let total = sec.items.reduce((s, item) => {
                       const val = item.quantity * item.unit_price;
                       const disc = val * ((item.discount_percent || 0) / 100);
                       const netVal = val - disc;
                       return s + (isBruttoP ? netVal * (1 + (item.vat_rate ?? 23) / 100) : netVal);
                     }, 0);
+                    (sec.children || []).forEach(child => { total += calcPreviewSecTotal(child); });
+                    return total;
+                  };
+                  const renderPreviewSection = (sec: LocalOfferSection, depth: number = 0) => {
+                    const secTotal = calcPreviewSecTotal(sec);
                     return (
-                    <div key={sec.id} className={`mb-6 ${depth > 0 ? 'ml-6' : ''}`}>
-                      <h3 className={`font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200 ${depth === 0 ? 'text-lg' : 'text-base'}`}>
-                        {sec.name}
-                      </h3>
+                    <div key={sec.id} className={`mb-4 ${depth > 0 ? 'ml-6' : ''}`}>
+                      <div className={`flex justify-between items-baseline font-semibold text-slate-900 mb-2 pb-1.5 border-b border-slate-200 ${depth === 0 ? 'text-lg' : 'text-base'}`}>
+                        <span>{sec.name}</span>
+                        {previewTemplate !== 'no_prices' && <span className="text-sm text-slate-500 font-medium">{formatCurrency(secTotal)}</span>}
+                      </div>
                       {sec.items.length > 0 && (
                         <table className="w-full text-sm">
                           <thead>
@@ -5890,20 +5910,6 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                                 </React.Fragment>
                               );
                             })}
-                            {/* Section subtotal */}
-                            {previewTemplate !== 'no_prices' && sec.items.length > 0 && (
-                              <tr className="bg-slate-100 border-t-2 border-slate-300">
-                                <td colSpan={4} className="py-2 pr-4 font-semibold text-slate-700 text-right">Razem {sec.name}:</td>
-                                {previewTemplate !== 'no_prices' && (
-                                  <>
-                                    <td className="py-2 pr-4"></td>
-                                    {(previewTemplate === 'rabat' || previewTemplate === 'full') && <td className="py-2 pr-4"></td>}
-                                    <td className="py-2 pr-4 text-right font-bold text-slate-900">{formatCurrency(secTotal)}</td>
-                                    {previewTemplate === 'full' && <td className="py-2"></td>}
-                                  </>
-                                )}
-                              </tr>
-                            )}
                           </tbody>
                         </table>
                       )}
