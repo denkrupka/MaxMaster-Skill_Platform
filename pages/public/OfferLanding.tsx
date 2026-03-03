@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import {
   FileText, CheckCircle, XCircle, Clock, Building2, Calendar,
-  Download, Loader2, ExternalLink, Shield, Star, Phone, Mail
+  Download, Loader2, ExternalLink, Shield, Star, Phone, Mail,
+  ChevronDown, ChevronRight
 } from 'lucide-react';
 
 interface PublicOffer {
@@ -90,6 +91,8 @@ export const OfferLandingPage: React.FC = () => {
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (token) loadOffer(token);
@@ -523,11 +526,33 @@ export const OfferLandingPage: React.FC = () => {
 
           {/* Sections & Items */}
           <div className="p-8">
-            {offer.sections.map(section => (
+            {offer.sections.map(section => {
+              const sectionTotal = section.items.reduce((s, i) => {
+                const val = i.quantity * i.unit_price;
+                return s + val - val * ((i.discount_percent || 0) / 100);
+              }, 0);
+              const isCollapsed = collapsedSections.has(section.id);
+              const toggleSection = () => {
+                setCollapsedSections(prev => {
+                  const next = new Set(prev);
+                  if (next.has(section.id)) next.delete(section.id);
+                  else next.add(section.id);
+                  return next;
+                });
+              };
+              return (
               <div key={section.id} className="mb-8 last:mb-0">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 pb-2 border-b-2 border-blue-100">
-                  {section.name}
-                </h3>
+                <button
+                  onClick={toggleSection}
+                  className="w-full flex items-center justify-between text-lg font-semibold text-slate-900 mb-4 pb-2 border-b-2 border-blue-100 hover:text-blue-700 transition cursor-pointer text-left"
+                >
+                  <span className="flex items-center gap-2">
+                    {isCollapsed ? <ChevronRight className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                    {section.name}
+                  </span>
+                  <span className="text-sm font-medium text-slate-500">{formatCurrency(sectionTotal)}</span>
+                </button>
+                {!isCollapsed && (
                 <table className="w-full">
                   <thead>
                     <tr className="text-left text-sm text-slate-500">
@@ -543,18 +568,36 @@ export const OfferLandingPage: React.FC = () => {
                     {section.items.map((item, idx) => {
                       const itemTotal = item.quantity * item.unit_price;
                       const itemDiscount = itemTotal * ((item.discount_percent || 0) / 100);
-                      const showRMS = offer.print_settings?.show_components_in_print && item.components && item.components.length > 0;
+                      const hasRMS = offer.print_settings?.show_components_in_print && item.components && item.components.length > 0;
+                      const isItemExpanded = expandedItems.has(item.id);
+                      const toggleItem = () => {
+                        setExpandedItems(prev => {
+                          const next = new Set(prev);
+                          if (next.has(item.id)) next.delete(item.id);
+                          else next.add(item.id);
+                          return next;
+                        });
+                      };
                       return (
                         <React.Fragment key={item.id}>
-                        <tr className="border-t border-slate-50 hover:bg-slate-50/50">
+                        <tr className={`border-t border-slate-50 hover:bg-slate-50/50 ${hasRMS ? 'cursor-pointer' : ''}`} onClick={hasRMS ? toggleItem : undefined}>
                           <td className="py-3 pr-4 text-sm text-slate-400">{idx + 1}</td>
                           <td className="py-3 pr-4">
-                            <p className="text-sm font-medium text-slate-900">{item.name}</p>
-                            {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
-                            {item.is_optional && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded ml-1">opcja</span>}
-                            {(item.discount_percent || 0) > 0 && (
-                              <span className="text-xs text-red-500 ml-1">-{item.discount_percent}%</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {hasRMS && (
+                                isItemExpanded
+                                  ? <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  : <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{item.name}</p>
+                                {item.description && <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>}
+                                {item.is_optional && <span className="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded ml-1">opcja</span>}
+                                {(item.discount_percent || 0) > 0 && (
+                                  <span className="text-xs text-red-500 ml-1">-{item.discount_percent}%</span>
+                                )}
+                              </div>
+                            </div>
                           </td>
                           <td className="py-3 pr-4 text-sm text-center text-slate-500">{item.unit || 'szt.'}</td>
                           <td className="py-3 pr-4 text-sm text-right text-slate-600">{item.quantity}</td>
@@ -563,7 +606,7 @@ export const OfferLandingPage: React.FC = () => {
                             {formatCurrency(itemTotal - itemDiscount)}
                           </td>
                         </tr>
-                        {showRMS && item.components!.map((comp, ci) => (
+                        {hasRMS && isItemExpanded && item.components!.map((comp, ci) => (
                           <tr key={`comp-${ci}`} className="bg-slate-50/50 border-t border-slate-50">
                             <td className="py-1 pr-4"></td>
                             <td className="py-1 pr-4" colSpan={2}>
@@ -580,10 +623,17 @@ export const OfferLandingPage: React.FC = () => {
                         </React.Fragment>
                       );
                     })}
+                    {/* Section subtotal */}
+                    <tr className="bg-slate-100 border-t-2 border-slate-200">
+                      <td colSpan={5} className="py-2.5 pr-4 text-sm font-semibold text-slate-700 text-right">Razem {section.name}:</td>
+                      <td className="py-2.5 text-sm text-right font-bold text-slate-900">{formatCurrency(sectionTotal)}</td>
+                    </tr>
                   </tbody>
                 </table>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Warunki istotne */}

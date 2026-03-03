@@ -225,6 +225,16 @@ export const OffersPage: React.FC = () => {
   const [invoiceFreqApply, setInvoiceFreqApply] = useState(true);
   const [warrantyApply, setWarrantyApply] = useState(true);
 
+  // Custom warunki istotne (beyond the 3 built-in)
+  interface CustomWarunek {
+    id: string;
+    name: string;
+    value: string;
+    surcharge: number;
+    apply: boolean;
+  }
+  const [customWarunki, setCustomWarunki] = useState<CustomWarunek[]>([]);
+
   // Koszty powiązane
   interface RelatedCost {
     id: string; name: string; value: number;
@@ -1052,6 +1062,7 @@ export const OffersPage: React.FC = () => {
           if (ps.warunki.payment_term_rules) setPaymentTermRules(ps.warunki.payment_term_rules);
           if (ps.warunki.warranty_rules) setWarrantyRules(ps.warunki.warranty_rules);
           if (ps.warunki.invoice_freq_rules) setInvoiceFreqRules(ps.warunki.invoice_freq_rules);
+          if (ps.warunki.custom_warunki) setCustomWarunki(ps.warunki.custom_warunki);
         }
         if (ps.related_costs) setRelatedCosts(ps.related_costs);
         if (ps.show_components_in_print !== undefined) setShowComponentsInPrint(ps.show_components_in_print);
@@ -1226,7 +1237,8 @@ export const OffersPage: React.FC = () => {
     const ptRule = paymentTermRules.find(r => String(r.value) === paymentTerm);
     const wrRule = warrantyRules.find(r => String(r.value) === warrantyPeriod);
     const ifRule = invoiceFreqRules.find(r => String(r.value) === invoiceFrequency);
-    const surchargePercent = (paymentTermApply ? (ptRule?.surcharge || 0) : 0) + (warrantyApply ? (wrRule?.surcharge || 0) : 0) + (invoiceFreqApply ? (ifRule?.surcharge || 0) : 0);
+    const customSurcharge = customWarunki.reduce((s, cw) => s + (cw.apply ? cw.surcharge : 0), 0);
+    const surchargePercent = (paymentTermApply ? (ptRule?.surcharge || 0) : 0) + (warrantyApply ? (wrRule?.surcharge || 0) : 0) + (invoiceFreqApply ? (ifRule?.surcharge || 0) : 0) + customSurcharge;
     const surchargeAmount = nettoAfterDiscount * (surchargePercent / 100);
     const nettoAfterSurcharges = nettoAfterDiscount + surchargeAmount;
 
@@ -1261,7 +1273,7 @@ export const OffersPage: React.FC = () => {
       discountFixed: offerData.discount_amount,
       final: Math.max(0, nettoAfterSurcharges)
     };
-  }, [sections, offerData.discount_amount, getAllItems, paymentTerm, warrantyPeriod, invoiceFrequency, paymentTermRules, warrantyRules, invoiceFreqRules, relatedCosts, paymentTermApply, invoiceFreqApply, warrantyApply]);
+  }, [sections, offerData.discount_amount, getAllItems, paymentTerm, warrantyPeriod, invoiceFrequency, paymentTermRules, warrantyRules, invoiceFreqRules, relatedCosts, paymentTermApply, invoiceFreqApply, warrantyApply, customWarunki]);
 
   const totals = useMemo(() => calculateTotals(), [calculateTotals]);
 
@@ -1414,7 +1426,8 @@ export const OffersPage: React.FC = () => {
               warranty_options: warrantyOptions,
               payment_term_rules: paymentTermRules,
               warranty_rules: warrantyRules,
-              invoice_freq_rules: invoiceFreqRules
+              invoice_freq_rules: invoiceFreqRules,
+              custom_warunki: customWarunki
             },
             company_data: {
               name: state.currentCompany?.name || '',
@@ -1650,7 +1663,8 @@ export const OffersPage: React.FC = () => {
               warranty_options: warrantyOptions,
               payment_term_rules: paymentTermRules,
               warranty_rules: warrantyRules,
-              invoice_freq_rules: invoiceFreqRules
+              invoice_freq_rules: invoiceFreqRules,
+              custom_warunki: customWarunki
             },
             company_data: {
               name: state.currentCompany?.name || '',
@@ -2620,9 +2634,14 @@ export const OffersPage: React.FC = () => {
     const colCount = previewTemplate === 'no_prices' ? 2 : (previewTemplate === 'full' ? 6 : (previewTemplate === 'rabat' ? 5 : 4));
     const renderSectionHTML = (sec: LocalOfferSection, depth: number = 0): string => {
       let html = '';
+      const hLevel = depth === 0 ? 'h3' : 'h4';
+      const hSize = depth === 0 ? '14px' : '12px';
+      const hBorder = depth === 0 ? 'border-bottom:2px solid #2c3e50;' : 'border-bottom:1px solid #cbd5e1;';
+      const indent = depth > 0 ? `margin-left:${depth * 16}px;` : '';
+      html += `<${hLevel} style="font-size:${hSize};font-weight:600;color:#2c3e50;margin:${depth > 0 ? '12px' : '20px'} 0 8px;padding-bottom:4px;${hBorder}${indent}">${sec.name}</${hLevel}>`;
       if (sec.items.length > 0 && previewTemplate !== 'no_prices') {
-        const headerBg = '#2c3e50';
-        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+        const headerBg = depth === 0 ? '#2c3e50' : '#475569';
+        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;${indent}">
           <thead><tr style="background:${headerBg};color:white;">
             <th style="padding:10px 8px;text-align:left;font-weight:600;">Produkty/Usługi</th>
             <th style="padding:10px 8px;text-align:right;font-weight:600;">Ilość</th>
@@ -2631,6 +2650,7 @@ export const OffersPage: React.FC = () => {
             <th style="padding:10px 8px;text-align:right;font-weight:600;">Wartość ${priceLabel}<br/>[zł]</th>
             ${previewTemplate === 'full' ? `<th style="padding:10px 8px;text-align:right;font-weight:600;">VAT</th>` : ''}
           </tr></thead><tbody>`;
+        let sectionTotal = 0;
         sec.items.forEach((item) => {
           const val = item.quantity * item.unit_price;
           const disc = val * ((item.discount_percent || 0) / 100);
@@ -2638,6 +2658,7 @@ export const OffersPage: React.FC = () => {
           const vatMult = 1 + (item.vat_rate ?? 23) / 100;
           const displayPrice = isBrutto ? item.unit_price * vatMult : item.unit_price;
           const displayVal = isBrutto ? netVal * vatMult : netVal;
+          sectionTotal += displayVal;
           html += `<tr style="border-bottom:1px solid #e2e8f0;">
             <td style="padding:10px 8px;">${item.name}${item.is_optional ? ' <span style="background:#fef9c3;color:#a16207;font-size:10px;padding:1px 4px;border-radius:3px;">opcja</span>' : ''}</td>
             <td style="padding:10px 8px;text-align:right;">${item.quantity}</td>
@@ -2662,9 +2683,14 @@ export const OffersPage: React.FC = () => {
             });
           }
         });
+        // Section subtotal row
+        html += `<tr style="background:#f1f5f9;border-top:2px solid #cbd5e1;">
+          <td style="padding:8px;font-weight:600;font-size:12px;color:#334155;" colspan="${colCount - 1}">Razem ${sec.name}:</td>
+          <td style="padding:8px;text-align:right;font-weight:700;font-size:12px;color:#1e293b;">${fmtCur(sectionTotal)} zł</td>
+        </tr>`;
         html += '</tbody></table>';
       } else if (sec.items.length > 0) {
-        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
+        html += `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;${indent}">
           <thead><tr style="background:#2c3e50;color:white;">
             <th style="padding:10px 8px;text-align:left;font-weight:600;">Produkty/Usługi</th>
             <th style="padding:10px 8px;text-align:right;font-weight:600;">Ilość</th>
@@ -4443,6 +4469,12 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                     <p className="font-medium text-slate-900">{(selectedOffer as any).client.name}</p>
                     {(selectedOffer as any).client.nip && <p className="text-xs text-slate-500">NIP: {(selectedOffer as any).client.nip}</p>}
                     {(selectedOffer as any).client.legal_address && <p className="text-xs text-slate-500">{(selectedOffer as any).client.legal_address}</p>}
+                    {(() => {
+                      const ps = selectedOffer?.print_settings?.client_data;
+                      const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
+                      const rn = rep ? `${rep.first_name || ''} ${rep.last_name || ''}`.trim() : ps?.representative_name || '';
+                      return rn ? <p className="text-xs text-slate-500 mt-1">Przedstawiciel: {rn}</p> : null;
+                    })()}
                   </div>
                 ) : offerClientData.client_name ? (
                   <div>
@@ -4455,6 +4487,23 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 ) : (
                   <p className="font-medium text-slate-900">Nie przypisano</p>
                 )}
+                {/* Representative in view mode */}
+                {(() => {
+                  const ps = selectedOffer?.print_settings?.client_data;
+                  const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
+                  const repName = rep ? `${rep.first_name || ''} ${rep.last_name || ''}`.trim() : ps?.representative_name || '';
+                  const repEmail = rep?.email || ps?.representative_email || '';
+                  const repPhone = rep?.phone || ps?.representative_phone || '';
+                  if (!repName) return null;
+                  return (
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider">Przedstawiciel</p>
+                      <p className="text-xs font-medium text-slate-700">{repName}</p>
+                      {repEmail && <p className="text-[11px] text-slate-500">{repEmail}</p>}
+                      {repPhone && <p className="text-[11px] text-slate-500">{repPhone}</p>}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             <div className="p-4 bg-slate-50 rounded-lg">
@@ -4610,7 +4659,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Termin płatności</p>
-                  {paymentTerm && (() => { const r = paymentTermRules.find(r => String(r.value) === paymentTerm); return r && r.surcharge !== 0; })() && (
+                  {paymentTerm && paymentTermRules.some(r => r.surcharge !== 0) && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={paymentTermApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={paymentTermApply} onChange={e => setPaymentTermApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${paymentTermApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4634,7 +4683,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fakturowanie</p>
-                  {invoiceFrequency && (() => { const r = invoiceFreqRules.find(r => String(r.value) === invoiceFrequency); return r && r.surcharge !== 0; })() && (
+                  {invoiceFrequency && invoiceFreqRules.some(r => r.surcharge !== 0) && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={invoiceFreqApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={invoiceFreqApply} onChange={e => setInvoiceFreqApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${invoiceFreqApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4658,7 +4707,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gwarancja</p>
-                  {warrantyPeriod && (() => { const r = warrantyRules.find(r => String(r.value) === warrantyPeriod); return r && r.surcharge !== 0; })() && (
+                  {warrantyPeriod && warrantyRules.some(r => r.surcharge !== 0) && (
                     <label className="flex items-center gap-1.5 cursor-pointer" title={warrantyApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
                       <input type="checkbox" checked={warrantyApply} onChange={e => setWarrantyApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
                       <span className={`text-[10px] font-medium ${warrantyApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
@@ -4679,6 +4728,46 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 {warrantyPeriod && (() => { const r = warrantyRules.find(r => String(r.value) === warrantyPeriod); return r && r.surcharge !== 0 ? <p className={`text-xs mt-1.5 ${warrantyApply ? (r.surcharge > 0 ? 'text-red-500' : 'text-green-600') : 'text-slate-400 italic'}`}>{r.surcharge > 0 ? 'Narzut' : 'Rabat'}: {r.surcharge > 0 ? '+' : ''}{r.surcharge}%{!warrantyApply ? ' (informacyjnie)' : ''}</p> : null; })()}
               </div>
             </div>
+            {/* Custom warunki */}
+            {customWarunki.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                {customWarunki.map(cw => (
+                  <div key={cw.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100">
+                    <div className="flex items-center justify-between mb-2">
+                      {editMode ? (
+                        <input type="text" value={cw.name} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, name: e.target.value } : w))} className="text-xs font-semibold text-slate-500 uppercase tracking-wider bg-transparent border-none p-0 w-full focus:outline-none" placeholder="Nazwa warunku..." />
+                      ) : (
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{cw.name}</p>
+                      )}
+                      {editMode && (
+                        <button onClick={() => setCustomWarunki(prev => prev.filter(w => w.id !== cw.id))} className="p-0.5 hover:bg-red-50 rounded text-red-400 ml-1 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
+                    {editMode ? (
+                      <div className="flex gap-2">
+                        <input type="text" value={cw.value} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, value: e.target.value } : w))} className="flex-1 px-2.5 py-2 border border-slate-200 rounded-lg text-sm bg-white" placeholder="Wartość..." />
+                        <div className="flex items-center gap-1">
+                          <input type="number" value={cw.surcharge} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, surcharge: parseFloat(e.target.value) || 0 } : w))} className="w-16 px-1.5 py-2 border border-slate-200 rounded-lg text-sm text-center" step="0.5" />
+                          <span className="text-xs text-slate-400">%</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium text-slate-900">{cw.value || '-'}</p>
+                    )}
+                    {cw.surcharge !== 0 && <p className={`text-xs mt-1.5 ${cw.apply ? (cw.surcharge > 0 ? 'text-red-500' : 'text-green-600') : 'text-slate-400 italic'}`}>{cw.surcharge > 0 ? 'Narzut' : 'Rabat'}: {cw.surcharge > 0 ? '+' : ''}{cw.surcharge}%{!cw.apply ? ' (informacyjnie)' : ''}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {editMode && (
+              <button
+                onClick={() => setCustomWarunki(prev => [...prev, { id: `cw_${Date.now()}`, name: '', value: '', surcharge: 0, apply: true }])}
+                className="mt-3 flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded border border-dashed border-blue-300"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Dodaj warunek
+              </button>
+            )}
           </div>
 
           {/* Bulk operations bar */}
@@ -5111,9 +5200,31 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg shrink-0">
-                <span className="text-sm font-bold">{formatCurrency(totals.totalBrutto)}</span>
-                <span className="text-[10px] opacity-75">brutto</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedOffer?.status === 'draft' && (
+                  editMode ? (
+                    <button
+                      onClick={handleUpdateOffer}
+                      disabled={savingOffer}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium"
+                    >
+                      {savingOffer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Zapisz
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 text-xs font-medium text-slate-700"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edytuj
+                    </button>
+                  )
+                )}
+                <div className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg">
+                  <span className="text-sm font-bold">{formatCurrency(totals.totalBrutto)}</span>
+                  <span className="text-[10px] opacity-75">brutto</span>
+                </div>
               </div>
             </div>
           </div>
@@ -5642,9 +5753,6 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         className="h-12 mb-2 object-contain"
                       />
                     )}
-                    {showLogoInPreview && state.currentCompany?.name && (
-                      <p className="text-sm font-semibold text-slate-700 mb-2">{state.currentCompany.name}</p>
-                    )}
                     <h1 className="text-2xl font-bold text-slate-900">{selectedOffer.name}</h1>
                     <p className="text-slate-500 mt-1">{selectedOffer.number}</p>
                   </div>
@@ -5689,7 +5797,15 @@ tr{page-break-inside:avoid;page-break-after:auto;}
 
                 {/* Sections preview (recursive) */}
                 {(() => {
-                  const renderPreviewSection = (sec: LocalOfferSection, depth: number = 0) => (
+                  const renderPreviewSection = (sec: LocalOfferSection, depth: number = 0) => {
+                    const isBruttoP = previewTemplate === 'brutto';
+                    const secTotal = sec.items.reduce((s, item) => {
+                      const val = item.quantity * item.unit_price;
+                      const disc = val * ((item.discount_percent || 0) / 100);
+                      const netVal = val - disc;
+                      return s + (isBruttoP ? netVal * (1 + (item.vat_rate ?? 23) / 100) : netVal);
+                    }, 0);
+                    return (
                     <div key={sec.id} className={`mb-6 ${depth > 0 ? 'ml-6' : ''}`}>
                       <h3 className={`font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200 ${depth === 0 ? 'text-lg' : 'text-base'}`}>
                         {sec.name}
@@ -5774,12 +5890,26 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                                 </React.Fragment>
                               );
                             })}
+                            {/* Section subtotal */}
+                            {previewTemplate !== 'no_prices' && sec.items.length > 0 && (
+                              <tr className="bg-slate-100 border-t-2 border-slate-300">
+                                <td colSpan={4} className="py-2 pr-4 font-semibold text-slate-700 text-right">Razem {sec.name}:</td>
+                                {previewTemplate !== 'no_prices' && (
+                                  <>
+                                    <td className="py-2 pr-4"></td>
+                                    {(previewTemplate === 'rabat' || previewTemplate === 'full') && <td className="py-2 pr-4"></td>}
+                                    <td className="py-2 pr-4 text-right font-bold text-slate-900">{formatCurrency(secTotal)}</td>
+                                    {previewTemplate === 'full' && <td className="py-2"></td>}
+                                  </>
+                                )}
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       )}
                       {(sec.children || []).map(child => renderPreviewSection(child, depth + 1))}
                     </div>
-                  );
+                  );};
                   return sections.map(sec => renderPreviewSection(sec));
                 })()}
 
@@ -5913,15 +6043,15 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           const contentW = pageW - margin * 2;
                           try {
                             const html2canvas = (await import('html2canvas')).default;
-                            const canvas = await html2canvas(body, { scale: 2, useCORS: true, width: body.scrollWidth, windowWidth: body.scrollWidth });
-                            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+                            const canvas = await html2canvas(body, { scale: 3, useCORS: true, width: body.scrollWidth, windowWidth: body.scrollWidth, logging: false, backgroundColor: '#ffffff' });
+                            const imgData = canvas.toDataURL('image/png');
                             const imgW = contentW;
                             const imgH = (canvas.height * imgW) / canvas.width;
                             let yOffset = 0;
                             const usableH = pageH - margin * 2;
                             while (yOffset < imgH) {
                               if (yOffset > 0) pdf.addPage();
-                              pdf.addImage(imgData, 'JPEG', margin, margin - yOffset, imgW, imgH);
+                              pdf.addImage(imgData, 'PNG', margin, margin - yOffset, imgW, imgH);
                               yOffset += usableH;
                             }
                           } catch {
