@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Plus, Search, FileImage, ChevronRight, Loader2,
-  Upload, Eye, EyeOff, Download, Trash2, ZoomIn, ZoomOut,
-  Move, Type, Circle, Square, ArrowUpRight, Ruler,
+  Upload, Eye, Download, Trash2, ZoomIn, ZoomOut,
+  Type, Circle, Square, ArrowUpRight, Ruler,
   X, MoreVertical, ArrowLeft, Maximize2, Minimize2,
-  GripVertical, BookOpen, ArrowUpDown, Pencil, Eraser,
-  Lock, Unlock, PenTool, Hexagon, Minus,
-  ChevronDown, FolderPlus, ChevronLeft,
-  CloudUpload, RotateCcw, Palette, MousePointer,
-  FileDown, AlertTriangle
+  GripVertical, ArrowUpDown, Pencil, Eraser,
+  PenTool, Minus, ChevronDown, FolderPlus, ChevronLeft,
+  CloudUpload, MousePointer, FileDown, AlertTriangle,
+  Camera, MessageSquare, Scissors, Link2, History,
+  Save, Undo2, ScanLine, Filter, MapPin, Image,
+  ExternalLink, Crosshair, LayoutList
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -53,7 +54,7 @@ interface FolderWithPlans extends PlanFolder {
 
 interface Annotation {
   id?: string;
-  type: 'freehand' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'measurement';
+  type: 'freehand' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'measurement' | 'polyline' | 'polygon';
   geometry: any;
   strokeColor: string;
   strokeWidth: number;
@@ -64,7 +65,22 @@ interface Annotation {
   measurementUnit?: string;
 }
 
-type AnnotationTool = 'pointer' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler';
+interface PlanComment {
+  id: string; plan_id: string; author_id: string;
+  position_x: number; position_y: number;
+  content: string; is_resolved: boolean;
+  resolved_by_id?: string; resolved_at?: string;
+  created_at: string; updated_at: string;
+}
+
+interface PlanPin {
+  id: string; plan_id: string; position_x: number; position_y: number;
+  icon: string; color: string; label: string;
+  created_by_id: string; created_at: string;
+}
+
+type AnnotationTool = 'pointer' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler' | 'comment' | 'camera' | 'screenshot';
+type RulerMode = 'single' | 'polyline' | 'area';
 
 // ==================== HELPERS ====================
 
@@ -144,14 +160,56 @@ const renderAnnotationSvg = (ann: Annotation, idx: number, isActive: boolean, on
         {ann.textContent || ''}
       </text>;
     case 'measurement': {
+      // Polyline measurement
+      if (ann.geometry.points && ann.geometry.points.length >= 2) {
+        const pts = ann.geometry.points as number[][];
+        const isClosed = ann.geometry.isClosed;
+        return <g key={idx} onClick={onSelect} style={{ cursor: 'pointer' }}>
+          {isClosed && <polygon points={pts.map((p: number[]) => `${p[0]},${p[1]}`).join(' ')} fill={ann.strokeColor} fillOpacity={0.08} stroke="none" />}
+          {pts.map((p: number[], i: number) => {
+            if (i === 0) return null;
+            const prev = pts[i - 1];
+            const mx = (prev[0] + p[0]) / 2, my = (prev[1] + p[1]) / 2;
+            const segDist = ann.geometry.segDists?.[i - 1];
+            const angleDeg = Math.atan2(p[1] - prev[1], p[0] - prev[0]) * 180 / Math.PI;
+            let textAngle = angleDeg; if (textAngle > 90 || textAngle < -90) textAngle += 180;
+            return <g key={i}>
+              <line x1={prev[0]} y1={prev[1]} x2={p[0]} y2={p[1]} stroke={ann.strokeColor} strokeWidth={ann.strokeWidth} />
+              <circle cx={prev[0]} cy={prev[1]} r={3} fill={ann.strokeColor} />
+              <circle cx={p[0]} cy={p[1]} r={3} fill={ann.strokeColor} />
+              {segDist != null && <text transform={`translate(${mx},${my}) rotate(${textAngle})`} dy={-6} fill={ann.strokeColor} fontSize="11" textAnchor="middle" fontFamily="Arial, sans-serif" fontWeight="600">{segDist.toFixed(2)} {ann.measurementUnit || 'm'}</text>}
+            </g>;
+          })}
+          {isClosed && pts.length > 0 && (() => {
+            const last = pts[pts.length - 1], first = pts[0];
+            return <line x1={last[0]} y1={last[1]} x2={first[0]} y2={first[1]} stroke={ann.strokeColor} strokeWidth={ann.strokeWidth} />;
+          })()}
+          {ann.measurementValue != null && (() => {
+            const cx = pts.reduce((s: number, p: number[]) => s + p[0], 0) / pts.length;
+            const cy = pts.reduce((s: number, p: number[]) => s + p[1], 0) / pts.length;
+            const totalLabel = isClosed && ann.geometry.area
+              ? `Σ ${ann.measurementValue.toFixed(2)} ${ann.measurementUnit || 'm'} | S=${ann.geometry.area.toFixed(2)} ${ann.measurementUnit || 'm'}²`
+              : `Σ ${ann.measurementValue.toFixed(2)} ${ann.measurementUnit || 'm'}`;
+            return <text x={cx} y={cy} fill="#fff" fontSize="12" textAnchor="middle" fontFamily="Arial" fontWeight="700" paintOrder="stroke" stroke={ann.strokeColor} strokeWidth={3}>{totalLabel}</text>;
+          })()}
+        </g>;
+      }
+      // Single line measurement with AutoCAD-style label
       const { x1, y1, x2, y2 } = ann.geometry;
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
       const label = ann.measurementValue != null ? `${ann.measurementValue.toFixed(2)} ${ann.measurementUnit || 'm'}` : '';
+      const angleDeg = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+      let textAngle = angleDeg; if (textAngle > 90 || textAngle < -90) textAngle += 180;
+      // Extension lines
+      const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+      const nx = -(y2 - y1) / (len || 1) * 8, ny = (x2 - x1) / (len || 1) * 8;
       return <g key={idx} onClick={onSelect} style={{ cursor: 'pointer' }}>
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={ann.strokeColor} strokeWidth={ann.strokeWidth} strokeDasharray="6 3" />
-        <circle cx={x1} cy={y1} r={4} fill={ann.strokeColor} />
-        <circle cx={x2} cy={y2} r={4} fill={ann.strokeColor} />
-        {label && <text x={mx} y={my - 8} fill={ann.strokeColor} fontSize="13" textAnchor="middle" fontFamily="Arial">{label}</text>}
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={ann.strokeColor} strokeWidth={ann.strokeWidth} />
+        <line x1={x1 + nx} y1={y1 + ny} x2={x1 - nx} y2={y1 - ny} stroke={ann.strokeColor} strokeWidth={1} />
+        <line x1={x2 + nx} y1={y2 + ny} x2={x2 - nx} y2={y2 - ny} stroke={ann.strokeColor} strokeWidth={1} />
+        <circle cx={x1} cy={y1} r={3} fill={ann.strokeColor} />
+        <circle cx={x2} cy={y2} r={3} fill={ann.strokeColor} />
+        {label && <text transform={`translate(${mx},${my}) rotate(${textAngle})`} dy={-6} fill="#fff" fontSize="12" textAnchor="middle" fontFamily="Arial" fontWeight="700" paintOrder="stroke" stroke={ann.strokeColor} strokeWidth={3}>{label}</text>}
       </g>;
     }
     default: return null;
@@ -196,6 +254,39 @@ export const DrawingsPage: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [textInputPos, setTextInputPos] = useState<{ x: number; y: number } | null>(null);
   const [textInputValue, setTextInputValue] = useState('');
+
+  // Ruler modes
+  const [rulerMode, setRulerMode] = useState<RulerMode>('single');
+  const [showRulerDropdown, setShowRulerDropdown] = useState(false);
+  const [polylinePoints, setPolylinePoints] = useState<{ x: number; y: number }[]>([]);
+  const [polylineCursorPt, setPolylineCursorPt] = useState<{ x: number; y: number } | null>(null);
+
+  // Comments
+  const [comments, setComments] = useState<PlanComment[]>([]);
+  const [commentInputPos, setCommentInputPos] = useState<{ x: number; y: number } | null>(null);
+  const [commentInputValue, setCommentInputValue] = useState('');
+  const [selectedComment, setSelectedComment] = useState<PlanComment | null>(null);
+
+  // Pins/Photos
+  const [pins, setPins] = useState<PlanPin[]>([]);
+  const [photoModalPos, setPhotoModalPos] = useState<{ x: number; y: number } | null>(null);
+  const [selectedPin, setSelectedPin] = useState<PlanPin | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+
+  // Navigator
+  const [showNavigator, setShowNavigator] = useState(false);
+  const [navigatorFilter, setNavigatorFilter] = useState<string>('all');
+
+  // Screenshot
+  const [screenshotRect, setScreenshotRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+  // Save/Undo
+  const savedAnnotationsRef = useRef<Annotation[]>([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Links
+  const [showLinksModal, setShowLinksModal] = useState(false);
+  const [planLinks, setPlanLinks] = useState<{ type: string; id: string; name: string }[]>([]);
 
   // Popups/Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -251,6 +342,8 @@ export const DrawingsPage: React.FC = () => {
   const pdfRenderTimeout = useRef<ReturnType<typeof setTimeout>>();
   const expandedFolders = useRef<Set<string>>(new Set());
   const textInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   const MAX_PLANS = 500;
   const notifyTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -448,48 +541,183 @@ export const DrawingsPage: React.FC = () => {
       const { data } = await supabase.from('plan_markups').select('*')
         .eq('plan_id', planId).is('deleted_at', null).order('z_index');
       if (data) {
-        setAnnotations(data.map((m: any) => ({
+        const mapped = data.map((m: any) => ({
           id: m.id, type: m.markup_type,
           geometry: m.geometry, strokeColor: m.stroke_color || '#ef4444',
           strokeWidth: m.stroke_width || 2, fillColor: m.fill_color,
           fillOpacity: m.fill_opacity ?? 0.15, textContent: m.text_content,
           measurementValue: m.measurement_value, measurementUnit: m.measurement_unit,
-        })));
-      } else { setAnnotations([]); }
-    } catch { setAnnotations([]); }
+        }));
+        setAnnotations(mapped);
+        savedAnnotationsRef.current = [...mapped];
+      } else { setAnnotations([]); savedAnnotationsRef.current = []; }
+      setHasUnsavedChanges(false);
+    } catch { setAnnotations([]); savedAnnotationsRef.current = []; }
+    // Also load comments and pins
+    loadComments(planId);
+    loadPins(planId);
   };
 
-  const saveAnnotation = async (ann: Annotation) => {
+  const saveAnnotation = (ann: Annotation) => {
     if (!selectedPlan || !currentUser) return;
+    setAnnotations(prev => [...prev, ann]);
+    setHasUnsavedChanges(true);
+  };
+
+  const deleteAnnotation = (idx: number) => {
+    const ann = annotations[idx];
+    if (!ann) return;
+    setAnnotations(prev => prev.filter((_, i) => i !== idx));
+    setSelectedAnnotation(-1);
+    setHasUnsavedChanges(true);
+  };
+
+  // ==================== COMMENTS CRUD ====================
+
+  const loadComments = async (planId: string) => {
     try {
-      const row = {
+      const { data } = await supabase.from('plan_comments').select('*')
+        .eq('plan_id', planId).is('deleted_at', null).order('created_at');
+      if (data) setComments(data);
+      else setComments([]);
+    } catch { setComments([]); }
+  };
+
+  const saveCommentToDb = async (x: number, y: number, content: string) => {
+    if (!selectedPlan || !currentUser || !content.trim()) return;
+    try {
+      const { data, error } = await supabase.from('plan_comments').insert({
         plan_id: selectedPlan.id, author_id: currentUser.id,
-        markup_type: ann.type, geometry: ann.geometry,
-        stroke_color: ann.strokeColor, stroke_width: ann.strokeWidth,
-        fill_color: ann.fillColor || null, fill_opacity: ann.fillOpacity ?? 0.15,
-        text_content: ann.textContent || null,
-        measurement_value: ann.measurementValue ?? null,
-        measurement_unit: ann.measurementUnit || null,
-        z_index: annotations.length,
-      };
-      const { data, error } = await supabase.from('plan_markups').insert(row).select().single();
-      if (error) { notify('Błąd zapisu oznaczenia: ' + error.message, 'error'); return; }
-      if (data) {
-        setAnnotations(prev => [...prev, { ...ann, id: data.id }]);
-      }
+        position_x: x, position_y: y, content: content.trim(),
+      }).select().single();
+      if (error) { notify('Błąd zapisu komentarza: ' + error.message, 'error'); return; }
+      if (data) setComments(prev => [...prev, data]);
+      notify('Komentarz dodany');
     } catch (err: any) { notify('Błąd: ' + err.message, 'error'); }
   };
 
-  const deleteAnnotation = async (idx: number) => {
-    const ann = annotations[idx];
-    if (!ann) return;
-    if (ann.id) {
-      const { error } = await supabase.from('plan_markups').update({ deleted_at: new Date().toISOString() }).eq('id', ann.id);
-      if (error) { notify('Błąd usuwania oznaczenia: ' + error.message, 'error'); return; }
-    }
-    setAnnotations(prev => prev.filter((_, i) => i !== idx));
+  const deleteCommentFromDb = async (id: string) => {
+    const { error } = await supabase.from('plan_comments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (error) { notify('Błąd usuwania komentarza', 'error'); return; }
+    setComments(prev => prev.filter(c => c.id !== id));
+    setSelectedComment(null);
+  };
+
+  // ==================== PINS/PHOTOS CRUD ====================
+
+  const loadPins = async (planId: string) => {
+    try {
+      const { data } = await supabase.from('plan_pins').select('*').eq('plan_id', planId).order('created_at');
+      if (data) setPins(data);
+      else setPins([]);
+    } catch { setPins([]); }
+  };
+
+  const savePinWithPhoto = async (x: number, y: number, file: File) => {
+    if (!selectedPlan || !currentUser) return;
+    try {
+      const safeName = sanitizeFileName(file.name);
+      const filePath = `${selectedPlan.project_id}/photos/${Date.now()}_${safeName}`;
+      const { error: ue } = await supabase.storage.from('plans').upload(filePath, file, { contentType: file.type });
+      if (ue) { notify('Błąd przesyłania zdjęcia: ' + ue.message, 'error'); return; }
+      const { data: urlData } = supabase.storage.from('plans').getPublicUrl(filePath);
+      const photoUrl = urlData?.publicUrl || '';
+      const { data, error } = await supabase.from('plan_pins').insert({
+        plan_id: selectedPlan.id, position_x: x, position_y: y,
+        icon: 'Camera', color: '#22c55e', label: photoUrl,
+        created_by_id: currentUser.id,
+      }).select().single();
+      if (error) { notify('Błąd zapisu zdjęcia: ' + error.message, 'error'); return; }
+      if (data) setPins(prev => [...prev, data]);
+      notify('Zdjęcie dodane');
+    } catch (err: any) { notify('Błąd: ' + err.message, 'error'); }
+  };
+
+  const deletePinFromDb = async (id: string) => {
+    const { error } = await supabase.from('plan_pins').delete().eq('id', id);
+    if (error) { notify('Błąd usuwania', 'error'); return; }
+    setPins(prev => prev.filter(p => p.id !== id));
+    setSelectedPin(null);
+  };
+
+  // ==================== SAVE/UNDO ====================
+
+  const handleSaveAll = async () => {
+    if (!selectedPlan || !currentUser) return;
+    setSaving(true);
+    try {
+      // Find new annotations (no id)
+      const newAnns = annotations.filter(a => !a.id);
+      const removed = savedAnnotationsRef.current.filter(s => s.id && !annotations.find(a => a.id === s.id));
+      // Insert new
+      for (const ann of newAnns) {
+        const row = {
+          plan_id: selectedPlan.id, author_id: currentUser.id,
+          markup_type: ann.type === 'polygon' ? 'polygon' : ann.type === 'polyline' ? 'polyline' : ann.type,
+          geometry: ann.geometry, stroke_color: ann.strokeColor, stroke_width: ann.strokeWidth,
+          fill_color: ann.fillColor || null, fill_opacity: ann.fillOpacity ?? 0.15,
+          text_content: ann.textContent || null,
+          measurement_value: ann.measurementValue ?? null, measurement_unit: ann.measurementUnit || null,
+          z_index: annotations.indexOf(ann),
+        };
+        const { data } = await supabase.from('plan_markups').insert(row).select().single();
+        if (data) ann.id = data.id;
+      }
+      // Mark removed as deleted
+      for (const r of removed) {
+        await supabase.from('plan_markups').update({ deleted_at: new Date().toISOString() }).eq('id', r.id);
+      }
+      savedAnnotationsRef.current = [...annotations];
+      setHasUnsavedChanges(false);
+      notify('Zapisano');
+    } catch (err: any) { notify('Błąd zapisu: ' + err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const handleUndo = () => {
+    setAnnotations([...savedAnnotationsRef.current]);
+    setHasUnsavedChanges(false);
     setSelectedAnnotation(-1);
   };
+
+  // ==================== SCREENSHOT ====================
+
+  const captureScreenshot = useCallback(() => {
+    const canvas = pdfCanvasRef.current;
+    if (!canvas || !screenshotRect) return;
+    const r = screenshotRect;
+    const sx = Math.min(r.x1, r.x2), sy = Math.min(r.y1, r.y2);
+    const sw = Math.abs(r.x2 - r.x1), sh = Math.abs(r.y2 - r.y1);
+    if (sw < 5 || sh < 5) { setScreenshotRect(null); return; }
+    try {
+      const dpr = window.devicePixelRatio || 1;
+      const scaleX = canvas.width / planNatW, scaleY = canvas.height / planNatH;
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = sw * scaleX; tmpCanvas.height = sh * scaleY;
+      const ctx = tmpCanvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(canvas, sx * scaleX, sy * scaleY, sw * scaleX, sh * scaleY, 0, 0, tmpCanvas.width, tmpCanvas.height);
+      tmpCanvas.toBlob(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `screenshot_${Date.now()}.png`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        notify('Zrzut ekranu pobrany');
+      }, 'image/png');
+    } catch { notify('Błąd zrzutu ekranu', 'error'); }
+    setScreenshotRect(null);
+  }, [screenshotRect, planNatW, planNatH]);
+
+  // ==================== NAVIGATOR HELPERS ====================
+
+  const scrollToPoint = useCallback((x: number, y: number) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const scale = zoom / 100;
+    viewer.scrollTo({ left: x * scale - viewer.clientWidth / 2, top: y * scale - viewer.clientHeight / 2, behavior: 'smooth' });
+  }, [zoom]);
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -702,6 +930,31 @@ export const DrawingsPage: React.FC = () => {
       setTimeout(() => textInputRef.current?.focus(), 50);
       return;
     }
+    if (activeTool === 'comment') {
+      const pt = getSvgPoint(e);
+      setCommentInputPos(pt);
+      setCommentInputValue('');
+      setTimeout(() => commentInputRef.current?.focus(), 50);
+      return;
+    }
+    if (activeTool === 'camera') {
+      const pt = getSvgPoint(e);
+      setPhotoModalPos(pt);
+      return;
+    }
+    // Polyline/area ruler: click-based, not drag
+    if (activeTool === 'ruler' && rulerMode !== 'single') {
+      const pt = getSvgPoint(e);
+      setPolylinePoints(prev => [...prev, pt]);
+      return;
+    }
+    // Screenshot mode: draw rect
+    if (activeTool === 'screenshot') {
+      const pt = getSvgPoint(e);
+      setScreenshotRect({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
+      setIsDrawing(true);
+      return;
+    }
     const pt = getSvgPoint(e);
     setIsDrawing(true);
     if (activeTool === 'pen' || activeTool === 'highlighter') {
@@ -721,16 +974,26 @@ export const DrawingsPage: React.FC = () => {
         type: 'ellipse', geometry: { cx: pt.x, cy: pt.y, rx: 0, ry: 0, startX: pt.x, startY: pt.y },
         strokeColor: annColor, strokeWidth: annWidth, fillColor: annColor, fillOpacity: 0.1,
       });
-    } else if (activeTool === 'line' || activeTool === 'arrow' || activeTool === 'ruler') {
+    } else if (activeTool === 'line' || activeTool === 'arrow' || (activeTool === 'ruler' && rulerMode === 'single')) {
       const type = activeTool === 'ruler' ? 'measurement' : activeTool;
       setCurrentDrawing({
         type: type as any, geometry: { x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y },
         strokeColor: annColor, strokeWidth: annWidth,
       });
     }
-  }, [activeTool, annColor, annWidth, getSvgPoint, calibrationMode]);
+  }, [activeTool, annColor, annWidth, getSvgPoint, calibrationMode, rulerMode]);
 
   const handleSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    // Polyline cursor tracking
+    if (activeTool === 'ruler' && rulerMode !== 'single' && polylinePoints.length > 0) {
+      setPolylineCursorPt(getSvgPoint(e));
+    }
+    // Screenshot rect drag
+    if (activeTool === 'screenshot' && isDrawing && screenshotRect) {
+      const pt = getSvgPoint(e);
+      setScreenshotRect(prev => prev ? { ...prev, x2: pt.x, y2: pt.y } : null);
+      return;
+    }
     if (!isDrawing || !currentDrawing) return;
     const pt = getSvgPoint(e);
     setCurrentDrawing(prev => {
@@ -748,9 +1011,58 @@ export const DrawingsPage: React.FC = () => {
       }
       return prev;
     });
-  }, [isDrawing, currentDrawing, getSvgPoint]);
+  }, [isDrawing, currentDrawing, getSvgPoint, activeTool, rulerMode, polylinePoints, screenshotRect]);
+
+  // Polyline double-click to finish
+  const handleSvgDoubleClick = useCallback(() => {
+    if (activeTool === 'ruler' && rulerMode !== 'single' && polylinePoints.length >= 2) {
+      const ratio = selectedPlan?.scale_ratio || 1;
+      const pts = polylinePoints;
+      let totalDist = 0;
+      const segDists: number[] = [];
+      for (let i = 1; i < pts.length; i++) {
+        const d = Math.sqrt((pts[i].x - pts[i - 1].x) ** 2 + (pts[i].y - pts[i - 1].y) ** 2) * ratio;
+        segDists.push(d);
+        totalDist += d;
+      }
+      // Check if closed (last point near first)
+      const first = pts[0], last = pts[pts.length - 1];
+      const closeDist = Math.sqrt((last.x - first.x) ** 2 + (last.y - first.y) ** 2);
+      const isClosed = closeDist < 30 && pts.length >= 3;
+      if (isClosed) {
+        const closingDist = closeDist * ratio;
+        segDists.push(closingDist);
+        totalDist += closingDist;
+      }
+      // Area calculation (shoelace formula)
+      let area: number | undefined;
+      if (isClosed && pts.length >= 3) {
+        let a = 0;
+        for (let i = 0; i < pts.length; i++) {
+          const j = (i + 1) % pts.length;
+          a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+        }
+        area = Math.abs(a / 2) * ratio * ratio;
+      }
+      const ann: Annotation = {
+        type: 'measurement',
+        geometry: { points: pts.map(p => [p.x, p.y]), segDists, isClosed, area },
+        strokeColor: annColor, strokeWidth: annWidth,
+        measurementValue: totalDist, measurementUnit: scaleUnit || 'm',
+      };
+      saveAnnotation(ann);
+      setPolylinePoints([]);
+      setPolylineCursorPt(null);
+    }
+  }, [activeTool, rulerMode, polylinePoints, selectedPlan, annColor, annWidth, scaleUnit]);
 
   const handleSvgMouseUp = useCallback(() => {
+    // Screenshot finish
+    if (activeTool === 'screenshot' && isDrawing && screenshotRect) {
+      setIsDrawing(false);
+      captureScreenshot();
+      return;
+    }
     if (!isDrawing || !currentDrawing) return;
     setIsDrawing(false);
     // Add measurement value if ruler
@@ -833,6 +1145,7 @@ export const DrawingsPage: React.FC = () => {
   const closeAllPopups = () => {
     setShowMoreMenu(false); setShowUploadDropdown(false); setShowUpdateDropdown(false);
     setShowPenDropdown(false); setShowShapeDropdown(false); setShowColorPicker(false);
+    setShowRulerDropdown(false);
   };
 
   // ==================== COMPUTED ====================
@@ -922,27 +1235,20 @@ export const DrawingsPage: React.FC = () => {
         </button>
         <button onClick={e => { e.stopPropagation(); setCreateName(''); setCreateFolderId(selectedFolder?.id || ''); setCreateFile(null); setShowCreateModal(true); }}
           className="px-5 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 text-sm shadow-sm">
-          Utwórz rzuty
+          Importuj plik
         </button>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-28 h-2 bg-slate-200 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(100, (totalPlans / MAX_PLANS) * 100)}%` }} />
-          </div>
-          <span className="text-xs text-slate-500 whitespace-nowrap">{totalPlans}/{MAX_PLANS}</span>
-        </div>
-        <div className="flex-1 max-w-xs">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="Szukaj..." value={search} onChange={e => setSearch(e.target.value)}
-              onClick={e => e.stopPropagation()}
-              className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500" />
-          </div>
+        <div className="flex-1" />
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-800 truncate max-w-[300px]">{selectedProject.name}</p>
+          <p className="text-[10px] text-slate-400">
+            Utworzono: {new Date(selectedProject.created_at).toLocaleDateString('pl-PL')}
+            {' · '}Aktualizacja: {new Date(selectedProject.updated_at || selectedProject.created_at).toLocaleDateString('pl-PL')}
+          </p>
         </div>
         <div className="flex-1" />
-        <span className="text-sm text-slate-600 font-medium truncate max-w-[200px]">{selectedProject.name}</span>
-        <button onClick={handleDeleteOldVersions}
-          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 shadow-sm">
-          <Trash2 className="w-3.5 h-3.5" /> Usuń stare wersje
+        <button onClick={e => { e.stopPropagation(); setShowLinksModal(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50" title="Związki">
+          <Link2 className="w-3.5 h-3.5" /> Związki
         </button>
       </div>
 
@@ -958,6 +1264,15 @@ export const DrawingsPage: React.FC = () => {
                 className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Nowa grupa"><FolderPlus className="w-4 h-4" /></button>
               <button onClick={e => { e.stopPropagation(); setShowSortModal(true); }}
                 className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Sortuj"><ArrowUpDown className="w-4 h-4" /></button>
+            </div>
+          </div>
+          {/* Search in left panel */}
+          <div className="px-3 py-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input type="text" placeholder="Szukaj planu..." value={search} onChange={e => setSearch(e.target.value)}
+                onClick={e => e.stopPropagation()}
+                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 bg-white" />
             </div>
           </div>
 
@@ -978,7 +1293,7 @@ export const DrawingsPage: React.FC = () => {
             ) : filteredFolders.length === 0 ? (
               <div className="text-center py-10 px-4">
                 <FileImage className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-sm text-slate-400">Brak planów. Kliknij "Utwórz rzuty" aby dodać.</p>
+                <p className="text-sm text-slate-400">Brak planów. Kliknij "Importuj plik" aby dodać.</p>
               </div>
             ) : filteredFolders.map(folder => (
               <div key={folder.id}>
@@ -1082,10 +1397,10 @@ export const DrawingsPage: React.FC = () => {
                 )}
                 <div className="flex-1" />
                 <button onClick={() => { loadVersions(selectedPlan!.id); setShowVersionModal(true); }}
-                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Historia wersji"><RotateCcw className="w-4 h-4" /></button>
+                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Historia wersji"><History className="w-4 h-4" /></button>
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowUpdateDropdown(!showUpdateDropdown); }}
-                    className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Zaktualizuj"><Upload className="w-4 h-4" /></button>
+                    className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Prześlij nową wersję"><Upload className="w-4 h-4" /></button>
                   {showUpdateDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
                       <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
@@ -1099,8 +1414,10 @@ export const DrawingsPage: React.FC = () => {
                   className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pobierz" target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
-                <button onClick={handleDeletePlan} className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600" title="Usuń">
-                  <Trash2 className="w-4 h-4" />
+                <div className="w-px h-5 bg-slate-200 mx-1" />
+                <button onClick={() => setShowNavigator(!showNavigator)}
+                  className={`p-1.5 rounded-lg transition ${showNavigator ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Nawigator">
+                  <LayoutList className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1133,9 +1450,9 @@ export const DrawingsPage: React.FC = () => {
                       {/* SVG Annotation Overlay */}
                       <svg ref={svgRef} viewBox={`0 0 ${planNatW} ${planNatH}`}
                         className="absolute top-0 left-0 w-full h-full"
-                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'eraser' ? 'crosshair' : 'crosshair' }}
+                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'screenshot' ? 'crosshair' : activeTool === 'comment' ? 'crosshair' : activeTool === 'camera' ? 'crosshair' : 'crosshair' }}
                         onMouseDown={handleSvgMouseDown} onMouseMove={handleSvgMouseMove} onMouseUp={handleSvgMouseUp}
-                        onMouseLeave={handleSvgMouseUp}>
+                        onMouseLeave={handleSvgMouseUp} onDoubleClick={handleSvgDoubleClick}>
                         {/* Saved annotations */}
                         {annotations.map((ann, i) => renderAnnotationSvg(ann, i, selectedAnnotation === i,
                           () => { if (activeTool === 'eraser') deleteAnnotation(i); else setSelectedAnnotation(i); }))}
@@ -1164,6 +1481,70 @@ export const DrawingsPage: React.FC = () => {
                               autoFocus />
                           </foreignObject>
                         )}
+                        {/* Comment input */}
+                        {commentInputPos && (
+                          <foreignObject x={commentInputPos.x} y={commentInputPos.y - 10} width="220" height="80">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <textarea ref={commentInputRef} value={commentInputValue} onChange={e => setCommentInputValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (commentInputValue.trim()) { saveCommentToDb(commentInputPos.x, commentInputPos.y, commentInputValue); setCommentInputPos(null); } } if (e.key === 'Escape') setCommentInputPos(null); }}
+                                className="w-full px-2 py-1 border border-blue-400 rounded text-xs bg-white/95 focus:outline-none resize-none"
+                                rows={2} placeholder="Komentarz..." autoFocus />
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button onClick={() => { if (commentInputValue.trim()) { saveCommentToDb(commentInputPos.x, commentInputPos.y, commentInputValue); setCommentInputPos(null); } }}
+                                  style={{ padding: '2px 8px', background: '#3b82f6', color: '#fff', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}>Dodaj</button>
+                                <button onClick={() => setCommentInputPos(null)}
+                                  style={{ padding: '2px 8px', background: '#e2e8f0', borderRadius: '4px', fontSize: '10px', border: 'none', cursor: 'pointer' }}>Anuluj</button>
+                              </div>
+                            </div>
+                          </foreignObject>
+                        )}
+                        {/* Comment markers */}
+                        {comments.map(c => (
+                          <foreignObject key={`c-${c.id}`} x={c.position_x - 14} y={c.position_y - 14} width="28" height="28">
+                            <div onClick={e => { e.stopPropagation(); setSelectedComment(selectedComment?.id === c.id ? null : c); }}
+                              title={c.content}
+                              style={{ width: 28, height: 28, borderRadius: '50%', background: c.is_resolved ? '#22c55e' : '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', border: selectedComment?.id === c.id ? '2px solid #fff' : 'none' }}>
+                              <MessageSquare style={{ width: 14, height: 14, color: '#fff' }} />
+                            </div>
+                          </foreignObject>
+                        ))}
+                        {/* Photo/pin markers */}
+                        {pins.map(p => (
+                          <foreignObject key={`p-${p.id}`} x={p.position_x - 14} y={p.position_y - 14} width="28" height="28">
+                            <div onClick={e => { e.stopPropagation(); setSelectedPin(selectedPin?.id === p.id ? null : p); }}
+                              style={{ width: 28, height: 28, borderRadius: '50%', background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', border: selectedPin?.id === p.id ? '2px solid #fff' : 'none' }}>
+                              <Camera style={{ width: 14, height: 14, color: '#fff' }} />
+                            </div>
+                          </foreignObject>
+                        ))}
+                        {/* Polyline measurement in-progress */}
+                        {polylinePoints.length > 0 && (
+                          <g>
+                            {polylinePoints.map((pt, i) => {
+                              if (i === 0) return <circle key={`pp${i}`} cx={pt.x} cy={pt.y} r={4} fill={annColor} />;
+                              const prev = polylinePoints[i - 1];
+                              const dist = Math.sqrt((pt.x - prev.x) ** 2 + (pt.y - prev.y) ** 2) * (selectedPlan?.scale_ratio || 1);
+                              const mx = (pt.x + prev.x) / 2, my = (pt.y + prev.y) / 2;
+                              const angleDeg = Math.atan2(pt.y - prev.y, pt.x - prev.x) * 180 / Math.PI;
+                              let textAngle = angleDeg; if (textAngle > 90 || textAngle < -90) textAngle += 180;
+                              return <g key={`pp${i}`}>
+                                <line x1={prev.x} y1={prev.y} x2={pt.x} y2={pt.y} stroke={annColor} strokeWidth={annWidth} strokeDasharray="6 3" />
+                                <circle cx={pt.x} cy={pt.y} r={4} fill={annColor} />
+                                <text transform={`translate(${mx},${my}) rotate(${textAngle})`} dy={-6} fill="#fff" fontSize="11" textAnchor="middle" fontFamily="Arial" fontWeight="600" paintOrder="stroke" stroke={annColor} strokeWidth={3}>{dist.toFixed(2)} {scaleUnit}</text>
+                              </g>;
+                            })}
+                            {polylineCursorPt && polylinePoints.length > 0 && (
+                              <line x1={polylinePoints[polylinePoints.length - 1].x} y1={polylinePoints[polylinePoints.length - 1].y}
+                                x2={polylineCursorPt.x} y2={polylineCursorPt.y} stroke={annColor} strokeWidth={1} strokeDasharray="4 4" opacity={0.5} />
+                            )}
+                          </g>
+                        )}
+                        {/* Screenshot selection rect */}
+                        {screenshotRect && (
+                          <rect x={Math.min(screenshotRect.x1, screenshotRect.x2)} y={Math.min(screenshotRect.y1, screenshotRect.y2)}
+                            width={Math.abs(screenshotRect.x2 - screenshotRect.x1)} height={Math.abs(screenshotRect.y2 - screenshotRect.y1)}
+                            fill="#3b82f6" fillOpacity={0.15} stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" />
+                        )}
                       </svg>
                     </div>
                   </div>
@@ -1173,7 +1554,7 @@ export const DrawingsPage: React.FC = () => {
               {/* Bottom annotation toolbar */}
               <div className="px-3 py-1.5 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 {/* Pointer */}
-                <button onClick={() => setActiveTool('pointer')}
+                <button onClick={() => { setActiveTool('pointer'); setPolylinePoints([]); setPolylineCursorPt(null); }}
                   className={`p-2 rounded-lg transition ${activeTool === 'pointer' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zaznacz">
                   <MousePointer className="w-5 h-5" />
                 </button>
@@ -1230,11 +1611,57 @@ export const DrawingsPage: React.FC = () => {
                   <Type className="w-5 h-5" />
                 </button>
 
-                {/* Ruler */}
-                <button onClick={() => setActiveTool('ruler')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'ruler' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}
-                  title={selectedPlan?.scale_ratio ? 'Pomiar' : 'Pomiar (skalibruj skalę)'}>
-                  <Ruler className="w-5 h-5" />
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+
+                {/* Ruler dropdown */}
+                <div className="relative">
+                  <button onClick={e => { e.stopPropagation(); setShowRulerDropdown(!showRulerDropdown); }}
+                    className={`p-2 rounded-lg flex items-center gap-0.5 transition ${activeTool === 'ruler' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}
+                    title={selectedPlan?.scale_ratio ? 'Pomiar' : 'Pomiar (skalibruj skalę)'}>
+                    <Ruler className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
+                  </button>
+                  {showRulerDropdown && (
+                    <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
+                      <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'single' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        onClick={() => { setActiveTool('ruler'); setRulerMode('single'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
+                        <Crosshair className="w-4 h-4" /> Snać zamiar
+                      </button>
+                      <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'polyline' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        onClick={() => { setActiveTool('ruler'); setRulerMode('polyline'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
+                        <Ruler className="w-4 h-4" /> Zmierzyć odległość — linia
+                      </button>
+                      <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'area' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        onClick={() => { setActiveTool('ruler'); setRulerMode('area'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
+                        <Square className="w-4 h-4" /> Zmierzyć — kilka odcinków / obszar
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="w-px h-6 bg-slate-200 mx-1" />
+
+                {/* Comment */}
+                <button onClick={() => setActiveTool('comment')}
+                  className={`p-2 rounded-lg transition ${activeTool === 'comment' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Komentarz">
+                  <MessageSquare className="w-5 h-5" />
+                </button>
+
+                {/* Camera */}
+                <button onClick={() => setActiveTool('camera')}
+                  className={`p-2 rounded-lg transition ${activeTool === 'camera' ? 'bg-green-100 text-green-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zdjęcie">
+                  <Camera className="w-5 h-5" />
+                </button>
+
+                {/* Screenshot */}
+                <button onClick={() => setActiveTool('screenshot')}
+                  className={`p-2 rounded-lg transition ${activeTool === 'screenshot' ? 'bg-purple-100 text-purple-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zrzut ekranu">
+                  <Scissors className="w-5 h-5" />
+                </button>
+
+                {/* OCR */}
+                <button onClick={() => notify('OCR — funkcja w przygotowaniu', 'success')}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="Podlicz elementy (OCR)">
+                  <ScanLine className="w-5 h-5" />
                 </button>
 
                 {/* Eraser */}
@@ -1277,10 +1704,15 @@ export const DrawingsPage: React.FC = () => {
 
                 <div className="flex-1" />
 
-                {/* Annotations count & clear */}
-                {annotations.length > 0 && (
-                  <span className="text-xs text-slate-400">{annotations.length} oznaczeń</span>
-                )}
+                {/* Save & Undo */}
+                <button onClick={handleUndo} disabled={!hasUnsavedChanges}
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30 transition" title="Cofnij zmiany">
+                  <Undo2 className="w-5 h-5" />
+                </button>
+                <button onClick={handleSaveAll} disabled={!hasUnsavedChanges || saving}
+                  className={`p-2 rounded-lg transition flex items-center gap-1 ${hasUnsavedChanges ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'hover:bg-slate-100 text-slate-400'}`} title="Zapisz">
+                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                </button>
                 {selectedAnnotation >= 0 && (
                   <button onClick={() => { deleteAnnotation(selectedAnnotation); }}
                     className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 ml-1" title="Usuń zaznaczenie">
@@ -1314,6 +1746,177 @@ export const DrawingsPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* NAVIGATOR PANEL (RIGHT) */}
+        {showNavigator && viewingPlan && (
+          <div className="w-[300px] min-w-[260px] border-l border-slate-200 bg-white flex flex-col overflow-hidden flex-shrink-0">
+            <div className="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <span className="font-semibold text-slate-700 text-sm flex items-center gap-1.5"><LayoutList className="w-4 h-4" /> Nawigator</span>
+              <button onClick={() => setShowNavigator(false)} className="p-1 hover:bg-slate-200 rounded text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            {/* Filter */}
+            <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1 flex-wrap">
+              {[
+                { key: 'all', label: 'Wszystko' },
+                { key: 'annotations', label: 'Oznaczenia' },
+                { key: 'measurements', label: 'Pomiary' },
+                { key: 'comments', label: 'Komentarze' },
+                { key: 'photos', label: 'Zdjęcia' },
+              ].map(f => (
+                <button key={f.key} onClick={() => setNavigatorFilter(f.key)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition ${navigatorFilter === f.key ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Items list */}
+            <div className="flex-1 overflow-y-auto">
+              {/* Annotations */}
+              {(navigatorFilter === 'all' || navigatorFilter === 'annotations') && annotations.filter(a => a.type !== 'measurement').map((ann, i) => (
+                <div key={`na-${i}`} onClick={() => { setSelectedAnnotation(i); if (ann.geometry.x1 != null) scrollToPoint(ann.geometry.x1, ann.geometry.y1); else if (ann.geometry.x != null) scrollToPoint(ann.geometry.x, ann.geometry.y); else if (ann.geometry.points?.[0]) scrollToPoint(ann.geometry.points[0][0], ann.geometry.points[0][1]); }}
+                  className={`px-3 py-2 border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition ${selectedAnnotation === i ? 'bg-blue-50' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: ann.strokeColor }} />
+                    <span className="text-xs font-medium text-slate-700 capitalize">{ann.type === 'freehand' ? 'Rysunek' : ann.type === 'rectangle' ? 'Prostokąt' : ann.type === 'ellipse' ? 'Elipsa' : ann.type === 'arrow' ? 'Strzałka' : ann.type === 'line' ? 'Linia' : ann.type === 'text' ? 'Tekst' : ann.type}</span>
+                    {ann.textContent && <span className="text-[10px] text-slate-400 truncate">"{ann.textContent}"</span>}
+                  </div>
+                </div>
+              ))}
+              {/* Measurements */}
+              {(navigatorFilter === 'all' || navigatorFilter === 'measurements') && annotations.filter(a => a.type === 'measurement').map((ann, i) => {
+                const origIdx = annotations.indexOf(ann);
+                return (
+                  <div key={`nm-${i}`} onClick={() => { setSelectedAnnotation(origIdx); if (ann.geometry.x1 != null) scrollToPoint(ann.geometry.x1, ann.geometry.y1); else if (ann.geometry.points?.[0]) scrollToPoint(ann.geometry.points[0][0], ann.geometry.points[0][1]); }}
+                    className={`px-3 py-2 border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition ${selectedAnnotation === origIdx ? 'bg-blue-50' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <Ruler className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                      <span className="text-xs font-medium text-slate-700">
+                        {ann.measurementValue != null ? `${ann.measurementValue.toFixed(2)} ${ann.measurementUnit || 'm'}` : 'Pomiar'}
+                      </span>
+                      {ann.geometry.area && <span className="text-[10px] text-slate-400">S={ann.geometry.area.toFixed(2)} {ann.measurementUnit || 'm'}²</span>}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Comments */}
+              {(navigatorFilter === 'all' || navigatorFilter === 'comments') && comments.map(c => (
+                <div key={`nc-${c.id}`} onClick={() => { setSelectedComment(c); scrollToPoint(c.position_x, c.position_y); }}
+                  className={`px-3 py-2 border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition ${selectedComment?.id === c.id ? 'bg-blue-50' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${c.is_resolved ? 'text-green-500' : 'text-blue-500'}`} />
+                    <span className="text-xs text-slate-700 truncate flex-1">{c.content}</span>
+                    <button onClick={e => { e.stopPropagation(); deleteCommentFromDb(c.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 pl-5">{new Date(c.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              ))}
+              {/* Photos */}
+              {(navigatorFilter === 'all' || navigatorFilter === 'photos') && pins.map(p => (
+                <div key={`np-${p.id}`} onClick={() => { setSelectedPin(p); scrollToPoint(p.position_x, p.position_y); }}
+                  className={`px-3 py-2 border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition ${selectedPin?.id === p.id ? 'bg-blue-50' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+                    <span className="text-xs text-slate-700 truncate flex-1">Zdjęcie</span>
+                    <button onClick={e => { e.stopPropagation(); deletePinFromDb(p.id); }} className="p-0.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                  </div>
+                  {p.label && p.label.startsWith('http') && (
+                    <img src={p.label} alt="" className="mt-1 w-full h-16 object-cover rounded-lg border border-slate-200" />
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-0.5 pl-5">{new Date(p.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              ))}
+              {/* Empty state */}
+              {annotations.length === 0 && comments.length === 0 && pins.length === 0 && (
+                <div className="text-center py-10 px-4">
+                  <LayoutList className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                  <p className="text-xs text-slate-400">Brak oznaczeń</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Selected comment popup */}
+        {selectedComment && viewingPlan && (
+          <div className="fixed bottom-24 right-4 z-[70] w-72 bg-white rounded-xl shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            <div className="p-3 flex items-start gap-2 border-b border-slate-100">
+              <MessageSquare className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-slate-800">{selectedComment.content}</p>
+                <p className="text-[10px] text-slate-400 mt-1">{new Date(selectedComment.created_at).toLocaleString('pl-PL')}</p>
+              </div>
+              <button onClick={() => setSelectedComment(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-3.5 h-3.5 text-slate-400" /></button>
+            </div>
+            <div className="p-2 flex gap-2">
+              <button onClick={() => deleteCommentFromDb(selectedComment.id)}
+                className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg">Usuń</button>
+            </div>
+          </div>
+        )}
+
+        {/* Selected photo popup */}
+        {selectedPin && viewingPlan && selectedPin.label?.startsWith('http') && (
+          <div className="fixed bottom-24 right-4 z-[70] w-80 bg-white rounded-xl shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
+            <div className="p-3 flex items-center justify-between border-b border-slate-100">
+              <span className="text-sm font-medium text-slate-700 flex items-center gap-1.5"><Camera className="w-4 h-4 text-green-500" /> Zdjęcie</span>
+              <button onClick={() => setSelectedPin(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-3.5 h-3.5 text-slate-400" /></button>
+            </div>
+            <div className="p-3">
+              <img src={selectedPin.label} alt="" className="w-full rounded-lg border border-slate-200" />
+              <div className="mt-2 flex gap-2">
+                <a href={selectedPin.label} target="_blank" rel="noopener noreferrer"
+                  className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-1"><ExternalLink className="w-3 h-3" /> Otwórz</a>
+                <button onClick={() => deletePinFromDb(selectedPin.id)}
+                  className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg">Usuń</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Photo upload modal */}
+        {photoModalPos && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => { setPhotoModalPos(null); setPhotoFile(null); }}>
+            <div className="bg-white rounded-xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-4 flex items-center justify-between border-b border-slate-100">
+                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Camera className="w-5 h-5 text-green-500" /> Dodaj zdjęcie</h2>
+                <button onClick={() => { setPhotoModalPos(null); setPhotoFile(null); }} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-4 h-4 text-slate-500" /></button>
+              </div>
+              <div className="p-4">
+                <div className={`border-2 border-dashed rounded-xl p-6 text-center transition ${photoFile ? 'border-green-400 bg-green-50/50' : 'border-slate-300 hover:border-green-400'}`}
+                  onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setPhotoFile(f); }} onDragOver={e => e.preventDefault()}>
+                  {photoFile ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <Image className="w-8 h-8 text-green-500" />
+                      <div className="text-left">
+                        <p className="text-sm font-medium text-slate-800">{photoFile.name}</p>
+                        <p className="text-xs text-slate-500">{formatFileSize(photoFile.size)}</p>
+                      </div>
+                      <button onClick={() => setPhotoFile(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4 text-slate-400" /></button>
+                    </div>
+                  ) : (
+                    <>
+                      <Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm text-slate-400">Przeciągnij zdjęcie lub kliknij poniżej</p>
+                    </>
+                  )}
+                </div>
+                <button onClick={() => photoInputRef.current?.click()}
+                  className="mt-3 w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Wybierz plik</button>
+              </div>
+              <div className="px-4 pb-4 flex gap-2">
+                <button onClick={async () => {
+                  if (photoFile && photoModalPos) {
+                    await savePinWithPhoto(photoModalPos.x, photoModalPos.y, photoFile);
+                    setPhotoModalPos(null); setPhotoFile(null);
+                  }
+                }} disabled={!photoFile}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">Zapisz</button>
+                <button onClick={() => { setPhotoModalPos(null); setPhotoFile(null); }}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50">Anuluj</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* HIDDEN FILE INPUTS */}
@@ -1323,6 +1926,8 @@ export const DrawingsPage: React.FC = () => {
         onChange={e => { const f = e.target.files?.[0]; if (f) handleUpdatePlanFile(f); e.target.value = ''; }} />
       <input ref={createFileInputRef} type="file" className="hidden" accept="image/*,.pdf,.dwg,.dxf"
         onChange={e => { const f = e.target.files?.[0]; if (f) setCreateFile(f); e.target.value = ''; }} />
+      <input ref={photoInputRef} type="file" className="hidden" accept="image/*"
+        onChange={e => { const f = e.target.files?.[0]; if (f) setPhotoFile(f); e.target.value = ''; }} />
 
       {/* ==================== MODALS ==================== */}
 
@@ -1351,7 +1956,7 @@ export const DrawingsPage: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setShowCreateModal(false)}>
           <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="p-5 flex justify-between items-center border-b border-slate-100">
-              <h2 className="text-lg font-bold text-blue-600">Utwórz rzuty</h2>
+              <h2 className="text-lg font-bold text-blue-600">Importuj plik</h2>
               <button onClick={() => setShowCreateModal(false)} className="w-8 h-8 flex items-center justify-center bg-slate-700 text-white rounded-full hover:bg-slate-600">
                 <X className="w-4 h-4" />
               </button>
@@ -1455,20 +2060,86 @@ export const DrawingsPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {planVersions.map(v => (
-                    <tr key={v.id} className="border-b border-slate-100 hover:bg-blue-50 cursor-pointer">
+                    <tr key={v.id} className="border-b border-slate-100 hover:bg-blue-50">
                       <td className="py-2.5 px-3 text-slate-700">{v.original_filename || 'plan'}</td>
                       <td className="py-2.5 px-3 text-slate-500">
                         {v.created_at ? new Date(v.created_at).toLocaleDateString('pl-PL') + ' ' + new Date(v.created_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '-'}
                       </td>
                       <td className="py-2.5 px-3">V{v.version} {v.is_current_version ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">aktualna</span> : ''}</td>
-                      <td className="py-2.5 px-3">
-                        {v.id === selectedVersionId && <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">wyświetlona</span>}
+                      <td className="py-2.5 px-3 flex items-center gap-2">
+                        <button onClick={() => { setSelectedVersionId(v.id); setShowCompareModal(false); setShowVersionModal(true); }}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100">
+                          <Eye className="w-3 h-3" /> Pokaż
+                        </button>
+                        {v.file_url && (
+                          <a href={v.file_url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-2.5 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-100">
+                            <ExternalLink className="w-3 h-3" /> Otwórz
+                          </a>
+                        )}
                       </td>
                     </tr>
                   ))}
                   {planVersions.length === 0 && <tr><td colSpan={4} className="text-center py-8 text-slate-400">Brak wersji</td></tr>}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Links / Związki Modal */}
+      {showLinksModal && selectedProject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setShowLinksModal(false)}>
+          <div className="bg-white rounded-xl w-full max-w-2xl shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 flex justify-between items-center border-b border-slate-100">
+              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2"><Link2 className="w-5 h-5 text-blue-500" /> Związki</h2>
+              <button onClick={() => setShowLinksModal(false)} className="p-1.5 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm text-slate-500 mb-4">Powiąż plany z innymi elementami systemu:</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { type: 'Kosztorys', icon: '📊', desc: 'Kosztorysy budowlane' },
+                  { type: 'Oferta', icon: '📋', desc: 'Oferty i wyceny' },
+                  { type: 'Zapytanie ofertowe', icon: '📩', desc: 'Zapytania ofertowe' },
+                  { type: 'Projekt', icon: '📁', desc: 'Projekty budowlane' },
+                  { type: 'Harmonogram', icon: '📅', desc: 'Harmonogramy Gantta' },
+                  { type: 'Klient', icon: '👤', desc: 'Klienci i kontrahenci' },
+                  { type: 'Obiekt', icon: '🏗️', desc: 'Obiekty budowlane' },
+                ].map(item => {
+                  const linked = planLinks.filter(l => l.type === item.type);
+                  return (
+                    <div key={item.type} className="border border-slate-200 rounded-xl p-3 hover:border-blue-300 transition">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{item.icon}</span>
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{item.type}</p>
+                          <p className="text-[10px] text-slate-400">{item.desc}</p>
+                        </div>
+                      </div>
+                      {linked.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {linked.map(l => (
+                            <span key={l.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[10px]">
+                              {l.name}
+                              <button onClick={() => setPlanLinks(prev => prev.filter(p => p.id !== l.id))} className="hover:text-red-500"><X className="w-2.5 h-2.5" /></button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={() => {
+                        const name = prompt(`Wpisz nazwę ${item.type}:`);
+                        if (name) setPlanLinks(prev => [...prev, { type: item.type, id: crypto.randomUUID(), name }]);
+                      }}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Dodaj powiązanie</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex justify-end">
+              <button onClick={() => setShowLinksModal(false)} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 text-sm">Zamknij</button>
             </div>
           </div>
         </div>
