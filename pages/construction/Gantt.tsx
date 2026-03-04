@@ -340,7 +340,7 @@ export const GanttPage: React.FC = () => {
 
   // Material form
   const [showAddMaterial, setShowAddMaterial] = useState(false);
-  const [materialForm, setMaterialForm] = useState({ gantt_task_id: '', name: '', quantity: 0, unit: 'szt', supplier: '', delivery_date: '' });
+  const [materialForm, setMaterialForm] = useState({ gantt_task_id: '', name: '', quantity: 0, unit: 'szt', unit_price: 0, supplier: '', delivery_date: '' });
 
   // Predictive Insights
   const [showInsights, setShowInsights] = useState(false);
@@ -1423,7 +1423,12 @@ export const GanttPage: React.FC = () => {
     const data = { tasks: allFlatTasks.map(t => ({
       id: t.id, title: t.title, parent_id: t.parent_id, wbs: t.wbs,
       start_date: t.start_date, end_date: t.end_date, duration: t.duration,
-      progress: t.progress, is_milestone: t.is_milestone, sort_order: t.sort_order
+      progress: t.progress, is_milestone: t.is_milestone, sort_order: t.sort_order,
+      color: t.color, priority: t.priority, notes: t.notes,
+      assigned_to_id: t.assigned_to_id, supervisor_id: t.supervisor_id, approver_id: t.approver_id,
+      zone_id: (t as any).zone_id, norm_id: (t as any).norm_id,
+      quantity: (t as any).quantity, quantity_unit: (t as any).quantity_unit,
+      lps_status: (t as any).lps_status
     })), dependencies: dependencies.map(d => ({
       predecessor_id: d.predecessor_id, successor_id: d.successor_id,
       dependency_type: d.dependency_type, lag: d.lag
@@ -1436,13 +1441,14 @@ export const GanttPage: React.FC = () => {
   };
 
   const handleExportCSV = () => {
-    const rows = [['SPP', 'Nazwa', 'Faza nadrzędna', 'Data rozpoczęcia', 'Data zakończenia', 'Czas trwania', 'Postęp %', 'Kamień milowy'].join(';')];
+    const rows = [['SPP', 'Nazwa', 'Faza nadrzędna', 'Data rozpoczęcia', 'Data zakończenia', 'Czas trwania', 'Postęp %', 'Kamień milowy', 'Priorytet', 'LPS Status'].join(';')];
     allFlatTasks.forEach(t => {
       rows.push([
         t.wbs || '', `"${(t.title || '').replace(/"/g, '""')}"`,
         t.parent_id || '', t.start_date?.split('T')[0] || '',
         t.end_date?.split('T')[0] || '', String(t.duration || ''),
-        String(t.progress || 0), t.is_milestone ? 'Tak' : 'Nie'
+        String(t.progress || 0), t.is_milestone ? 'Tak' : 'Nie',
+        t.priority || 'normal', (t as any).lps_status || ''
       ].join(';'));
     });
     const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
@@ -1473,7 +1479,12 @@ export const GanttPage: React.FC = () => {
             start_date: t.start_date || null, end_date: t.end_date || null,
             duration: t.duration || null, progress: t.progress || 0,
             is_milestone: t.is_milestone || false, sort_order: t.sort_order || 0,
-            source: 'manual', color: '#3b82f6'
+            source: 'manual', color: t.color || '#3b82f6',
+            priority: t.priority || 'normal', notes: t.notes || null,
+            assigned_to_id: t.assigned_to_id || null, supervisor_id: t.supervisor_id || null,
+            approver_id: t.approver_id || null, lps_status: t.lps_status || null,
+            zone_id: t.zone_id || null, norm_id: t.norm_id || null,
+            quantity: t.quantity || null, quantity_unit: t.quantity_unit || null
           }).select('id').single();
           if (inserted) idMap.set(t.id, inserted.id);
         }
@@ -3376,6 +3387,8 @@ export const GanttPage: React.FC = () => {
                   className="w-16 px-2 py-1.5 text-xs border border-slate-200 rounded-lg" />
                 <input type="text" placeholder="Jedn." value={materialForm.unit} onChange={e => setMaterialForm({...materialForm, unit: e.target.value})}
                   className="w-14 px-2 py-1.5 text-xs border border-slate-200 rounded-lg" />
+                <input type="number" placeholder="Cena/jedn." value={materialForm.unit_price || ''} onChange={e => setMaterialForm({...materialForm, unit_price: parseFloat(e.target.value) || 0})}
+                  className="w-20 px-2 py-1.5 text-xs border border-slate-200 rounded-lg" />
                 <input type="text" placeholder="Dostawca" value={materialForm.supplier} onChange={e => setMaterialForm({...materialForm, supplier: e.target.value})}
                   className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg" />
               </div>
@@ -3387,11 +3400,11 @@ export const GanttPage: React.FC = () => {
                   try {
                     await supabase.from('gantt_materials').insert({
                       gantt_task_id: materialForm.gantt_task_id, name: materialForm.name,
-                      quantity: materialForm.quantity, unit: materialForm.unit, unit_price: 0,
+                      quantity: materialForm.quantity, unit: materialForm.unit, unit_price: materialForm.unit_price || 0,
                       supplier: materialForm.supplier || null, delivery_date: materialForm.delivery_date || null, delivered: false
                     });
                     showSuccess('Materiał dodany.');
-                    setMaterialForm({ gantt_task_id: '', name: '', quantity: 0, unit: 'szt', supplier: '', delivery_date: '' });
+                    setMaterialForm({ gantt_task_id: '', name: '', quantity: 0, unit: 'szt', unit_price: 0, supplier: '', delivery_date: '' });
                     setShowAddMaterial(false);
                     loadAdvancedData();
                   } catch (err: any) { showError('Błąd: ' + (err?.message || err)); }
@@ -3427,7 +3440,7 @@ export const GanttPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="text-slate-400 mt-0.5">
-                        {m.quantity} {m.unit} {m.supplier ? `• ${m.supplier}` : ''} {m.delivery_date ? `• Dostawa: ${new Date(m.delivery_date).toLocaleDateString('pl-PL')}` : ''}
+                        {m.quantity} {m.unit}{m.unit_price > 0 ? ` × ${m.unit_price.toLocaleString('pl-PL')} PLN` : ''} {m.supplier ? `• ${m.supplier}` : ''} {m.delivery_date ? `• Dostawa: ${new Date(m.delivery_date).toLocaleDateString('pl-PL')}` : ''}
                       </div>
                     </div>
                   );

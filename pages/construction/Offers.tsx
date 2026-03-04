@@ -6295,9 +6295,15 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         <button
                           onClick={async () => {
                             if (!confirm('Usunąć zapytanie?')) return;
-                            await supabase.from('offer_requests').delete().eq('id', req.id);
-                            setOfferRequests(prev => prev.filter(r => r.id !== req.id));
-                            showToast('Zapytanie usunięte', 'info');
+                            try {
+                              const { error: delErr } = await supabase.from('offer_requests').delete().eq('id', req.id);
+                              if (delErr) throw delErr;
+                              setOfferRequests(prev => prev.filter(r => r.id !== req.id));
+                              showToast('Zapytanie usunięte', 'info');
+                            } catch (err) {
+                              console.error('Error deleting request:', err);
+                              showToast('Błąd usuwania zapytania', 'error');
+                            }
                           }}
                           className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
                           title="Usuń"
@@ -6347,37 +6353,64 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               </div>
             </div>
 
-            {selectedRequest.response_data && (
+            {selectedRequest.response_data?.notes && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm font-medium text-green-800 mb-2">Odpowiedź podwykonawcy</p>
-                <pre className="text-xs text-green-700 whitespace-pre-wrap">{JSON.stringify(selectedRequest.response_data, null, 2)}</pre>
+                <p className="text-sm font-medium text-green-800 mb-1">Uwagi podwykonawcy</p>
+                <p className="text-sm text-green-700 whitespace-pre-wrap">{selectedRequest.response_data.notes}</p>
               </div>
             )}
 
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left p-2 text-slate-600">Lp.</th>
-                    <th className="text-left p-2 text-slate-600">Sekcja</th>
-                    <th className="text-left p-2 text-slate-600">Nazwa</th>
-                    <th className="text-left p-2 text-slate-600">Jedn.</th>
-                    <th className="text-right p-2 text-slate-600">Ilość</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item: any, i: number) => (
-                    <tr key={item.id || i} className="border-t border-slate-100">
-                      <td className="p-2 text-slate-500">{i + 1}</td>
-                      <td className="p-2 text-slate-500">{item.section_name || '-'}</td>
-                      <td className="p-2 font-medium text-slate-900">{item.name}</td>
-                      <td className="p-2 text-slate-500">{item.unit || 'szt.'}</td>
-                      <td className="p-2 text-right text-slate-700">{item.quantity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {(() => {
+              const responsePrices = selectedRequest.response_data?.prices || {};
+              const hasResponse = Object.keys(responsePrices).length > 0;
+              return (
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="text-left p-2 text-slate-600">Lp.</th>
+                        <th className="text-left p-2 text-slate-600">Sekcja</th>
+                        <th className="text-left p-2 text-slate-600">Nazwa</th>
+                        <th className="text-left p-2 text-slate-600">Jedn.</th>
+                        <th className="text-right p-2 text-slate-600">Ilość</th>
+                        {hasResponse && <th className="text-right p-2 text-green-700">Cena jedn.</th>}
+                        {hasResponse && <th className="text-right p-2 text-green-700">Wartość</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item: any, i: number) => {
+                        const unitPrice = parseFloat(responsePrices[item.id] || '0') || 0;
+                        const totalPrice = unitPrice * (item.quantity || 0);
+                        return (
+                          <tr key={item.id || i} className="border-t border-slate-100">
+                            <td className="p-2 text-slate-500">{i + 1}</td>
+                            <td className="p-2 text-slate-500">{item.section_name || '-'}</td>
+                            <td className="p-2 font-medium text-slate-900">{item.name}</td>
+                            <td className="p-2 text-slate-500">{item.unit || 'szt.'}</td>
+                            <td className="p-2 text-right text-slate-700">{item.quantity}</td>
+                            {hasResponse && <td className="p-2 text-right text-green-700">{unitPrice > 0 ? unitPrice.toFixed(2) : '-'}</td>}
+                            {hasResponse && <td className="p-2 text-right font-medium text-green-800">{totalPrice > 0 ? totalPrice.toFixed(2) : '-'}</td>}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {hasResponse && (
+                      <tfoot className="bg-green-50">
+                        <tr className="border-t-2 border-green-200">
+                          <td colSpan={6} className="p-2 text-right font-semibold text-green-800">Razem netto:</td>
+                          <td className="p-2 text-right font-bold text-green-900">
+                            {items.reduce((sum: number, item: any) => {
+                              const p = parseFloat(responsePrices[item.id] || '0') || 0;
+                              return sum + p * (item.quantity || 0);
+                            }, 0).toFixed(2)} zł
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              );
+            })()}
           </div>
           <div className="p-4 border-t border-slate-200 flex justify-between">
             <button
