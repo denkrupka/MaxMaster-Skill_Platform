@@ -3045,7 +3045,7 @@ export const OffersPage: React.FC = () => {
               <tr><td style="padding:3px 0;">Suma netto:</td><td style="padding:3px 0;text-align:right;font-weight:500;">${fmtCur(totals.total)} zł</td></tr>
               ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<tr style="color:#dc2626;"><td style="padding:3px 0;">Rabat:</td><td style="padding:3px 0;text-align:right;">-${fmtCur(totals.totalDiscount)} zł</td></tr>` : ''}
               ${totals.surchargePercent !== 0 ? `<tr style="color:${totals.surchargePercent > 0 ? '#dc2626' : '#16a34a'};"><td style="padding:3px 0;">Warunki istotne (${totals.surchargePercent > 0 ? '+' : ''}${totals.surchargePercent}%):</td><td style="padding:3px 0;text-align:right;">${totals.surchargePercent > 0 ? '+' : ''}${fmtCur(totals.surchargeAmount)} zł</td></tr>` : ''}
-              ${previewTemplate === 'full' || totals.surchargePercent !== 0 ? `<tr><td style="padding:3px 0;font-weight:600;">Netto po rabacie:</td><td style="padding:3px 0;text-align:right;font-weight:600;">${fmtCur(totals.nettoAfterSurcharges)} zł</td></tr>` : ''}
+              <tr><td style="padding:3px 0;font-weight:600;">Netto po rabacie:</td><td style="padding:3px 0;text-align:right;font-weight:600;">${fmtCur(totals.nettoAfterSurcharges)} zł</td></tr>
               <tr><td style="padding:3px 0;">VAT:</td><td style="padding:3px 0;text-align:right;">${fmtCur(totals.totalVat)} zł</td></tr>
               <tr style="font-weight:bold;font-size:15px;border-top:1px solid #cbd5e1;"><td style="padding:6px 0;">Brutto:</td><td style="padding:6px 0;text-align:right;">${fmtCur(totals.totalBrutto)} zł</td></tr>
             </table>
@@ -7030,12 +7030,10 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                             <span>{totals.surchargePercent > 0 ? '+' : ''}{formatCurrency(totals.surchargeAmount)}</span>
                           </div>
                         )}
-                        {(previewTemplate === 'full' || totals.surchargePercent !== 0) && (
-                          <div className="flex justify-between font-semibold">
-                            <span>Netto po rabacie:</span>
-                            <span>{formatCurrency(totals.nettoAfterSurcharges)}</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between font-semibold">
+                          <span>Netto po rabacie:</span>
+                          <span>{formatCurrency(totals.nettoAfterSurcharges)}</span>
+                        </div>
                         <div className="flex justify-between">
                           <span>VAT:</span>
                           <span>{formatCurrency(totals.totalVat)}</span>
