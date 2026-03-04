@@ -349,6 +349,15 @@ export const GanttPage: React.FC = () => {
   // Advanced panel toggle
   const [showAdvancedPanel, setShowAdvancedPanel] = useState<string | null>(null); // 'baseline' | 'lookahead' | 'zones' | 'materials' | 'rfis' | 'insights'
 
+  // Load evidence when evidence modal opens for a task
+  useEffect(() => {
+    if (!evidenceTaskId) { setTaskEvidence([]); return; }
+    (async () => {
+      const { data } = await supabase.from('gantt_evidence').select('*').eq('gantt_task_id', evidenceTaskId).order('created_at', { ascending: false });
+      if (data) setTaskEvidence(data as any);
+    })();
+  }, [evidenceTaskId]);
+
   // Auto-dismiss notifications
   useEffect(() => {
     if (errorMsg) { const t = setTimeout(() => setErrorMsg(''), 5000); return () => clearTimeout(t); }
@@ -464,8 +473,13 @@ export const GanttPage: React.FC = () => {
       if (e.key === 'Escape') {
         if (showHelp) { setShowHelp(false); return; }
         if (contextMenu) { setContextMenu(null); return; }
+        if (showEvidenceModal) { setShowEvidenceModal(false); setEvidenceTaskId(null); return; }
+        if (showRFIModal) { setShowRFIModal(false); return; }
+        if (showBaselineModal) { setShowBaselineModal(false); return; }
         if (showPhaseModal) { setShowPhaseModal(false); return; }
         if (showDepModal) { setShowDepModal(false); return; }
+        if (showInsights) { setShowInsights(false); return; }
+        if (showAdvancedPanel) { setShowAdvancedPanel(null); return; }
         if (showFilterPanel) { setShowFilterPanel(false); return; }
         if (inlineEdit) { setInlineEdit(null); return; }
         if (showSettingsMenu) { setShowSettingsMenu(false); return; }
@@ -3665,7 +3679,9 @@ export const GanttPage: React.FC = () => {
                       created_by_id: currentUser?.id
                     });
                     showSuccess('Dowód dodany (placeholder — upload pliku wymaga konfiguracji Storage).');
-                    setShowEvidenceModal(false); setEvidenceTaskId(null);
+                    // Reload evidence list
+                    const { data: evData } = await supabase.from('gantt_evidence').select('*').eq('gantt_task_id', evidenceTaskId).order('created_at', { ascending: false });
+                    if (evData) setTaskEvidence(evData as any);
                   } catch (err: any) { showError('Błąd: ' + (err?.message || err)); }
                 }}
                   className="px-4 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 font-medium">

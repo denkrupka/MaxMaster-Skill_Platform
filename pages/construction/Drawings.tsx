@@ -653,6 +653,21 @@ export const DrawingsPage: React.FC = () => {
     }
   };
 
+  // Helper: reset all PDF analysis states
+  const resetPdfAnalysisState = useCallback(() => {
+    setPdfAnalysis(null);
+    setPdfAnalysisExtra(null);
+    setPdfStyleGroups([]);
+    setPdfLegend(null);
+    setPdfTakeoffResult(null);
+    setShowPdfTakeoff(false);
+    setShowPdfStyleGroups(false);
+    setShowPdfLegend(false);
+    setPdfHighlightPaths([]);
+    setPdfHighlightPoints([]);
+    setPdfHighlightLabel('');
+  }, []);
+
   useEffect(() => {
     if (selectedPlan) {
       setEditName(selectedPlan.name);
@@ -664,60 +679,69 @@ export const DrawingsPage: React.FC = () => {
         if (ft === 'pdf') {
           loadPdf(selectedPlan.file_url);
           setDxfImageUrl(null); setDxfData(null); setDxfLayers([]); setDxfHiddenLayers(new Set()); setDxfViewBox(null);
+          // Reset PDF analysis state before loading new data
+          resetPdfAnalysisState();
           // Load previous PDF analysis from DB if exists
+          const planId = selectedPlan.id;
           if (currentUser?.company_id) {
             supabase.from('pdf_analyses')
               .select('id, analysis_result, detected_scale, scale_factor, ai_classification_status')
-              .eq('drawing_id', selectedPlan.id)
+              .eq('drawing_id', planId)
               .eq('company_id', currentUser.company_id)
               .eq('status', 'completed')
               .order('created_at', { ascending: false })
               .limit(1)
-              .then(async ({ data: rows }) => {
-                if (rows && rows.length > 0 && rows[0].analysis_result) {
-                  const analysisId = rows[0].id;
-                  const savedAnalysis = rows[0].analysis_result as DxfAnalysis;
-                  setPdfAnalysis(savedAnalysis);
-                  if (pdfTakeoffRules.length === 0) {
-                    setPdfTakeoffRules(getDefaultPdfElectricalRules());
-                  }
-                  // Auto-apply rules
-                  const defaultRules = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : getDefaultPdfElectricalRules();
-                  const result = applyRules(savedAnalysis, defaultRules);
-                  setPdfTakeoffResult(result);
+              .then(async ({ data: rows, error: dbError }) => {
+                if (dbError) { console.error('PDF analysis load error:', dbError); return; }
+                if (!rows || rows.length === 0 || !rows[0].analysis_result) return;
+                const savedAnalysis = rows[0].analysis_result as DxfAnalysis;
+                // Validate loaded structure
+                if (!savedAnalysis.entities || !Array.isArray(savedAnalysis.entities)) {
+                  console.error('Invalid analysis structure from DB');
+                  return;
+                }
+                const analysisId = rows[0].id;
+                setPdfAnalysis(savedAnalysis);
+                if (pdfTakeoffRules.length === 0) {
+                  setPdfTakeoffRules(getDefaultPdfElectricalRules());
+                }
+                // Auto-apply rules
+                const defaultRules = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : getDefaultPdfElectricalRules();
+                const result = applyRules(savedAnalysis, defaultRules);
+                setPdfTakeoffResult(result);
 
+                try {
                   // Load style groups from DB
                   const { data: sgRows } = await supabase.from('pdf_style_groups')
                     .select('*')
                     .eq('analysis_id', analysisId)
                     .order('path_count', { ascending: false });
                   if (sgRows && sgRows.length > 0) {
-                    const groups: PdfStyleGroup[] = sgRows.map(r => {
-                      // Reconstruct pathIndices from entities matching this group name
-                      const groupName = r.name;
-                      const indices: number[] = [];
-                      for (let i = 0; i < savedAnalysis.entities.length; i++) {
-                        if (savedAnalysis.entities[i].layerName === groupName) {
-                          const pi = savedAnalysis.entities[i].properties?.pathIndex;
-                          if (pi != null) indices.push(pi);
-                        }
+                    // Build entity-to-group index once for efficiency
+                    const entityGroupMap = new Map<string, number[]>();
+                    for (let i = 0; i < savedAnalysis.entities.length; i++) {
+                      const ln = savedAnalysis.entities[i].layerName;
+                      const pi = savedAnalysis.entities[i].properties?.pathIndex;
+                      if (ln && pi != null) {
+                        if (!entityGroupMap.has(ln)) entityGroupMap.set(ln, []);
+                        entityGroupMap.get(ln)!.push(pi);
                       }
-                      return {
-                        id: r.id,
-                        name: r.name,
-                        styleKey: `${r.stroke_color}-${(r.line_width || 0).toFixed(1)}-${(r.dash_pattern || []).join(',')}`,
-                        strokeColor: r.stroke_color || '#000000',
-                        lineWidth: r.line_width || 1,
-                        dashPattern: r.dash_pattern || [],
-                        pathCount: r.path_count || 0,
-                        pathIndices: indices,
-                        totalLengthPx: r.total_length_px || 0,
-                        totalLengthM: r.total_length_m || 0,
-                        category: r.category,
-                        aiConfidence: r.ai_confidence,
-                        visible: true,
-                      };
-                    });
+                    }
+                    const groups: PdfStyleGroup[] = sgRows.map(r => ({
+                      id: r.id,
+                      name: r.name,
+                      styleKey: `${r.stroke_color}-${(r.line_width || 0).toFixed(1)}-${(r.dash_pattern || []).join(',')}`,
+                      strokeColor: r.stroke_color || '#000000',
+                      lineWidth: r.line_width || 1,
+                      dashPattern: r.dash_pattern || [],
+                      pathCount: r.path_count || 0,
+                      pathIndices: entityGroupMap.get(r.name) || [],
+                      totalLengthPx: r.total_length_px || 0,
+                      totalLengthM: r.total_length_m || 0,
+                      category: r.category,
+                      aiConfidence: r.ai_confidence,
+                      visible: true,
+                    }));
                     setPdfStyleGroups(groups);
                   }
 
@@ -732,16 +756,20 @@ export const DrawingsPage: React.FC = () => {
                       entries: legendRows[0].entries || [],
                     });
                   }
+                } catch (err) {
+                  console.error('Error loading PDF style groups / legend from DB:', err);
                 }
               });
           }
         } else if (ft === 'dxf') {
           setPdfDoc(null);
           setPdfTotalPages(0);
+          resetPdfAnalysisState();
           loadDxf(selectedPlan.file_url);
         } else {
           setPdfDoc(null);
           setPdfTotalPages(0);
+          resetPdfAnalysisState();
           if (dxfImageUrl) { URL.revokeObjectURL(dxfImageUrl); setDxfImageUrl(null); }
           setDxfData(null); setDxfLayers([]); setDxfHiddenLayers(new Set()); setDxfViewBox(null);
         }
@@ -750,6 +778,7 @@ export const DrawingsPage: React.FC = () => {
       loadAnnotations(selectedPlan.id);
     } else {
       setPdfDoc(null);
+      resetPdfAnalysisState();
       if (dxfImageUrl) { URL.revokeObjectURL(dxfImageUrl); setDxfImageUrl(null); }
       setDxfData(null); setDxfLayers([]); setDxfHiddenLayers(new Set()); setDxfViewBox(null);
       setDxfCountMatches([]); setDxfCountLabel('');

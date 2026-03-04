@@ -4594,6 +4594,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       setRequestOfferId(selectedOffer.id);
                       setRequestName(`Zapytanie — ${selectedOffer.name || selectedOffer.number || ''}`);
                       setRequestSubcontractorId('');
+                      setRequestSections([]);
                       setShowCreateRequestModal(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm"
@@ -6121,6 +6122,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               setRequestOfferId('');
               setRequestName('');
               setRequestSubcontractorId('');
+              setRequestSections([]);
               setShowCreateRequestModal(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
@@ -8018,7 +8020,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold">Utwórz zapytanie ofertowe</h2>
-              <button onClick={() => setShowCreateRequestModal(false)} className="p-1 hover:bg-slate-100 rounded">
+              <button onClick={() => { setShowCreateRequestModal(false); setCreatingRequest(false); }} className="p-1 hover:bg-slate-100 rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -8316,7 +8318,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               ) : (
                 <>
                   <button
-                    onClick={() => setShowCreateRequestModal(false)}
+                    onClick={() => { setShowCreateRequestModal(false); setCreatingRequest(false); }}
                     className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
                   >
                     Anuluj
