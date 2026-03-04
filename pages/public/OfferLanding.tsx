@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import {
   FileText, CheckCircle, XCircle, Clock, Building2, Calendar,
   Download, Loader2, ExternalLink, Shield, Star, Phone, Mail,
-  ChevronDown, ChevronRight, MapPin
+  ChevronDown, ChevronRight, MapPin, MessageSquare
 } from 'lucide-react';
 
 interface PublicOffer {
@@ -93,6 +93,41 @@ export const OfferLandingPage: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  // SMS verification state
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsStep, setSmsStep] = useState<'phone' | 'code' | 'verified'>('phone');
+  const [smsPhone, setSmsPhone] = useState('');
+  const [smsMaskedPhone, setSmsMaskedPhone] = useState('');
+  const [smsCode, setSmsCode] = useState(['', '', '', '', '', '']);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsError, setSmsError] = useState('');
+  const [smsRecipientName, setSmsRecipientName] = useState('');
+  const smsInputRefs = [
+    React.useRef<HTMLInputElement>(null),
+    React.useRef<HTMLInputElement>(null),
+    React.useRef<HTMLInputElement>(null),
+    React.useRef<HTMLInputElement>(null),
+    React.useRef<HTMLInputElement>(null),
+    React.useRef<HTMLInputElement>(null),
+  ];
+
+  // Comments state
+  const [showComments, setShowComments] = useState(false);
+  const [offerComments, setOfferComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [commentReplyTo, setCommentReplyTo] = useState<string | null>(null);
+  const [commentReplyText, setCommentReplyText] = useState('');
+  const [commentAuthorName, setCommentAuthorName] = useState('');
+
+  // Negotiation state
+  const [negotiationMode, setNegotiationMode] = useState(false);
+  const [negotiationItems, setNegotiationItems] = useState<Record<string, { quantity?: number; unit_price?: number }>>({});
+  const [negotiationCosts, setNegotiationCosts] = useState<Record<string, { value?: number }>>({});
+  const [negotiationMessage, setNegotiationMessage] = useState('');
+  const [negotiationSubmitting, setNegotiationSubmitting] = useState(false);
+  const [negotiationSubmitted, setNegotiationSubmitted] = useState(false);
+  const [existingNegotiation, setExistingNegotiation] = useState<any>(null);
 
   useEffect(() => {
     if (token) loadOffer(token);
@@ -226,11 +261,46 @@ export const OfferLandingPage: React.FC = () => {
         });
       }
 
-      setOffer({
+      const fullOffer = {
         ...offerData,
         client: clientRes.data as { name: string } | null,
         sections
-      });
+      };
+      setOffer(fullOffer);
+
+      // Load comments
+      const { data: commentsData } = await supabase
+        .from('offer_comments')
+        .select('*')
+        .eq('offer_id', offerData.id)
+        .order('created_at', { ascending: true });
+      setOfferComments(commentsData || []);
+
+      // Load existing negotiation if status is 'negotiation'
+      if (offerData.status === 'negotiation') {
+        const { data: negData } = await supabase
+          .from('offer_negotiations')
+          .select('*, items:offer_negotiation_items(*), costs:offer_negotiation_costs(*)')
+          .eq('offer_id', offerData.id)
+          .order('round', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (negData) {
+          setExistingNegotiation(negData);
+          // Pre-populate items with response statuses
+          const itemMap: Record<string, any> = {};
+          (negData.items || []).forEach((ni: any) => {
+            itemMap[ni.offer_item_id] = {
+              quantity: ni.proposed_quantity,
+              unit_price: ni.proposed_unit_price,
+              status: ni.status,
+              counter_quantity: ni.counter_quantity,
+              counter_unit_price: ni.counter_unit_price
+            };
+          });
+          setNegotiationItems(itemMap);
+        }
+      }
     } catch (err) {
       setError('Wystąpił błąd podczas ładowania oferty.');
     } finally {
@@ -279,6 +349,187 @@ export const OfferLandingPage: React.FC = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleSendSmsCode = async () => {
+    if (!offer || !smsPhone.trim()) return;
+    setSmsLoading(true);
+    setSmsError('');
+    try {
+      const res = await fetch(`https://diytvuczpciikzdhldny.supabase.co/functions/v1/verify-offer-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send-code',
+          offer_id: offer.id,
+          phone_number: smsPhone,
+          recipient_name: smsRecipientName
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Błąd wysyłki');
+      setSmsMaskedPhone(data.masked_phone || smsPhone);
+      setSmsStep('code');
+      setSmsCode(['', '', '', '', '', '']);
+      setTimeout(() => smsInputRefs[0].current?.focus(), 100);
+    } catch (err: any) {
+      setSmsError(err.message || 'Nie udało się wysłać kodu');
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  const handleVerifySmsCode = async () => {
+    if (!offer) return;
+    const codeStr = smsCode.join('');
+    if (codeStr.length !== 6) return;
+    setSmsLoading(true);
+    setSmsError('');
+    try {
+      const res = await fetch(`https://diytvuczpciikzdhldny.supabase.co/functions/v1/verify-offer-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify-code',
+          offer_id: offer.id,
+          code: codeStr
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Nieprawidłowy kod');
+      setSmsStep('verified');
+      setAccepted(true);
+      setShowSmsModal(false);
+    } catch (err: any) {
+      setSmsError(err.message || 'Weryfikacja nieudana');
+      setSmsCode(['', '', '', '', '', '']);
+      setTimeout(() => smsInputRefs[0].current?.focus(), 100);
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  const handleAcceptWithSmsCheck = () => {
+    if (offer?.print_settings?.sms_acceptance) {
+      // Pre-fill phone from representative data
+      const cd = offer.print_settings?.client_data;
+      setSmsPhone(cd?.representative_phone || offer.client?.phone || '');
+      setSmsRecipientName(cd?.representative_name || '');
+      setShowSmsModal(true);
+      setSmsStep('phone');
+      setSmsError('');
+      setSmsCode(['', '', '', '', '', '']);
+    } else {
+      handleAccept();
+    }
+  };
+
+  const handleStartNegotiation = () => {
+    setNegotiationMode(true);
+    // Pre-populate negotiation items with original values
+    if (offer) {
+      const items: Record<string, { quantity?: number; unit_price?: number }> = {};
+      offer.sections.forEach(s => s.items.forEach(i => {
+        items[i.id] = { quantity: i.quantity, unit_price: i.unit_price };
+      }));
+      setNegotiationItems(items);
+    }
+  };
+
+  const handleSubmitNegotiation = async () => {
+    if (!offer) return;
+    setNegotiationSubmitting(true);
+    try {
+      // Update offer status to negotiation
+      await supabase.from('offers').update({ status: 'negotiation' }).eq('id', offer.id);
+
+      // Create negotiation record
+      const { data: negRecord, error: negErr } = await supabase
+        .from('offer_negotiations')
+        .insert({
+          offer_id: offer.id,
+          round: 1,
+          initiated_by: 'recipient',
+          status: 'submitted',
+          message: negotiationMessage || null
+        })
+        .select()
+        .single();
+
+      if (negErr || !negRecord) throw negErr;
+
+      // Save negotiation items (only those that changed)
+      const changedItems = Object.entries(negotiationItems)
+        .filter(([itemId, vals]) => {
+          const original = offer.sections.flatMap(s => s.items).find(i => i.id === itemId);
+          return original && (vals.quantity !== original.quantity || vals.unit_price !== original.unit_price);
+        })
+        .map(([itemId, vals]) => {
+          const original = offer.sections.flatMap(s => s.items).find(i => i.id === itemId);
+          return {
+            negotiation_id: negRecord.id,
+            offer_item_id: itemId,
+            proposed_quantity: vals.quantity,
+            proposed_unit_price: vals.unit_price,
+            original_quantity: original!.quantity,
+            original_unit_price: original!.unit_price,
+            status: 'pending'
+          };
+        });
+
+      if (changedItems.length > 0) {
+        await supabase.from('offer_negotiation_items').insert(changedItems);
+      }
+
+      // Save negotiation costs (only changed ones)
+      const changedCosts = Object.entries(negotiationCosts)
+        .filter(([_, vals]) => vals.value !== undefined)
+        .map(([costId, vals]) => ({
+          negotiation_id: negRecord.id,
+          cost_id: costId,
+          proposed_value: vals.value,
+          original_value: (offer.print_settings?.related_costs || []).find((c: any) => c.id === costId)?.value || 0,
+          status: 'pending'
+        }));
+
+      if (changedCosts.length > 0) {
+        await supabase.from('offer_negotiation_costs').insert(changedCosts);
+      }
+
+      setNegotiationSubmitted(true);
+      setNegotiationMode(false);
+      setExistingNegotiation(negRecord);
+    } catch (err) {
+      console.error('Error submitting negotiation:', err);
+      setActionError('Nie udało się wysłać propozycji negocjacyjnej.');
+    } finally {
+      setNegotiationSubmitting(false);
+    }
+  };
+
+  const handleAddRecipientComment = async (parentId: string | null, text: string) => {
+    if (!offer || !text.trim()) return;
+    const name = commentAuthorName.trim() || 'Odbiorca';
+    await supabase.from('offer_comments').insert({
+      offer_id: offer.id,
+      offer_item_id: null,
+      parent_id: parentId || null,
+      author_type: 'recipient',
+      author_name: name,
+      content: text.trim()
+    });
+    if (parentId) {
+      await supabase.from('offer_comments').update({ is_answered: true }).eq('id', parentId);
+    }
+    const { data } = await supabase
+      .from('offer_comments')
+      .select('*')
+      .eq('offer_id', offer.id)
+      .order('created_at', { ascending: true });
+    setOfferComments(data || []);
+    setNewComment('');
+    setCommentReplyText('');
+    setCommentReplyTo(null);
   };
 
   if (loading) {
@@ -411,6 +662,7 @@ export const OfferLandingPage: React.FC = () => {
               <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
                 accepted || offer.status === 'accepted' ? 'bg-green-500/20 text-green-100' :
                 rejected || offer.status === 'rejected' ? 'bg-red-500/20 text-red-200' :
+                offer.status === 'negotiation' || negotiationSubmitted ? 'bg-amber-500/20 text-amber-100' :
                 isExpired ? 'bg-red-500/20 text-red-200' :
                 'bg-white/20 text-white'
               }`}>
@@ -418,6 +670,8 @@ export const OfferLandingPage: React.FC = () => {
                   <><CheckCircle className="w-4 h-4" /> Zaakceptowana</>
                 ) : rejected || offer.status === 'rejected' ? (
                   <><XCircle className="w-4 h-4" /> Odrzucona</>
+                ) : offer.status === 'negotiation' || negotiationSubmitted ? (
+                  <><Clock className="w-4 h-4" /> W negocjacji</>
                 ) : isExpired ? (
                   <><Clock className="w-4 h-4" /> Wygasła</>
                 ) : (
@@ -487,6 +741,7 @@ export const OfferLandingPage: React.FC = () => {
                     const clientNip = offer.client?.nip || cd.nip || '';
                     const clientAddr = offer.client?.legal_address || [cd.company_street, cd.company_street_number, cd.company_postal_code, cd.company_city].filter(Boolean).join(', ');
                     const repName = cd.representative_name || '';
+                    const repPosition = cd.representative_position || '';
                     const repEmail = cd.representative_email || offer.client?.email || '';
                     const repPhone = cd.representative_phone || offer.client?.phone || '';
                     return clientName ? (
@@ -494,9 +749,15 @@ export const OfferLandingPage: React.FC = () => {
                         <p className="font-semibold text-slate-900">{clientName}</p>
                         {clientNip && <p>NIP: {clientNip}</p>}
                         {clientAddr && <p>{clientAddr}</p>}
-                        {repName && <p className="mt-1">Przedstawiciel: {repName}</p>}
-                        {repEmail && <p>email: {repEmail}</p>}
-                        {repPhone && <p>tel. {repPhone}</p>}
+                        {repName && (
+                          <div className="mt-2 pt-2 border-t border-slate-100">
+                            <p className="text-xs text-slate-400 uppercase tracking-wider mb-0.5">Przedstawiciel</p>
+                            <p className="font-medium text-slate-800">{repName}</p>
+                            {repPosition && <p className="text-xs text-slate-500">{repPosition}</p>}
+                            {repEmail && <p className="text-xs text-slate-500">{repEmail}</p>}
+                            {repPhone && <p className="text-xs text-slate-500">tel. {repPhone}</p>}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-slate-400 italic">Brak danych</p>
@@ -580,6 +841,19 @@ export const OfferLandingPage: React.FC = () => {
                       <th className="pb-3 pr-4 text-right w-20">Ilość</th>
                       <th className="pb-3 pr-4 text-right w-28">Cena jedn.</th>
                       <th className="pb-3 text-right w-28">Wartość</th>
+                      {negotiationMode && (
+                        <>
+                          <th className="pb-3 pr-4 text-right w-24 text-amber-600">Ilość (neg.)</th>
+                          <th className="pb-3 pr-4 text-right w-28 text-amber-600">Cena (neg.)</th>
+                          <th className="pb-3 text-right w-28 text-amber-600">Wartość (neg.)</th>
+                        </>
+                      )}
+                      {existingNegotiation && !negotiationMode && existingNegotiation.items?.some((ni: any) => ni.offer_item_id) && (
+                        <>
+                          <th className="pb-3 pr-4 text-right w-28 text-amber-600">Propozycja</th>
+                          <th className="pb-3 text-center w-20 text-amber-600">Status</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -623,6 +897,62 @@ export const OfferLandingPage: React.FC = () => {
                           <td className="py-3 text-sm text-right font-medium text-slate-900">
                             {formatCurrency(itemTotal - itemDiscount)}
                           </td>
+                          {negotiationMode && (() => {
+                            const neg = negotiationItems[item.id] || { quantity: item.quantity, unit_price: item.unit_price };
+                            const negTotal = (neg.quantity || 0) * (neg.unit_price || 0);
+                            const changed = neg.quantity !== item.quantity || neg.unit_price !== item.unit_price;
+                            return (
+                              <>
+                                <td className="py-3 pr-4">
+                                  <input
+                                    type="number"
+                                    value={neg.quantity ?? item.quantity}
+                                    onChange={e => setNegotiationItems(prev => ({
+                                      ...prev,
+                                      [item.id]: { ...prev[item.id], quantity: parseFloat(e.target.value) || 0, unit_price: prev[item.id]?.unit_price ?? item.unit_price }
+                                    }))}
+                                    className={`w-20 px-2 py-1 border rounded text-sm text-right ${changed ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
+                                    step="0.01"
+                                  />
+                                </td>
+                                <td className="py-3 pr-4">
+                                  <input
+                                    type="number"
+                                    value={neg.unit_price ?? item.unit_price}
+                                    onChange={e => setNegotiationItems(prev => ({
+                                      ...prev,
+                                      [item.id]: { ...prev[item.id], unit_price: parseFloat(e.target.value) || 0, quantity: prev[item.id]?.quantity ?? item.quantity }
+                                    }))}
+                                    className={`w-24 px-2 py-1 border rounded text-sm text-right ${changed ? 'border-amber-400 bg-amber-50' : 'border-slate-200'}`}
+                                    step="0.01"
+                                  />
+                                </td>
+                                <td className={`py-3 text-sm text-right font-medium ${changed ? 'text-amber-700' : 'text-slate-900'}`}>
+                                  {formatCurrency(negTotal)}
+                                </td>
+                              </>
+                            );
+                          })()}
+                          {existingNegotiation && !negotiationMode && (() => {
+                            const ni = (existingNegotiation.items || []).find((n: any) => n.offer_item_id === item.id);
+                            if (!ni) return <><td></td><td></td></>;
+                            const negTotal = (ni.proposed_quantity || 0) * (ni.proposed_unit_price || 0);
+                            return (
+                              <>
+                                <td className="py-3 pr-4 text-sm text-right text-amber-700 font-medium">{formatCurrency(negTotal)}</td>
+                                <td className="py-3 text-center">
+                                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    ni.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                    ni.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    ni.status === 'counter' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {ni.status === 'accepted' ? '✓' : ni.status === 'rejected' ? '✗' : ni.status === 'counter' ? '✎' : '⏳'}
+                                  </span>
+                                </td>
+                              </>
+                            );
+                          })()}
                         </tr>
                         {hasRMS && isItemExpanded && item.components!.map((comp, ci) => (
                           <tr key={`comp-${ci}`} className="bg-slate-50/50 border-t border-slate-50">
@@ -654,13 +984,17 @@ export const OfferLandingPage: React.FC = () => {
           {(() => {
             const warunki = offer.print_settings?.warunki;
             if (!warunki) return null;
-            const { payment_term, invoice_frequency, warranty_period, payment_term_rules, warranty_rules, invoice_freq_rules } = warunki;
-            if (!payment_term && !invoice_frequency && !warranty_period) return null;
+            const { payment_term, invoice_frequency, warranty_period, payment_term_rules, warranty_rules, invoice_freq_rules, custom_warunki } = warunki;
+            const showPT = payment_term && warunki.payment_term_show_on_offer !== false;
+            const showIF = invoice_frequency && warunki.invoice_freq_show_on_offer !== false;
+            const showWR = warranty_period && warunki.warranty_show_on_offer !== false;
+            const visibleCustom = (custom_warunki || []).filter((cw: any) => cw.show_on_offer !== false && cw.name && cw.value);
+            if (!showPT && !showIF && !showWR && visibleCustom.length === 0) return null;
             return (
               <div className="px-8 py-6 border-t border-slate-100">
                 <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Warunki istotne</h3>
                 <div className="grid grid-cols-3 gap-4">
-                  {payment_term && (
+                  {showPT && (
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Termin płatności</p>
                       <p className="text-sm font-medium text-slate-900">{payment_term} dni
@@ -668,7 +1002,7 @@ export const OfferLandingPage: React.FC = () => {
                       </p>
                     </div>
                   )}
-                  {invoice_frequency && (
+                  {showIF && (
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Wystawienie faktur</p>
                       <p className="text-sm font-medium text-slate-900">co {invoice_frequency} dni
@@ -676,7 +1010,7 @@ export const OfferLandingPage: React.FC = () => {
                       </p>
                     </div>
                   )}
-                  {warranty_period && (
+                  {showWR && (
                     <div>
                       <p className="text-xs text-slate-500 mb-1">Okres gwarancyjny</p>
                       <p className="text-sm font-medium text-slate-900">{warranty_period} miesięcy
@@ -684,6 +1018,14 @@ export const OfferLandingPage: React.FC = () => {
                       </p>
                     </div>
                   )}
+                  {visibleCustom.map((cw: any) => (
+                    <div key={cw.id}>
+                      <p className="text-xs text-slate-500 mb-1">{cw.name}</p>
+                      <p className="text-sm font-medium text-slate-900">{cw.value}
+                        {cw.surcharge !== 0 && cw.apply ? <span className={`ml-1 text-xs ${cw.surcharge > 0 ? 'text-red-500' : 'text-green-600'}`}>({cw.surcharge > 0 ? '+' : ''}{cw.surcharge}%)</span> : null}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             );
@@ -694,19 +1036,35 @@ export const OfferLandingPage: React.FC = () => {
             const costs: any[] = offer.print_settings?.related_costs || [];
             const visibleCosts = costs.filter((c: any) => c.value > 0);
             if (visibleCosts.length === 0) return null;
+            const calcMonths = (c: any) => {
+              if (c.frequency !== 'monthly') return 1;
+              const from = c.date_from || offer.work_start_date;
+              const to = c.date_to || offer.work_end_date;
+              if (!from || !to) return 1;
+              const d1 = new Date(from);
+              const d2 = new Date(to);
+              const m = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth()) + (d2.getDate() > d1.getDate() ? 1 : 0);
+              return Math.max(1, Math.ceil(m));
+            };
+            const costVal = (c: any) => c.mode === 'percent' ? nettoAfterDiscount * (c.value / 100) : c.value * calcMonths(c);
             const shownCosts = visibleCosts.filter((c: any) => c.show_on_offer);
             const hiddenCosts = visibleCosts.filter((c: any) => !c.show_on_offer);
-            const hiddenTotal = hiddenCosts.reduce((s: number, c: any) => s + (c.mode === 'percent' ? nettoAfterDiscount * (c.value / 100) : c.value), 0);
-            const allTotal = visibleCosts.reduce((s: number, c: any) => s + (c.mode === 'percent' ? nettoAfterDiscount * (c.value / 100) : c.value), 0);
+            const hiddenTotal = hiddenCosts.reduce((s: number, c: any) => s + costVal(c), 0);
+            const allTotal = visibleCosts.reduce((s: number, c: any) => s + costVal(c), 0);
             return (
               <div className="px-8 py-6 border-t border-slate-100">
                 <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Koszty powiązane</h3>
                 <div className="space-y-1.5">
                   {shownCosts.map((c: any) => {
-                    const val = c.mode === 'percent' ? nettoAfterDiscount * (c.value / 100) : c.value;
+                    const months = calcMonths(c);
+                    const val = costVal(c);
                     return (
                       <div key={c.id} className="flex justify-between text-sm">
-                        <span className="text-slate-600">{c.name}{c.mode === 'percent' ? ` (${c.value}%)` : ''}{c.frequency === 'monthly' ? ' (mies.)' : ''}</span>
+                        <span className="text-slate-600">
+                          {c.name}
+                          {c.mode === 'percent' ? ` (${c.value}%)` : ''}
+                          {c.frequency === 'monthly' ? ` (${c.value} zł × ${months} mies.)` : ''}
+                        </span>
                         <span className="font-medium">{formatCurrency(val)}</span>
                       </div>
                     );
@@ -790,21 +1148,77 @@ export const OfferLandingPage: React.FC = () => {
             </div>
           )}
 
+          {/* Negotiation mode: summary + submit */}
+          {negotiationMode && (
+            <div className="p-8 border-t border-amber-200 bg-amber-50/50">
+              <h3 className="font-semibold text-amber-800 mb-3">Twoja propozycja negocjacyjna</h3>
+              {(() => {
+                const changedCount = Object.entries(negotiationItems).filter(([itemId, vals]) => {
+                  const original = offer.sections.flatMap(s => s.items).find(i => i.id === itemId);
+                  return original && (vals.quantity !== original.quantity || vals.unit_price !== original.unit_price);
+                }).length;
+                const negTotal = Object.entries(negotiationItems).reduce((sum, [itemId, vals]) => {
+                  return sum + (vals.quantity || 0) * (vals.unit_price || 0);
+                }, 0);
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-slate-600">Zmienione pozycje: <span className="font-bold text-amber-700">{changedCount}</span></span>
+                      <span className="text-slate-600">Nowa suma netto: <span className="font-bold text-amber-700">{formatCurrency(negTotal)}</span></span>
+                      <span className="text-slate-600">Różnica: <span className={`font-bold ${negTotal < totalNetto ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(negTotal - totalNetto)}</span></span>
+                    </div>
+                    <textarea
+                      value={negotiationMessage}
+                      onChange={e => setNegotiationMessage(e.target.value)}
+                      placeholder="Dodaj wiadomość do propozycji (opcjonalnie)..."
+                      className="w-full px-4 py-3 border border-amber-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-amber-200"
+                      rows={3}
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleSubmitNegotiation}
+                        disabled={negotiationSubmitting || changedCount === 0}
+                        className="px-6 py-2.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 transition disabled:opacity-50"
+                      >
+                        {negotiationSubmitting ? <Loader2 className="w-4 h-4 inline-block mr-1 animate-spin" /> : null}
+                        Wyślij propozycję
+                      </button>
+                      <button
+                        onClick={() => setNegotiationMode(false)}
+                        className="px-4 py-2.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 transition"
+                      >
+                        Anuluj
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           {/* Action buttons */}
-          {!accepted && !rejected && offer.status !== 'accepted' && offer.status !== 'rejected' && !isExpired && (
+          {!accepted && !rejected && !negotiationMode && !negotiationSubmitted && offer.status !== 'accepted' && offer.status !== 'rejected' && offer.status !== 'negotiation' && !isExpired && (
             <div className="p-8 border-t border-slate-100 text-center">
               {actionError && (
                 <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">{actionError}</div>
               )}
               <div className="flex items-center justify-center gap-4">
                 <button
-                  onClick={handleAccept}
+                  onClick={handleAcceptWithSmsCheck}
                   disabled={actionLoading}
                   className="px-8 py-3 bg-green-600 text-white rounded-xl text-lg font-semibold hover:bg-green-700 transition shadow-lg shadow-green-200 disabled:opacity-50"
                 >
                   {actionLoading ? <Loader2 className="w-5 h-5 inline-block mr-2 -mt-0.5 animate-spin" /> : <CheckCircle className="w-5 h-5 inline-block mr-2 -mt-0.5" />}
                   Akceptuję ofertę
                 </button>
+                {offer.print_settings?.negotiation_enabled && (
+                  <button
+                    onClick={handleStartNegotiation}
+                    className="px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold hover:bg-amber-600 transition shadow-lg shadow-amber-200"
+                  >
+                    Negocjuj
+                  </button>
+                )}
                 <button
                   onClick={() => setShowRejectForm(!showRejectForm)}
                   disabled={actionLoading}
@@ -836,6 +1250,18 @@ export const OfferLandingPage: React.FC = () => {
             </div>
           )}
 
+          {/* Negotiation submitted confirmation */}
+          {(negotiationSubmitted || offer.status === 'negotiation') && !accepted && !rejected && (
+            <div className="p-8 border-t border-slate-100 text-center bg-amber-50">
+              <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+              <h3 className="text-xl font-bold text-amber-800">Propozycja negocjacyjna wysłana</h3>
+              <p className="text-amber-600 mt-1">Oczekuj na odpowiedź. Otrzymasz powiadomienie, gdy wykonawca odpowie na Twoją propozycję.</p>
+              {existingNegotiation?.items?.some((ni: any) => ni.status !== 'pending') && (
+                <p className="text-sm text-amber-700 mt-2 font-medium">Część pozycji otrzymała już odpowiedź — sprawdź status powyżej.</p>
+              )}
+            </div>
+          )}
+
           {accepted && (
             <div className="p-8 border-t border-slate-100 text-center bg-green-50">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
@@ -853,6 +1279,114 @@ export const OfferLandingPage: React.FC = () => {
           )}
         </div>
 
+        {/* Comments section */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden mt-6">
+          <button
+            onClick={() => setShowComments(!showComments)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition"
+          >
+            <span className="flex items-center gap-2 font-semibold text-slate-900">
+              <MessageSquare className="w-5 h-5 text-blue-600" />
+              Komentarze
+              {offerComments.length > 0 && <span className="text-xs text-slate-400">({offerComments.length})</span>}
+            </span>
+            {showComments ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
+          </button>
+          {showComments && (
+            <div className="p-6 pt-0 space-y-4">
+              {/* Author name */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Twoje imię:</span>
+                <input
+                  type="text"
+                  value={commentAuthorName}
+                  onChange={e => setCommentAuthorName(e.target.value)}
+                  placeholder="Imię / Firma"
+                  className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm"
+                />
+              </div>
+              {/* Comment list */}
+              <div className="space-y-3">
+                {offerComments.filter(c => !c.parent_id).map(comment => {
+                  const replies = offerComments.filter(c => c.parent_id === comment.id);
+                  return (
+                    <div key={comment.id} className="rounded-lg border border-slate-200 overflow-hidden">
+                      <div className="p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs font-medium ${comment.author_type === 'owner' ? 'text-blue-700' : 'text-amber-700'}`}>
+                            {comment.author_name || (comment.author_type === 'owner' ? 'Wykonawca' : 'Ja')}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(comment.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700">{comment.content}</p>
+                        <button
+                          onClick={() => { setCommentReplyTo(commentReplyTo === comment.id ? null : comment.id); setCommentReplyText(''); }}
+                          className="text-xs text-blue-600 mt-1 hover:underline"
+                        >
+                          Odpowiedz
+                        </button>
+                      </div>
+                      {replies.map(r => (
+                        <div key={r.id} className="ml-4 p-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className={`text-xs font-medium ${r.author_type === 'owner' ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {r.author_name || (r.author_type === 'owner' ? 'Wykonawca' : 'Ja')}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(r.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600">{r.content}</p>
+                        </div>
+                      ))}
+                      {commentReplyTo === comment.id && (
+                        <div className="p-2 border-t border-slate-100">
+                          <textarea
+                            value={commentReplyText}
+                            onChange={e => setCommentReplyText(e.target.value)}
+                            placeholder="Twoja odpowiedź..."
+                            className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs resize-none"
+                            rows={2}
+                          />
+                          <div className="flex justify-end gap-1 mt-1">
+                            <button onClick={() => setCommentReplyTo(null)} className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded">Anuluj</button>
+                            <button
+                              onClick={() => handleAddRecipientComment(comment.id, commentReplyText)}
+                              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                              disabled={!commentReplyText.trim()}
+                            >
+                              Wyślij
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* New comment */}
+              <div>
+                <textarea
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  placeholder="Napisz komentarz..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none"
+                  rows={2}
+                />
+                <button
+                  onClick={() => handleAddRecipientComment(null, newComment)}
+                  className="mt-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                  disabled={!newComment.trim()}
+                >
+                  Dodaj komentarz
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Footer - marketing */}
         <div className="mt-8 mb-12 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full shadow-sm border border-slate-100">
@@ -866,6 +1400,115 @@ export const OfferLandingPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* SMS Verification Modal */}
+      {showSmsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Phone className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Weryfikacja SMS</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                {smsStep === 'phone'
+                  ? 'Podaj numer telefonu, na który wyślemy kod weryfikacyjny'
+                  : `Wpisz 6-cyfrowy kod wysłany na numer ${smsMaskedPhone}`}
+              </p>
+            </div>
+
+            {smsError && (
+              <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg text-center">{smsError}</div>
+            )}
+
+            {smsStep === 'phone' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Imię i nazwisko</label>
+                  <input
+                    type="text"
+                    value={smsRecipientName}
+                    onChange={e => setSmsRecipientName(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm"
+                    placeholder="Jan Kowalski"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Numer telefonu</label>
+                  <input
+                    type="tel"
+                    value={smsPhone}
+                    onChange={e => setSmsPhone(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-center text-lg tracking-wider"
+                    placeholder="+48 123 456 789"
+                  />
+                </div>
+                <button
+                  onClick={handleSendSmsCode}
+                  disabled={smsLoading || !smsPhone.trim()}
+                  className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50"
+                >
+                  {smsLoading ? <Loader2 className="w-5 h-5 inline-block mr-2 animate-spin" /> : null}
+                  Wyślij kod SMS
+                </button>
+              </div>
+            )}
+
+            {smsStep === 'code' && (
+              <div className="space-y-4">
+                <div className="flex justify-center gap-2">
+                  {smsCode.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={smsInputRefs[idx]}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        const newCode = [...smsCode];
+                        newCode[idx] = val;
+                        setSmsCode(newCode);
+                        if (val && idx < 5) {
+                          smsInputRefs[idx + 1].current?.focus();
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Backspace' && !smsCode[idx] && idx > 0) {
+                          smsInputRefs[idx - 1].current?.focus();
+                        }
+                      }}
+                      className="w-12 h-14 text-center text-2xl font-bold border-2 border-slate-200 rounded-lg focus:border-green-500 focus:ring-2 focus:ring-green-200"
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={handleVerifySmsCode}
+                  disabled={smsLoading || smsCode.join('').length !== 6}
+                  className="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition disabled:opacity-50"
+                >
+                  {smsLoading ? <Loader2 className="w-5 h-5 inline-block mr-2 animate-spin" /> : null}
+                  Weryfikuj i akceptuj ofertę
+                </button>
+                <button
+                  onClick={() => { setSmsStep('phone'); setSmsError(''); }}
+                  className="w-full py-2 text-sm text-slate-500 hover:text-slate-700"
+                >
+                  Wyślij kod ponownie
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowSmsModal(false)}
+              className="mt-4 w-full py-2 text-sm text-slate-400 hover:text-slate-600"
+            >
+              Anuluj
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

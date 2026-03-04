@@ -2368,7 +2368,7 @@ export interface Contractor {
 // МОДУЛЬ: ОФФЕРЫ / КОММЕРЧЕСКИЕ ПРЕДЛОЖЕНИЯ (OFERTOWANIE)
 // =====================================================
 
-export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
+export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'rejected' | 'negotiation';
 
 export interface OfferTemplate {
   id: string;

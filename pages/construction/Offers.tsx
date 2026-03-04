@@ -225,6 +225,11 @@ export const OffersPage: React.FC = () => {
   const [invoiceFreqApply, setInvoiceFreqApply] = useState(true);
   const [warrantyApply, setWarrantyApply] = useState(true);
 
+  // "Na ofercie" flags for built-in warunki — when true, shown on public offer
+  const [paymentTermShowOnOffer, setPaymentTermShowOnOffer] = useState(true);
+  const [invoiceFreqShowOnOffer, setInvoiceFreqShowOnOffer] = useState(true);
+  const [warrantyShowOnOffer, setWarrantyShowOnOffer] = useState(true);
+
   // Custom warunki istotne (beyond the 3 built-in)
   interface CustomWarunek {
     id: string;
@@ -232,15 +237,26 @@ export const OffersPage: React.FC = () => {
     value: string;
     surcharge: number;
     apply: boolean;
+    show_on_offer: boolean;
   }
   const [customWarunki, setCustomWarunki] = useState<CustomWarunek[]>([]);
 
   // Koszty powiązane
+  const calculateMonthsBetween = (from: string, to: string): number => {
+    if (!from || !to) return 1;
+    const d1 = new Date(from);
+    const d2 = new Date(to);
+    const months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth()) + (d2.getDate() > d1.getDate() ? 1 : 0);
+    return Math.max(1, Math.ceil(months));
+  };
+
   interface RelatedCost {
     id: string; name: string; value: number;
     mode: 'fixed' | 'percent'; // fixed sum or % of net contract
     frequency: 'one_time' | 'monthly'; // only for fixed mode
     show_on_offer: boolean; // show as separate line in offer
+    date_from?: string;
+    date_to?: string;
   }
   const [relatedCosts, setRelatedCosts] = useState<RelatedCost[]>([
     { id: 'koszty_budowy', name: 'Koszty budowy', value: 0, mode: 'fixed', frequency: 'one_time', show_on_offer: false },
@@ -248,6 +264,22 @@ export const OffersPage: React.FC = () => {
     { id: 'polisa_oc', name: 'Polisa OC', value: 0, mode: 'fixed', frequency: 'one_time', show_on_offer: false },
     { id: 'wynajem_konteneru', name: 'Wynajem Konteneru', value: 0, mode: 'fixed', frequency: 'monthly', show_on_offer: false }
   ]);
+
+  // SMS acceptance & Negotiation flags
+  const [smsAcceptance, setSmsAcceptance] = useState(false);
+  const [negotiationEnabled, setNegotiationEnabled] = useState(false);
+  // Negotiation data (owner view)
+  const [negotiationData, setNegotiationData] = useState<any>(null);
+  const [negotiationResponding, setNegotiationResponding] = useState(false);
+  // Comments state
+  const [comments, setComments] = useState<any[]>([]);
+  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [commentsFilter, setCommentsFilter] = useState<'all' | 'unread' | 'unanswered'>('all');
+  const [commentItemId, setCommentItemId] = useState<string | null>(null); // focused item
+  const [newCommentText, setNewCommentText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
 
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -1111,9 +1143,14 @@ export const OffersPage: React.FC = () => {
           if (ps.warunki.warranty_rules) setWarrantyRules(ps.warunki.warranty_rules);
           if (ps.warunki.invoice_freq_rules) setInvoiceFreqRules(ps.warunki.invoice_freq_rules);
           if (ps.warunki.custom_warunki) setCustomWarunki(ps.warunki.custom_warunki);
+          if (ps.warunki.payment_term_show_on_offer !== undefined) setPaymentTermShowOnOffer(ps.warunki.payment_term_show_on_offer);
+          if (ps.warunki.invoice_freq_show_on_offer !== undefined) setInvoiceFreqShowOnOffer(ps.warunki.invoice_freq_show_on_offer);
+          if (ps.warunki.warranty_show_on_offer !== undefined) setWarrantyShowOnOffer(ps.warunki.warranty_show_on_offer);
         }
         if (ps.related_costs) setRelatedCosts(ps.related_costs);
         if (ps.show_components_in_print !== undefined) setShowComponentsInPrint(ps.show_components_in_print);
+        if (ps.sms_acceptance !== undefined) setSmsAcceptance(ps.sms_acceptance);
+        if (ps.negotiation_enabled !== undefined) setNegotiationEnabled(ps.negotiation_enabled);
 
         // Restore client data from saved print_settings and contractor
         const client = offer.client;
@@ -1226,11 +1263,84 @@ export const OffersPage: React.FC = () => {
             .order('is_primary', { ascending: false });
           setOfferClientContacts(contacts || []);
         }
+
+        // Load negotiation data if status is negotiation
+        if (offer.status === 'negotiation') {
+          const { data: negData } = await supabase
+            .from('offer_negotiations')
+            .select('*, items:offer_negotiation_items(*), costs:offer_negotiation_costs(*), warunki:offer_negotiation_warunki(*)')
+            .eq('offer_id', offerId)
+            .order('round', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          setNegotiationData(negData);
+        } else {
+          setNegotiationData(null);
+        }
+
+        // Load comments
+        const { data: commentsData } = await supabase
+          .from('offer_comments')
+          .select('*')
+          .eq('offer_id', offerId)
+          .order('created_at', { ascending: true });
+        setComments(commentsData || []);
       }
     } catch (err) {
       console.error('Error loading offer details:', err);
     }
   };
+
+  // ============================================
+  // COMMENTS HELPERS
+  // ============================================
+  const handleAddComment = async (offerId: string, itemId: string | null, parentId: string | null, text: string) => {
+    if (!text.trim() || !currentUser) return;
+    const authorName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() || 'Nadawca';
+    await supabase.from('offer_comments').insert({
+      offer_id: offerId,
+      offer_item_id: itemId || null,
+      parent_id: parentId || null,
+      author_type: 'owner',
+      author_name: authorName,
+      content: text.trim()
+    });
+    // Mark parent as answered if replying
+    if (parentId) {
+      await supabase.from('offer_comments').update({ is_answered: true }).eq('id', parentId);
+    }
+    // Reload comments
+    const { data } = await supabase
+      .from('offer_comments')
+      .select('*')
+      .eq('offer_id', offerId)
+      .order('created_at', { ascending: true });
+    setComments(data || []);
+    setNewCommentText('');
+    setReplyText('');
+    setReplyingTo(null);
+  };
+
+  const getItemCommentCount = useCallback((itemId: string) => {
+    return comments.filter(c => c.offer_item_id === itemId).length;
+  }, [comments]);
+
+  const getUnreadCount = useCallback(() => {
+    return comments.filter(c => !c.is_read && c.author_type === 'recipient').length;
+  }, [comments]);
+
+  const filteredComments = useMemo(() => {
+    let filtered = comments;
+    if (commentItemId) {
+      filtered = filtered.filter(c => c.offer_item_id === commentItemId);
+    }
+    if (commentsFilter === 'unread') {
+      filtered = filtered.filter(c => !c.is_read && c.author_type === 'recipient');
+    } else if (commentsFilter === 'unanswered') {
+      filtered = filtered.filter(c => !c.is_answered && c.author_type === 'recipient' && !c.parent_id);
+    }
+    return filtered;
+  }, [comments, commentItemId, commentsFilter]);
 
   // ============================================
   // FILTERING
@@ -1290,8 +1400,15 @@ export const OffersPage: React.FC = () => {
     const surchargeAmount = nettoAfterDiscount * (surchargePercent / 100);
     const nettoAfterSurcharges = nettoAfterDiscount + surchargeAmount;
 
-    // Related costs
-    const relatedCostsTotal = relatedCosts.reduce((s, c) => s + (c.mode === 'percent' ? nettoAfterDiscount * (c.value / 100) : c.value), 0);
+    // Related costs (monthly costs multiplied by month count)
+    const relatedCostsTotal = relatedCosts.reduce((s, c) => {
+      if (c.mode === 'percent') return s + nettoAfterDiscount * (c.value / 100);
+      if (c.frequency === 'monthly') {
+        const months = calculateMonthsBetween(c.date_from || workStartDate, c.date_to || workEndDate);
+        return s + c.value * months;
+      }
+      return s + c.value;
+    }, 0);
 
     const profit = nettoAfterSurcharges - totalCost;
     const discountPercent = totalNetto > 0 ? (totalDiscount / totalNetto) * 100 : 0;
@@ -1460,6 +1577,7 @@ export const OffersPage: React.FC = () => {
               representative_name: (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
               representative_email: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
               representative_phone: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
+              representative_position: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
               work_type_ids: offerSelectedWorkTypes
             },
             warunki: {
@@ -1469,6 +1587,9 @@ export const OffersPage: React.FC = () => {
               payment_term_apply: paymentTermApply,
               invoice_freq_apply: invoiceFreqApply,
               warranty_apply: warrantyApply,
+              payment_term_show_on_offer: paymentTermShowOnOffer,
+              invoice_freq_show_on_offer: invoiceFreqShowOnOffer,
+              warranty_show_on_offer: warrantyShowOnOffer,
               payment_term_options: paymentTermOptions,
               invoice_freq_options: invoiceFreqOptions,
               warranty_options: warrantyOptions,
@@ -1489,7 +1610,9 @@ export const OffersPage: React.FC = () => {
               logo_url: (state.currentCompany as any)?.logo_url || ''
             },
             related_costs: relatedCosts,
-            show_components_in_print: showComponentsInPrint
+            show_components_in_print: showComponentsInPrint,
+            sms_acceptance: smsAcceptance,
+            negotiation_enabled: negotiationEnabled
           }
         })
         .select()
@@ -1697,6 +1820,7 @@ export const OffersPage: React.FC = () => {
               representative_name: (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
               representative_email: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
               representative_phone: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
+              representative_position: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
               work_type_ids: offerSelectedWorkTypes
             },
             warunki: {
@@ -1706,6 +1830,9 @@ export const OffersPage: React.FC = () => {
               payment_term_apply: paymentTermApply,
               invoice_freq_apply: invoiceFreqApply,
               warranty_apply: warrantyApply,
+              payment_term_show_on_offer: paymentTermShowOnOffer,
+              invoice_freq_show_on_offer: invoiceFreqShowOnOffer,
+              warranty_show_on_offer: warrantyShowOnOffer,
               payment_term_options: paymentTermOptions,
               invoice_freq_options: invoiceFreqOptions,
               warranty_options: warrantyOptions,
@@ -1726,7 +1853,9 @@ export const OffersPage: React.FC = () => {
               logo_url: (state.currentCompany as any)?.logo_url || ''
             },
             related_costs: relatedCosts,
-            show_components_in_print: showComponentsInPrint
+            show_components_in_print: showComponentsInPrint,
+            sms_acceptance: smsAcceptance,
+            negotiation_enabled: negotiationEnabled
           }
         })
         .eq('id', selectedOffer.id);
@@ -3465,6 +3594,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         const { data } = await supabase.from('kosztorys_work_types').insert({
                           code: offerNewWorkTypeCode.trim(),
                           name: fullName,
+                          category: offerNewWorkTypeCode.trim(),
                           company_id: currentUser?.company_id,
                           is_active: true
                         }).select('id, code, name').single();
@@ -3486,6 +3616,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         const { data } = await supabase.from('kosztorys_work_types').insert({
                           code: offerNewWorkTypeCode.trim(),
                           name: fullName,
+                          category: offerNewWorkTypeCode.trim(),
                           company_id: currentUser?.company_id,
                           is_active: true
                         }).select('id, code, name').single();
@@ -4856,10 +4987,16 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Termin płatności</p>
                   {paymentTerm && (
-                    <label className="flex items-center gap-1.5 cursor-pointer" title={paymentTermApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
-                      <input type="checkbox" checked={paymentTermApply} onChange={e => setPaymentTermApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
-                      <span className={`text-[10px] font-medium ${paymentTermApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1 cursor-pointer" title={paymentTermShowOnOffer ? 'Widoczny na ofercie' : 'Ukryty na ofercie'}>
+                        <input type="checkbox" checked={paymentTermShowOnOffer} onChange={e => setPaymentTermShowOnOffer(e.target.checked)} className="w-3 h-3 text-green-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${paymentTermShowOnOffer ? 'text-green-600' : 'text-slate-400'}`}>Na ofercie</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer" title={paymentTermApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
+                        <input type="checkbox" checked={paymentTermApply} onChange={e => setPaymentTermApply(e.target.checked)} className="w-3 h-3 text-blue-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${paymentTermApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
+                      </label>
+                    </div>
                   )}
                 </div>
                 {editMode ? (
@@ -4880,10 +5017,16 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fakturowanie</p>
                   {invoiceFrequency && (
-                    <label className="flex items-center gap-1.5 cursor-pointer" title={invoiceFreqApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
-                      <input type="checkbox" checked={invoiceFreqApply} onChange={e => setInvoiceFreqApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
-                      <span className={`text-[10px] font-medium ${invoiceFreqApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1 cursor-pointer" title={invoiceFreqShowOnOffer ? 'Widoczny na ofercie' : 'Ukryty na ofercie'}>
+                        <input type="checkbox" checked={invoiceFreqShowOnOffer} onChange={e => setInvoiceFreqShowOnOffer(e.target.checked)} className="w-3 h-3 text-green-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${invoiceFreqShowOnOffer ? 'text-green-600' : 'text-slate-400'}`}>Na ofercie</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer" title={invoiceFreqApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
+                        <input type="checkbox" checked={invoiceFreqApply} onChange={e => setInvoiceFreqApply(e.target.checked)} className="w-3 h-3 text-blue-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${invoiceFreqApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
+                      </label>
+                    </div>
                   )}
                 </div>
                 {editMode ? (
@@ -4904,10 +5047,16 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Gwarancja</p>
                   {warrantyPeriod && (
-                    <label className="flex items-center gap-1.5 cursor-pointer" title={warrantyApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
-                      <input type="checkbox" checked={warrantyApply} onChange={e => setWarrantyApply(e.target.checked)} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
-                      <span className={`text-[10px] font-medium ${warrantyApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1 cursor-pointer" title={warrantyShowOnOffer ? 'Widoczny na ofercie' : 'Ukryty na ofercie'}>
+                        <input type="checkbox" checked={warrantyShowOnOffer} onChange={e => setWarrantyShowOnOffer(e.target.checked)} className="w-3 h-3 text-green-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${warrantyShowOnOffer ? 'text-green-600' : 'text-slate-400'}`}>Na ofercie</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer" title={warrantyApply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
+                        <input type="checkbox" checked={warrantyApply} onChange={e => setWarrantyApply(e.target.checked)} className="w-3 h-3 text-blue-600 rounded" disabled={!editMode} />
+                        <span className={`text-[10px] font-medium ${warrantyApply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
+                      </label>
+                    </div>
                   )}
                 </div>
                 {editMode ? (
@@ -4935,9 +5084,13 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       ) : (
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{cw.name}</p>
                       )}
-                      <div className="flex items-center gap-1 shrink-0 ml-1">
-                        <label className="flex items-center gap-1.5 cursor-pointer" title={cw.apply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
-                          <input type="checkbox" checked={cw.apply} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, apply: e.target.checked } : w))} className="w-3.5 h-3.5 text-blue-600 rounded" disabled={!editMode} />
+                      <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                        <label className="flex items-center gap-1 cursor-pointer" title={cw.show_on_offer ? 'Widoczny na ofercie' : 'Ukryty na ofercie'}>
+                          <input type="checkbox" checked={cw.show_on_offer} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, show_on_offer: e.target.checked } : w))} className="w-3 h-3 text-green-600 rounded" disabled={!editMode} />
+                          <span className={`text-[10px] font-medium ${cw.show_on_offer ? 'text-green-600' : 'text-slate-400'}`}>Na ofercie</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer" title={cw.apply ? 'Uwzględniony w kalkulacji' : 'Tylko informacyjnie'}>
+                          <input type="checkbox" checked={cw.apply} onChange={e => setCustomWarunki(prev => prev.map(w => w.id === cw.id ? { ...w, apply: e.target.checked } : w))} className="w-3 h-3 text-blue-600 rounded" disabled={!editMode} />
                           <span className={`text-[10px] font-medium ${cw.apply ? 'text-blue-600' : 'text-slate-400'}`}>Uwzgl.</span>
                         </label>
                         {editMode && (
@@ -4963,7 +5116,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             )}
             {editMode && (
               <button
-                onClick={() => setCustomWarunki(prev => [...prev, { id: `cw_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`, name: '', value: '', surcharge: 0, apply: true }])}
+                onClick={() => setCustomWarunki(prev => [...prev, { id: `cw_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`, name: '', value: '', surcharge: 0, apply: true, show_on_offer: true }])}
                 className="mt-3 flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded border border-dashed border-blue-300"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -5118,19 +5271,22 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             </h2>
             <div className="space-y-2">
               {relatedCosts.map(cost => {
-                const resolvedValue = cost.mode === 'percent' ? totals.nettoAfterDiscount * (cost.value / 100) : cost.value;
+                const monthCount = cost.frequency === 'monthly' ? calculateMonthsBetween(cost.date_from || workStartDate, cost.date_to || workEndDate) : 1;
+                const resolvedValue = cost.mode === 'percent' ? totals.nettoAfterDiscount * (cost.value / 100) : cost.value * monthCount;
                 return (
                 <div key={cost.id} className="space-y-1">
                   <div className="flex items-center gap-2">
                     {editMode ? (
                       <>
-                        <input
-                          type="checkbox"
-                          checked={cost.show_on_offer}
-                          onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, show_on_offer: e.target.checked } : c))}
-                          className="w-3.5 h-3.5 text-blue-600 rounded"
-                          title="Pokaż na ofercie"
-                        />
+                        <label className="flex items-center gap-1 shrink-0" title="Pokaż na ofercie">
+                          <input
+                            type="checkbox"
+                            checked={cost.show_on_offer}
+                            onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, show_on_offer: e.target.checked } : c))}
+                            className="w-3.5 h-3.5 text-blue-600 rounded"
+                          />
+                          <span className="text-[10px] text-slate-500">Na ofercie</span>
+                        </label>
                         <input
                           type="text"
                           value={cost.name}
@@ -5175,12 +5331,32 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         <span className="flex-1 text-sm text-slate-700">
                           {cost.name}
                           {cost.mode === 'percent' && <span className="text-xs text-slate-400 ml-1">({cost.value}%)</span>}
-                          {cost.mode === 'fixed' && cost.frequency === 'monthly' && <span className="text-xs text-slate-400 ml-1">(mies.)</span>}
+                          {cost.mode === 'fixed' && cost.frequency === 'monthly' && <span className="text-xs text-slate-400 ml-1">({cost.value} zł × {monthCount} mies.)</span>}
                         </span>
                         <span className="text-sm font-medium text-slate-900">{formatCurrency(resolvedValue)}</span>
                       </>
                     )}
                   </div>
+                  {/* Monthly date range inputs */}
+                  {editMode && cost.mode === 'fixed' && cost.frequency === 'monthly' && (
+                    <div className="flex items-center gap-2 ml-16 mt-1">
+                      <span className="text-xs text-slate-500">od:</span>
+                      <input
+                        type="date"
+                        value={cost.date_from || workStartDate}
+                        onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, date_from: e.target.value } : c))}
+                        className="px-2 py-1 border border-slate-200 rounded text-xs"
+                      />
+                      <span className="text-xs text-slate-500">do:</span>
+                      <input
+                        type="date"
+                        value={cost.date_to || workEndDate}
+                        onChange={e => setRelatedCosts(prev => prev.map(c => c.id === cost.id ? { ...c, date_to: e.target.value } : c))}
+                        className="px-2 py-1 border border-slate-200 rounded text-xs"
+                      />
+                      <span className="text-xs text-blue-600 font-medium">= {monthCount} mies.</span>
+                    </div>
+                  )}
                 </div>
               );})}
               {editMode && (
@@ -5196,7 +5372,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 <div className="flex justify-between pt-2 border-t border-slate-200">
                   <span className="text-sm font-medium text-slate-700">Suma kosztów powiązanych:</span>
                   <span className="text-sm font-bold text-slate-900">
-                    {formatCurrency(relatedCosts.reduce((s, c) => s + (c.mode === 'percent' ? totals.nettoAfterDiscount * (c.value / 100) : c.value), 0))}
+                    {formatCurrency(totals.relatedCostsTotal)}
                   </span>
                 </div>
               )}
@@ -5277,6 +5453,128 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             </div>
           </div>
 
+          {/* Negotiation panel (owner view) */}
+          {selectedOffer.status === 'negotiation' && negotiationData && (
+            <div className="p-6 border-b border-amber-200 bg-amber-50/50">
+              <h2 className="text-lg font-semibold text-amber-800 mb-4 flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                Propozycja negocjacyjna (runda {negotiationData.round})
+              </h2>
+              {negotiationData.message && (
+                <div className="mb-4 p-3 bg-white rounded-lg border border-amber-200 text-sm text-slate-700">
+                  <p className="text-xs text-slate-400 mb-1">Wiadomość od odbiorcy:</p>
+                  <p>{negotiationData.message}</p>
+                </div>
+              )}
+              {negotiationData.items && negotiationData.items.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <p className="text-sm font-semibold text-slate-700">Zmienione pozycje:</p>
+                  <div className="space-y-1.5">
+                    {negotiationData.items.map((ni: any) => {
+                      const originalItem = getAllItems(sections).find(i => i.id === ni.offer_item_id);
+                      if (!originalItem) return null;
+                      const origTotal = (ni.original_quantity || 0) * (ni.original_unit_price || 0);
+                      const propTotal = (ni.proposed_quantity || 0) * (ni.proposed_unit_price || 0);
+                      return (
+                        <div key={ni.id} className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-200">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">{originalItem.name}</p>
+                            <p className="text-xs text-slate-500">
+                              Oryginał: {ni.original_quantity} × {formatCurrency(ni.original_unit_price)} = {formatCurrency(origTotal)}
+                            </p>
+                            <p className="text-xs text-amber-700 font-medium">
+                              Propozycja: {ni.proposed_quantity} × {formatCurrency(ni.proposed_unit_price)} = {formatCurrency(propTotal)}
+                              <span className={`ml-2 ${propTotal < origTotal ? 'text-red-500' : 'text-green-600'}`}>
+                                ({propTotal >= origTotal ? '+' : ''}{formatCurrency(propTotal - origTotal)})
+                              </span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {ni.status === 'pending' ? (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    await supabase.from('offer_negotiation_items').update({ status: 'accepted' }).eq('id', ni.id);
+                                    loadOfferDetails(selectedOffer.id);
+                                    showToast('Pozycja zaakceptowana', 'success');
+                                  }}
+                                  className="p-1.5 bg-green-100 text-green-700 rounded hover:bg-green-200 transition"
+                                  title="Akceptuj"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await supabase.from('offer_negotiation_items').update({ status: 'rejected' }).eq('id', ni.id);
+                                    loadOfferDetails(selectedOffer.id);
+                                    showToast('Pozycja odrzucona', 'info');
+                                  }}
+                                  className="p-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+                                  title="Odrzuć"
+                                >
+                                  <XCircle className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                ni.status === 'accepted' ? 'bg-green-100 text-green-700' :
+                                ni.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                'bg-blue-100 text-blue-700'
+                              }`}>
+                                {ni.status === 'accepted' ? '✓ Zaakceptowano' : ni.status === 'rejected' ? '✗ Odrzucono' : '✎ Kontr-propozycja'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Send response button */}
+              {negotiationData.items?.some((ni: any) => ni.status !== 'pending') && (
+                <div className="flex items-center gap-3 mt-4">
+                  <button
+                    disabled={negotiationResponding}
+                    onClick={async () => {
+                      setNegotiationResponding(true);
+                      try {
+                        await supabase.from('offer_negotiations').update({ status: 'responded', updated_at: new Date().toISOString() }).eq('id', negotiationData.id);
+                        // Check if all items are resolved and all accepted → status back to sent, otherwise stay in negotiation
+                        const allResolved = negotiationData.items.every((ni: any) => ni.status !== 'pending');
+                        const allAccepted = negotiationData.items.every((ni: any) => ni.status === 'accepted');
+                        if (allResolved) {
+                          // Apply accepted changes to offer items
+                          for (const ni of negotiationData.items.filter((n: any) => n.status === 'accepted')) {
+                            await supabase.from('offer_items').update({
+                              quantity: ni.proposed_quantity,
+                              unit_price: ni.proposed_unit_price
+                            }).eq('id', ni.offer_item_id);
+                          }
+                          await supabase.from('offers').update({ status: allAccepted ? 'sent' : 'sent' }).eq('id', selectedOffer.id);
+                        }
+                        showToast('Odpowiedź wysłana', 'success');
+                        loadData();
+                        loadOfferDetails(selectedOffer.id);
+                      } catch (err) {
+                        showToast('Błąd wysyłania odpowiedzi', 'error');
+                      } finally {
+                        setNegotiationResponding(false);
+                      }
+                    }}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition disabled:opacity-50"
+                  >
+                    {negotiationResponding ? <Loader2 className="w-4 h-4 inline-block mr-1 animate-spin" /> : <Send className="w-4 h-4 inline-block mr-1" />}
+                    Wyślij odpowiedź
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    {negotiationData.items.filter((ni: any) => ni.status === 'pending').length} pozycji oczekuje na decyzję
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Public link */}
           {selectedOffer.public_url && (
             <div className="p-6 border-b border-slate-200">
@@ -5306,6 +5604,37 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   Otwórz
                 </a>
               </div>
+              {/* Offer flags: SMS & Negotiation */}
+              {editMode && (
+                <div className="mt-4 flex items-center gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={negotiationEnabled} onChange={e => setNegotiationEnabled(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                    <span className="text-sm text-slate-700 font-medium">Do negocjacji</span>
+                    <span className="text-xs text-slate-400">— odbiorca może złożyć kontrpropozycję</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={smsAcceptance} onChange={e => setSmsAcceptance(e.target.checked)} className="w-4 h-4 text-green-600 rounded" />
+                    <span className="text-sm text-slate-700 font-medium">Akceptacja SMS</span>
+                    <span className="text-xs text-slate-400">— wymaga kodu SMS do zaakceptowania</span>
+                  </label>
+                </div>
+              )}
+              {!editMode && (negotiationEnabled || smsAcceptance) && (
+                <div className="mt-4 flex items-center gap-4">
+                  {negotiationEnabled && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      Do negocjacji
+                    </span>
+                  )}
+                  {smsAcceptance && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-full border border-green-200">
+                      <Phone className="w-3.5 h-3.5" />
+                      Akceptacja SMS
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -5393,6 +5722,170 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             </div>
           </div>
         </div>
+
+        {/* Comments toggle button */}
+        <button
+          onClick={() => setShowCommentsPanel(!showCommentsPanel)}
+          className="fixed right-4 top-20 z-50 flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-lg shadow-lg hover:bg-slate-50 transition"
+        >
+          <MessageSquare className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-medium text-slate-700">Komentarze</span>
+          {getUnreadCount() > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full">{getUnreadCount()}</span>
+          )}
+        </button>
+
+        {/* Comments sliding panel */}
+        {showCommentsPanel && (
+          <div className="fixed right-0 top-0 bottom-0 w-[350px] bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col">
+            {/* Panel header */}
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-blue-600" />
+                Komentarze
+                {comments.length > 0 && <span className="text-xs text-slate-400">({comments.length})</span>}
+              </h3>
+              <button onClick={() => setShowCommentsPanel(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+            {/* Filter tabs */}
+            <div className="px-4 py-2 border-b border-slate-100 flex gap-1 shrink-0">
+              {(['all', 'unread', 'unanswered'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setCommentsFilter(f)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition ${commentsFilter === f ? 'bg-blue-100 text-blue-700' : 'text-slate-500 hover:bg-slate-100'}`}
+                >
+                  {f === 'all' ? 'Wszystkie' : f === 'unread' ? 'Nieprzeczytane' : 'Bez odpowiedzi'}
+                </button>
+              ))}
+            </div>
+            {/* Item filter */}
+            {commentItemId && (
+              <div className="px-4 py-2 border-b border-slate-100 bg-blue-50 flex items-center justify-between shrink-0">
+                <span className="text-xs text-blue-700">Filtr: pozycja</span>
+                <button onClick={() => setCommentItemId(null)} className="text-xs text-blue-600 hover:underline">Pokaż wszystkie</button>
+              </div>
+            )}
+            {/* Comments list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {filteredComments.filter(c => !c.parent_id).length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">Brak komentarzy</p>
+              ) : (
+                filteredComments.filter(c => !c.parent_id).map(comment => {
+                  const replies = comments.filter(c => c.parent_id === comment.id);
+                  const isCollapsed = collapsedThreads.has(comment.id);
+                  return (
+                    <div key={comment.id} className={`rounded-lg border ${comment.author_type === 'recipient' && !comment.is_read ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200'}`}>
+                      <div className="p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-1.5">
+                            {comment.author_type === 'recipient' && !comment.is_read && (
+                              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                            )}
+                            <span className={`text-xs font-medium ${comment.author_type === 'owner' ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {comment.author_name || (comment.author_type === 'owner' ? 'Ty' : 'Odbiorca')}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {new Date(comment.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700">{comment.content}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => { setReplyingTo(replyingTo === comment.id ? null : comment.id); setReplyText(''); }}
+                            className="text-[11px] text-blue-600 hover:underline"
+                          >
+                            Odpowiedz
+                          </button>
+                          {replies.length > 0 && (
+                            <button
+                              onClick={() => setCollapsedThreads(prev => {
+                                const next = new Set(prev);
+                                if (next.has(comment.id)) next.delete(comment.id);
+                                else next.add(comment.id);
+                                return next;
+                              })}
+                              className="text-[11px] text-slate-500 hover:underline"
+                            >
+                              {isCollapsed ? `▸ ${replies.length} odp.` : `▾ ${replies.length} odp.`}
+                            </button>
+                          )}
+                          {comment.author_type === 'recipient' && !comment.is_read && (
+                            <button
+                              onClick={async () => {
+                                await supabase.from('offer_comments').update({ is_read: true }).eq('id', comment.id);
+                                setComments(prev => prev.map(c => c.id === comment.id ? { ...c, is_read: true } : c));
+                              }}
+                              className="text-[11px] text-slate-400 hover:underline"
+                            >
+                              Oznacz jako przeczytane
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Replies */}
+                      {!isCollapsed && replies.map(reply => (
+                        <div key={reply.id} className="ml-4 p-2.5 border-t border-slate-100">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs font-medium ${reply.author_type === 'owner' ? 'text-blue-700' : 'text-amber-700'}`}>
+                              {reply.author_name || (reply.author_type === 'owner' ? 'Ty' : 'Odbiorca')}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {new Date(reply.created_at).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-600">{reply.content}</p>
+                        </div>
+                      ))}
+                      {/* Reply form */}
+                      {replyingTo === comment.id && (
+                        <div className="p-2 border-t border-slate-100">
+                          <textarea
+                            value={replyText}
+                            onChange={e => setReplyText(e.target.value)}
+                            placeholder="Napisz odpowiedź..."
+                            className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs resize-none"
+                            rows={2}
+                          />
+                          <div className="flex justify-end gap-1 mt-1">
+                            <button onClick={() => setReplyingTo(null)} className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded">Anuluj</button>
+                            <button
+                              onClick={() => selectedOffer && handleAddComment(selectedOffer.id, comment.offer_item_id, comment.id, replyText)}
+                              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                              disabled={!replyText.trim()}
+                            >
+                              Wyślij
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {/* New comment form */}
+            <div className="p-4 border-t border-slate-200 shrink-0">
+              <textarea
+                value={newCommentText}
+                onChange={e => setNewCommentText(e.target.value)}
+                placeholder="Napisz komentarz..."
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none"
+                rows={2}
+              />
+              <button
+                onClick={() => selectedOffer && handleAddComment(selectedOffer.id, commentItemId, null, newCommentText)}
+                className="mt-2 w-full px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+                disabled={!newCommentText.trim()}
+              >
+                Dodaj komentarz
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Sticky bottom summary bar */}
         <div className="fixed bottom-0 left-0 lg:left-64 right-0 bg-white border-t-2 border-blue-200 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] z-40">

@@ -503,21 +503,24 @@ export const OFFER_STATUS_LABELS: Record<OfferStatus, string> = {
   draft: 'Wersja robocza',
   sent: 'Wysłana',
   accepted: 'Zaakceptowana',
-  rejected: 'Odrzucona'
+  rejected: 'Odrzucona',
+  negotiation: 'Negocjacja'
 };
 
 export const OFFER_STATUS_COLORS: Record<OfferStatus, string> = {
   draft: 'bg-slate-100 text-slate-700 border-slate-200',
   sent: 'bg-blue-100 text-blue-700 border-blue-200',
   accepted: 'bg-green-100 text-green-700 border-green-200',
-  rejected: 'bg-red-100 text-red-700 border-red-200'
+  rejected: 'bg-red-100 text-red-700 border-red-200',
+  negotiation: 'bg-amber-100 text-amber-700 border-amber-200'
 };
 
 export const OFFER_STATUS_ICONS: Record<OfferStatus, string> = {
   draft: 'FileEdit',
   sent: 'Send',
   accepted: 'CheckCircle',
-  rejected: 'XCircle'
+  rejected: 'XCircle',
+  negotiation: 'MessageSquare'
 };
 
 // =============================================
