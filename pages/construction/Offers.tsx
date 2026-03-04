@@ -329,6 +329,7 @@ export const OffersPage: React.FC = () => {
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [requestSubcontractorId, setRequestSubcontractorId] = useState('');
   const [requestName, setRequestName] = useState('');
+  const [requestOfferId, setRequestOfferId] = useState('');
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
   const [creatingRequest, setCreatingRequest] = useState(false);
 
@@ -4583,11 +4584,12 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 >
                   <Settings className="w-4 h-4 text-slate-500" />
                 </button>
-                {!editMode && selectedOffer.status !== 'draft' && (
+                {!editMode && (
                   <button
                     onClick={() => {
                       setRequestType('all');
                       setRequestStep('type');
+                      setRequestOfferId(selectedOffer.id);
                       setRequestName(`Zapytanie — ${selectedOffer.name || selectedOffer.number || ''}`);
                       setRequestSubcontractorId('');
                       setShowCreateRequestModal(true);
@@ -8008,7 +8010,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
       )}
 
       {/* Create Offer Request (Zapytanie ofertowe) Modal */}
-      {showCreateRequestModal && selectedOffer && (
+      {showCreateRequestModal && (() => {
+        const reqOffer = selectedOffer || offers.find(o => o.id === requestOfferId) || null;
+        return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
             <div className="p-4 border-b border-slate-200 flex justify-between items-center">
@@ -8020,6 +8024,25 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               {requestStep === 'type' && (
                 <>
+                  {/* Offer selector (when opened from tab, not from offer detail) */}
+                  {!selectedOffer && (
+                    <div>
+                      <label className="text-sm font-medium text-slate-700 mb-1 block">Oferta źródłowa</label>
+                      <select
+                        value={requestOfferId}
+                        onChange={e => {
+                          setRequestOfferId(e.target.value);
+                          const off = offers.find(o => o.id === e.target.value);
+                          if (off) setRequestName(`Zapytanie — ${off.name || off.number || ''}`);
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                      >
+                        <option value="">-- Wybierz ofertę --</option>
+                        {offers.map(o => <option key={o.id} value={o.id}>{o.name || o.number} {o.status !== 'draft' ? '' : '(szkic)'}</option>)}
+                      </select>
+                    </div>
+                  )}
+
                   {/* Request name */}
                   <div>
                     <label className="text-sm font-medium text-slate-700 mb-1 block">Nazwa zapytania</label>
@@ -8037,18 +8060,18 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                     <label className="text-sm font-medium text-slate-700 mb-2 block">Typ zapytania</label>
                     <div className="grid grid-cols-2 gap-3">
                       {([
-                        { value: 'robota' as const, label: 'Robota', desc: 'Tylko robocizna', icon: Hammer, color: 'blue' },
-                        { value: 'materialy' as const, label: 'Materiały', desc: 'Tylko materiały', icon: Package, color: 'amber' },
-                        { value: 'sprzet' as const, label: 'Sprzęt', desc: 'Tylko sprzęt', icon: Wrench, color: 'green' },
-                        { value: 'all' as const, label: 'Cały zakres', desc: 'Wszystkie pozycje', icon: Briefcase, color: 'indigo' },
+                        { value: 'robota' as const, label: 'Robota', desc: 'Tylko robocizna', icon: Hammer, activeBorder: 'border-blue-500', activeBg: 'bg-blue-50', activeText: 'text-blue-600' },
+                        { value: 'materialy' as const, label: 'Materiały', desc: 'Tylko materiały', icon: Package, activeBorder: 'border-amber-500', activeBg: 'bg-amber-50', activeText: 'text-amber-600' },
+                        { value: 'sprzet' as const, label: 'Sprzęt', desc: 'Tylko sprzęt', icon: Wrench, activeBorder: 'border-green-500', activeBg: 'bg-green-50', activeText: 'text-green-600' },
+                        { value: 'all' as const, label: 'Cały zakres', desc: 'Wszystkie pozycje', icon: Briefcase, activeBorder: 'border-indigo-500', activeBg: 'bg-indigo-50', activeText: 'text-indigo-600' },
                       ]).map(opt => (
                         <button
                           key={opt.value}
                           onClick={() => setRequestType(opt.value)}
-                          className={`p-4 rounded-lg border-2 text-left transition ${requestType === opt.value ? `border-${opt.color}-500 bg-${opt.color}-50` : 'border-slate-200 hover:border-slate-300'}`}
+                          className={`p-4 rounded-lg border-2 text-left transition ${requestType === opt.value ? `${opt.activeBorder} ${opt.activeBg}` : 'border-slate-200 hover:border-slate-300'}`}
                         >
                           <div className="flex items-center gap-2 mb-1">
-                            <opt.icon className={`w-5 h-5 ${requestType === opt.value ? `text-${opt.color}-600` : 'text-slate-400'}`} />
+                            <opt.icon className={`w-5 h-5 ${requestType === opt.value ? opt.activeText : 'text-slate-400'}`} />
                             <span className="font-medium text-slate-900">{opt.label}</span>
                           </div>
                           <p className="text-xs text-slate-500">{opt.desc}</p>
@@ -8094,7 +8117,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Oferta źródłowa:</span>
-                      <span className="text-sm font-medium">{selectedOffer.name || selectedOffer.number}</span>
+                      <span className="text-sm font-medium">{reqOffer?.name || reqOffer?.number || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Typ zapytania:</span>
@@ -8162,7 +8185,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <div className="flex gap-2">
                     <button
                       onClick={async () => {
-                        if (!currentUser || !selectedOffer) return;
+                        if (!currentUser || !reqOffer) return;
                         setCreatingRequest(true);
                         try {
                           const token = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
@@ -8175,17 +8198,17 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           );
                           const { data: newReq, error } = await supabase.from('offer_requests').insert({
                             company_id: currentUser.company_id,
-                            offer_id: selectedOffer.id,
+                            offer_id: reqOffer.id,
                             subcontractor_id: requestSubcontractorId || null,
-                            name: requestName || `Zapytanie — ${selectedOffer.name}`,
+                            name: requestName || `Zapytanie — ${reqOffer.name}`,
                             request_type: requestType,
                             status: 'draft',
                             share_token: token,
                             created_by_id: currentUser.id,
                             print_settings: {
                               items: filteredItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, section_name: i.section_name })),
-                              offer_name: selectedOffer.name,
-                              offer_number: selectedOffer.number,
+                              offer_name: reqOffer.name,
+                              offer_number: reqOffer.number,
                               company_data: {
                                 name: state.currentCompany?.name || '',
                                 nip: (state.currentCompany as any)?.nip || (state.currentCompany as any)?.tax_id || '',
@@ -8213,7 +8236,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                     </button>
                     <button
                       onClick={async () => {
-                        if (!currentUser || !selectedOffer) return;
+                        if (!currentUser || !reqOffer) return;
                         setCreatingRequest(true);
                         try {
                           const token = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
@@ -8226,9 +8249,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           );
                           const { data: newReq, error } = await supabase.from('offer_requests').insert({
                             company_id: currentUser.company_id,
-                            offer_id: selectedOffer.id,
+                            offer_id: reqOffer.id,
                             subcontractor_id: requestSubcontractorId || null,
-                            name: requestName || `Zapytanie — ${selectedOffer.name}`,
+                            name: requestName || `Zapytanie — ${reqOffer.name}`,
                             request_type: requestType,
                             status: 'sent',
                             share_token: token,
@@ -8236,8 +8259,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                             created_by_id: currentUser.id,
                             print_settings: {
                               items: filteredItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, section_name: i.section_name })),
-                              offer_name: selectedOffer.name,
-                              offer_number: selectedOffer.number,
+                              offer_name: reqOffer.name,
+                              offer_number: reqOffer.number,
                               company_data: {
                                 name: state.currentCompany?.name || '',
                                 nip: (state.currentCompany as any)?.nip || (state.currentCompany as any)?.tax_id || '',
@@ -8277,7 +8300,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   </button>
                   <button
                     onClick={() => setRequestStep('preview')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    disabled={!reqOffer}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Dalej — podgląd
                   </button>
@@ -8286,7 +8310,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </>
   );
 };
