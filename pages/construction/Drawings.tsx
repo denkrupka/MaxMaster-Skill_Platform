@@ -9,7 +9,8 @@ import {
   CloudUpload, MousePointer, FileDown, AlertTriangle,
   Camera, MessageSquare, Scissors, Link2, History,
   Save, Undo2, ScanLine, Filter, MapPin, Image,
-  ExternalLink, Crosshair, LayoutList
+  ExternalLink, Crosshair, LayoutList, BookOpen,
+  Hash, CloudLightning, MessageCircleWarning
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -54,7 +55,7 @@ interface FolderWithPlans extends PlanFolder {
 
 interface Annotation {
   id?: string;
-  type: 'freehand' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'measurement' | 'polyline' | 'polygon';
+  type: 'freehand' | 'line' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'measurement' | 'polyline' | 'polygon' | 'cloud' | 'callout';
   geometry: any;
   strokeColor: string;
   strokeWidth: number;
@@ -79,7 +80,7 @@ interface PlanPin {
   created_by_id: string; created_at: string;
 }
 
-type AnnotationTool = 'pointer' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler' | 'comment' | 'camera' | 'screenshot';
+type AnnotationTool = 'pointer' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler' | 'comment' | 'camera' | 'screenshot' | 'cloud' | 'callout' | 'count';
 type RulerMode = 'single' | 'polyline' | 'area';
 
 // ==================== HELPERS ====================
@@ -212,6 +213,54 @@ const renderAnnotationSvg = (ann: Annotation, idx: number, isActive: boolean, on
         {label && <text transform={`translate(${mx},${my}) rotate(${textAngle})`} dy={-6} fill="#fff" fontSize="12" textAnchor="middle" fontFamily="Arial" fontWeight="700" paintOrder="stroke" stroke={ann.strokeColor} strokeWidth={3}>{label}</text>}
       </g>;
     }
+    case 'cloud': {
+      const { x, y, w, h } = ann.geometry;
+      if (!w || !h || (w < 5 && h < 5)) return null;
+      const perimeter = 2 * (w + h);
+      const bumpR = 14;
+      const numTop = Math.max(2, Math.round(w / (bumpR * 2)));
+      const numRight = Math.max(2, Math.round(h / (bumpR * 2)));
+      const numBottom = numTop;
+      const numLeft = numRight;
+      const pts: [number, number][] = [];
+      for (let i = 0; i <= numTop; i++) pts.push([x + (i * w / numTop), y]);
+      for (let i = 1; i <= numRight; i++) pts.push([x + w, y + (i * h / numRight)]);
+      for (let i = 1; i <= numBottom; i++) pts.push([x + w - (i * w / numBottom), y + h]);
+      for (let i = 1; i < numLeft; i++) pts.push([x, y + h - (i * h / numLeft)]);
+      let d = `M ${pts[0][0]},${pts[0][1]}`;
+      for (let i = 1; i < pts.length; i++) {
+        const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const r = dist * 0.55;
+        d += ` A ${r},${r} 0 0,1 ${pts[i][0]},${pts[i][1]}`;
+      }
+      const last = pts[pts.length - 1];
+      const dx0 = pts[0][0] - last[0], dy0 = pts[0][1] - last[1];
+      const d0 = Math.sqrt(dx0 * dx0 + dy0 * dy0);
+      d += ` A ${d0 * 0.55},${d0 * 0.55} 0 0,1 ${pts[0][0]},${pts[0][1]} Z`;
+      return <path key={idx} d={d} {...baseProps} />;
+    }
+    case 'callout': {
+      const { x1, y1, x2, y2 } = ann.geometry;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const hl = Math.max(ann.strokeWidth * 3, 8);
+      const ax1 = x2 - hl * Math.cos(angle - Math.PI / 6);
+      const ay1 = y2 - hl * Math.sin(angle - Math.PI / 6);
+      const ax2 = x2 - hl * Math.cos(angle + Math.PI / 6);
+      const ay2 = y2 - hl * Math.sin(angle + Math.PI / 6);
+      const text = ann.textContent || '';
+      const textW = Math.max(text.length * 7.5 + 16, 40);
+      return <g key={idx} onClick={onSelect} style={{ cursor: 'pointer' }}>
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={ann.strokeColor} strokeWidth={ann.strokeWidth} />
+        <polygon points={`${x2},${y2} ${ax1},${ay1} ${ax2},${ay2}`} fill={ann.strokeColor} />
+        {text && <>
+          <rect x={x1 - 6} y={y1 - 20} width={textW} height={24} rx={4}
+            fill="white" stroke={ann.strokeColor} strokeWidth={1.5} />
+          <text x={x1 + 2} y={y1 - 3} fill={ann.strokeColor} fontSize="12"
+            fontFamily="Arial, sans-serif" fontWeight="600">{text}</text>
+        </>}
+      </g>;
+    }
     default: return null;
   }
 };
@@ -283,6 +332,9 @@ export const DrawingsPage: React.FC = () => {
   // Save/Undo
   const savedAnnotationsRef = useRef<Annotation[]>([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Count tool
+  const [countItems, setCountItems] = useState<{ x: number; y: number }[]>([]);
 
   // Links
   const [showLinksModal, setShowLinksModal] = useState(false);
@@ -363,12 +415,49 @@ export const DrawingsPage: React.FC = () => {
     };
   }, []);
 
-  // Escape key for fullscreen
+  // Keyboard shortcuts
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isFullscreen) setIsFullscreen(false); };
+    const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Ctrl+S: Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (hasUnsavedChanges) handleSaveAll(); return; }
+      // Ctrl+Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (hasUnsavedChanges) handleUndo(); return; }
+      // Delete: remove selected annotation
+      if (e.key === 'Delete' && selectedAnnotation >= 0) { deleteAnnotation(selectedAnnotation); return; }
+      // Escape: cancel current tool or exit fullscreen
+      if (e.key === 'Escape') {
+        if (isFullscreen) { setIsFullscreen(false); return; }
+        setActiveTool('pointer'); setPolylinePoints([]); setPolylineCursorPt(null);
+        setTextInputPos(null); setCommentInputPos(null); setPhotoModalPos(null);
+        setScreenshotRect(null); setCountItems([]);
+        if (calibrationMode) { setCalibrationMode(false); setCalibrationPoints([]); }
+        return;
+      }
+      // Tool shortcuts (no modifier keys)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        switch (e.key.toLowerCase()) {
+          case 'v': setActiveTool('pointer'); setPolylinePoints([]); break;
+          case 'p': setActiveTool('pen'); break;
+          case 'h': setActiveTool('highlighter'); break;
+          case 'r': setActiveTool('rectangle'); break;
+          case 'o': setActiveTool('ellipse'); break;
+          case 'a': setActiveTool('arrow'); break;
+          case 'l': setActiveTool('line'); break;
+          case 't': setActiveTool('text'); break;
+          case 'm': setActiveTool('ruler'); break;
+          case 'c': setActiveTool('comment'); break;
+          case 'e': setActiveTool('eraser'); break;
+          case 'k': setActiveTool('cloud'); break;
+          case 'b': setActiveTool('callout'); break;
+          case 'n': setActiveTool('count'); setCountItems([]); break;
+        }
+      }
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [isFullscreen]);
+  }, [isFullscreen, hasUnsavedChanges, selectedAnnotation, calibrationMode]);
 
   // ==================== SVG COORDINATE HELPER ====================
 
@@ -942,6 +1031,11 @@ export const DrawingsPage: React.FC = () => {
       setPhotoModalPos(pt);
       return;
     }
+    if (activeTool === 'count') {
+      const pt = getSvgPoint(e);
+      setCountItems(prev => [...prev, pt]);
+      return;
+    }
     // Polyline/area ruler: click-based, not drag
     if (activeTool === 'ruler' && rulerMode !== 'single') {
       const pt = getSvgPoint(e);
@@ -974,6 +1068,16 @@ export const DrawingsPage: React.FC = () => {
         type: 'ellipse', geometry: { cx: pt.x, cy: pt.y, rx: 0, ry: 0, startX: pt.x, startY: pt.y },
         strokeColor: annColor, strokeWidth: annWidth, fillColor: annColor, fillOpacity: 0.1,
       });
+    } else if (activeTool === 'cloud') {
+      setCurrentDrawing({
+        type: 'cloud', geometry: { x: pt.x, y: pt.y, w: 0, h: 0, startX: pt.x, startY: pt.y },
+        strokeColor: annColor, strokeWidth: annWidth, fillColor: annColor, fillOpacity: 0.05,
+      });
+    } else if (activeTool === 'callout') {
+      setCurrentDrawing({
+        type: 'callout', geometry: { x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y },
+        strokeColor: annColor, strokeWidth: annWidth,
+      });
     } else if (activeTool === 'line' || activeTool === 'arrow' || (activeTool === 'ruler' && rulerMode === 'single')) {
       const type = activeTool === 'ruler' ? 'measurement' : activeTool;
       setCurrentDrawing({
@@ -1000,13 +1104,16 @@ export const DrawingsPage: React.FC = () => {
       if (!prev) return null;
       if (prev.type === 'freehand') {
         return { ...prev, geometry: { ...prev.geometry, points: [...prev.geometry.points, [pt.x, pt.y]] } };
+      } else if (prev.type === 'cloud') {
+        const sx = prev.geometry.startX, sy = prev.geometry.startY;
+        return { ...prev, geometry: { ...prev.geometry, x: Math.min(sx, pt.x), y: Math.min(sy, pt.y), w: Math.abs(pt.x - sx), h: Math.abs(pt.y - sy) } };
       } else if (prev.type === 'rectangle') {
         const sx = prev.geometry.startX, sy = prev.geometry.startY;
         return { ...prev, geometry: { ...prev.geometry, x: Math.min(sx, pt.x), y: Math.min(sy, pt.y), w: Math.abs(pt.x - sx), h: Math.abs(pt.y - sy) } };
       } else if (prev.type === 'ellipse') {
         const sx = prev.geometry.startX, sy = prev.geometry.startY;
         return { ...prev, geometry: { ...prev.geometry, cx: (sx + pt.x) / 2, cy: (sy + pt.y) / 2, rx: Math.abs(pt.x - sx) / 2, ry: Math.abs(pt.y - sy) / 2 } };
-      } else if (['line', 'arrow', 'measurement'].includes(prev.type)) {
+      } else if (['line', 'arrow', 'measurement', 'callout'].includes(prev.type)) {
         return { ...prev, geometry: { ...prev.geometry, x2: pt.x, y2: pt.y } };
       }
       return prev;
@@ -1077,9 +1184,17 @@ export const DrawingsPage: React.FC = () => {
     if (ann.type === 'freehand' && ann.geometry.points.length < 3) { setCurrentDrawing(null); return; }
     if (ann.type === 'rectangle' && ann.geometry.w < 3 && ann.geometry.h < 3) { setCurrentDrawing(null); return; }
     if (ann.type === 'ellipse' && ann.geometry.rx < 3 && ann.geometry.ry < 3) { setCurrentDrawing(null); return; }
+    if (ann.type === 'cloud' && ann.geometry.w < 10 && ann.geometry.h < 10) { setCurrentDrawing(null); return; }
     // Clean geometry
     if (ann.type === 'rectangle') { const { startX, startY, ...rest } = ann.geometry; ann.geometry = rest; }
     if (ann.type === 'ellipse') { const { startX, startY, ...rest } = ann.geometry; ann.geometry = rest; }
+    if (ann.type === 'cloud') { const { startX, startY, ...rest } = ann.geometry; ann.geometry = rest; }
+    // Callout: prompt for text
+    if (ann.type === 'callout') {
+      const text = prompt('Wpisz tekst odnośnika:');
+      if (!text) { setCurrentDrawing(null); return; }
+      ann.textContent = text;
+    }
     saveAnnotation(ann);
     setCurrentDrawing(null);
   }, [isDrawing, currentDrawing, selectedPlan, scaleUnit]);
@@ -1230,7 +1345,7 @@ export const DrawingsPage: React.FC = () => {
       {/* TOP BAR */}
       <div className="bg-white border-b-[3px] border-blue-600 px-4 py-2 flex items-center gap-3 flex-shrink-0">
         <button onClick={() => { setSelectedProject(null); setSelectedPlan(null); setSelectedFolder(null); setFolders([]); setAllPlans([]); setPdfDoc(null); }}
-          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Powrót">
+          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Powrót do listy projektów">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <button onClick={e => { e.stopPropagation(); setCreateName(''); setCreateFolderId(selectedFolder?.id || ''); setCreateFile(null); setShowCreateModal(true); }}
@@ -1261,9 +1376,9 @@ export const DrawingsPage: React.FC = () => {
             <span className="font-semibold text-slate-700 text-sm">Plany i rzuty</span>
             <div className="flex items-center gap-0.5">
               <button onClick={e => { e.stopPropagation(); setShowNewFolderInput(!showNewFolderInput); }}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Nowa grupa"><FolderPlus className="w-4 h-4" /></button>
+                className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Utwórz nową grupę planów"><FolderPlus className="w-4 h-4" /></button>
               <button onClick={e => { e.stopPropagation(); setShowSortModal(true); }}
-                className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Sortuj"><ArrowUpDown className="w-4 h-4" /></button>
+                className="p-1.5 hover:bg-slate-200 rounded text-slate-500" title="Sortuj plany alfabetycznie"><ArrowUpDown className="w-4 h-4" /></button>
             </div>
           </div>
           {/* Search in left panel */}
@@ -1378,10 +1493,10 @@ export const DrawingsPage: React.FC = () => {
             <div className={`flex-1 flex flex-col overflow-hidden ${isFullscreen ? 'fixed inset-0 z-[80] bg-white' : ''}`}>
               {/* Viewer toolbar */}
               <div className="px-3 py-1.5 border-b border-slate-200 flex items-center gap-1 flex-shrink-0 bg-slate-50" onClick={e => e.stopPropagation()}>
-                <button onClick={() => setZoom(z => Math.min(z + 25, 500))} className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Powiększ"><ZoomIn className="w-4 h-4" /></button>
+                <button onClick={() => setZoom(z => Math.min(z + 25, 500))} className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Powiększ (Ctrl + kółko myszy)"><ZoomIn className="w-4 h-4" /></button>
                 <span className="text-xs text-slate-500 w-10 text-center font-mono">{zoom}%</span>
-                <button onClick={() => setZoom(z => Math.max(z - 25, 25))} className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pomniejsz"><ZoomOut className="w-4 h-4" /></button>
-                <button onClick={() => setZoom(100)} className="p-1.5 hover:bg-white rounded-lg text-slate-600 text-xs font-medium" title="100%">1:1</button>
+                <button onClick={() => setZoom(z => Math.max(z - 25, 25))} className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pomniejsz (Ctrl + kółko myszy)"><ZoomOut className="w-4 h-4" /></button>
+                <button onClick={() => setZoom(100)} className="p-1.5 hover:bg-white rounded-lg text-slate-600 text-xs font-medium" title="Resetuj powiększenie do 100%">1:1</button>
                 <div className="w-px h-5 bg-slate-200 mx-1" />
                 <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pełny ekran">
                   {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -1397,10 +1512,10 @@ export const DrawingsPage: React.FC = () => {
                 )}
                 <div className="flex-1" />
                 <button onClick={() => { loadVersions(selectedPlan!.id); setShowVersionModal(true); }}
-                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Historia wersji"><History className="w-4 h-4" /></button>
+                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Historia wersji pliku"><History className="w-4 h-4" /></button>
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowUpdateDropdown(!showUpdateDropdown); }}
-                    className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Prześlij nową wersję"><Upload className="w-4 h-4" /></button>
+                    className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Prześlij nową wersję pliku"><Upload className="w-4 h-4" /></button>
                   {showUpdateDropdown && (
                     <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
                       <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
@@ -1411,12 +1526,12 @@ export const DrawingsPage: React.FC = () => {
                   )}
                 </div>
                 <a href={selectedPlan!.file_url} download={selectedPlan!.original_filename || selectedPlan!.name}
-                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pobierz" target="_blank" rel="noopener noreferrer">
+                  className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Pobierz plik na dysk" target="_blank" rel="noopener noreferrer">
                   <Download className="w-4 h-4" />
                 </a>
                 <div className="w-px h-5 bg-slate-200 mx-1" />
                 <button onClick={() => setShowNavigator(!showNavigator)}
-                  className={`p-1.5 rounded-lg transition ${showNavigator ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Nawigator">
+                  className={`p-1.5 rounded-lg transition ${showNavigator ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Panel nawigacji — lista oznaczeń">
                   <LayoutList className="w-4 h-4" />
                 </button>
               </div>
@@ -1450,7 +1565,7 @@ export const DrawingsPage: React.FC = () => {
                       {/* SVG Annotation Overlay */}
                       <svg ref={svgRef} viewBox={`0 0 ${planNatW} ${planNatH}`}
                         className="absolute top-0 left-0 w-full h-full"
-                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'screenshot' ? 'crosshair' : activeTool === 'comment' ? 'crosshair' : activeTool === 'camera' ? 'crosshair' : 'crosshair' }}
+                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'eraser' ? 'not-allowed' : 'crosshair' }}
                         onMouseDown={handleSvgMouseDown} onMouseMove={handleSvgMouseMove} onMouseUp={handleSvgMouseUp}
                         onMouseLeave={handleSvgMouseUp} onDoubleClick={handleSvgDoubleClick}>
                         {/* Saved annotations */}
@@ -1539,6 +1654,13 @@ export const DrawingsPage: React.FC = () => {
                             )}
                           </g>
                         )}
+                        {/* Count markers */}
+                        {countItems.map((item, i) => (
+                          <g key={`count-${i}`}>
+                            <circle cx={item.x} cy={item.y} r={14} fill="#ef4444" stroke="white" strokeWidth={2} />
+                            <text x={item.x} y={item.y + 5} fill="white" fontSize="12" fontWeight="700" textAnchor="middle" fontFamily="Arial">{i + 1}</text>
+                          </g>
+                        ))}
                         {/* Screenshot selection rect */}
                         {screenshotRect && (
                           <rect x={Math.min(screenshotRect.x1, screenshotRect.x2)} y={Math.min(screenshotRect.y1, screenshotRect.y2)}
@@ -1554,8 +1676,8 @@ export const DrawingsPage: React.FC = () => {
               {/* Bottom annotation toolbar */}
               <div className="px-3 py-1.5 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                 {/* Pointer */}
-                <button onClick={() => { setActiveTool('pointer'); setPolylinePoints([]); setPolylineCursorPt(null); }}
-                  className={`p-2 rounded-lg transition ${activeTool === 'pointer' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zaznacz">
+                <button onClick={() => { setActiveTool('pointer'); setPolylinePoints([]); setPolylineCursorPt(null); setCountItems([]); }}
+                  className={`p-2 rounded-lg transition ${activeTool === 'pointer' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zaznacz (V)">
                   <MousePointer className="w-5 h-5" />
                 </button>
 
@@ -1564,18 +1686,19 @@ export const DrawingsPage: React.FC = () => {
                 {/* Pen dropdown */}
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowPenDropdown(!showPenDropdown); }}
-                    className={`p-2 rounded-lg flex items-center gap-0.5 transition ${['pen', 'highlighter'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}>
+                    className={`p-2 rounded-lg flex items-center gap-0.5 transition ${['pen', 'highlighter'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}
+                    title="Rysowanie (P/H)">
                     <PenTool className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
                   {showPenDropdown && (
-                    <div className="absolute left-0 bottom-full mb-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
+                    <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
                       <button className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === 'pen' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                         onClick={() => { setActiveTool('pen'); setShowPenDropdown(false); }}>
-                        <PenTool className="w-4 h-4" /> Pióro
+                        <PenTool className="w-4 h-4" /> Pióro <span className="ml-auto text-[10px] text-slate-400 font-mono">P</span>
                       </button>
                       <button className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === 'highlighter' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                         onClick={() => { setActiveTool('highlighter'); setShowPenDropdown(false); }}>
-                        <Pencil className="w-4 h-4" /> Zakreślacz
+                        <Pencil className="w-4 h-4" /> Zakreślacz <span className="ml-auto text-[10px] text-slate-400 font-mono">H</span>
                       </button>
                     </div>
                   )}
@@ -1584,21 +1707,22 @@ export const DrawingsPage: React.FC = () => {
                 {/* Shape dropdown */}
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowShapeDropdown(!showShapeDropdown); }}
-                    className={`p-2 rounded-lg flex items-center gap-0.5 transition ${['rectangle', 'ellipse', 'arrow', 'line'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}>
+                    className={`p-2 rounded-lg flex items-center gap-0.5 transition ${['rectangle', 'ellipse', 'arrow', 'line'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}
+                    title="Kształty (R/O/A/L)">
                     <Square className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
                   {showShapeDropdown && (
-                    <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
+                    <div className="absolute left-0 bottom-full mb-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
                       {([
-                        { tool: 'rectangle' as const, label: 'Prostokąt', icon: Square },
-                        { tool: 'ellipse' as const, label: 'Elipsa', icon: Circle },
-                        { tool: 'arrow' as const, label: 'Strzałka', icon: ArrowUpRight },
-                        { tool: 'line' as const, label: 'Linia', icon: Minus },
+                        { tool: 'rectangle' as const, label: 'Prostokąt', icon: Square, key: 'R' },
+                        { tool: 'ellipse' as const, label: 'Elipsa', icon: Circle, key: 'O' },
+                        { tool: 'arrow' as const, label: 'Strzałka', icon: ArrowUpRight, key: 'A' },
+                        { tool: 'line' as const, label: 'Linia', icon: Minus, key: 'L' },
                       ]).map(item => (
                         <button key={item.tool}
                           className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === item.tool ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                           onClick={() => { setActiveTool(item.tool); setShowShapeDropdown(false); }}>
-                          <item.icon className="w-4 h-4" /> {item.label}
+                          <item.icon className="w-4 h-4" /> {item.label} <span className="ml-auto text-[10px] text-slate-400 font-mono">{item.key}</span>
                         </button>
                       ))}
                     </div>
@@ -1607,8 +1731,20 @@ export const DrawingsPage: React.FC = () => {
 
                 {/* Text */}
                 <button onClick={() => setActiveTool('text')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'text' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Tekst">
+                  className={`p-2 rounded-lg transition ${activeTool === 'text' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Tekst (T)">
                   <Type className="w-5 h-5" />
+                </button>
+
+                {/* Cloud markup */}
+                <button onClick={() => setActiveTool('cloud')}
+                  className={`p-2 rounded-lg transition ${activeTool === 'cloud' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Chmura rewizyjna (K)">
+                  <CloudLightning className="w-5 h-5" />
+                </button>
+
+                {/* Callout */}
+                <button onClick={() => setActiveTool('callout')}
+                  className={`p-2 rounded-lg transition ${activeTool === 'callout' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Odnośnik z tekstem (B)">
+                  <MessageCircleWarning className="w-5 h-5" />
                 </button>
 
                 <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -1617,56 +1753,70 @@ export const DrawingsPage: React.FC = () => {
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowRulerDropdown(!showRulerDropdown); }}
                     className={`p-2 rounded-lg flex items-center gap-0.5 transition ${activeTool === 'ruler' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`}
-                    title={selectedPlan?.scale_ratio ? 'Pomiar' : 'Pomiar (skalibruj skalę)'}>
+                    title={selectedPlan?.scale_ratio ? 'Pomiar (M)' : 'Pomiar — skalibruj skalę (M)'}>
                     <Ruler className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
                   </button>
                   {showRulerDropdown && (
                     <div className="absolute left-0 bottom-full mb-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
                       <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'single' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                         onClick={() => { setActiveTool('ruler'); setRulerMode('single'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
-                        <Crosshair className="w-4 h-4" /> Snać zamiar
+                        <Crosshair className="w-4 h-4" /> Odcinek
                       </button>
                       <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'polyline' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                         onClick={() => { setActiveTool('ruler'); setRulerMode('polyline'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
-                        <Ruler className="w-4 h-4" /> Zmierzyć odległość — linia
+                        <Ruler className="w-4 h-4" /> Polilinia — łamana
                       </button>
                       <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'ruler' && rulerMode === 'area' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                         onClick={() => { setActiveTool('ruler'); setRulerMode('area'); setShowRulerDropdown(false); setPolylinePoints([]); }}>
-                        <Square className="w-4 h-4" /> Zmierzyć — kilka odcinków / obszar
+                        <Square className="w-4 h-4" /> Polilinia / obszar
                       </button>
                     </div>
                   )}
                 </div>
 
+                {/* Count tool */}
+                <button onClick={() => { setActiveTool('count'); setCountItems([]); }}
+                  className={`p-2 rounded-lg transition ${activeTool === 'count' ? 'bg-amber-100 text-amber-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Licznik elementów (N)">
+                  <Hash className="w-5 h-5" />
+                </button>
+                {activeTool === 'count' && countItems.length > 0 && (
+                  <div className="flex items-center gap-1 ml-1">
+                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">Σ {countItems.length}</span>
+                    <button onClick={() => setCountItems([])} className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-500" title="Wyczyść licznik">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 <div className="w-px h-6 bg-slate-200 mx-1" />
 
                 {/* Comment */}
                 <button onClick={() => setActiveTool('comment')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'comment' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Komentarz">
+                  className={`p-2 rounded-lg transition ${activeTool === 'comment' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Komentarz (C)">
                   <MessageSquare className="w-5 h-5" />
                 </button>
 
                 {/* Camera */}
                 <button onClick={() => setActiveTool('camera')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'camera' ? 'bg-green-100 text-green-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zdjęcie">
+                  className={`p-2 rounded-lg transition ${activeTool === 'camera' ? 'bg-green-100 text-green-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zdjęcie — przypnij do planu">
                   <Camera className="w-5 h-5" />
                 </button>
 
                 {/* Screenshot */}
                 <button onClick={() => setActiveTool('screenshot')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'screenshot' ? 'bg-purple-100 text-purple-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zrzut ekranu">
+                  className={`p-2 rounded-lg transition ${activeTool === 'screenshot' ? 'bg-purple-100 text-purple-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zrzut ekranu — zaznacz obszar">
                   <Scissors className="w-5 h-5" />
                 </button>
 
                 {/* OCR */}
                 <button onClick={() => notify('OCR — funkcja w przygotowaniu', 'success')}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="Podlicz elementy (OCR)">
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 transition" title="Rozpoznawanie tekstu (OCR) — wkrótce">
                   <ScanLine className="w-5 h-5" />
                 </button>
 
                 {/* Eraser */}
                 <button onClick={() => setActiveTool('eraser')}
-                  className={`p-2 rounded-lg transition ${activeTool === 'eraser' ? 'bg-red-100 text-red-600 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Gumka">
+                  className={`p-2 rounded-lg transition ${activeTool === 'eraser' ? 'bg-red-100 text-red-600 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Gumka — kliknij oznaczenie aby usunąć (E)">
                   <Eraser className="w-5 h-5" />
                 </button>
 
@@ -1675,7 +1825,7 @@ export const DrawingsPage: React.FC = () => {
                 {/* Color picker */}
                 <div className="relative">
                   <button onClick={e => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
-                    className="p-2 hover:bg-slate-100 rounded-lg flex items-center gap-1.5" title="Kolor">
+                    className="p-2 hover:bg-slate-100 rounded-lg flex items-center gap-1.5" title="Kolor i grubość linii">
                     <div className="w-5 h-5 rounded-full border-2 border-slate-300" style={{ backgroundColor: annColor }} />
                     <ChevronDown className="w-3 h-3 text-slate-400" />
                   </button>
@@ -1686,14 +1836,15 @@ export const DrawingsPage: React.FC = () => {
                         {COLORS.map(c => (
                           <button key={c} onClick={() => { setAnnColor(c); setShowColorPicker(false); }}
                             className={`w-7 h-7 rounded-full border-2 transition ${annColor === c ? 'border-blue-500 scale-110' : 'border-slate-200 hover:border-slate-400'}`}
-                            style={{ backgroundColor: c }} />
+                            style={{ backgroundColor: c }} title={c} />
                         ))}
                       </div>
                       <p className="text-xs font-medium text-slate-500 mb-2">Grubość</p>
                       <div className="flex gap-1.5">
                         {STROKE_WIDTHS.map(w => (
                           <button key={w} onClick={() => { setAnnWidth(w); setShowColorPicker(false); }}
-                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition ${annWidth === w ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-400'}`}>
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition ${annWidth === w ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-400'}`}
+                            title={`${w}px`}>
                             <div className="rounded-full bg-slate-800" style={{ width: `${Math.min(w * 2, 16)}px`, height: `${Math.min(w * 2, 16)}px` }} />
                           </button>
                         ))}
@@ -1706,19 +1857,57 @@ export const DrawingsPage: React.FC = () => {
 
                 {/* Save & Undo */}
                 <button onClick={handleUndo} disabled={!hasUnsavedChanges}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30 transition" title="Cofnij zmiany">
+                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-500 disabled:opacity-30 transition" title="Cofnij zmiany (Ctrl+Z)">
                   <Undo2 className="w-5 h-5" />
                 </button>
                 <button onClick={handleSaveAll} disabled={!hasUnsavedChanges || saving}
-                  className={`p-2 rounded-lg transition flex items-center gap-1 ${hasUnsavedChanges ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'hover:bg-slate-100 text-slate-400'}`} title="Zapisz">
+                  className={`p-2 rounded-lg transition flex items-center gap-1 ${hasUnsavedChanges ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' : 'hover:bg-slate-100 text-slate-400'}`} title="Zapisz oznaczenia (Ctrl+S)">
                   {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 </button>
                 {selectedAnnotation >= 0 && (
                   <button onClick={() => { deleteAnnotation(selectedAnnotation); }}
-                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 ml-1" title="Usuń zaznaczenie">
+                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 ml-1" title="Usuń zaznaczenie (Del)">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
+              </div>
+
+              {/* Status bar with contextual hints */}
+              <div className="px-3 py-1 border-t border-slate-100 bg-slate-50 flex items-center gap-3 flex-shrink-0 text-[11px] text-slate-400" onClick={e => e.stopPropagation()}>
+                <span className="font-medium text-slate-500">
+                  {activeTool === 'pointer' && 'Zaznaczanie'}
+                  {activeTool === 'pen' && 'Pióro'}
+                  {activeTool === 'highlighter' && 'Zakreślacz'}
+                  {activeTool === 'rectangle' && 'Prostokąt'}
+                  {activeTool === 'ellipse' && 'Elipsa'}
+                  {activeTool === 'arrow' && 'Strzałka'}
+                  {activeTool === 'line' && 'Linia'}
+                  {activeTool === 'text' && 'Tekst'}
+                  {activeTool === 'ruler' && (rulerMode === 'single' ? 'Pomiar — odcinek' : rulerMode === 'polyline' ? 'Pomiar — polilinia' : 'Pomiar — obszar')}
+                  {activeTool === 'comment' && 'Komentarz'}
+                  {activeTool === 'camera' && 'Zdjęcie'}
+                  {activeTool === 'screenshot' && 'Zrzut ekranu'}
+                  {activeTool === 'eraser' && 'Gumka'}
+                  {activeTool === 'cloud' && 'Chmura rewizyjna'}
+                  {activeTool === 'callout' && 'Odnośnik'}
+                  {activeTool === 'count' && 'Licznik'}
+                </span>
+                <span>
+                  {activeTool === 'pointer' && 'Kliknij element aby go zaznaczyć · Del = usuń'}
+                  {activeTool === 'pen' && 'Rysuj dowolny kształt przytrzymując przycisk myszy'}
+                  {activeTool === 'highlighter' && 'Zaznacz ważny fragment przytrzymując przycisk myszy'}
+                  {(activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'cloud') && 'Kliknij i przeciągnij aby narysować'}
+                  {(activeTool === 'arrow' || activeTool === 'line' || activeTool === 'callout') && 'Kliknij i przeciągnij od początku do końca'}
+                  {activeTool === 'text' && 'Kliknij na planie aby wstawić tekst'}
+                  {activeTool === 'ruler' && rulerMode === 'single' && 'Kliknij i przeciągnij aby zmierzyć odległość'}
+                  {activeTool === 'ruler' && rulerMode !== 'single' && 'Klikaj punkty · Dwuklik = zakończ pomiar'}
+                  {activeTool === 'comment' && 'Kliknij na planie aby dodać komentarz'}
+                  {activeTool === 'camera' && 'Kliknij na planie aby przypiąć zdjęcie'}
+                  {activeTool === 'screenshot' && 'Zaznacz obszar aby pobrać fragment jako PNG'}
+                  {activeTool === 'eraser' && 'Kliknij oznaczenie aby je usunąć'}
+                  {activeTool === 'count' && `Klikaj elementy aby je policzyć · Esc = wyczyść`}
+                </span>
+                <span className="ml-auto">Esc = anuluj · Ctrl+Z = cofnij · Ctrl+S = zapisz</span>
               </div>
             </div>
           ) : (
@@ -1777,7 +1966,7 @@ export const DrawingsPage: React.FC = () => {
                   className={`px-3 py-2 border-b border-slate-50 cursor-pointer hover:bg-blue-50 transition ${selectedAnnotation === i ? 'bg-blue-50' : ''}`}>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: ann.strokeColor }} />
-                    <span className="text-xs font-medium text-slate-700 capitalize">{ann.type === 'freehand' ? 'Rysunek' : ann.type === 'rectangle' ? 'Prostokąt' : ann.type === 'ellipse' ? 'Elipsa' : ann.type === 'arrow' ? 'Strzałka' : ann.type === 'line' ? 'Linia' : ann.type === 'text' ? 'Tekst' : ann.type}</span>
+                    <span className="text-xs font-medium text-slate-700 capitalize">{ann.type === 'freehand' ? 'Rysunek' : ann.type === 'rectangle' ? 'Prostokąt' : ann.type === 'ellipse' ? 'Elipsa' : ann.type === 'arrow' ? 'Strzałka' : ann.type === 'line' ? 'Linia' : ann.type === 'text' ? 'Tekst' : ann.type === 'cloud' ? 'Chmura rewizyjna' : ann.type === 'callout' ? 'Odnośnik' : ann.type}</span>
                     {ann.textContent && <span className="text-[10px] text-slate-400 truncate">"{ann.textContent}"</span>}
                   </div>
                 </div>

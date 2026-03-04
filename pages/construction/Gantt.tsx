@@ -6,7 +6,8 @@ import {
   Pencil, Trash2, Flag, Play, AlertCircle, Check, FileText,
   Briefcase, ListTree, ClipboardList, MoreVertical, GripVertical,
   Eye, EyeOff, Maximize2, Minimize2, Upload, FileDown, ChevronUp,
-  MoreHorizontal, ArrowRight
+  MoreHorizontal, ArrowRight, Undo2, Redo2, Copy, ClipboardPaste,
+  HelpCircle, MoveRight, MoveLeft, CheckCircle2, Diamond
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -35,6 +36,28 @@ interface GanttTaskWithChildren extends GanttTask {
 type WizardStep = 'project' | 'time' | 'tasks' | 'resources';
 type TaskImportMode = 'empty' | 'general' | 'detailed';
 type ResourcePriority = 'slowest' | 'labor' | 'equipment';
+
+interface HistoryEntry {
+  type: 'update' | 'delete' | 'create';
+  taskId?: string;
+  depId?: string;
+  before?: any;
+  after?: any;
+  children?: any[];
+  deps?: any[];
+}
+
+interface InlineEditState {
+  taskId: string;
+  field: 'title' | 'duration';
+  value: string;
+}
+
+interface FilterState {
+  priorities: string[];
+  statuses: string[];
+  criticalOnly: boolean;
+}
 
 interface WizardFormData {
   project_id: string;
@@ -240,6 +263,27 @@ export const GanttPage: React.FC = () => {
   const [chartScrollLeft, setChartScrollLeft] = useState(0);
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
 
+  // Undo/Redo
+  const [undoStack, setUndoStack] = useState<HistoryEntry[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryEntry[]>([]);
+
+  // Selection & clipboard
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [clipboardTask, setClipboardTask] = useState<any | null>(null);
+
+  // Inline editing
+  const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null);
+
+  // Filters
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({ priorities: [], statuses: [], criticalOnly: false });
+
+  // Help overlay
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Dependency hover
+  const [hoveredDepId, setHoveredDepId] = useState<string | null>(null);
+
   // Auto-dismiss notifications
   useEffect(() => {
     if (errorMsg) { const t = setTimeout(() => setErrorMsg(''), 5000); return () => clearTimeout(t); }
@@ -250,6 +294,53 @@ export const GanttPage: React.FC = () => {
 
   const showError = (msg: string) => { setErrorMsg(msg); console.error(msg); };
   const showSuccess = (msg: string) => setSuccessMsg(msg);
+
+  // Undo/Redo system
+  const pushHistory = useCallback((entry: HistoryEntry) => {
+    setUndoStack(prev => [...prev.slice(-49), entry]);
+    setRedoStack([]);
+  }, []);
+
+  const handleUndo = useCallback(async () => {
+    if (undoStack.length === 0) return;
+    const entry = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, entry]);
+    try {
+      if (entry.type === 'update' && entry.taskId && entry.before) {
+        await supabase.from('gantt_tasks').update(entry.before).eq('id', entry.taskId);
+      } else if (entry.type === 'delete' && entry.before) {
+        await supabase.from('gantt_tasks').insert(entry.before);
+        if (entry.children) for (const c of entry.children) await supabase.from('gantt_tasks').insert(c);
+        if (entry.deps) for (const d of entry.deps) await supabase.from('gantt_dependencies').insert(d);
+      } else if (entry.type === 'create' && entry.taskId) {
+        await supabase.from('gantt_dependencies').delete().or(`predecessor_id.eq.${entry.taskId},successor_id.eq.${entry.taskId}`);
+        await supabase.from('gantt_tasks').delete().eq('id', entry.taskId);
+      }
+      await loadGanttData();
+      showSuccess('Cofnięto.');
+    } catch (err: any) { showError('Błąd cofania: ' + (err?.message || err)); }
+  }, [undoStack, selectedProject]);
+
+  const handleRedo = useCallback(async () => {
+    if (redoStack.length === 0) return;
+    const entry = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, entry]);
+    try {
+      if (entry.type === 'update' && entry.taskId && entry.after) {
+        await supabase.from('gantt_tasks').update(entry.after).eq('id', entry.taskId);
+      } else if (entry.type === 'delete' && entry.taskId) {
+        if (entry.children) for (const c of entry.children) await supabase.from('gantt_tasks').delete().eq('id', c.id);
+        if (entry.deps) for (const d of entry.deps) await supabase.from('gantt_dependencies').delete().eq('id', d.id);
+        await supabase.from('gantt_tasks').delete().eq('id', entry.taskId);
+      } else if (entry.type === 'create' && entry.after) {
+        await supabase.from('gantt_tasks').insert(entry.after);
+      }
+      await loadGanttData();
+      showSuccess('Ponowiono.');
+    } catch (err: any) { showError('Błąd ponowienia: ' + (err?.message || err)); }
+  }, [redoStack, selectedProject]);
 
   // Critical path calculation
   const criticalPathIds = useMemo(() => {
@@ -274,6 +365,70 @@ export const GanttPage: React.FC = () => {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!selectedProject) return;
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      // Escape — close modals/menus
+      if (e.key === 'Escape') {
+        if (showHelp) { setShowHelp(false); return; }
+        if (contextMenu) { setContextMenu(null); return; }
+        if (showPhaseModal) { setShowPhaseModal(false); return; }
+        if (showDepModal) { setShowDepModal(false); return; }
+        if (showFilterPanel) { setShowFilterPanel(false); return; }
+        if (inlineEdit) { setInlineEdit(null); return; }
+        if (showSettingsMenu) { setShowSettingsMenu(false); return; }
+        setSelectedTaskId(null);
+        return;
+      }
+
+      // Ctrl+Z — undo
+      if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        e.preventDefault(); handleUndo(); return;
+      }
+      // Ctrl+Y or Ctrl+Shift+Z — redo
+      if ((e.key === 'y' && (e.ctrlKey || e.metaKey)) || (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
+        e.preventDefault(); handleRedo(); return;
+      }
+      // Ctrl+D — duplicate selected task
+      if (e.key === 'd' && (e.ctrlKey || e.metaKey) && selectedTaskId) {
+        e.preventDefault();
+        const task = allFlatTasks.find(t => t.id === selectedTaskId);
+        if (task) handleDuplicateTask(task);
+        return;
+      }
+      // Delete — delete hovered/selected task
+      if (e.key === 'Delete' && (selectedTaskId || hoveredRowId)) {
+        const taskId = selectedTaskId || hoveredRowId;
+        const task = allFlatTasks.find(t => t.id === taskId);
+        if (task) handleDeletePhase(task);
+        return;
+      }
+      // T — scroll to today
+      if (e.key === 't' || e.key === 'T') { scrollToToday(); return; }
+      // + / = — zoom in
+      if (e.key === '+' || e.key === '=') {
+        setZoomLevel(prev => prev === 'month' ? 'week' : prev === 'week' ? 'day' : 'day');
+        return;
+      }
+      // - — zoom out
+      if (e.key === '-') {
+        setZoomLevel(prev => prev === 'day' ? 'week' : prev === 'week' ? 'month' : 'month');
+        return;
+      }
+      // ? — toggle help
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) { setShowHelp(prev => !prev); return; }
+      // F — toggle filters
+      if (e.key === 'f' && !e.ctrlKey && !e.metaKey) { setShowFilterPanel(prev => !prev); return; }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedProject, showHelp, contextMenu, showPhaseModal, showDepModal, showFilterPanel, inlineEdit, showSettingsMenu, selectedTaskId, hoveredRowId, undoStack, redoStack]);
 
   useEffect(() => { if (currentUser) loadProjects(); }, [currentUser]);
 
@@ -635,6 +790,168 @@ export const GanttPage: React.FC = () => {
       await loadGanttData();
     } catch (err: any) { showError('Błąd usuwania fazy: ' + (err?.message || err)); }
   };
+
+  // ========== NEW HANDLERS ==========
+
+  const handleDuplicateTask = async (task: GanttTaskWithChildren) => {
+    if (!selectedProject || !currentUser) return;
+    try {
+      const { data: inserted } = await supabase.from('gantt_tasks').insert({
+        project_id: selectedProject.id, title: (task.title || '') + ' (kopia)',
+        parent_id: task.parent_id || null, start_date: task.start_date || null,
+        end_date: task.end_date || null, duration: task.duration || null,
+        progress: 0, is_milestone: task.is_milestone, is_auto: task.is_auto,
+        has_custom_progress: false, color: task.color || '#3b82f6',
+        priority: task.priority || 'normal', notes: task.notes || null,
+        sort_order: task.sort_order + 1, source: 'manual'
+      }).select('id').single();
+      if (inserted) pushHistory({ type: 'create', taskId: inserted.id, after: { ...task, id: inserted.id } });
+      showSuccess('Zduplikowano fazę.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd duplikacji: ' + (err?.message || err)); }
+  };
+
+  const handleDuplicateTaskWithChildren = async (task: GanttTaskWithChildren) => {
+    if (!selectedProject || !currentUser) return;
+    try {
+      const duplicateRecursive = async (src: GanttTaskWithChildren, parentId: string | null) => {
+        const { data: inserted } = await supabase.from('gantt_tasks').insert({
+          project_id: selectedProject!.id, title: parentId ? src.title : (src.title || '') + ' (kopia)',
+          parent_id: parentId, start_date: src.start_date || null,
+          end_date: src.end_date || null, duration: src.duration || null,
+          progress: 0, is_milestone: src.is_milestone, is_auto: src.is_auto,
+          has_custom_progress: false, color: src.color || '#3b82f6',
+          priority: src.priority || 'normal', notes: src.notes || null,
+          sort_order: src.sort_order, source: 'manual'
+        }).select('id').single();
+        if (inserted && src.children) {
+          for (const child of src.children) await duplicateRecursive(child, inserted.id);
+        }
+      };
+      await duplicateRecursive(task, task.parent_id || null);
+      showSuccess('Zduplikowano fazę z podfazami.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd duplikacji: ' + (err?.message || err)); }
+  };
+
+  const handleIndent = async (task: GanttTaskWithChildren) => {
+    // Make this task a child of its previous sibling
+    const siblings = task.parent_id
+      ? (allFlatTasks.find(t => t.id === task.parent_id)?.children || [])
+      : tasks;
+    const idx = (siblings as GanttTaskWithChildren[]).findIndex(t => t.id === task.id);
+    if (idx <= 0) { showError('Brak poprzedniego rodzeństwa.'); return; }
+    const newParent = (siblings as GanttTaskWithChildren[])[idx - 1];
+    const before = { parent_id: task.parent_id };
+    try {
+      await supabase.from('gantt_tasks').update({ parent_id: newParent.id }).eq('id', task.id);
+      pushHistory({ type: 'update', taskId: task.id, before, after: { parent_id: newParent.id } });
+      if (task.parent_id) await recalcAndSaveParent(task.parent_id);
+      await recalcAndSaveParent(newParent.id);
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd wcięcia: ' + (err?.message || err)); }
+  };
+
+  const handleOutdent = async (task: GanttTaskWithChildren) => {
+    if (!task.parent_id) { showError('Faza jest już na najwyższym poziomie.'); return; }
+    const parent = allFlatTasks.find(t => t.id === task.parent_id);
+    const newParentId = parent?.parent_id || null;
+    const before = { parent_id: task.parent_id };
+    try {
+      await supabase.from('gantt_tasks').update({ parent_id: newParentId }).eq('id', task.id);
+      pushHistory({ type: 'update', taskId: task.id, before, after: { parent_id: newParentId } });
+      await recalcAndSaveParent(task.parent_id);
+      if (newParentId) await recalcAndSaveParent(newParentId);
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd cofnięcia wcięcia: ' + (err?.message || err)); }
+  };
+
+  const handleToggleMilestone = async (task: GanttTaskWithChildren) => {
+    const before = { is_milestone: task.is_milestone };
+    try {
+      await supabase.from('gantt_tasks').update({ is_milestone: !task.is_milestone }).eq('id', task.id);
+      pushHistory({ type: 'update', taskId: task.id, before, after: { is_milestone: !task.is_milestone } });
+      showSuccess(task.is_milestone ? 'Kamień milowy usunięty.' : 'Oznaczono jako kamień milowy.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd: ' + (err?.message || err)); }
+  };
+
+  const handleMarkComplete = async (task: GanttTaskWithChildren) => {
+    const before = { progress: task.progress, has_custom_progress: task.has_custom_progress };
+    try {
+      await supabase.from('gantt_tasks').update({ progress: 100, has_custom_progress: true }).eq('id', task.id);
+      pushHistory({ type: 'update', taskId: task.id, before, after: { progress: 100, has_custom_progress: true } });
+      if (task.parent_id) await recalcAndSaveParent(task.parent_id);
+      showSuccess('Oznaczono jako ukończone.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd: ' + (err?.message || err)); }
+  };
+
+  const handleCopyTask = (task: GanttTaskWithChildren) => {
+    setClipboardTask(task);
+    showSuccess('Skopiowano do schowka.');
+  };
+
+  const handlePasteTask = async (parentId?: string) => {
+    if (!clipboardTask || !selectedProject) return;
+    try {
+      const { data: inserted } = await supabase.from('gantt_tasks').insert({
+        project_id: selectedProject.id, title: (clipboardTask.title || '') + ' (wklejone)',
+        parent_id: parentId || clipboardTask.parent_id || null,
+        start_date: clipboardTask.start_date || null, end_date: clipboardTask.end_date || null,
+        duration: clipboardTask.duration || null, progress: 0,
+        is_milestone: clipboardTask.is_milestone, is_auto: clipboardTask.is_auto,
+        has_custom_progress: false, color: clipboardTask.color || '#3b82f6',
+        priority: clipboardTask.priority || 'normal', sort_order: allFlatTasks.length,
+        source: 'manual'
+      }).select('id').single();
+      if (inserted) pushHistory({ type: 'create', taskId: inserted.id });
+      showSuccess('Wklejono fazę.');
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd wklejania: ' + (err?.message || err)); }
+  };
+
+  const handleSetPriority = async (task: GanttTaskWithChildren, priority: string) => {
+    const before = { priority: task.priority };
+    try {
+      await supabase.from('gantt_tasks').update({ priority }).eq('id', task.id);
+      pushHistory({ type: 'update', taskId: task.id, before, after: { priority } });
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd: ' + (err?.message || err)); }
+  };
+
+  const handleInlineSave = async () => {
+    if (!inlineEdit) return;
+    const task = allFlatTasks.find(t => t.id === inlineEdit.taskId);
+    if (!task) { setInlineEdit(null); return; }
+    const field = inlineEdit.field;
+    const value = inlineEdit.value;
+    const before: any = {};
+    const after: any = {};
+    if (field === 'title') {
+      if (!value.trim()) { setInlineEdit(null); return; }
+      before.title = task.title;
+      after.title = value.trim();
+    } else if (field === 'duration') {
+      const dur = parseInt(value) || 0;
+      before.duration = task.duration;
+      after.duration = dur;
+      if (task.start_date && dur > 0) {
+        const endDate = addWD(new Date(task.start_date), dur, workingDays);
+        after.end_date = endDate.toISOString().split('T')[0];
+      }
+    }
+    try {
+      await supabase.from('gantt_tasks').update(after).eq('id', inlineEdit.taskId);
+      pushHistory({ type: 'update', taskId: inlineEdit.taskId, before, after });
+      if (task.parent_id) await recalcAndSaveParent(task.parent_id);
+      setInlineEdit(null);
+      await loadGanttData();
+    } catch (err: any) { showError('Błąd zapisu: ' + (err?.message || err)); }
+  };
+
+  // Active filter count
+  const activeFilterCount = filters.priorities.length + filters.statuses.length + (filters.criticalOnly ? 1 : 0);
 
   // Dependencies
   const openCreateDep = (predecessorId?: string, successorId?: string) => {
@@ -1471,7 +1788,20 @@ export const GanttPage: React.FC = () => {
   }
 
   // ========== RENDER: GANTT VIEW ==========
-  const filteredFlatTasks = search ? flatTasks.filter(t => getTaskTitle(t).toLowerCase().includes(search.toLowerCase())) : flatTasks;
+  const filteredFlatTasks = useMemo(() => {
+    let result = flatTasks;
+    if (search) result = result.filter(t => getTaskTitle(t).toLowerCase().includes(search.toLowerCase()));
+    if (filters.priorities.length > 0) result = result.filter(t => filters.priorities.includes(t.priority || 'normal'));
+    if (filters.statuses.length > 0) result = result.filter(t => {
+      const status = getDeadlineStatus(t);
+      if (filters.statuses.includes('overdue') && status === 'overdue') return true;
+      if (filters.statuses.includes('due-soon') && status === 'due-soon') return true;
+      if (filters.statuses.includes('ok') && (status === 'ok' || status === null)) return true;
+      return false;
+    });
+    if (filters.criticalOnly) result = result.filter(t => criticalPathIds.has(t.id));
+    return result;
+  }, [flatTasks, search, filters, criticalPathIds]);
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -1491,26 +1821,55 @@ export const GanttPage: React.FC = () => {
       )}
       {/* Top toolbar */}
       <div className="px-3 py-2 bg-white border-b border-slate-200 flex items-center gap-2 flex-shrink-0">
-        <button onClick={() => setSelectedProject(null)} className="p-1.5 hover:bg-slate-100 rounded-lg" title="Wróć do listy">
+        {/* Group: Navigation & Tasks */}
+        <button onClick={() => setSelectedProject(null)} className="p-1.5 hover:bg-slate-100 rounded-lg" title="Wróć do listy (Esc)">
           <ArrowLeft className="w-4 h-4 text-slate-500" />
         </button>
         <div className="h-5 w-px bg-slate-200" />
-        <button onClick={() => openCreatePhase()}
+        <button onClick={() => openCreatePhase()} title="Utwórz nową fazę"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
           <Plus className="w-3.5 h-3.5" /> Utwórz fazę
         </button>
-        <button onClick={() => openCreateDep()}
+        <button onClick={() => openCreateDep()} title="Dodaj zależność między fazami"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium">
           <LinkIcon className="w-3.5 h-3.5" /> Zależność
         </button>
-        <button onClick={handleAutoSchedule} disabled={saving || allFlatTasks.length === 0}
+        <button onClick={handleAutoSchedule} disabled={saving || allFlatTasks.length === 0} title="Automatyczne planowanie (przelicz daty wg zależności)"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-medium">
           {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />} Planuj
         </button>
+
+        {/* Group: Undo/Redo */}
+        <div className="h-5 w-px bg-slate-200" />
+        <button onClick={handleUndo} disabled={undoStack.length === 0} title={`Cofnij (Ctrl+Z)${undoStack.length > 0 ? ` — ${undoStack.length}` : ''}`}
+          className="p-1.5 hover:bg-slate-100 rounded-lg disabled:opacity-30 relative">
+          <Undo2 className="w-4 h-4 text-slate-500" />
+          {undoStack.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{undoStack.length}</span>}
+        </button>
+        <button onClick={handleRedo} disabled={redoStack.length === 0} title={`Ponów (Ctrl+Y)${redoStack.length > 0 ? ` — ${redoStack.length}` : ''}`}
+          className="p-1.5 hover:bg-slate-100 rounded-lg disabled:opacity-30 relative">
+          <Redo2 className="w-4 h-4 text-slate-500" />
+          {redoStack.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{redoStack.length}</span>}
+        </button>
+
         <div className="h-5 w-px bg-slate-200" />
         <span className="text-sm font-semibold text-slate-800 truncate">{selectedProject.name}</span>
         <span className="text-xs text-slate-400 ml-1">{allFlatTasks.length} faz</span>
         <div className="flex-1" />
+
+        {/* Group: View — Filter toggle */}
+        <button onClick={() => setShowFilterPanel(prev => !prev)} title="Filtry (F)"
+          className={`p-1.5 rounded-lg relative ${showFilterPanel ? 'bg-blue-100 text-blue-600' : 'hover:bg-slate-100 text-slate-500'}`}>
+          <Filter className="w-4 h-4" />
+          {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{activeFilterCount}</span>}
+        </button>
+        {/* Help */}
+        <button onClick={() => setShowHelp(prev => !prev)} title="Pomoc i legenda (?)"
+          className={`p-1.5 rounded-lg ${showHelp ? 'bg-blue-100 text-blue-600' : 'hover:bg-slate-100 text-slate-500'}`}>
+          <HelpCircle className="w-4 h-4" />
+        </button>
+
+        <div className="h-5 w-px bg-slate-200" />
 
         {/* Harmonogram start */}
         <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -1522,7 +1881,7 @@ export const GanttPage: React.FC = () => {
 
         {/* Settings gear */}
         <div className="relative" ref={settingsRef}>
-          <button onClick={() => setShowSettingsMenu(!showSettingsMenu)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+          <button onClick={() => setShowSettingsMenu(!showSettingsMenu)} className="p-1.5 hover:bg-slate-100 rounded-lg" title="Ustawienia">
             <MoreVertical className="w-4 h-4 text-slate-500" />
           </button>
           {showSettingsMenu && (
@@ -1576,11 +1935,15 @@ export const GanttPage: React.FC = () => {
         <div className="flex items-center bg-white rounded-lg border border-slate-200 p-0.5">
           {(['day', 'week', 'month'] as ZoomLevel[]).map(z => (
             <button key={z} onClick={() => setZoomLevel(z)}
+              title={z === 'day' ? 'Widok dzienny (+)' : z === 'week' ? 'Widok tygodniowy' : 'Widok miesięczny (-)'}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${zoomLevel === z ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
               {z === 'day' ? 'Dzień' : z === 'week' ? 'Tydzień' : 'Miesiąc'}
             </button>
           ))}
         </div>
+        <button onClick={scrollToToday} title="Dzisiaj (T)" className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md">
+          Dzisiaj
+        </button>
         <div className="flex-1" />
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
@@ -1588,6 +1951,52 @@ export const GanttPage: React.FC = () => {
             className="pl-7 pr-3 py-1 text-xs border border-slate-200 rounded-lg w-44 focus:ring-1 focus:ring-blue-200" />
         </div>
       </div>
+
+      {/* Filter panel */}
+      {showFilterPanel && (
+        <div className="px-3 py-2 bg-blue-50/50 border-b border-slate-200 flex items-center gap-3 flex-shrink-0 flex-wrap">
+          <span className="text-xs font-semibold text-slate-500 uppercase">Priorytet:</span>
+          {([
+            { val: 'low', label: 'Niski', color: 'bg-slate-200 text-slate-700' },
+            { val: 'normal', label: 'Normalny', color: 'bg-blue-200 text-blue-700' },
+            { val: 'high', label: 'Wysoki', color: 'bg-amber-200 text-amber-700' },
+            { val: 'critical', label: 'Krytyczny', color: 'bg-red-200 text-red-700' },
+          ] as const).map(p => (
+            <button key={p.val} onClick={() => setFilters(prev => ({
+              ...prev, priorities: prev.priorities.includes(p.val) ? prev.priorities.filter(x => x !== p.val) : [...prev.priorities, p.val]
+            }))}
+              className={`px-2 py-0.5 text-xs rounded-full font-medium transition-all ${filters.priorities.includes(p.val) ? p.color + ' ring-2 ring-offset-1 ring-current' : 'bg-white text-slate-400 border border-slate-200'}`}>
+              {p.label}
+            </button>
+          ))}
+          <div className="h-4 w-px bg-slate-300" />
+          <span className="text-xs font-semibold text-slate-500 uppercase">Status:</span>
+          {([
+            { val: 'overdue', label: 'Spóźnione', color: 'bg-red-200 text-red-700' },
+            { val: 'due-soon', label: 'Wkrótce', color: 'bg-amber-200 text-amber-700' },
+            { val: 'ok', label: 'W terminie', color: 'bg-green-200 text-green-700' },
+          ] as const).map(s => (
+            <button key={s.val} onClick={() => setFilters(prev => ({
+              ...prev, statuses: prev.statuses.includes(s.val) ? prev.statuses.filter(x => x !== s.val) : [...prev.statuses, s.val]
+            }))}
+              className={`px-2 py-0.5 text-xs rounded-full font-medium transition-all ${filters.statuses.includes(s.val) ? s.color + ' ring-2 ring-offset-1 ring-current' : 'bg-white text-slate-400 border border-slate-200'}`}>
+              {s.label}
+            </button>
+          ))}
+          <div className="h-4 w-px bg-slate-300" />
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" checked={filters.criticalOnly} onChange={e => setFilters(prev => ({ ...prev, criticalOnly: e.target.checked }))}
+              className="w-3.5 h-3.5 rounded text-blue-600" />
+            <span className="text-xs text-slate-600">Tylko ścieżka krytyczna</span>
+          </label>
+          {activeFilterCount > 0 && (
+            <button onClick={() => setFilters({ priorities: [], statuses: [], criticalOnly: false })}
+              className="px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 rounded-full font-medium">
+              Wyczyść ({activeFilterCount})
+            </button>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
@@ -1626,24 +2035,27 @@ export const GanttPage: React.FC = () => {
                 const progress = task.progress || 0;
                 const deadline = getDeadlineStatus(task);
                 const isHovered = hoveredRowId === task.id;
+                const isSelected = selectedTaskId === task.id;
                 return (
                   <div key={task.id}
-                    className={`flex items-center border-b cursor-pointer group transition-colors ${isHovered ? 'bg-blue-50' : rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${deadline === 'overdue' ? 'border-l-2 border-l-red-400' : deadline === 'due-soon' ? 'border-l-2 border-l-amber-400' : ''} border-b-slate-100 hover:bg-blue-50`}
+                    className={`flex items-center border-b cursor-pointer group transition-colors ${isSelected ? 'bg-blue-100' : isHovered ? 'bg-blue-50' : rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} ${deadline === 'overdue' ? 'border-l-2 border-l-red-400' : deadline === 'due-soon' ? 'border-l-2 border-l-amber-400' : ''} border-b-slate-100 hover:bg-blue-50`}
                     style={{ height: ROW_HEIGHT }}
-                    onClick={() => openEditPhase(task)}
+                    onClick={() => { setSelectedTaskId(task.id); openEditPhase(task); }}
+                    onContextMenu={(e) => handleContextMenu(e, task)}
                     onMouseEnter={() => setHoveredRowId(task.id)}
                     onMouseLeave={() => setHoveredRowId(null)}>
                     {/* Priority dot + WBS */}
                     <div className="w-14 flex items-center justify-center shrink-0 px-1 gap-1">
                       {task.priority && task.priority !== 'normal' && (
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: PRIORITY_COLORS[task.priority] }} />
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" title={`Priorytet: ${task.priority === 'low' ? 'Niski' : task.priority === 'high' ? 'Wysoki' : 'Krytyczny'}`} style={{ backgroundColor: PRIORITY_COLORS[task.priority] }} />
                       )}
                       <span className="text-xs text-slate-500 font-medium">{task.wbs}</span>
                     </div>
-                    {/* Name */}
+                    {/* Name — with inline editing */}
                     <div className="flex-1 flex items-center gap-1.5 px-2 min-w-[120px]" style={{ paddingLeft: `${8 + (task.level || 0) * 18}px` }}>
                       {isParent ? (
                         <button onClick={(e) => { e.stopPropagation(); toggleTaskExpand(task.id); }}
+                          title={task.isExpanded ? 'Zwiń' : 'Rozwiń'}
                           className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 bg-blue-600 text-white hover:bg-blue-700 transition-colors">
                           {task.isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                         </button>
@@ -1652,7 +2064,23 @@ export const GanttPage: React.FC = () => {
                       ) : (
                         <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 ml-1.5" style={{ backgroundColor: task.color || '#93c5fd' }} />
                       )}
-                      <span className={`text-sm truncate ${isParent ? 'font-semibold text-slate-800' : 'text-slate-700'}`}>{title}</span>
+                      {inlineEdit?.taskId === task.id && inlineEdit.field === 'title' ? (
+                        <input type="text" autoFocus value={inlineEdit.value}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleInlineSave();
+                            if (e.key === 'Escape') setInlineEdit(null);
+                            if (e.key === 'Tab') { e.preventDefault(); handleInlineSave(); setInlineEdit({ taskId: task.id, field: 'duration', value: String(task.duration || '') }); }
+                          }}
+                          onBlur={handleInlineSave}
+                          className="text-sm flex-1 min-w-0 px-1 py-0.5 border border-blue-400 rounded focus:ring-1 focus:ring-blue-300 outline-none" />
+                      ) : (
+                        <span className={`text-sm truncate ${isParent ? 'font-semibold text-slate-800' : 'text-slate-700'}`}
+                          onDoubleClick={(e) => { e.stopPropagation(); setInlineEdit({ taskId: task.id, field: 'title', value: task.title || '' }); }}>
+                          {title}
+                        </span>
+                      )}
                       {/* Deadline warning icon */}
                       {deadline === 'overdue' && <span title="Przekroczony termin!"><AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0" /></span>}
                       {deadline === 'due-soon' && <span title="Termin wkrótce"><Clock className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /></span>}
@@ -1666,7 +2094,23 @@ export const GanttPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="w-20 px-1 text-center text-xs text-slate-500">{task.duration ? `${task.duration} d.` : '–'}</div>
+                    {/* Duration — with inline editing */}
+                    <div className="w-20 px-1 text-center text-xs text-slate-500" onClick={e => e.stopPropagation()}>
+                      {inlineEdit?.taskId === task.id && inlineEdit.field === 'duration' ? (
+                        <input type="number" autoFocus value={inlineEdit.value} min="0"
+                          onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleInlineSave();
+                            if (e.key === 'Escape') setInlineEdit(null);
+                          }}
+                          onBlur={handleInlineSave}
+                          className="w-full text-center text-xs px-1 py-0.5 border border-blue-400 rounded focus:ring-1 focus:ring-blue-300 outline-none" />
+                      ) : (
+                        <span onDoubleClick={() => setInlineEdit({ taskId: task.id, field: 'duration', value: String(task.duration || '') })}>
+                          {task.duration ? `${task.duration} d.` : '–'}
+                        </span>
+                      )}
+                    </div>
                     <div className="w-24 px-1 text-center text-xs text-slate-500">{task.start_date ? new Date(task.start_date).toLocaleDateString('pl-PL') : '–'}</div>
                     <div className={`w-24 px-1 text-center text-xs ${deadline === 'overdue' ? 'text-red-600 font-medium' : deadline === 'due-soon' ? 'text-amber-600' : 'text-slate-500'}`}>
                       {task.end_date ? new Date(task.end_date).toLocaleDateString('pl-PL') : '–'}
@@ -1681,7 +2125,7 @@ export const GanttPage: React.FC = () => {
                       </div>
                     </div>
                     <div className="w-8 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-                      <button onClick={(e) => handleContextMenu(e, task)} className="p-1 hover:bg-slate-200 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={(e) => handleContextMenu(e, task)} title="Więcej opcji" className="p-1 hover:bg-slate-200 rounded opacity-30 group-hover:opacity-100 transition-opacity">
                         <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
                       </button>
                     </div>
@@ -1693,6 +2137,7 @@ export const GanttPage: React.FC = () => {
 
           {/* Splitter */}
           <div className="w-1.5 bg-slate-200 hover:bg-blue-400 cursor-col-resize flex-shrink-0 transition-colors"
+            title="Przeciągnij, aby zmienić szerokość panelu"
             onMouseDown={handleSplitterMouseDown} />
 
           {/* RIGHT PANEL: timeline chart */}
@@ -1811,11 +2256,14 @@ export const GanttPage: React.FC = () => {
                             )}
                             {/* Resize handle (right edge) */}
                             <div className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize opacity-0 group-hover/bar:opacity-100 bg-white/30 hover:bg-white/60"
+                              title="Przeciągnij, aby zmienić czas trwania"
                               onMouseDown={(e) => { e.stopPropagation(); handleBarMouseDown(e, task, 'resize-end'); }} />
                             {/* Connection dots for drag-to-connect */}
                             <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blue-500 bg-white opacity-0 group-hover/bar:opacity-100 cursor-crosshair z-20 hover:bg-blue-100 hover:scale-125 transition-all"
+                              title="Przeciągnij, aby utworzyć zależność (od początku)"
                               onMouseDown={(e) => { e.stopPropagation(); handleConnectStart(e, task.id, 'start'); }} />
                             <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-blue-500 bg-white opacity-0 group-hover/bar:opacity-100 cursor-crosshair z-20 hover:bg-blue-100 hover:scale-125 transition-all"
+                              title="Przeciągnij, aby utworzyć zależność (od końca)"
                               onMouseDown={(e) => { e.stopPropagation(); handleConnectStart(e, task.id, 'end'); }} />
                           </div>
                         )}
@@ -1841,6 +2289,9 @@ export const GanttPage: React.FC = () => {
                   <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
                     <polygon points="0 0, 8 3, 0 6" fill="#3b82f6" />
                   </marker>
+                  <marker id="arrowhead-highlight" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="#2563eb" />
+                  </marker>
                 </defs>
                 {/* Existing dependencies */}
                 {showDependencies && dependencies.map(dep => {
@@ -1865,11 +2316,29 @@ export const GanttPage: React.FC = () => {
                   const path = y1 === y2
                     ? `M ${x1} ${y1} L ${x2} ${y2}`
                     : `M ${x1} ${y1} L ${exitX} ${y1} L ${exitX} ${y2} L ${x2} ${y2}`;
+                  // Stroke pattern per dependency type
+                  const isHovDep = hoveredDepId === dep.id;
+                  const strokeDash = dep.dependency_type === 'FS' ? 'none'
+                    : dep.dependency_type === 'SS' ? '6 3'
+                    : dep.dependency_type === 'FF' ? '2 2'
+                    : '8 3 2 3'; // SF
+                  const strokeColor = isHovDep ? '#2563eb' : '#475569';
+                  const strokeW = isHovDep ? 2.5 : 1.5;
                   return (
-                    <g key={dep.id} className="cursor-pointer" style={{ pointerEvents: 'auto' }} onClick={() => openEditDep(dep)}>
+                    <g key={dep.id} className="cursor-pointer" style={{ pointerEvents: 'auto' }}
+                      onClick={() => openEditDep(dep)}
+                      onMouseEnter={() => setHoveredDepId(dep.id)}
+                      onMouseLeave={() => setHoveredDepId(null)}>
                       <path d={path} fill="none" stroke="transparent" strokeWidth="12" />
-                      <path d={path} fill="none" stroke="#475569" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                      <circle cx={x1} cy={y1} r="3" fill="#475569" />
+                      <path d={path} fill="none" stroke={strokeColor} strokeWidth={strokeW} strokeDasharray={strokeDash}
+                        markerEnd={isHovDep ? 'url(#arrowhead-highlight)' : 'url(#arrowhead)'} />
+                      <circle cx={x1} cy={y1} r="3" fill={strokeColor} />
+                      {isHovDep && (
+                        <text x={(x1 + x2) / 2} y={Math.min(y1, y2) - 6} textAnchor="middle"
+                          className="text-[10px] font-medium fill-blue-700 pointer-events-none">
+                          {GANTT_DEPENDENCY_SHORT_LABELS[dep.dependency_type]}{dep.lag > 0 ? ` +${dep.lag}d` : ''}
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -2162,18 +2631,106 @@ export const GanttPage: React.FC = () => {
           position={{ x: contextMenu.x, y: contextMenu.y }}
           onClose={() => setContextMenu(null)}
           items={[
+            // View
             { label: 'Pokaż na wykresie', icon: <ArrowRight className="w-4 h-4" />, onClick: () => {
               if (chartRef.current && contextMenu.task.start_date) {
                 const daysFromStart = getDaysBetween(dateRange.start, new Date(contextMenu.task.start_date));
                 chartRef.current.scrollLeft = daysFromStart * dayWidth - 100;
               }
             }},
+            { label: 'Edytuj fazę', icon: <Pencil className="w-4 h-4" />, onClick: () => openEditPhase(contextMenu.task) },
+            { label: '', onClick: () => {}, divider: true },
+            // Create
             { label: 'Utwórz fazę podrzędną', icon: <Plus className="w-4 h-4" />, onClick: () => openCreatePhase(contextMenu.task.id) },
+            { label: 'Duplikuj', icon: <Copy className="w-4 h-4" />, onClick: () => handleDuplicateTask(contextMenu.task) },
+            { label: 'Duplikuj z podfazami', icon: <Copy className="w-4 h-4" />, onClick: () => handleDuplicateTaskWithChildren(contextMenu.task) },
+            { label: 'Kopiuj', icon: <Copy className="w-4 h-4" />, onClick: () => handleCopyTask(contextMenu.task) },
+            { label: 'Wklej jako podfazę', icon: <ClipboardPaste className="w-4 h-4" />, onClick: () => handlePasteTask(contextMenu.task.id) },
+            { label: '', onClick: () => {}, divider: true },
+            // Hierarchy
+            { label: 'Wcięcie (uczyń podfazą)', icon: <MoveRight className="w-4 h-4" />, onClick: () => handleIndent(contextMenu.task) },
+            { label: 'Cofnij wcięcie', icon: <MoveLeft className="w-4 h-4" />, onClick: () => handleOutdent(contextMenu.task) },
+            { label: '', onClick: () => {}, divider: true },
+            // Status
+            { label: contextMenu.task.is_milestone ? 'Usuń kamień milowy' : 'Oznacz jako kamień milowy', icon: <Diamond className="w-4 h-4" />, onClick: () => handleToggleMilestone(contextMenu.task) },
+            { label: 'Oznacz jako ukończone (100%)', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => handleMarkComplete(contextMenu.task) },
             { label: 'Dodaj zależność', icon: <LinkIcon className="w-4 h-4" />, onClick: () => openCreateDep(contextMenu.task.id) },
             { label: '', onClick: () => {}, divider: true },
-            { label: 'Usuń fazę', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDeletePhase(contextMenu.task), danger: true },
+            // Priority
+            { label: 'Priorytet: Niski', icon: <div className="w-3 h-3 rounded-full bg-slate-400" />, onClick: () => handleSetPriority(contextMenu.task, 'low') },
+            { label: 'Priorytet: Normalny', icon: <div className="w-3 h-3 rounded-full bg-blue-500" />, onClick: () => handleSetPriority(contextMenu.task, 'normal') },
+            { label: 'Priorytet: Wysoki', icon: <div className="w-3 h-3 rounded-full bg-amber-500" />, onClick: () => handleSetPriority(contextMenu.task, 'high') },
+            { label: 'Priorytet: Krytyczny', icon: <div className="w-3 h-3 rounded-full bg-red-500" />, onClick: () => handleSetPriority(contextMenu.task, 'critical') },
+            { label: '', onClick: () => {}, divider: true },
+            // Delete
+            { label: 'Usuń fazę (Del)', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDeletePhase(contextMenu.task), danger: true },
           ]}
         />
+      )}
+      {/* ========== HELP / LEGEND OVERLAY ========== */}
+      {showHelp && (
+        <div className="fixed bottom-4 right-4 z-[100] bg-white rounded-xl shadow-2xl border border-slate-200 w-96 max-h-[70vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white rounded-t-xl">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2"><HelpCircle className="w-4 h-4" /> Pomoc i legenda</h3>
+            <button onClick={() => setShowHelp(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4 text-slate-400" /></button>
+          </div>
+          <div className="p-4 space-y-4">
+            {/* Priority colors */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Priorytet</h4>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-400" /> Niski</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-blue-500" /> Normalny</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-amber-500" /> Wysoki</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-500" /> Krytyczny</div>
+              </div>
+            </div>
+            {/* Dependency types */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Typy zależności</h4>
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-2"><div className="w-8 h-0.5 bg-slate-600" /> FS — Koniec-Początek (solid)</div>
+                <div className="flex items-center gap-2"><div className="w-8 h-0.5 bg-slate-600" style={{ borderTop: '2px dashed #475569', height: 0 }} /> SS — Początek-Początek (dashed)</div>
+                <div className="flex items-center gap-2"><div className="w-8 h-0.5 bg-slate-600" style={{ borderTop: '2px dotted #475569', height: 0 }} /> FF — Koniec-Koniec (dotted)</div>
+                <div className="flex items-center gap-2"><div className="w-8 h-0.5 bg-slate-600" style={{ borderTop: '2px dashed #475569', height: 0 }} /> SF — Początek-Koniec (dash-dot)</div>
+              </div>
+            </div>
+            {/* Symbols */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Symbole</h4>
+              <div className="space-y-1 text-xs">
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rotate-45 bg-amber-500" /> Kamień milowy</div>
+                <div className="flex items-center gap-2"><div className="w-6 h-1.5 bg-blue-600 rounded-sm" /> Faza nadrzędna</div>
+                <div className="flex items-center gap-2"><div className="w-6 h-3 bg-blue-400 rounded" /> Zadanie</div>
+                <div className="flex items-center gap-2"><div className="w-0.5 h-4 bg-red-500" /> Dzisiaj</div>
+                <div className="flex items-center gap-2"><AlertCircle className="w-3.5 h-3.5 text-red-500" /> Przekroczony termin</div>
+                <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-amber-500" /> Termin wkrótce (&le;3 dni)</div>
+              </div>
+            </div>
+            {/* Critical path */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Ścieżka krytyczna</h4>
+              <p className="text-xs text-slate-600">Najdłuższa ścieżka przez sieć zależności. Opóźnienie zadania na ścieżce krytycznej opóźnia cały projekt. Włącz w ustawieniach.</p>
+            </div>
+            {/* Keyboard shortcuts */}
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">Skróty klawiszowe</h4>
+              <div className="grid grid-cols-2 gap-y-1 text-xs">
+                <span className="text-slate-500">Ctrl+Z</span><span>Cofnij</span>
+                <span className="text-slate-500">Ctrl+Y</span><span>Ponów</span>
+                <span className="text-slate-500">Ctrl+D</span><span>Duplikuj zaznaczone</span>
+                <span className="text-slate-500">Delete</span><span>Usuń zaznaczone</span>
+                <span className="text-slate-500">T</span><span>Przewiń do dzisiaj</span>
+                <span className="text-slate-500">+ / -</span><span>Powiększ / pomniejsz</span>
+                <span className="text-slate-500">F</span><span>Pokaż filtry</span>
+                <span className="text-slate-500">?</span><span>Pomoc</span>
+                <span className="text-slate-500">Esc</span><span>Zamknij / anuluj</span>
+                <span className="text-slate-500">Dbl-click</span><span>Edycja inline</span>
+                <span className="text-slate-500">Tab</span><span>Następne pole inline</span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
