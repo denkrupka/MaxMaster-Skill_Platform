@@ -334,6 +334,15 @@ export const OffersPage: React.FC = () => {
   const [loadingRequestSections, setLoadingRequestSections] = useState(false);
   const [subcontractors, setSubcontractors] = useState<any[]>([]);
   const [creatingRequest, setCreatingRequest] = useState(false);
+  // Searchable subcontractor dropdown
+  const [subcontractorSearch, setSubcontractorSearch] = useState('');
+  const [subcontractorDropdownOpen, setSubcontractorDropdownOpen] = useState(false);
+  const [selectedSubcontractor, setSelectedSubcontractor] = useState<any>(null);
+  // Searchable supplier dropdown
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
 
   // Toast notification system
   interface ToastMessage { id: number; text: string; type: 'success' | 'error' | 'info'; }
@@ -547,12 +556,14 @@ export const OffersPage: React.FC = () => {
       if (contractorsRes.data) setContractors(contractorsRes.data);
       if (kosztorysRes.data) setKosztorysEstimates(kosztorysRes.data);
 
-      // Load subcontractors and offer requests
-      const [subRes, reqRes] = await Promise.all([
-        supabase.from('contractors').select('*').eq('company_id', currentUser.company_id).eq('contractor_type', 'subcontractor').is('deleted_at', null),
+      // Load subcontractors, suppliers, and offer requests
+      const [subRes, supplierRes, reqRes] = await Promise.all([
+        supabase.from('contractors_subcontractors').select('*').eq('company_id', currentUser.company_id).eq('is_archived', false).order('name'),
+        supabase.from('contractors_clients').select('*').eq('company_id', currentUser.company_id).eq('contractor_type', 'supplier').eq('is_archived', false).order('name'),
         supabase.from('offer_requests').select('*, offer:offers(name, number), subcontractor:contractors(name)').eq('company_id', currentUser.company_id).order('created_at', { ascending: false })
       ]);
       if (subRes.data) setSubcontractors(subRes.data);
+      if (supplierRes.data) setSuppliers(supplierRes.data);
       if (reqRes.data) setOfferRequests(reqRes.data);
     } catch (err) {
       console.error('Error loading offers:', err);
@@ -2903,9 +2914,17 @@ export const OffersPage: React.FC = () => {
     sections.forEach(sec => exportSection(sec));
 
     rows.push('');
-    rows.push(['', '', '', '', 'Suma netto:', totals.total.toFixed(2).replace('.', ','), '', ''].join(';'));
+    rows.push(['', '', '', '', 'Suma pozycji netto:', totals.total.toFixed(2).replace('.', ','), '', ''].join(';'));
+    if (totals.relatedCostsTotal > 0) {
+      rows.push(['', '', '', '', 'Koszty powiązane:', totals.relatedCostsTotal.toFixed(2).replace('.', ','), '', ''].join(';'));
+    }
+    if (totals.surchargePercent !== 0) {
+      rows.push(['', '', '', '', `Warunki istotne (${totals.surchargePercent}%):`, totals.surchargeAmount.toFixed(2).replace('.', ','), '', ''].join(';'));
+    }
+    rows.push(['', '', '', '', 'Łącznie netto:', (totals.total + totals.surchargeAmount).toFixed(2).replace('.', ','), '', ''].join(';'));
     if (totals.totalDiscount > 0) {
       rows.push(['', '', '', '', 'Rabat:', (-totals.totalDiscount).toFixed(2).replace('.', ','), '', ''].join(';'));
+      rows.push(['', '', '', '', 'Netto po rabacie:', totals.nettoAfterSurcharges.toFixed(2).replace('.', ','), '', ''].join(';'));
     }
     rows.push(['', '', '', '', 'VAT:', totals.totalVat.toFixed(2).replace('.', ','), '', ''].join(';'));
     rows.push(['', '', '', '', 'BRUTTO:', totals.totalBrutto.toFixed(2).replace('.', ','), '', ''].join(';'));
@@ -3040,14 +3059,17 @@ export const OffersPage: React.FC = () => {
             <div style="font-size:16px;font-weight:bold;">Suma brutto: ${fmtCur(totals.totalBrutto)} zł</div>
           </div>`;
       } else {
+        const htmlLacznieNetto = totals.total + totals.surchargeAmount;
         totalsSectionHTML = `
           <div style="margin-top:24px;padding-top:12px;border-top:2px solid #2c3e50;">
             <h3 style="font-size:14px;font-weight:600;margin:0 0 8px;color:#2c3e50;">Podsumowanie</h3>
             <table style="width:300px;margin-left:auto;font-size:13px;">
-              <tr><td style="padding:3px 0;">Suma netto:</td><td style="padding:3px 0;text-align:right;font-weight:500;">${fmtCur(totals.total)} zł</td></tr>
-              ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<tr style="color:#dc2626;"><td style="padding:3px 0;">Rabat:</td><td style="padding:3px 0;text-align:right;">-${fmtCur(totals.totalDiscount)} zł</td></tr>` : ''}
+              <tr><td style="padding:3px 0;">Suma pozycji netto:</td><td style="padding:3px 0;text-align:right;font-weight:500;">${fmtCur(totals.total)} zł</td></tr>
+              ${totals.relatedCostsTotal > 0 ? `<tr style="color:#64748b;"><td style="padding:3px 0;">Koszty powiązane:</td><td style="padding:3px 0;text-align:right;">${fmtCur(totals.relatedCostsTotal)} zł</td></tr>` : ''}
               ${totals.surchargePercent !== 0 ? `<tr style="color:${totals.surchargePercent > 0 ? '#dc2626' : '#16a34a'};"><td style="padding:3px 0;">Warunki istotne (${totals.surchargePercent > 0 ? '+' : ''}${totals.surchargePercent}%):</td><td style="padding:3px 0;text-align:right;">${totals.surchargePercent > 0 ? '+' : ''}${fmtCur(totals.surchargeAmount)} zł</td></tr>` : ''}
-              <tr><td style="padding:3px 0;font-weight:600;">Netto po rabacie:</td><td style="padding:3px 0;text-align:right;font-weight:600;">${fmtCur(totals.nettoAfterSurcharges)} zł</td></tr>
+              <tr><td style="padding:3px 0;font-weight:600;">Łącznie netto:</td><td style="padding:3px 0;text-align:right;font-weight:600;">${fmtCur(htmlLacznieNetto)} zł</td></tr>
+              ${totals.totalDiscount > 0 && previewTemplate !== 'netto' ? `<tr style="color:#dc2626;"><td style="padding:3px 0;">Rabat:</td><td style="padding:3px 0;text-align:right;">-${fmtCur(totals.totalDiscount)} zł</td></tr>` : ''}
+              ${totals.totalDiscount > 0 ? `<tr><td style="padding:3px 0;font-weight:600;">Netto po rabacie:</td><td style="padding:3px 0;text-align:right;font-weight:600;">${fmtCur(totals.nettoAfterSurcharges)} zł</td></tr>` : ''}
               <tr><td style="padding:3px 0;">VAT:</td><td style="padding:3px 0;text-align:right;">${fmtCur(totals.totalVat)} zł</td></tr>
               <tr style="font-weight:bold;font-size:15px;border-top:1px solid #cbd5e1;"><td style="padding:6px 0;">Brutto:</td><td style="padding:6px 0;text-align:right;">${fmtCur(totals.totalBrutto)} zł</td></tr>
             </table>
@@ -3079,7 +3101,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
       <p style="margin:0;color:#64748b;font-size:12px;">Oferta ważna do: ${formatDate(selectedOffer.valid_until)}</p>
       ${objectName ? `<p style="margin:4px 0 0;color:#64748b;font-size:12px;">Obiekt: ${objectName}</p>` : ''}
       ${objectAddress ? `<p style="margin:0;color:#64748b;font-size:12px;">Adres obiektu: ${objectAddress}</p>` : ''}
-      ${workStartDate || workEndDate ? `<p style="margin:0;color:#64748b;font-size:12px;">Termin robót: ${workStartDate ? formatDate(workStartDate) : '?'} — ${workEndDate ? formatDate(workEndDate) : '?'}</p>` : ''}
+      ${workStartDate || workEndDate ? `<p style="margin:0;color:#64748b;font-size:12px;">Terminy Realizacji: ${workStartDate ? formatDate(workStartDate) : '?'} — ${workEndDate ? formatDate(workEndDate) : '?'}</p>` : ''}
     </div>
     ${showLogoInPreview && companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:50px;" />` : ''}
   </div>
@@ -4118,7 +4140,13 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <div className="text-right">VAT</div>
                   {editMode && <div></div>}
                 </div>
-                {section.items.map(item => renderItem(section.id, item))}
+                {section.items
+                  .filter(item => {
+                    if (!itemSearchQuery) return true;
+                    const q = itemSearchQuery.toLowerCase();
+                    return item.name?.toLowerCase().includes(q) || item.description?.toLowerCase().includes(q);
+                  })
+                  .map(item => renderItem(section.id, item))}
               </div>
             )}
 
@@ -4595,6 +4623,10 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                       setRequestName(`Zapytanie — ${selectedOffer.name || selectedOffer.number || ''}`);
                       setRequestSubcontractorId('');
                       setRequestSections([]);
+                      setSelectedSubcontractor(null);
+                      setSelectedSupplier(null);
+                      setSubcontractorSearch('');
+                      setSupplierSearch('');
                       setShowCreateRequestModal(true);
                     }}
                     className="flex items-center gap-1.5 px-3 py-1.5 border border-indigo-200 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 text-sm"
@@ -5496,10 +5528,10 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <span className="text-sm">{formatCurrency(totals.totalCost)}</span>
                 </div>
               )}
-              {totals.totalDiscount > 0 && (
-                <div className="flex justify-between text-red-600">
-                  <span>Rabat ({totals.discountPercent.toFixed(1)}%):</span>
-                  <span>-{formatCurrency(totals.totalDiscount)}</span>
+              {totals.relatedCostsTotal > 0 && (
+                <div className="flex justify-between text-sm text-slate-500">
+                  <span>Koszty powiązane:</span>
+                  <span>{formatCurrency(totals.relatedCostsTotal)}</span>
                 </div>
               )}
               {/* Surcharges from warunki */}
@@ -5519,19 +5551,19 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 )) : null;
               })()}
               <div className="flex justify-between font-semibold">
-                <span className="text-slate-700">Netto po rabacie:</span>
-                <span className="text-blue-700">{formatCurrency(totals.nettoAfterSurcharges)}</span>
+                <span className="text-slate-700">Łącznie netto:</span>
+                <span className="text-blue-700">{formatCurrency(totals.total + totals.surchargeAmount)}</span>
               </div>
-              {totals.relatedCostsTotal > 0 && (
-                <div className="flex justify-between text-sm text-slate-500">
-                  <span>Koszty powiązane:</span>
-                  <span>{formatCurrency(totals.relatedCostsTotal)}</span>
+              {totals.totalDiscount > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Rabat ({totals.discountPercent.toFixed(1)}%):</span>
+                  <span>-{formatCurrency(totals.totalDiscount)}</span>
                 </div>
               )}
-              {totals.profit !== 0 && (
-                <div className="flex justify-between text-slate-500">
-                  <span className="text-sm">Zysk netto:</span>
-                  <span className={`text-sm font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totals.profit)}</span>
+              {totals.totalDiscount > 0 && (
+                <div className="flex justify-between font-semibold">
+                  <span className="text-slate-700">Netto po rabacie:</span>
+                  <span className="text-blue-700">{formatCurrency(totals.nettoAfterSurcharges)}</span>
                 </div>
               )}
               <div className="flex justify-between">
@@ -5543,6 +5575,12 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 <span className="text-lg font-medium text-slate-900">{formatCurrency(totals.totalBrutto)}</span>
               </div>
             </div>
+            {totals.profit !== 0 && (
+              <div className="mt-3 flex justify-between items-center px-2 py-2 rounded-lg bg-slate-50 border border-dashed border-slate-200">
+                <span className="text-sm text-slate-500">Zysk netto:</span>
+                <span className={`text-sm font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totals.profit)}</span>
+              </div>
+            )}
           </div>
 
           {/* Negotiation panel (owner view) */}
@@ -6003,8 +6041,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 {totals.surchargePercent !== 0 && (
                   <>
                     <div className="whitespace-nowrap">
-                      <span className="text-slate-400 hidden lg:inline">Warunki:</span>
-                      <span className="text-slate-400 lg:hidden">W:</span>
+                      <span className="text-slate-400 hidden lg:inline">Warunki/Rabat:</span>
+                      <span className="text-slate-400 lg:hidden">W/R:</span>
                       <span className={`ml-1 font-medium ${totals.surchargePercent > 0 ? 'text-red-500' : 'text-green-600'}`}>
                         {totals.surchargePercent > 0 ? '+' : ''}{totals.surchargePercent.toFixed(1)}%
                       </span>
@@ -6018,11 +6056,21 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   <span className="ml-1 font-bold text-blue-700">{formatCurrency(totals.nettoAfterSurcharges)}</span>
                 </div>
                 <div className="h-4 w-px bg-slate-200 shrink-0" />
+                {totals.relatedCostsTotal > 0 && (
+                  <>
+                    <div className="whitespace-nowrap">
+                      <span className="text-slate-400 hidden lg:inline">Koszty pow.:</span>
+                      <span className="text-slate-400 lg:hidden">KP:</span>
+                      <span className="ml-1 font-medium text-slate-600">{formatCurrency(totals.relatedCostsTotal)}</span>
+                    </div>
+                    <div className="h-4 w-px bg-slate-200 shrink-0" />
+                  </>
+                )}
                 <div className="whitespace-nowrap">
-                  <span className="text-slate-400 hidden lg:inline">Zysk:</span>
-                  <span className="text-slate-400 lg:hidden">Z:</span>
-                  <span className={`ml-1 font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(totals.profit)}
+                  <span className="text-slate-400 hidden lg:inline">Łącznie netto:</span>
+                  <span className="text-slate-400 lg:hidden">ŁN:</span>
+                  <span className="ml-1 font-bold text-blue-700">
+                    {formatCurrency(totals.nettoAfterSurcharges - totals.relatedCostsTotal)}
                   </span>
                 </div>
               </div>
@@ -6047,9 +6095,9 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                     </button>
                   )
                 )}
-                <div className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg">
-                  <span className="text-sm font-bold">{formatCurrency(totals.totalBrutto)}</span>
-                  <span className="text-[10px] opacity-75">brutto</span>
+                <div className={`flex items-center gap-1.5 ${totals.profit >= 0 ? 'bg-green-600' : 'bg-red-600'} text-white px-3 py-1.5 rounded-lg`}>
+                  <span className="text-sm font-bold">{formatCurrency(totals.profit)}</span>
+                  <span className="text-[10px] opacity-75">zysk netto</span>
                 </div>
               </div>
             </div>
@@ -6123,6 +6171,10 @@ tr{page-break-inside:avoid;page-break-after:auto;}
               setRequestName('');
               setRequestSubcontractorId('');
               setRequestSections([]);
+              setSelectedSubcontractor(null);
+              setSelectedSupplier(null);
+              setSubcontractorSearch('');
+              setSupplierSearch('');
               setShowCreateRequestModal(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
@@ -7234,8 +7286,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                             ['OBIEKT'],
                             ['Nazwa obiektu:', objectName || ''],
                             ['Adres obiektu:', objectAddress || ''],
-                            ...(workStartDate ? [['Termin rozpoczęcia:', workStartDate]] : []),
-                            ...(workEndDate ? [['Termin zakończenia:', workEndDate]] : []),
+                            ...(workStartDate ? [['Terminy Realizacji od:', workStartDate]] : []),
+                            ...(workEndDate ? [['Terminy Realizacji do:', workEndDate]] : []),
                             [],
                             ['Lp.', 'Sekcja', 'Nazwa', 'Jedn.', 'Ilość', 'Cena jedn.', 'Rabat %', 'VAT %', 'Wartość netto']
                           ];
@@ -7257,8 +7309,14 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                               ]);
                             });
                           });
+                          const xlLacznieNetto = totals.total + totals.surchargeAmount;
                           wsData.push([]);
-                          wsData.push(['', '', '', '', '', '', '', 'Suma netto:', totals.total.toFixed(2)]);
+                          wsData.push(['', '', '', '', '', '', '', 'Suma pozycji netto:', totals.total.toFixed(2)]);
+                          if (totals.relatedCostsTotal > 0) wsData.push(['', '', '', '', '', '', '', 'Koszty powiązane:', totals.relatedCostsTotal.toFixed(2)]);
+                          if (totals.surchargePercent !== 0) wsData.push(['', '', '', '', '', '', '', `Warunki istotne (${totals.surchargePercent > 0 ? '+' : ''}${totals.surchargePercent}%):`, totals.surchargeAmount.toFixed(2)]);
+                          wsData.push(['', '', '', '', '', '', '', 'Łącznie netto:', xlLacznieNetto.toFixed(2)]);
+                          if (totals.totalDiscount > 0) wsData.push(['', '', '', '', '', '', '', 'Rabat:', (-totals.totalDiscount).toFixed(2)]);
+                          if (totals.totalDiscount > 0) wsData.push(['', '', '', '', '', '', '', 'Netto po rabacie:', totals.nettoAfterSurcharges.toFixed(2)]);
                           wsData.push(['', '', '', '', '', '', '', 'VAT:', totals.totalVat.toFixed(2)]);
                           wsData.push(['', '', '', '', '', '', '', 'Brutto:', totals.totalBrutto.toFixed(2)]);
                           if (offerData.notes) {
@@ -8180,17 +8238,106 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                     </div>
                   </div>
 
-                  {/* Subcontractor selection */}
-                  <div>
+                  {/* Subcontractor selection — searchable */}
+                  <div className="relative">
                     <label className="text-sm font-medium text-slate-700 mb-1 block">Podwykonawca</label>
-                    <select
-                      value={requestSubcontractorId}
-                      onChange={e => setRequestSubcontractorId(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                    >
-                      <option value="">-- Wybierz podwykonawcę (opcjonalnie) --</option>
-                      {subcontractors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    {selectedSubcontractor ? (
+                      <div className="flex items-center gap-2 px-3 py-2 border border-blue-200 bg-blue-50 rounded-lg text-sm">
+                        <span className="flex-1 font-medium text-slate-900">{selectedSubcontractor.name}</span>
+                        {selectedSubcontractor.nip && <span className="text-slate-500 text-xs">NIP: {selectedSubcontractor.nip}</span>}
+                        <button onClick={() => { setSelectedSubcontractor(null); setRequestSubcontractorId(''); setSubcontractorSearch(''); }} className="p-0.5 hover:bg-blue-100 rounded"><X className="w-4 h-4 text-slate-500" /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            value={subcontractorSearch}
+                            onChange={e => { setSubcontractorSearch(e.target.value); setSubcontractorDropdownOpen(true); }}
+                            onFocus={() => setSubcontractorDropdownOpen(true)}
+                            placeholder="Szukaj podwykonawcy (nazwa, NIP, telefon)…"
+                            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        {subcontractorDropdownOpen && (() => {
+                          const q = subcontractorSearch.toLowerCase().trim();
+                          const filtered = subcontractors.filter(s =>
+                            !q || (s.name || '').toLowerCase().includes(q) || (s.nip || '').includes(q) || (s.phone || '').includes(q)
+                          );
+                          return filtered.length > 0 ? (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {filtered.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => { setSelectedSubcontractor(s); setRequestSubcontractorId(s.id); setSubcontractorDropdownOpen(false); setSubcontractorSearch(''); }}
+                                  className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-slate-50 last:border-0"
+                                >
+                                  <span className="font-medium text-slate-900">{s.name}</span>
+                                  {s.nip && <span className="ml-2 text-xs text-slate-500">NIP: {s.nip}</span>}
+                                  {s.phone && <span className="ml-2 text-xs text-slate-400">{s.phone}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          ) : q ? (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm text-slate-500">
+                              Brak wyników dla „{subcontractorSearch}"
+                            </div>
+                          ) : null;
+                        })()}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Supplier selection — searchable */}
+                  <div className="relative">
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">Dostawca</label>
+                    {selectedSupplier ? (
+                      <div className="flex items-center gap-2 px-3 py-2 border border-amber-200 bg-amber-50 rounded-lg text-sm">
+                        <span className="flex-1 font-medium text-slate-900">{selectedSupplier.name}</span>
+                        {selectedSupplier.nip && <span className="text-slate-500 text-xs">NIP: {selectedSupplier.nip}</span>}
+                        <button onClick={() => { setSelectedSupplier(null); setSupplierSearch(''); }} className="p-0.5 hover:bg-amber-100 rounded"><X className="w-4 h-4 text-slate-500" /></button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            value={supplierSearch}
+                            onChange={e => { setSupplierSearch(e.target.value); setSupplierDropdownOpen(true); }}
+                            onFocus={() => setSupplierDropdownOpen(true)}
+                            placeholder="Szukaj dostawcy (nazwa, NIP, telefon)…"
+                            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                          />
+                        </div>
+                        {supplierDropdownOpen && (() => {
+                          const q = supplierSearch.toLowerCase().trim();
+                          const filtered = suppliers.filter(s =>
+                            !q || (s.name || '').toLowerCase().includes(q) || (s.nip || '').includes(q) || (s.phone || '').includes(q)
+                          );
+                          return filtered.length > 0 ? (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {filtered.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => { setSelectedSupplier(s); setSupplierDropdownOpen(false); setSupplierSearch(''); }}
+                                  className="w-full text-left px-3 py-2 hover:bg-amber-50 text-sm border-b border-slate-50 last:border-0"
+                                >
+                                  <span className="font-medium text-slate-900">{s.name}</span>
+                                  {s.nip && <span className="ml-2 text-xs text-slate-500">NIP: {s.nip}</span>}
+                                  {s.phone && <span className="ml-2 text-xs text-slate-400">{s.phone}</span>}
+                                </button>
+                              ))}
+                            </div>
+                          ) : q ? (
+                            <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm text-slate-500">
+                              Brak wyników dla „{supplierSearch}"
+                            </div>
+                          ) : null;
+                        })()}
+                      </>
+                    )}
                   </div>
 
                   {/* Preview of filtered items count */}
@@ -8211,208 +8358,80 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                   </div>
                 </>
               )}
-
-              {requestStep === 'preview' && (
-                <div className="space-y-4">
-                  {loadingRequestSections && (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                      <span className="ml-2 text-sm text-slate-500">Ładowanie pozycji…</span>
-                    </div>
-                  )}
-                  <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-500">Oferta źródłowa:</span>
-                      <span className="text-sm font-medium">{reqOffer?.name || reqOffer?.number || '-'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-slate-500">Typ zapytania:</span>
-                      <span className="text-sm font-medium">
-                        {{ robota: 'Robota', materialy: 'Materiały', sprzet: 'Sprzęt', all: 'Cały zakres' }[requestType]}
-                      </span>
-                    </div>
-                    {requestSubcontractorId && (
-                      <div className="flex justify-between">
-                        <span className="text-sm text-slate-500">Podwykonawca:</span>
-                        <span className="text-sm font-medium">{subcontractors.find(s => s.id === requestSubcontractorId)?.name || ''}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Filtered items preview */}
-                  <div className="border border-slate-200 rounded-lg overflow-hidden max-h-[40vh] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 sticky top-0">
-                        <tr>
-                          <th className="text-left p-2 text-slate-600">Lp.</th>
-                          <th className="text-left p-2 text-slate-600">Sekcja</th>
-                          <th className="text-left p-2 text-slate-600">Nazwa</th>
-                          <th className="text-left p-2 text-slate-600">Jedn.</th>
-                          <th className="text-right p-2 text-slate-600">Ilość</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          const typeMap: Record<string, string> = { robota: 'labor', materialy: 'material', sprzet: 'equipment' };
-                          const compType = requestType !== 'all' ? typeMap[requestType] : null;
-                          let lp = 0;
-                          return modalSections.flatMap((sec: any) =>
-                            (sec.items || [])
-                              .filter((item: any) => !compType || (item.components || []).some((c: any) => c.type === compType))
-                              .map((item: any) => {
-                                lp++;
-                                return (
-                                  <tr key={item.id} className="border-t border-slate-100">
-                                    <td className="p-2 text-slate-500">{lp}</td>
-                                    <td className="p-2 text-slate-500">{sec.name}</td>
-                                    <td className="p-2 font-medium text-slate-900">{item.name}</td>
-                                    <td className="p-2 text-slate-500">{item.unit || 'szt.'}</td>
-                                    <td className="p-2 text-right text-slate-700">{item.quantity}</td>
-                                  </tr>
-                                );
-                              })
-                          );
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="p-4 border-t border-slate-200 flex justify-between">
-              {requestStep === 'preview' ? (
-                <>
-                  <button
-                    onClick={() => setRequestStep('type')}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
-                  >
-                    Wstecz
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        if (!currentUser || !reqOffer) return;
-                        setCreatingRequest(true);
-                        try {
-                          const token = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-                          const typeMap: Record<string, string> = { robota: 'labor', materialy: 'material', sprzet: 'equipment' };
-                          const compType = requestType !== 'all' ? typeMap[requestType] : null;
-                          const filteredItems = modalSections.flatMap((sec: any) =>
-                            (sec.items || [])
-                              .filter((item: any) => !compType || (item.components || []).some((c: any) => c.type === compType))
-                              .map((item: any) => ({ ...item, section_name: sec.name }))
-                          );
-                          const { data: newReq, error } = await supabase.from('offer_requests').insert({
-                            company_id: currentUser.company_id,
-                            offer_id: reqOffer.id,
-                            subcontractor_id: requestSubcontractorId || null,
-                            name: requestName || `Zapytanie — ${reqOffer.name}`,
-                            request_type: requestType,
-                            status: 'draft',
-                            share_token: token,
-                            created_by_id: currentUser.id,
-                            print_settings: {
-                              items: filteredItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, section_name: i.section_name })),
-                              offer_name: reqOffer.name,
-                              offer_number: reqOffer.number,
-                              company_data: {
-                                name: state.currentCompany?.name || '',
-                                nip: (state.currentCompany as any)?.nip || (state.currentCompany as any)?.tax_id || '',
-                              }
-                            }
-                          }).select('*, offer:offers(name, number), subcontractor:contractors(name)').single();
-                          if (error) throw error;
-                          if (newReq) {
-                            setOfferRequests(prev => [newReq, ...prev]);
-                            showToast('Zapytanie ofertowe utworzone', 'success');
-                            setShowCreateRequestModal(false);
-                          }
-                        } catch (err) {
-                          console.error('Error creating request:', err);
-                          showToast('Błąd tworzenia zapytania', 'error');
-                        } finally {
-                          setCreatingRequest(false);
-                        }
-                      }}
-                      disabled={creatingRequest}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50"
-                    >
-                      {creatingRequest ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Zapisz jako szkic
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!currentUser || !reqOffer) return;
-                        setCreatingRequest(true);
-                        try {
-                          const token = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-                          const typeMap: Record<string, string> = { robota: 'labor', materialy: 'material', sprzet: 'equipment' };
-                          const compType = requestType !== 'all' ? typeMap[requestType] : null;
-                          const filteredItems = modalSections.flatMap((sec: any) =>
-                            (sec.items || [])
-                              .filter((item: any) => !compType || (item.components || []).some((c: any) => c.type === compType))
-                              .map((item: any) => ({ ...item, section_name: sec.name }))
-                          );
-                          const { data: newReq, error } = await supabase.from('offer_requests').insert({
-                            company_id: currentUser.company_id,
-                            offer_id: reqOffer.id,
-                            subcontractor_id: requestSubcontractorId || null,
-                            name: requestName || `Zapytanie — ${reqOffer.name}`,
-                            request_type: requestType,
-                            status: 'sent',
-                            share_token: token,
-                            sent_at: new Date().toISOString(),
-                            created_by_id: currentUser.id,
-                            print_settings: {
-                              items: filteredItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, section_name: i.section_name })),
-                              offer_name: reqOffer.name,
-                              offer_number: reqOffer.number,
-                              company_data: {
-                                name: state.currentCompany?.name || '',
-                                nip: (state.currentCompany as any)?.nip || (state.currentCompany as any)?.tax_id || '',
-                              }
-                            }
-                          }).select('*, offer:offers(name, number), subcontractor:contractors(name)').single();
-                          if (error) throw error;
-                          if (newReq) {
-                            setOfferRequests(prev => [newReq, ...prev]);
-                            const url = `${window.location.origin}/#/offer-request/${token}`;
-                            await navigator.clipboard.writeText(url);
-                            showToast('Zapytanie wysłane — link skopiowany do schowka', 'success');
-                            setShowCreateRequestModal(false);
-                          }
-                        } catch (err) {
-                          console.error('Error creating request:', err);
-                          showToast('Błąd tworzenia zapytania', 'error');
-                        } finally {
-                          setCreatingRequest(false);
-                        }
-                      }}
-                      disabled={creatingRequest}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm disabled:opacity-50"
-                    >
-                      {creatingRequest ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Wyślij
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => { setShowCreateRequestModal(false); setCreatingRequest(false); }}
-                    className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
-                  >
-                    Anuluj
-                  </button>
-                  <button
-                    onClick={() => setRequestStep('preview')}
-                    disabled={!reqOffer}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Dalej — podgląd
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => { setShowCreateRequestModal(false); setCreatingRequest(false); setSelectedSubcontractor(null); setSelectedSupplier(null); setSubcontractorSearch(''); setSupplierSearch(''); }}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-sm hover:bg-slate-50"
+              >
+                Anuluj
+              </button>
+              <button
+                onClick={async () => {
+                  if (!currentUser || !reqOffer) return;
+                  setCreatingRequest(true);
+                  try {
+                    const token = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+                    const typeMap: Record<string, string> = { robota: 'labor', materialy: 'material', sprzet: 'equipment' };
+                    const compType = requestType !== 'all' ? typeMap[requestType] : null;
+                    const filteredItems = modalSections.flatMap((sec: any) =>
+                      (sec.items || [])
+                        .filter((item: any) => !compType || (item.components || []).some((c: any) => c.type === compType))
+                        .map((item: any) => ({ ...item, section_name: sec.name }))
+                    );
+                    const { data: newReq, error } = await supabase.from('offer_requests').insert({
+                      company_id: currentUser.company_id,
+                      offer_id: reqOffer.id,
+                      subcontractor_id: requestSubcontractorId || null,
+                      name: requestName || `Zapytanie — ${reqOffer.name}`,
+                      request_type: requestType,
+                      status: 'draft',
+                      share_token: token,
+                      created_by_id: currentUser.id,
+                      print_settings: {
+                        items: filteredItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, quantity: i.quantity, section_name: i.section_name })),
+                        offer_name: reqOffer.name,
+                        offer_number: reqOffer.number,
+                        company_data: {
+                          name: state.currentCompany?.name || '',
+                          nip: (state.currentCompany as any)?.nip || (state.currentCompany as any)?.tax_id || '',
+                          logo_url: (state.currentCompany as any)?.logo_url || '',
+                          phone: (state.currentCompany as any)?.phone || '',
+                          email: (state.currentCompany as any)?.email || '',
+                          street: (state.currentCompany as any)?.street || '',
+                          building_number: (state.currentCompany as any)?.building_number || '',
+                          city: (state.currentCompany as any)?.city || '',
+                          postal_code: (state.currentCompany as any)?.postal_code || '',
+                        },
+                        subcontractor_data: selectedSubcontractor ? { id: selectedSubcontractor.id, name: selectedSubcontractor.name, nip: selectedSubcontractor.nip, phone: selectedSubcontractor.phone, email: selectedSubcontractor.email } : null,
+                        supplier_data: selectedSupplier ? { id: selectedSupplier.id, name: selectedSupplier.name, nip: selectedSupplier.nip, phone: selectedSupplier.phone, email: selectedSupplier.email } : null,
+                      }
+                    }).select('*, offer:offers(name, number), subcontractor:contractors(name)').single();
+                    if (error) throw error;
+                    if (newReq) {
+                      setOfferRequests(prev => [newReq, ...prev]);
+                      const url = `${window.location.origin}/#/offer-request/${token}`;
+                      window.open(url, '_blank');
+                      showToast('Zapytanie ofertowe utworzone', 'success');
+                      setShowCreateRequestModal(false);
+                      setSelectedSubcontractor(null);
+                      setSelectedSupplier(null);
+                      setSubcontractorSearch('');
+                      setSupplierSearch('');
+                    }
+                  } catch (err) {
+                    console.error('Error creating request:', err);
+                    showToast('Błąd tworzenia zapytania', 'error');
+                  } finally {
+                    setCreatingRequest(false);
+                  }
+                }}
+                disabled={creatingRequest || !reqOffer}
+                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingRequest ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Utwórz
+              </button>
             </div>
           </div>
         </div>
