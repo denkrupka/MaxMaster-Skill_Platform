@@ -1617,10 +1617,10 @@ export const OffersPage: React.FC = () => {
               object_city: offerClientData.object_city,
               object_postal_code: offerClientData.object_postal_code,
               representative_id: sendRepresentativeId || null,
-              representative_name: (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
-              representative_email: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
-              representative_phone: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
-              representative_position: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
+              representative_name: showAddRepInline && newRepData.first_name ? `${newRepData.first_name} ${newRepData.last_name}`.trim() : (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
+              representative_email: showAddRepInline && newRepData.first_name ? (newRepData.email || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
+              representative_phone: showAddRepInline && newRepData.first_name ? (newRepData.phone || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
+              representative_position: showAddRepInline && newRepData.first_name ? (newRepData.position || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
               work_type_ids: offerSelectedWorkTypes
             },
             warunki: {
@@ -1836,6 +1836,49 @@ export const OffersPage: React.FC = () => {
       const totalDisc = allItemsFlat.reduce((sum, i) => sum + (i.quantity * i.unit_price) * ((i.discount_percent || 0) / 100), 0);
       const finalAmount = totalNetto - totalDisc;
 
+      // Resolve client_id: find or create contractor if needed (before offer update)
+      let resolvedClientId = offerData.client_id || (selectedOffer as any)?.client_id || '';
+      if (!resolvedClientId && offerClientData.client_name.trim()) {
+        const nipNorm = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
+        if (nipNorm) {
+          const { data: byNip } = await supabase.from('contractors').select('id')
+            .eq('company_id', currentUser.company_id).eq('nip', nipNorm).is('deleted_at', null).limit(1);
+          if (byNip?.length) resolvedClientId = byNip[0].id;
+        }
+        if (!resolvedClientId) {
+          const { data: byName } = await supabase.from('contractors').select('id')
+            .eq('company_id', currentUser.company_id).ilike('name', offerClientData.client_name.trim()).is('deleted_at', null).limit(1);
+          if (byName?.length) resolvedClientId = byName[0].id;
+        }
+        if (!resolvedClientId) {
+          const address = [offerClientData.company_street, offerClientData.company_street_number, offerClientData.company_postal_code, offerClientData.company_city].filter(Boolean).join(', ') || null;
+          const nipNorm2 = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
+          const { data: newC } = await supabase.from('contractors').insert({
+            company_id: currentUser.company_id, name: offerClientData.client_name.trim(),
+            nip: nipNorm2 || null, contractor_entity_type: 'company', contractor_type: 'customer',
+            legal_address: address, actual_address: address, created_by_id: currentUser.id
+          }).select('id').single();
+          if (newC) resolvedClientId = newC.id;
+        }
+      }
+
+      // Save new representative contact BEFORE offer update
+      let savedRepId = sendRepresentativeId || '';
+      if (showAddRepInline && newRepData.first_name.trim() && newRepData.last_name.trim() && resolvedClientId) {
+        const { data: savedContact } = await supabase.from('contractor_client_contacts').insert({
+          client_id: resolvedClientId, first_name: newRepData.first_name.trim(), last_name: newRepData.last_name.trim(),
+          phone: newRepData.phone || null, email: newRepData.email || null, position: newRepData.position || null,
+          is_main_contact: newRepData.is_main_contact
+        }).select().single();
+        if (savedContact) {
+          savedRepId = savedContact.id;
+          setOfferClientContacts(prev => [...prev, savedContact]);
+          setSendRepresentativeId(savedContact.id);
+          setShowAddRepInline(false);
+          setNewRepData({ first_name: '', last_name: '', phone: '', email: '', position: '', is_main_contact: true });
+        }
+      }
+
       // Update offer
       await supabase
         .from('offers')
@@ -1843,7 +1886,7 @@ export const OffersPage: React.FC = () => {
           name: offerData.name.trim(),
           number: offerData.number || selectedOffer.number,
           project_id: offerData.project_id || null,
-          client_id: offerData.client_id || null,
+          client_id: resolvedClientId || null,
           valid_until: offerData.valid_until || null,
           discount_percent: offerData.discount_percent,
           discount_amount: offerData.discount_amount,
@@ -1873,11 +1916,11 @@ export const OffersPage: React.FC = () => {
               object_street_number: offerClientData.object_street_number,
               object_city: offerClientData.object_city,
               object_postal_code: offerClientData.object_postal_code,
-              representative_id: sendRepresentativeId || null,
-              representative_name: (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
-              representative_email: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
-              representative_phone: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
-              representative_position: (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
+              representative_id: savedRepId || sendRepresentativeId || null,
+              representative_name: savedRepId ? `${newRepData.first_name} ${newRepData.last_name}`.trim() : (() => { const r = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0]; return r ? `${r.first_name || ''} ${r.last_name || ''}`.trim() : ''; })(),
+              representative_email: savedRepId ? (newRepData.email || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.email || '',
+              representative_phone: savedRepId ? (newRepData.phone || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.phone || '',
+              representative_position: savedRepId ? (newRepData.position || '') : (offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0])?.position || '',
               work_type_ids: offerSelectedWorkTypes
             },
             warunki: {
@@ -1916,52 +1959,6 @@ export const OffersPage: React.FC = () => {
           }
         })
         .eq('id', selectedOffer.id);
-
-      // Save new representative contact if added inline
-      if (showAddRepInline && newRepData.first_name.trim() && newRepData.last_name.trim()) {
-        let repClientId = offerData.client_id || (selectedOffer as any)?.client_id || '';
-        // Find or create contractor if needed
-        if (!repClientId && offerClientData.client_name.trim()) {
-          const nipNorm = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
-          if (nipNorm) {
-            const { data: byNip } = await supabase.from('contractors').select('id')
-              .eq('company_id', currentUser.company_id).eq('nip', nipNorm).is('deleted_at', null).limit(1);
-            if (byNip?.length) repClientId = byNip[0].id;
-          }
-          if (!repClientId) {
-            const { data: byName } = await supabase.from('contractors').select('id')
-              .eq('company_id', currentUser.company_id).ilike('name', offerClientData.client_name.trim()).is('deleted_at', null).limit(1);
-            if (byName?.length) repClientId = byName[0].id;
-          }
-          if (!repClientId) {
-            const address = [offerClientData.company_street, offerClientData.company_street_number, offerClientData.company_postal_code, offerClientData.company_city].filter(Boolean).join(', ') || null;
-            const { data: newC } = await supabase.from('contractors').insert({
-              company_id: currentUser.company_id, name: offerClientData.client_name.trim(),
-              nip: nipNorm || null, contractor_entity_type: 'company', contractor_type: 'customer',
-              legal_address: address, actual_address: address, created_by_id: currentUser.id
-            }).select('id').single();
-            if (newC) repClientId = newC.id;
-          }
-          if (repClientId) {
-            setOfferData(prev => ({ ...prev, client_id: repClientId }));
-            // Also update offer's client_id
-            await supabase.from('offers').update({ client_id: repClientId }).eq('id', selectedOffer.id);
-          }
-        }
-        if (repClientId) {
-          const { data: savedContact } = await supabase.from('contractor_client_contacts').insert({
-            client_id: repClientId, first_name: newRepData.first_name.trim(), last_name: newRepData.last_name.trim(),
-            phone: newRepData.phone || null, email: newRepData.email || null, position: newRepData.position || null,
-            is_main_contact: newRepData.is_main_contact
-          }).select().single();
-          if (savedContact) {
-            setOfferClientContacts(prev => [...prev, savedContact]);
-            setSendRepresentativeId(savedContact.id);
-            setShowAddRepInline(false);
-            setNewRepData({ first_name: '', last_name: '', phone: '', email: '', position: '', is_main_contact: true });
-          }
-        }
-      }
 
       // Delete existing sections and items (will re-create)
       await supabase.from('offer_sections').delete().eq('offer_id', selectedOffer.id);
