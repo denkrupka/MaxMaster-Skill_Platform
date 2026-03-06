@@ -1295,11 +1295,16 @@ export const OffersPage: React.FC = () => {
         // Load client contacts for send modal
         if (offer.client_id) {
           const { data: contacts } = await supabase
-            .from('contractor_contacts')
+            .from('contractor_client_contacts')
             .select('*')
-            .eq('contractor_id', offer.client_id)
-            .order('is_primary', { ascending: false });
+            .eq('client_id', offer.client_id)
+            .order('last_name');
           setOfferClientContacts(contacts || []);
+          // Auto-select representative from saved print_settings or main contact
+          const ps = offer.print_settings?.client_data;
+          const savedRepId = ps?.representative_id;
+          const mainContact = (contacts || []).find((c: any) => c.id === savedRepId) || (contacts || []).find((c: any) => c.is_main_contact) || (contacts || [])[0];
+          if (mainContact) setSendRepresentativeId(mainContact.id);
         }
 
         // Load negotiation data if status is negotiation
