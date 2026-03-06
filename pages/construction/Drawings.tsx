@@ -2024,8 +2024,8 @@ export const DrawingsPage: React.FC = () => {
                     </a>
                   </div>
                 ) : (
-                  <div className="min-h-full flex items-start justify-center p-4">
-                    <div className="relative" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}>
+                  <div className="min-h-full flex items-start justify-start p-4">
+                    <div className="relative" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}>
                       {/* PDF Canvas */}
                       {fileType === 'pdf' && <canvas ref={pdfCanvasRef} className="bg-white shadow-lg" />}
                       {/* Image */}
