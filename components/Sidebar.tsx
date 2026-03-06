@@ -211,6 +211,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
 
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 bottom-0 bg-white border-r border-slate-200 z-50 transform transition-all duration-300 lg:translate-x-0 ${collapsed ? 'w-16' : 'w-64'} ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        {/* Collapse/expand toggle arrow — visible on desktop */}
+        <button
+          onClick={() => setCollapsed?.(!collapsed)}
+          className="hidden lg:flex absolute -right-3 top-7 z-[60] w-6 h-6 bg-white border border-slate-200 rounded-full items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-300 shadow-sm transition-colors"
+          title={collapsed ? 'Rozwiń menu' : 'Zwiń menu'}
+        >
+          {collapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+        </button>
         <div className={`h-16 flex items-center ${collapsed ? 'px-3 justify-center' : 'px-6'} border-b border-slate-100`}>
           {collapsed ? (
             <button onClick={() => setCollapsed?.(false)} className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold hover:bg-blue-700 transition" title="Rozwiń menu">
@@ -222,9 +230,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, collapsed =
                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">M</div>
                 <span className="text-lg font-bold text-slate-800">MaxMaster</span>
               </div>
-              <button onClick={() => setCollapsed?.(true)} className="ml-auto hidden lg:flex p-1 hover:bg-slate-100 rounded text-slate-400" title="Zwiń menu">
-                <ChevronsLeft size={18} />
-              </button>
               <button onClick={() => setIsOpen(false)} className="ml-auto lg:hidden text-slate-500">
                 <X size={24} />
               </button>

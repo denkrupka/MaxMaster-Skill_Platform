@@ -11,7 +11,7 @@ import {
   Save, Undo2, Filter, MapPin, Image,
   ExternalLink, Crosshair, LayoutList, BookOpen,
   Hash, CloudLightning, MessageCircleWarning,
-  Magnet, FileSearch, BarChart3, Printer, FileType2, Info, Sparkles, PanelLeftClose, PanelLeftOpen
+  Magnet, FileSearch, BarChart3, Printer, FileType2, Info, Sparkles, PanelLeftClose, PanelLeftOpen, Hand
 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { supabase } from '../../lib/supabase';
@@ -106,7 +106,7 @@ interface PlanPin {
   created_by_id: string; created_at: string;
 }
 
-type AnnotationTool = 'pointer' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler' | 'comment' | 'camera' | 'screenshot' | 'cloud' | 'callout' | 'count';
+type AnnotationTool = 'pointer' | 'hand' | 'pen' | 'highlighter' | 'rectangle' | 'ellipse' | 'arrow' | 'line' | 'text' | 'eraser' | 'ruler' | 'comment' | 'camera' | 'screenshot' | 'cloud' | 'callout' | 'count';
 type RulerMode = 'single' | 'polyline' | 'area';
 
 // ==================== HELPERS ====================
@@ -527,6 +527,7 @@ export const DrawingsPage: React.FC = () => {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         switch (e.key.toLowerCase()) {
           case 'v': setActiveTool('pointer'); setPolylinePoints([]); break;
+          case 'g': setActiveTool('hand'); setPolylinePoints([]); break;
           case 'p': setActiveTool('pen'); break;
           case 'h': setActiveTool('highlighter'); break;
           case 'r': setActiveTool('rectangle'); break;
@@ -1278,6 +1279,29 @@ export const DrawingsPage: React.FC = () => {
   // ==================== ANNOTATION TOOL HANDLERS ====================
 
   const handleSvgMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (activeTool === 'hand') {
+      // Pan mode: track start position for scrolling the viewer
+      e.preventDefault();
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const scrollLeft = viewer.scrollLeft;
+      const scrollTop = viewer.scrollTop;
+      (e.target as SVGSVGElement).style.cursor = 'grabbing';
+      const onMove = (ev: MouseEvent) => {
+        viewer.scrollLeft = scrollLeft - (ev.clientX - startX);
+        viewer.scrollTop = scrollTop - (ev.clientY - startY);
+      };
+      const onUp = () => {
+        (e.target as SVGSVGElement).style.cursor = 'grab';
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+      return;
+    }
     if (activeTool === 'pointer') {
       // DXF entity properties on click
       if (dxfData && dxfViewBox && selectedPlan && getFileType(selectedPlan) === 'dxf') {
@@ -2021,7 +2045,7 @@ export const DrawingsPage: React.FC = () => {
                       {/* SVG Annotation Overlay */}
                       <svg ref={svgRef} viewBox={`0 0 ${planNatW} ${planNatH}`}
                         className="absolute top-0 left-0 w-full h-full"
-                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'eraser' ? 'not-allowed' : 'crosshair' }}
+                        style={{ cursor: activeTool === 'pointer' ? 'default' : activeTool === 'hand' ? 'grab' : activeTool === 'eraser' ? 'not-allowed' : 'crosshair' }}
                         onMouseDown={handleSvgMouseDown} onMouseMove={handleSvgMouseMove} onMouseUp={handleSvgMouseUp}
                         onMouseLeave={handleSvgMouseUp} onDoubleClick={handleSvgDoubleClick}>
                         {/* Saved annotations */}
@@ -2245,11 +2269,17 @@ export const DrawingsPage: React.FC = () => {
               </div>
 
               {/* Bottom annotation toolbar */}
-              <div className="px-3 py-1.5 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 overflow-x-auto" onClick={e => e.stopPropagation()}>
+              <div className="px-3 py-1.5 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 relative" onClick={e => e.stopPropagation()}>
                 {/* Pointer */}
                 <button onClick={() => { setActiveTool('pointer'); setPolylinePoints([]); setPolylineCursorPt(null); setRulerSingleStart(null); setRulerSingleCursorPt(null); setCountItems([]); setDxfCountMatches([]); setDxfCountLabel(''); }}
                   className={`p-2 rounded-lg transition ${activeTool === 'pointer' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Zaznacz (V)">
                   <MousePointer className="w-5 h-5" />
+                </button>
+
+                {/* Hand / Pan */}
+                <button onClick={() => { setActiveTool('hand'); setPolylinePoints([]); setPolylineCursorPt(null); setRulerSingleStart(null); setRulerSingleCursorPt(null); setCountItems([]); setDxfCountMatches([]); setDxfCountLabel(''); }}
+                  className={`p-2 rounded-lg transition ${activeTool === 'hand' ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'}`} title="Rączka — przesuń (G)">
+                  <Hand className="w-5 h-5" />
                 </button>
 
                 <div className="w-px h-6 bg-slate-200 mx-1" />
@@ -2457,6 +2487,7 @@ export const DrawingsPage: React.FC = () => {
               <div className="px-3 py-1 border-t border-slate-100 bg-slate-50 flex items-center gap-3 flex-shrink-0 text-[11px] text-slate-400" onClick={e => e.stopPropagation()}>
                 <span className="font-medium text-slate-500">
                   {activeTool === 'pointer' && 'Zaznaczanie'}
+                  {activeTool === 'hand' && 'Przesuwanie'}
                   {activeTool === 'pen' && 'Pióro'}
                   {activeTool === 'highlighter' && 'Zakreślacz'}
                   {activeTool === 'rectangle' && 'Prostokąt'}
@@ -2475,6 +2506,7 @@ export const DrawingsPage: React.FC = () => {
                 </span>
                 <span>
                   {activeTool === 'pointer' && 'Kliknij element aby go zaznaczyć · Del = usuń'}
+                  {activeTool === 'hand' && 'Przytrzymaj i przeciągnij aby przesunąć widok'}
                   {activeTool === 'pen' && 'Rysuj dowolny kształt przytrzymując przycisk myszy'}
                   {activeTool === 'highlighter' && 'Zaznacz ważny fragment przytrzymując przycisk myszy'}
                   {(activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'cloud') && 'Kliknij i przeciągnij aby narysować'}

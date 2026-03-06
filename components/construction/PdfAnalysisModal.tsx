@@ -35,25 +35,31 @@ export default function PdfAnalysisModal({
     setError('');
     setExtractionProgress(0);
     try {
-      // Step 1: Classify
       const page = await pdfDoc.getPage(pageNumber);
+
+      // Step 1: Classify — use a microtask yield to let UI update before heavy work
+      await new Promise(r => setTimeout(r, 0));
       const cls = await classifyPdfPage(page);
       setClassification(cls);
 
       if (cls.contentType === 'raster') {
         // Raster pipeline
         setStep('analyzing');
+        await new Promise(r => setTimeout(r, 0));
         const { analysis: result } = await analyzeRasterPdf(page, supabase, pageNumber);
         setAnalysis(result);
         setStep('analyzed');
       } else {
         // Vector pipeline — runs in Web Worker (non-blocking)
         setStep('extracting');
+        await new Promise(r => setTimeout(r, 0));
         const extraction = await extractPageGeometry(page, (pct) => {
           setExtractionProgress(pct);
         });
 
         setStep('analyzing');
+        // Yield to UI before heavy sync analysis
+        await new Promise(r => setTimeout(r, 0));
         const { analysis: result, extra: analysisExtra } = analyzePdfPage(extraction, {
           calibrationScaleRatio: scaleRatio,
         });
@@ -185,8 +191,8 @@ export default function PdfAnalysisModal({
         });
       }
 
-      onAnalysisComplete(analysis, extra || undefined);
       setStep('done');
+      onAnalysisComplete(analysis, extra || undefined);
     } catch (err: any) {
       setError(err.message || 'Błąd zapisu');
       setStep('error');
@@ -357,6 +363,11 @@ export default function PdfAnalysisModal({
             {step === 'ai_classifying' && (
               <div className="flex items-center gap-1 px-3 py-1.5 text-sm text-purple-700">
                 <Loader2 size={14} className="animate-spin" /> Klasyfikacja AI grup...
+              </div>
+            )}
+            {step === 'saving' && (
+              <div className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-700">
+                <Loader2 size={14} className="animate-spin" /> Zapisywanie...
               </div>
             )}
             {step === 'analyzed' && (
