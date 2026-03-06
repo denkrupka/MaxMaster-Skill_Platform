@@ -344,10 +344,25 @@ export default function PdfAnalysisModal({
                 </div>
               )}
 
-              {/* Legend info */}
-              {extra?.legend && (
-                <div className="text-xs text-amber-700 bg-amber-50 rounded p-2">
-                  Wykryto legendę: {extra.legend.entries.length} wpisów
+              {/* Legend entries with match counts */}
+              {extra?.legend && extra.legend.entries.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium mb-1">Legenda ({extra.legend.entries.length} wpisów):</div>
+                  <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                    {extra.legend.entries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs bg-amber-50/50 px-2 py-0.5 rounded">
+                        {entry.sampleColor && (
+                          <div className="w-3 h-3 rounded flex-shrink-0" style={{ backgroundColor: entry.sampleColor }} />
+                        )}
+                        <span className="flex-1 truncate">{entry.label}</span>
+                        {(entry.matchCount || 0) > 0 ? (
+                          <span className="text-green-600 font-medium">{entry.matchCount} szt.</span>
+                        ) : (
+                          <span className="text-gray-400">0</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

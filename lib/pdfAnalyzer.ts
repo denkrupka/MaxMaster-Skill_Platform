@@ -460,28 +460,22 @@ export function detectSymbols(
       }
     }
     let clusterDesc: string | undefined;
-    let clusterCategory: string | undefined;
     if (textCounts.size > 0) {
       clusterDesc = [...textCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-      clusterCategory = classifyByNearbyText(clusterDesc);
     }
 
-    // Compute confidence for the cluster:
-    // - Cluster size (more = higher confidence, up to 0.4)
-    // - Shape consistency: all same shape type (up to 0.3)
-    // - Text association: has nearby text matching a known pattern (up to 0.3)
+    // Compute confidence for the cluster
     const sizeConf = Math.min(items.length / 10, 1) * 0.4;
     const shapeParts = key.split('-');
     const shape = shapeParts[0];
     const shapeConf = (shape !== 'OTHER') ? 0.3 : 0.1;
-    const textConf = clusterCategory ? 0.3 : (clusterDesc ? 0.15 : 0);
+    const textConf = clusterDesc ? 0.15 : 0;
     const clusterConfidence = Math.min(sizeConf + shapeConf + textConf, 1);
 
     for (const sym of items) {
       symbols.push({
         ...sym,
         clusterId,
-        category: sym.category || clusterCategory,
         description: sym.description || clusterDesc,
         confidence: parseFloat(clusterConfidence.toFixed(2)),
       });
@@ -512,37 +506,6 @@ function findNearestText(
   }
 
   return best ? best.text.trim() : null;
-}
-
-/** Classify symbol category based on nearby text label */
-export function classifyByNearbyText(text: string): string | undefined {
-  const t = text.toUpperCase();
-
-  // Access Point / WiFi
-  if (/\bAP\b/.test(t) || /ACCESS\s*POINT/i.test(t) || /WI-?FI/i.test(t)) return 'Teletechnika';
-
-  // Lighting fixtures
-  if (/\bOP\d*\b/.test(t) || /OPRAWA/i.test(t) || /LAMP/i.test(t) || /LED/i.test(t)) return 'Oprawy oświetleniowe';
-
-  // Outlets
-  if (/\bG\d*\b/.test(t) || /GNIAZD/i.test(t) || /GNIAZDKO/i.test(t)) return 'Osprzęt elektryczny';
-
-  // Switches
-  if (/\bW\d*\b/.test(t) || /WYL/i.test(t) || /LACZNIK/i.test(t) || /ŁĄCZNIK/i.test(t)) return 'Osprzęt elektryczny';
-
-  // Sensors / detectors
-  if (/\bCZ\d*\b/.test(t) || /CZUJ/i.test(t) || /DETECT/i.test(t) || /Ø\s*\d/.test(t)) return 'Instalacja alarmowa';
-
-  // Distribution boards
-  if (/\bTB\d*\b/.test(t) || /TABL/i.test(t) || /ROZDZ/i.test(t) || /RG\b/.test(t)) return 'Tablice i rozdzielnice';
-
-  // Data / network
-  if (/\bRJ\d+\b/.test(t) || /\bDATA\b/.test(t) || /\bLAN\b/.test(t) || /\bUTP\b/.test(t)) return 'Teletechnika';
-
-  // Camera / CCTV
-  if (/\bKAM\b/.test(t) || /CCTV/i.test(t) || /KAMERA/i.test(t)) return 'Instalacja alarmowa';
-
-  return undefined;
 }
 
 /** Classify a small path as a shape type */
