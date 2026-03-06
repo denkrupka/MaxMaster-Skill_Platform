@@ -3083,10 +3083,10 @@ export const OffersPage: React.FC = () => {
 <html lang="pl">
 <head><meta charset="UTF-8"><title>Oferta ${selectedOffer.number}</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:20px 28px;color:#1e293b;font-size:13px;}
+body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:15mm 20mm;color:#1e293b;font-size:13px;box-sizing:border-box;}
 @media print{
-  body{padding:0;}
-  @page{margin:12mm 15mm;size:A4;}
+  body{padding:0;margin:0;}
+  @page{margin:15mm 20mm;size:A4;}
 }
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;}
 .info-table{width:100%;border-collapse:collapse;margin-bottom:24px;}
@@ -4993,8 +4993,8 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                         type="button"
                         disabled={!newRepData.first_name.trim() || !newRepData.last_name.trim()}
                         onClick={async () => {
-                          const clientId = offerData.client_id;
-                          if (!clientId) return;
+                          const clientId = offerData.client_id || (selectedOffer as any)?.client_id;
+                          if (!clientId) { console.error('No client_id found'); return; }
                           try {
                             const { data: saved } = await supabase
                               .from('contractor_client_contacts')
@@ -7361,7 +7361,7 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                           const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
                           const pageW = 210;
                           const pageH = 297;
-                          const margin = 10;
+                          const margin = 15;
                           const contentW = pageW - margin * 2;
                           try {
                             const html2canvas = (await import('html2canvas')).default;
