@@ -426,9 +426,8 @@ export function detectSymbols(
     const shape = classifyShape(p, bw, bh);
     const groupId = pathToGroup.get(i);
 
-    // Find nearest text within radius
+    // Find nearest text within radius (for description only, not for classification)
     const nearbyText = findNearestText(centerX, centerY, texts, textSearchRadius);
-    const category = nearbyText ? classifyByNearbyText(nearbyText) : undefined;
     const description = nearbyText || undefined;
 
     // Cluster by shape + style + approximate size
@@ -444,7 +443,6 @@ export function detectSymbols(
       centerY,
       radius,
       styleGroupId: groupId,
-      category,
       description,
     });
   }
@@ -635,7 +633,107 @@ export function detectScale(
 
 // ==================== LEGEND EXTRACTION ====================
 
-/** Detect legend region and entries, matching nearby line samples to style groups */
+/**
+ * Create a normalized shape signature for a group of paths.
+ * Normalizes coordinates to 0-100 range and encodes segment types.
+ * Used for matching symbol templates from legend to instances on drawing.
+ */
+function computeShapeSignature(pathGroup: PdfPath[]): string {
+  if (pathGroup.length === 0) return '';
+
+  // Compute combined bbox
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pathGroup) {
+    if (p.bbox.minX < minX) minX = p.bbox.minX;
+    if (p.bbox.minY < minY) minY = p.bbox.minY;
+    if (p.bbox.maxX > maxX) maxX = p.bbox.maxX;
+    if (p.bbox.maxY > maxY) maxY = p.bbox.maxY;
+  }
+  const w = maxX - minX || 1;
+  const h = maxY - minY || 1;
+
+  // Normalize segments to 0-100 space, quantize to reduce noise
+  const parts: string[] = [];
+  for (const p of pathGroup) {
+    const color = p.style.isStroked ? p.style.strokeColor : p.style.fillColor;
+    let segStr = '';
+    for (const seg of p.segments) {
+      const type = seg.type;
+      if (type === 'Z') { segStr += 'Z'; continue; }
+      const pts = seg.points.map(pt => {
+        const nx = Math.round(((pt.x - minX) / w) * 20);
+        const ny = Math.round(((pt.y - minY) / h) * 20);
+        return `${nx},${ny}`;
+      });
+      segStr += `${type}${pts.join(';')}|`;
+    }
+    parts.push(`${color}:${p.style.lineWidth.toFixed(0)}:${p.isClosed ? 'c' : 'o'}:${segStr}`);
+  }
+  parts.sort();
+  return parts.join('##');
+}
+
+/**
+ * Compute a simpler signature for fast matching — segment counts + shape type + aspect ratio
+ */
+function computeSimpleSignature(pathGroup: PdfPath[]): string {
+  let totalSegs = 0, curves = 0, lines = 0, closedCount = 0;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const colors = new Set<string>();
+
+  for (const p of pathGroup) {
+    if (p.bbox.minX < minX) minX = p.bbox.minX;
+    if (p.bbox.minY < minY) minY = p.bbox.minY;
+    if (p.bbox.maxX > maxX) maxX = p.bbox.maxX;
+    if (p.bbox.maxY > maxY) maxY = p.bbox.maxY;
+    if (p.isClosed) closedCount++;
+    const c = p.style.isStroked ? p.style.strokeColor : p.style.fillColor;
+    colors.add(c);
+    for (const s of p.segments) {
+      if (s.type === 'L') { lines++; totalSegs++; }
+      else if (s.type === 'C') { curves++; totalSegs++; }
+    }
+  }
+
+  const w = maxX - minX || 1;
+  const h = maxY - minY || 1;
+  const aspect = Math.round((Math.min(w, h) / Math.max(w, h)) * 10);
+
+  return `p${pathGroup.length}:s${totalSegs}:l${lines}:c${curves}:cl${closedCount}:a${aspect}:col${colors.size}`;
+}
+
+/** Check if two shape signatures are similar enough to be the same symbol */
+function signaturesMatch(sig1: string, sig2: string): boolean {
+  if (sig1 === sig2) return true;
+
+  // Parse simple signatures and compare
+  const parse = (s: string) => {
+    const m: Record<string, number> = {};
+    for (const part of s.split(':')) {
+      const key = part.replace(/\d+$/, '');
+      const val = parseInt(part.replace(/^\D+/, ''));
+      m[key] = val;
+    }
+    return m;
+  };
+
+  const a = parse(sig1);
+  const b = parse(sig2);
+
+  // Must have same number of sub-paths
+  if (a['p'] !== b['p']) return false;
+  // Segment count within 20%
+  const segDiff = Math.abs((a['s'] || 0) - (b['s'] || 0));
+  if (segDiff > Math.max(a['s'] || 1, b['s'] || 1) * 0.3) return false;
+  // Similar aspect ratio
+  if (Math.abs((a['a'] || 0) - (b['a'] || 0)) > 3) return false;
+  // Same closed/open pattern
+  if (a['cl'] !== b['cl']) return false;
+
+  return true;
+}
+
+/** Detect legend region and extract entries with symbol templates */
 export function detectLegend(
   paths: PdfPath[],
   texts: PdfExtractedText[],
@@ -643,19 +741,18 @@ export function detectLegend(
   pageHeight: number,
   styleGroups?: PdfStyleGroup[],
 ): PdfLegend | null {
-  // Look for large rectangles in corners (typically bottom-right)
+  // Look for large rectangles that could be legend borders
   const candidateRects = paths.filter(p => {
     if (!p.isClosed) return false;
     const w = p.bbox.maxX - p.bbox.minX;
     const h = p.bbox.maxY - p.bbox.minY;
-    // Legend is typically 15-40% of page width, 20-60% of page height
     return w > pageWidth * 0.1 && w < pageWidth * 0.5
       && h > pageHeight * 0.1 && h < pageHeight * 0.7;
   });
 
   if (candidateRects.length === 0) return null;
 
-  // Score rectangles by text density inside
+  // Score by text density + bonus for "LEGENDA" text nearby
   let bestRect: PdfPath | null = null;
   let bestScore = 0;
 
@@ -664,7 +761,8 @@ export function detectLegend(
       t.x >= rect.bbox.minX && t.x <= rect.bbox.maxX &&
       t.y >= rect.bbox.minY && t.y <= rect.bbox.maxY
     );
-    const score = textsInside.length;
+    let score = textsInside.length;
+    if (textsInside.some(t => /LEGENDA/i.test(t.text))) score += 20;
     if (score > bestScore) {
       bestScore = score;
       bestRect = rect;
@@ -673,69 +771,240 @@ export function detectLegend(
 
   if (!bestRect || bestScore < 3) return null;
 
-  // Get all paths inside the legend bounding box (for style sample matching)
-  const legendPaths = paths.filter(p =>
-    p.bbox.minX >= bestRect!.bbox.minX && p.bbox.maxX <= bestRect!.bbox.maxX &&
-    p.bbox.minY >= bestRect!.bbox.minY && p.bbox.maxY <= bestRect!.bbox.maxY
-  );
+  const lb = bestRect.bbox;
 
-  // Extract entries from texts inside the legend
+  // Index all paths inside legend
+  const legendPathIndices: number[] = [];
+  for (let i = 0; i < paths.length; i++) {
+    const p = paths[i];
+    if (p.bbox.minX >= lb.minX - 5 && p.bbox.maxX <= lb.maxX + 5 &&
+        p.bbox.minY >= lb.minY - 5 && p.bbox.maxY <= lb.maxY + 5) {
+      legendPathIndices.push(i);
+    }
+  }
+
+  // Get texts inside legend, sorted by Y (top to bottom)
   const legendTexts = texts.filter(t =>
-    t.x >= bestRect!.bbox.minX && t.x <= bestRect!.bbox.maxX &&
-    t.y >= bestRect!.bbox.minY && t.y <= bestRect!.bbox.maxY
+    t.x >= lb.minX && t.x <= lb.maxX &&
+    t.y >= lb.minY && t.y <= lb.maxY
   ).sort((a, b) => a.y - b.y);
 
-  const entries: PdfLegendEntry[] = [];
-  const rowTolerance = 8; // px tolerance for "same row"
-
+  // Group texts into rows (entries)
+  const ROW_TOL = 12;
+  const textRows: PdfExtractedText[][] = [];
   for (const t of legendTexts) {
     if (t.text.trim().length < 2) continue;
+    // Skip "LEGENDA" header
+    if (/^LEGENDA$/i.test(t.text.trim())) continue;
+    const lastRow = textRows[textRows.length - 1];
+    if (lastRow && Math.abs(t.y - lastRow[0].y) < ROW_TOL) {
+      lastRow.push(t);
+    } else {
+      textRows.push([t]);
+    }
+  }
 
-    const entry: PdfLegendEntry = {
-      label: t.text.trim(),
-      description: t.text.trim(),
-    };
+  // For each text row, find symbol graphic to the left
+  const entries: PdfLegendEntry[] = [];
+  const usedPathIndices = new Set<number>();
 
-    // Find nearby line/path sample on the same row (to the left of text, typically)
-    const nearbyLineSample = legendPaths.find(p => {
+  for (const row of textRows) {
+    // Combine row texts into description
+    const rowTexts = row.sort((a, b) => a.x - b.x);
+    const description = rowTexts.map(t => t.text.trim()).join(' ');
+    if (description.length < 3) continue;
+
+    const rowCenterY = row[0].y + (row[0].height || 10) / 2;
+    const rowMinX = Math.min(...row.map(t => t.x));
+
+    // Find symbol paths to the left of text in this row
+    const symbolPathIdxs: number[] = [];
+    for (const pi of legendPathIndices) {
+      if (usedPathIndices.has(pi)) continue;
+      const p = paths[pi];
       const pCenterY = (p.bbox.minY + p.bbox.maxY) / 2;
-      const tCenterY = t.y + (t.height || 0) / 2;
-      const sameRow = Math.abs(pCenterY - tCenterY) < rowTolerance;
-      const toTheLeft = p.bbox.maxX < t.x + 10;
-      const isShortLine = (p.bbox.maxX - p.bbox.minX) > 10 && (p.bbox.maxY - p.bbox.minY) < 15;
-      return sameRow && toTheLeft && isShortLine;
-    });
-
-    if (nearbyLineSample) {
-      entry.sampleColor = nearbyLineSample.style.isStroked
-        ? nearbyLineSample.style.strokeColor
-        : nearbyLineSample.style.fillColor;
-      entry.sampleLineWidth = nearbyLineSample.style.lineWidth;
-
-      // Match to a style group if available
-      if (styleGroups) {
-        const matchedGroup = styleGroups.find(sg =>
-          sg.strokeColor === entry.sampleColor &&
-          Math.abs(sg.lineWidth - (entry.sampleLineWidth || 0)) < 0.5
-        );
-        if (matchedGroup) {
-          entry.styleKey = matchedGroup.styleKey;
-        }
+      const pw = p.bbox.maxX - p.bbox.minX;
+      const ph = p.bbox.maxY - p.bbox.minY;
+      // Symbol is to the left of text, on same row, and not too big
+      if (Math.abs(pCenterY - rowCenterY) < ROW_TOL + 5 &&
+          p.bbox.maxX < rowMinX + 20 &&
+          pw < 80 && ph < 40 && pw > 1 && ph > 1) {
+        symbolPathIdxs.push(pi);
       }
     }
 
-    entries.push(entry);
+    // Mark paths as used
+    for (const pi of symbolPathIdxs) usedPathIndices.add(pi);
+
+    const symbolPaths = symbolPathIdxs.map(i => paths[i]);
+    const sig = symbolPaths.length > 0 ? computeSimpleSignature(symbolPaths) : undefined;
+    let symBbox: { w: number; h: number } | undefined;
+    if (symbolPaths.length > 0) {
+      let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+      for (const sp of symbolPaths) {
+        if (sp.bbox.minX < sMinX) sMinX = sp.bbox.minX;
+        if (sp.bbox.minY < sMinY) sMinY = sp.bbox.minY;
+        if (sp.bbox.maxX > sMaxX) sMaxX = sp.bbox.maxX;
+        if (sp.bbox.maxY > sMaxY) sMaxY = sp.bbox.maxY;
+      }
+      symBbox = { w: sMaxX - sMinX, h: sMaxY - sMinY };
+    }
+
+    // Also capture color/line info for fallback matching
+    const samplePath = symbolPaths[0];
+    const sampleColor = samplePath
+      ? (samplePath.style.isStroked ? samplePath.style.strokeColor : samplePath.style.fillColor)
+      : undefined;
+
+    entries.push({
+      label: description.substring(0, 80),
+      description,
+      sampleColor,
+      sampleLineWidth: samplePath?.style.lineWidth,
+      symbolSignature: sig,
+      symbolBbox: symBbox,
+      symbolPathIndices: symbolPathIdxs.length > 0 ? symbolPathIdxs : undefined,
+    });
   }
 
   return {
     boundingBox: {
-      x: bestRect.bbox.minX,
-      y: bestRect.bbox.minY,
-      width: bestRect.bbox.maxX - bestRect.bbox.minX,
-      height: bestRect.bbox.maxY - bestRect.bbox.minY,
+      x: lb.minX, y: lb.minY,
+      width: lb.maxX - lb.minX,
+      height: lb.maxY - lb.minY,
     },
     entries,
   };
+}
+
+/**
+ * Match symbols on the drawing to legend entries by shape similarity.
+ * Returns symbols categorized by legend entry descriptions.
+ * Excludes symbols inside the legend bounding box.
+ */
+export function matchSymbolsToLegend(
+  paths: PdfPath[],
+  legend: PdfLegend,
+  maxSymbolSize: number = 50,
+): PdfDetectedSymbol[] {
+  const lb = legend.boundingBox;
+  const results: PdfDetectedSymbol[] = [];
+
+  // Get legend entries that have symbol signatures
+  const entriesWithSigs = legend.entries.filter(e => e.symbolSignature && e.symbolBbox);
+  if (entriesWithSigs.length === 0) return results;
+
+  // Pre-compute size ranges for each legend entry (allow ±40% size variation)
+  const entryMeta = entriesWithSigs.map(e => ({
+    entry: e,
+    minW: e.symbolBbox!.w * 0.5,
+    maxW: e.symbolBbox!.w * 1.8,
+    minH: e.symbolBbox!.h * 0.5,
+    maxH: e.symbolBbox!.h * 1.8,
+    templatePaths: (e.symbolPathIndices || []).map(i => paths[i]),
+  }));
+
+  // Scan all small paths on the drawing, group nearby ones, and match to legend
+  // First: find all "small path clusters" — groups of nearby small paths
+  const smallPaths: { idx: number; cx: number; cy: number; w: number; h: number }[] = [];
+  for (let i = 0; i < paths.length; i++) {
+    const p = paths[i];
+    const w = p.bbox.maxX - p.bbox.minX;
+    const h = p.bbox.maxY - p.bbox.minY;
+    if (w > maxSymbolSize || h > maxSymbolSize || w < 1 || h < 1) continue;
+    // Skip paths inside legend
+    const cx = (p.bbox.minX + p.bbox.maxX) / 2;
+    const cy = (p.bbox.minY + p.bbox.maxY) / 2;
+    if (cx >= lb.x && cx <= lb.x + lb.width && cy >= lb.y && cy <= lb.y + lb.height) continue;
+    smallPaths.push({ idx: i, cx, cy, w, h });
+  }
+
+  // Cluster nearby small paths (within proximity)
+  const CLUSTER_DIST = 15;
+  const clustered = new Array(smallPaths.length).fill(false);
+  const clusters: number[][] = []; // each cluster = array of smallPaths indices
+
+  for (let i = 0; i < smallPaths.length; i++) {
+    if (clustered[i]) continue;
+    const cluster = [i];
+    clustered[i] = true;
+    // BFS to find nearby paths
+    const queue = [i];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      for (let j = i + 1; j < smallPaths.length; j++) {
+        if (clustered[j]) continue;
+        const dx = smallPaths[cur].cx - smallPaths[j].cx;
+        const dy = smallPaths[cur].cy - smallPaths[j].cy;
+        if (Math.abs(dx) < CLUSTER_DIST && Math.abs(dy) < CLUSTER_DIST) {
+          clustered[j] = true;
+          cluster.push(j);
+          queue.push(j);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+
+  // For each cluster, compute signature and try to match to a legend entry
+  let matchId = 0;
+  for (const cluster of clusters) {
+    const clusterPathIndices = cluster.map(ci => smallPaths[ci].idx);
+    const clusterPaths = clusterPathIndices.map(i => paths[i]);
+
+    // Compute cluster bbox
+    let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
+    for (const ci of cluster) {
+      const sp = smallPaths[ci];
+      if (sp.cx - sp.w / 2 < cMinX) cMinX = sp.cx - sp.w / 2;
+      if (sp.cy - sp.h / 2 < cMinY) cMinY = sp.cy - sp.h / 2;
+      if (sp.cx + sp.w / 2 > cMaxX) cMaxX = sp.cx + sp.w / 2;
+      if (sp.cy + sp.h / 2 > cMaxY) cMaxY = sp.cy + sp.h / 2;
+    }
+    const cw = cMaxX - cMinX;
+    const ch = cMaxY - cMinY;
+
+    // Skip if cluster is too big to be a symbol
+    if (cw > maxSymbolSize * 2 || ch > maxSymbolSize * 2) continue;
+
+    const clusterSig = computeSimpleSignature(clusterPaths);
+    const cx = (cMinX + cMaxX) / 2;
+    const cy = (cMinY + cMaxY) / 2;
+
+    // Try to match to each legend entry
+    let bestEntry: PdfLegendEntry | null = null;
+    let bestConf = 0;
+
+    for (const meta of entryMeta) {
+      // Size check
+      if (cw < meta.minW || cw > meta.maxW || ch < meta.minH || ch > meta.maxH) continue;
+
+      // Signature match
+      if (signaturesMatch(clusterSig, meta.entry.symbolSignature!)) {
+        const conf = 0.8;
+        if (conf > bestConf) {
+          bestConf = conf;
+          bestEntry = meta.entry;
+        }
+      }
+    }
+
+    if (bestEntry) {
+      bestEntry.matchCount = (bestEntry.matchCount || 0) + 1;
+      results.push({
+        clusterId: `legend_match_${++matchId}`,
+        shape: 'OTHER',
+        centerX: cx,
+        centerY: cy,
+        radius: Math.max(cw, ch) / 2,
+        category: bestEntry.label,
+        description: bestEntry.description,
+        confidence: bestConf,
+      });
+    }
+  }
+
+  return results;
 }
 
 // ==================== ROOM / ZONE DETECTION ====================
@@ -955,23 +1224,27 @@ export function analyzePdfPage(
     allRoutes.push(...routes);
   }
 
-  // 5. Symbol detection (with text proximity)
-  const symbols = detectSymbols(extraction.paths, styleGroups, extraction.texts, maxSymbolSize);
-
-  // 6. Legend extraction (with style group matching)
+  // 5. Legend extraction (with symbol template matching)
   const legend = detectLegend(extraction.paths, extraction.texts, extraction.pageWidth, extraction.pageHeight, styleGroups);
 
-  // 7. Apply legend if found
-  if (legend) {
+  // 6. Legend-based symbol matching (primary) + fallback basic detection
+  let symbols: PdfDetectedSymbol[];
+  if (legend && legend.entries.some(e => e.symbolSignature)) {
+    // Primary: match drawing symbols to legend entries by shape signature
+    symbols = matchSymbolsToLegend(extraction.paths, legend, maxSymbolSize);
+    // Apply legend categories to style groups based on matched symbols
     applyLegendToGroups(legend, styleGroups);
+  } else {
+    // Fallback: basic shape-based detection (no legend found)
+    symbols = detectSymbols(extraction.paths, styleGroups, extraction.texts, maxSymbolSize);
   }
 
-  // 8. Room/zone detection
+  // 7. Room/zone detection
   const rooms = detectRooms(extraction.paths, extraction.texts, extraction.pageWidth, extraction.pageHeight);
   assignToRooms(rooms, symbols, allRoutes);
 
-  // 9. Convert to DxfAnalysis format
-  const analysis = toDxfAnalysis(extraction, styleGroups, symbols, allRoutes, scaleInfo);
+  // 8. Convert to DxfAnalysis format
+  const analysis = toDxfAnalysis(extraction, styleGroups, symbols, allRoutes, scaleInfo, legend);
 
   return {
     analysis,
@@ -979,45 +1252,20 @@ export function analyzePdfPage(
   };
 }
 
-/** Apply legend entries to style groups — match by style key (best), color sample, or text mention */
+/** Apply legend entries to style groups — match by color sample from legend symbols */
 function applyLegendToGroups(legend: PdfLegend, groups: PdfStyleGroup[]) {
   for (const entry of legend.entries) {
-    // Priority 1: direct styleKey match from line sample detection
-    if (entry.styleKey) {
-      const matchedGroup = groups.find(g => g.styleKey === entry.styleKey);
-      if (matchedGroup) {
-        matchedGroup.category = entry.label;
-        entry.category = entry.label;
-        continue;
-      }
-    }
+    entry.category = entry.label;
 
-    // Priority 2: match by sample color + lineWidth
+    // Match style groups by sample color + lineWidth from legend symbol
     if (entry.sampleColor) {
       const matchedGroup = groups.find(g =>
         g.strokeColor === entry.sampleColor &&
-        Math.abs(g.lineWidth - (entry.sampleLineWidth || 0)) < 0.5
+        (!entry.sampleLineWidth || Math.abs(g.lineWidth - entry.sampleLineWidth) < 0.5)
       );
       if (matchedGroup) {
         matchedGroup.category = entry.label;
-        entry.category = entry.label;
         entry.styleKey = matchedGroup.styleKey;
-        continue;
-      }
-    }
-
-    // Priority 3: text-based fallback — match by color name mention
-    const text = entry.label.toLowerCase();
-    for (const group of groups) {
-      if (group.category) continue; // Already assigned
-      const colorName = getColorName(group.strokeColor).toLowerCase();
-      if (text.includes(colorName) || text.includes(group.strokeColor.toLowerCase())) {
-        group.category = entry.label;
-        entry.category = entry.label;
-        entry.styleKey = group.styleKey;
-        entry.sampleColor = group.strokeColor;
-        entry.sampleLineWidth = group.lineWidth;
-        break;
       }
     }
   }
@@ -1030,6 +1278,7 @@ function toDxfAnalysis(
   symbols: PdfDetectedSymbol[],
   routes: LineGroup[],
   scaleInfo: PdfScaleInfo,
+  legend?: PdfLegend | null,
 ): DxfAnalysis {
   // Layers = style groups
   const layers: AnalyzedLayer[] = styleGroups.map(sg => ({
@@ -1135,19 +1384,34 @@ function toDxfAnalysis(
     });
   }
 
-  // Blocks = symbol clusters
+  // Blocks = legend categories (if legend-based) or symbol clusters (fallback)
   const blocks: AnalyzedBlock[] = [];
-  for (const [clusterId, clusterSyms] of symbolClusters) {
-    const first = clusterSyms[0];
-    blocks.push({
-      name: clusterId,
-      insertCount: clusterSyms.length,
-      sampleLayer: first.styleGroupId
-        ? (styleGroups.find(sg => sg.id === first.styleGroupId)?.name || 'Symbole')
-        : 'Symbole',
-      entityCount: 1,
-      containedTypes: ['PDF_SYMBOL'],
-    });
+  if (legend && legend.entries.some(e => (e.matchCount || 0) > 0)) {
+    // Legend-based blocks: one block per legend entry with matches
+    for (const entry of legend.entries) {
+      if ((entry.matchCount || 0) === 0) continue;
+      blocks.push({
+        name: entry.label,
+        insertCount: entry.matchCount!,
+        sampleLayer: entry.category || entry.label,
+        entityCount: 1,
+        containedTypes: ['PDF_SYMBOL'],
+      });
+    }
+  } else {
+    // Fallback: cluster-based blocks
+    for (const [clusterId, clusterSyms] of symbolClusters) {
+      const first = clusterSyms[0];
+      blocks.push({
+        name: clusterId,
+        insertCount: clusterSyms.length,
+        sampleLayer: first.styleGroupId
+          ? (styleGroups.find(sg => sg.id === first.styleGroupId)?.name || 'Symbole')
+          : 'Symbole',
+        entityCount: 1,
+        containedTypes: ['PDF_SYMBOL'],
+      });
+    }
   }
 
   // Update route entity indices to use analysis-level indices

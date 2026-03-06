@@ -125,6 +125,11 @@ export interface PdfLegendEntry {
   category?: string;
   sampleColor?: string;
   sampleLineWidth?: number;
+  // Symbol template from legend (for shape matching on drawing)
+  symbolSignature?: string;     // normalized shape signature for matching
+  symbolBbox?: { w: number; h: number }; // template size
+  symbolPathIndices?: number[]; // path indices that form this symbol in legend
+  matchCount?: number;          // how many instances found on drawing (excl. legend)
 }
 
 // Legend region with entries

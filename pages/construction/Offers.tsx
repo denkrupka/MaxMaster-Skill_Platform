@@ -4823,44 +4823,162 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 </div>
               </div>
 
-              {/* Representative block — show when client is selected */}
-              {offerClientSelected && (
-                <div className="pt-3 border-t border-slate-200">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5" />
-                    Przedstawiciel klienta
-                  </p>
-                  {offerClientContacts.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {offerClientContacts.map((contact: any) => (
-                        <button
-                          key={contact.id}
-                          onClick={() => setSendRepresentativeId(contact.id)}
-                          className={`px-3 py-2 rounded-lg text-sm border transition flex items-center gap-2 ${
-                            sendRepresentativeId === contact.id
-                              ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                            sendRepresentativeId === contact.id ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
-                          }`}>
-                            {(contact.first_name?.[0] || '').toUpperCase()}{(contact.last_name?.[0] || '').toUpperCase()}
-                          </div>
-                          <div className="text-left">
-                            <p className="font-medium leading-tight">{contact.first_name} {contact.last_name}</p>
-                            {contact.email && <p className="text-[11px] text-slate-400">{contact.email}</p>}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">Brak przedstawicieli — dodaj w ustawieniach klienta</p>
-                  )}
-                </div>
-              )}
             </div>
           )}
+
+          {/* Przedstawiciel Zamawiającego */}
+          {(() => {
+            const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
+            const ps = selectedOffer?.print_settings?.client_data;
+            const hasRep = rep || ps?.representative_name;
+            const hasClient = editMode ? offerClientSelected : ((selectedOffer as any).client || offerClientData.client_name);
+            if (!hasClient) return null;
+            return (
+              <div className="p-6 border-b border-slate-200 bg-amber-50/30">
+                <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-4">
+                  <User className="w-5 h-5 text-amber-500" />
+                  Przedstawiciel Zamawiającego
+                </h3>
+                {editMode ? (
+                  <>
+                    {offerClientContacts.length > 1 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {offerClientContacts.map((contact: any) => (
+                          <button
+                            key={contact.id}
+                            onClick={() => setSendRepresentativeId(contact.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition flex items-center gap-1.5 ${
+                              sendRepresentativeId === contact.id
+                                ? 'border-amber-500 bg-amber-50 text-amber-700 shadow-sm'
+                                : 'border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              sendRepresentativeId === contact.id ? 'bg-amber-600 text-white' : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {(contact.first_name?.[0] || '').toUpperCase()}{(contact.last_name?.[0] || '').toUpperCase()}
+                            </div>
+                            {contact.first_name} {contact.last_name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {rep ? (
+                      <div className="p-4 bg-white rounded-lg border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={rep.is_main_contact === true}
+                              readOnly
+                              className="w-4 h-4 text-amber-600 rounded"
+                            />
+                            <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                              {rep.is_main_contact && <Star className="w-4 h-4 text-amber-500" />}
+                              Główny kontakt
+                            </span>
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Imię *</label>
+                            <input
+                              type="text"
+                              value={rep.first_name || ''}
+                              readOnly
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nazwisko *</label>
+                            <input
+                              type="text"
+                              value={rep.last_name || ''}
+                              readOnly
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Telefon</label>
+                            <input
+                              type="text"
+                              value={rep.phone || ''}
+                              readOnly
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Stanowisko</label>
+                            <input
+                              type="text"
+                              value={rep.position || ''}
+                              readOnly
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 mt-3">
+                          <div className="col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail</label>
+                            <input
+                              type="text"
+                              value={rep.email || ''}
+                              readOnly
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">Brak przedstawicieli — dodaj w ustawieniach klienta</p>
+                    )}
+                  </>
+                ) : (
+                  (() => {
+                    const repName = rep ? `${rep.first_name || ''} ${rep.last_name || ''}`.trim() : ps?.representative_name || '';
+                    const repPosition = rep?.position || ps?.representative_position || '';
+                    const repEmail = rep?.email || ps?.representative_email || '';
+                    const repPhone = rep?.phone || ps?.representative_phone || '';
+                    if (!repName) return <p className="text-sm text-slate-400 italic">Nie przypisano</p>;
+                    return (
+                      <div className="p-4 bg-white rounded-lg border border-slate-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          {(rep?.is_main_contact) && (
+                            <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                              <Star className="w-3 h-3" />
+                              Główny kontakt
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-slate-500 mb-0.5">Imię</p>
+                            <p className="text-sm font-medium text-slate-900">{rep?.first_name || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500 mb-0.5">Nazwisko</p>
+                            <p className="text-sm font-medium text-slate-900">{rep?.last_name || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500 mb-0.5">Telefon</p>
+                            <p className="text-sm font-medium text-slate-900">{repPhone || '-'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-500 mb-0.5">Stanowisko</p>
+                            <p className="text-sm font-medium text-slate-900">{repPosition || '-'}</p>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <p className="text-xs text-slate-500 mb-0.5">E-mail</p>
+                          <p className="text-sm font-medium text-slate-900">{repEmail || '-'}</p>
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            );
+          })()}
 
           {/* Info cards */}
           <div className={`grid grid-cols-1 ${editMode ? 'md:grid-cols-4' : 'md:grid-cols-3 lg:grid-cols-6'} gap-4 p-6 border-b border-slate-200`}>
@@ -4886,25 +5004,6 @@ tr{page-break-inside:avoid;page-break-after:auto;}
                 )}
               </div>
             )}
-            {/* Przedstawiciel klienta tile */}
-            {!editMode && (() => {
-              const ps = selectedOffer?.print_settings?.client_data;
-              const rep = offerClientContacts.find((c: any) => c.id === sendRepresentativeId) || offerClientContacts[0];
-              const repName = rep ? `${rep.first_name || ''} ${rep.last_name || ''}`.trim() : ps?.representative_name || '';
-              const repPosition = rep?.position || ps?.representative_position || '';
-              const repEmail = rep?.email || ps?.representative_email || '';
-              const repPhone = rep?.phone || ps?.representative_phone || '';
-              if (!repName) return null;
-              return (
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <p className="text-sm text-slate-500 mb-1">Przedstawiciel klienta</p>
-                  <p className="font-medium text-slate-900">{repName}</p>
-                  {repPosition && <p className="text-xs text-slate-500">{repPosition}</p>}
-                  {repEmail && <p className="text-xs text-slate-500">{repEmail}</p>}
-                  {repPhone && <p className="text-xs text-slate-500">{repPhone}</p>}
-                </div>
-              );
-            })()}
             <div className="p-4 bg-slate-50 rounded-lg">
               <p className="text-sm text-slate-500 mb-1">Projekt</p>
               {editMode ? (
