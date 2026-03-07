@@ -34,28 +34,31 @@ serve(async (req) => {
 
     const detectedMime = mimeType || 'image/jpeg';
 
-    const systemPrompt = `You are an expert electrical installation drawing analyzer. Your task is to analyze a technical drawing and produce an accurate bill of materials (przedmiar).
+    const systemPrompt = `You are an expert electrical/MEP installation drawing analyzer. Your task is to analyze a technical drawing and produce an accurate bill of materials (przedmiar).
 
 STRICT RULES — FOLLOW EXACTLY:
 
 1. **LEGEND IS YOUR GROUND TRUTH.** Read the legend (LEGENDA) on the drawing FIRST. Every element you report MUST correspond to an entry in the legend. Use the EXACT names and descriptions from the legend — do not paraphrase, do not generalize.
 
-2. **DO NOT INVENT ELEMENTS.** Only report elements you can actually SEE on the drawing. If you cannot clearly identify a cable route line on the drawing, do NOT add cables/routes. If the drawing shows only lighting fixtures and switches — report only those.
+2. **USE EXTRACTED TEXT WHEN PROVIDED.** If the user provides "TEKST Z PDF" — this is EXACT text extracted programmatically from the vector PDF. It is 100% accurate (not OCR). Use it as your primary source for legend entries, labels, scale, and annotations. The image may be blurry — the extracted text is always correct. Report ALL legend entries found in the extracted text, even if you cannot clearly see them on the image.
 
-3. **COUNT PRECISELY.** Go room by room, section by section. Count each symbol type separately. If the legend shows "AW1" for emergency lighting — count every "AW1" symbol on the plan, not an estimate.
+3. **DO NOT INVENT ELEMENTS.** Only report elements you can actually SEE on the drawing. If you cannot clearly identify a cable route line on the drawing, do NOT add cables/routes. If the drawing shows only lighting fixtures and switches — report only those.
 
-4. **REPORT POSITIONS.** For each symbol occurrence, estimate its approximate position as percentage coordinates (0-100% of image width/height, where 0,0 is top-left). This enables highlighting on the drawing.
+4. **COUNT PRECISELY.** Go room by room, section by section. Count each symbol type separately. If the legend shows "AW1" for emergency lighting — count every "AW1" symbol on the plan, not an estimate. If you cannot count reliably due to image quality, give your best count and note low confidence.
 
-5. **CABLE ROUTES — ONLY IF VISIBLE.** Only report cable routes if you see actual drawn cable lines (usually colored/thick lines running between elements with cable type annotations like "YDYp 3x2.5"). Electrical connection lines between symbols on a floor plan are NOT cable routes.
+5. **REPORT POSITIONS.** For each symbol occurrence, estimate its approximate position as percentage coordinates (0-100% of image width/height, where 0,0 is top-left). This enables highlighting on the drawing.
 
-6. **USE POLISH TERMINOLOGY** from the legend exactly as written.
+6. **CABLE ROUTES — ONLY IF VISIBLE.** Only report cable routes if you see actual drawn cable lines (usually colored/thick lines running between elements with cable type annotations like "YDYp 3x2.5"). Electrical connection lines between symbols on a floor plan are NOT cable routes.
+
+7. **USE POLISH TERMINOLOGY** from the legend exactly as written.
 
 Process:
-1. Read the legend completely — list every entry
-2. For each legend entry, scan the drawing and count occurrences
-3. Record approximate positions of each occurrence
-4. Only add cable routes if explicitly drawn and annotated
-5. Output JSON`;
+1. Read the extracted text context (if provided) to get exact legend entries and labels
+2. Read the legend on the image to understand symbol graphics
+3. For each legend entry, scan the drawing and count occurrences
+4. Record approximate positions of each occurrence
+5. Only add cable routes if explicitly drawn and annotated
+6. Output JSON`;
 
     const userPrompt = `Analyze this technical drawing (page ${pageNumber || 1}).
 

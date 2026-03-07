@@ -9,15 +9,25 @@ import type { DxfAnalysis } from '../../lib/dxfAnalyzer';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
 import { supabase } from '../../lib/supabase';
 
-/** Render a PDF page to base64 JPEG for AI analysis */
-async function renderPageToBase64(page: PDFPageProxy, renderScale: number = 2): Promise<string> {
+/** Render a PDF page to base64 JPEG for AI analysis.
+ *  Auto-scales: 3x default, up to 4x for small pages, capped at ~20MP to stay within API limits. */
+async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
+  const baseVp = page.getViewport({ scale: 1 });
+  const basePx = baseVp.width * baseVp.height;
+  // Target ~16MP (4000x4000). For small pages allow 4x, for large pages drop to 2x
+  const maxPixels = 16_000_000;
+  let renderScale = 3;
+  if (basePx * 9 < 4_000_000) renderScale = 4; // small page → 4x for clarity
+  if (basePx * renderScale * renderScale > maxPixels) {
+    renderScale = Math.max(2, Math.floor(Math.sqrt(maxPixels / basePx)));
+  }
   const viewport = page.getViewport({ scale: renderScale });
   const canvas = document.createElement('canvas');
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   const ctx = canvas.getContext('2d')!;
   await page.render({ canvasContext: ctx, viewport }).promise;
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
   return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
 }
 
@@ -98,13 +108,30 @@ export default function PdfAnalysisModal({
           sg.totalLengthM = sg.totalLengthPx * scaleInfo.scaleFactor;
         }
 
-        // Build context summary for AI — helps it match elements more accurately
+        // Build rich context: ALL extracted texts from PDF (legend, labels, annotations)
+        // Group texts by position to reconstruct legend and labels
+        const allTexts = extraction.texts
+          .filter(t => t.text.trim().length >= 2)
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .map(t => t.text.trim());
+        // Deduplicate while preserving order
+        const uniqueTexts = [...new Set(allTexts)];
+        const textsBlock = uniqueTexts.slice(0, 500).join('\n'); // limit to 500 unique texts
+
         const topGroups = [...styleGroups]
           .sort((a, b) => b.totalLengthPx - a.totalLengthPx)
           .slice(0, 10)
           .map(sg => `${sg.name}: ${sg.pathCount} elementów, ${sg.totalLengthM.toFixed(1)}m`)
           .join('; ');
-        geometryContext = `Wektorowy PDF. Wykryto ${extraction.paths.length} ścieżek, ${extraction.texts.length} tekstów. Grupy stylów: ${topGroups}. Skala: ${scaleInfo.scaleText || 'domyślna 1:100'}`;
+
+        geometryContext = `WEKTOROWY PDF — poniżej DOKŁADNY tekst wyekstrahowany z pliku PDF (nie OCR, 100% dokładny):
+
+=== TEKST Z PDF (${uniqueTexts.length} fragmentów) ===
+${textsBlock}
+=== KONIEC TEKSTU ===
+
+Grupy stylów graficznych: ${topGroups}
+Skala: ${scaleInfo.scaleText || 'domyślna 1:100'}`;
       }
 
       // Step 4: AI analyzes the full drawing
