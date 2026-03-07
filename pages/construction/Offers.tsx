@@ -2354,19 +2354,125 @@ export const OffersPage: React.FC = () => {
     if (!editingOffer || !currentUser) return;
     setSavingOffer(true);
     try {
+      // Resolve client_id from offerClientData (find or create in contractors)
+      let resolvedClientId = editForm.client_id || '';
+      if (!resolvedClientId && offerClientData.client_name.trim()) {
+        const nipNorm = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
+        if (nipNorm) {
+          const { data: byNip } = await supabase.from('contractors').select('id')
+            .eq('company_id', currentUser.company_id).eq('nip', nipNorm).is('deleted_at', null).limit(1);
+          if (byNip?.length) resolvedClientId = byNip[0].id;
+        }
+        if (!resolvedClientId) {
+          const { data: byName } = await supabase.from('contractors').select('id')
+            .eq('company_id', currentUser.company_id).ilike('name', offerClientData.client_name.trim()).is('deleted_at', null).limit(1);
+          if (byName?.length) resolvedClientId = byName[0].id;
+        }
+        if (!resolvedClientId) {
+          const address = [offerClientData.company_street, offerClientData.company_street_number, offerClientData.company_postal_code, offerClientData.company_city].filter(Boolean).join(', ') || null;
+          const { data: newC } = await supabase.from('contractors').insert({
+            company_id: currentUser.company_id, name: offerClientData.client_name.trim(),
+            nip: nipNorm || null, contractor_entity_type: 'company', contractor_type: 'customer',
+            legal_address: address, actual_address: address, created_by_id: currentUser.id
+          }).select('id').single();
+          if (newC) resolvedClientId = newC.id;
+        }
+      }
+
+      // Sync client to contractors_clients (kartoteka)
+      let contactsClientId = '';
+      if (offerClientData.client_name.trim()) {
+        const nipNorm = offerClientData.nip ? offerClientData.nip.replace(/\D/g, '') : '';
+        if (nipNorm) {
+          const { data: byNip } = await supabase.from('contractors_clients').select('id')
+            .eq('company_id', currentUser.company_id).eq('nip', nipNorm).limit(1);
+          if (byNip?.length) contactsClientId = byNip[0].id;
+        }
+        if (!contactsClientId) {
+          const { data: byName } = await supabase.from('contractors_clients').select('id')
+            .eq('company_id', currentUser.company_id).ilike('name', offerClientData.client_name.trim()).limit(1);
+          if (byName?.length) contactsClientId = byName[0].id;
+        }
+        if (!contactsClientId) {
+          const { data: newCl } = await supabase.from('contractors_clients').insert({
+            company_id: currentUser.company_id, name: offerClientData.client_name.trim(),
+            nip: nipNorm || null,
+            address_street: offerClientData.company_street ? `${offerClientData.company_street} ${offerClientData.company_street_number || ''}`.trim() : null,
+            address_city: offerClientData.company_city || null,
+            address_postal_code: offerClientData.company_postal_code || null
+          }).select('id').single();
+          if (newCl) contactsClientId = newCl.id;
+        }
+      }
+
+      // Save contacts from offerContacts form
+      let savedRepId = '';
+      if (contactsClientId) {
+        const validContacts = offerContacts.filter(c => c.first_name.trim() && c.last_name.trim());
+        for (const contact of validContacts) {
+          // Check if this contact already exists (by name)
+          const { data: existing } = await supabase.from('contractor_client_contacts').select('id')
+            .eq('client_id', contactsClientId).ilike('first_name', contact.first_name.trim()).ilike('last_name', contact.last_name.trim()).limit(1);
+          if (existing?.length) {
+            savedRepId = existing[0].id;
+          } else {
+            const { data: savedContact } = await supabase.from('contractor_client_contacts').insert({
+              client_id: contactsClientId, company_id: currentUser.company_id,
+              first_name: contact.first_name.trim(), last_name: contact.last_name.trim(),
+              phone: contact.phone || null, email: contact.email || null,
+              position: contact.position || null, is_main_contact: contact.is_primary || false
+            }).select().single();
+            if (savedContact) savedRepId = savedContact.id;
+          }
+        }
+      }
+
+      // Build representative data for print_settings
+      const repContact = offerContacts.find(c => c.first_name.trim());
+      const repName = repContact ? `${repContact.first_name} ${repContact.last_name}`.trim() : '';
+      const repEmail = repContact?.email || '';
+      const repPhone = repContact?.phone || '';
+      const repPosition = repContact?.position || '';
+
+      // Merge existing print_settings
+      const existingPs = editingOffer.print_settings || {};
+      const existingClientData = existingPs.client_data || {};
+
       await supabase
         .from('offers')
         .update({
           name: editForm.name.trim(),
           project_id: editForm.project_id || null,
-          client_id: editForm.client_id || null,
+          client_id: resolvedClientId || null,
           valid_until: editForm.valid_until || null,
-          notes: editForm.notes || null
+          notes: editForm.notes || null,
+          print_settings: {
+            ...existingPs,
+            client_data: {
+              ...existingClientData,
+              client_name: offerClientData.client_name || existingClientData.client_name,
+              nip: offerClientData.nip || existingClientData.nip,
+              company_street: offerClientData.company_street || existingClientData.company_street,
+              company_street_number: offerClientData.company_street_number || existingClientData.company_street_number,
+              company_city: offerClientData.company_city || existingClientData.company_city,
+              company_postal_code: offerClientData.company_postal_code || existingClientData.company_postal_code,
+              representative_id: savedRepId || existingClientData.representative_id || null,
+              representative_name: repName || existingClientData.representative_name || '',
+              representative_email: repEmail || existingClientData.representative_email || '',
+              representative_phone: repPhone || existingClientData.representative_phone || '',
+              representative_position: repPosition || existingClientData.representative_position || ''
+            }
+          }
         })
         .eq('id', editingOffer.id);
+
       await loadData();
       setShowEditModal(false);
       setEditingOffer(null);
+      // Reload offer details if viewing it
+      if (selectedOffer?.id === editingOffer.id) {
+        loadOfferDetails(editingOffer.id);
+      }
     } catch (err) {
       console.error('Error updating offer:', err);
     } finally {

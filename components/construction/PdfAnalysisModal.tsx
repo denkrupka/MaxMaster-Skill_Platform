@@ -3,23 +3,27 @@ import { X, Play, Loader2, CheckCircle, AlertTriangle, BookOpen, FileImage, Save
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { classifyFromOpList } from '../../lib/pdfGeometryExtractor';
 import { extractPageGeometry } from '../../lib/pdfGeometryExtractor';
-import { groupPathsByStyle, detectScale, matchAiResultToGeometry } from '../../lib/pdfAnalyzer';
+import { groupPathsByStyle, detectScale, detectSymbols, matchAiResultToGeometry } from '../../lib/pdfAnalyzer';
 import type { PdfClassification, PdfAnalysisStep, PdfRasterAiResult } from '../../lib/pdfTypes';
 import type { DxfAnalysis } from '../../lib/dxfAnalyzer';
 import type { PdfAnalysisExtra } from '../../lib/pdfAnalyzer';
 import { supabase } from '../../lib/supabase';
 
 /** Render a PDF page to base64 JPEG for AI analysis.
- *  Auto-scales: 3x default, up to 4x for small pages, capped at ~20MP to stay within API limits. */
-async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
+ *  If scaleOverride is set, uses that. Otherwise auto-scales: 3x default, up to 4x for small pages, capped at ~16MP. */
+async function renderPageToBase64(page: PDFPageProxy, scaleOverride?: number): Promise<string> {
   const baseVp = page.getViewport({ scale: 1 });
-  const basePx = baseVp.width * baseVp.height;
-  // Target ~16MP (4000x4000). For small pages allow 4x, for large pages drop to 2x
-  const maxPixels = 16_000_000;
-  let renderScale = 3;
-  if (basePx * 9 < 4_000_000) renderScale = 4; // small page → 4x for clarity
-  if (basePx * renderScale * renderScale > maxPixels) {
-    renderScale = Math.max(2, Math.floor(Math.sqrt(maxPixels / basePx)));
+  let renderScale: number;
+  if (scaleOverride) {
+    renderScale = scaleOverride;
+  } else {
+    const basePx = baseVp.width * baseVp.height;
+    const maxPixels = 16_000_000;
+    renderScale = 3;
+    if (basePx * 9 < 4_000_000) renderScale = 4;
+    if (basePx * renderScale * renderScale > maxPixels) {
+      renderScale = Math.max(2, Math.floor(Math.sqrt(maxPixels / basePx)));
+    }
   }
   const viewport = page.getViewport({ scale: renderScale });
   const canvas = document.createElement('canvas');
@@ -31,18 +35,20 @@ async function renderPageToBase64(page: PDFPageProxy): Promise<string> {
   return dataUrl.replace(/^data:image\/jpeg;base64,/, '');
 }
 
-/** Call AI (Gemini) to analyze the full drawing page */
+/** Call AI to analyze the full drawing page */
 async function analyzeDrawingWithAI(
   imageBase64: string,
   pageNumber: number,
-  geometryContext?: string,
+  structuredData?: any,
+  ocrContext?: string,
 ): Promise<PdfRasterAiResult> {
   const { data, error } = await supabase.functions.invoke('pdf-analyze-raster', {
     body: {
       imageBase64,
       mimeType: 'image/jpeg',
       pageNumber,
-      ocrContext: geometryContext || undefined,
+      structuredData: structuredData || undefined,
+      ocrContext: ocrContext || undefined,
     },
   });
   if (error) throw new Error(`AI analysis failed: ${error.message}`);
@@ -86,19 +92,17 @@ export default function PdfAnalysisModal({
       const cls = classifyFromOpList(opList.fnArray);
       setClassification(cls);
 
-      // Step 2: Render full page for AI
+      // Step 2: Extract geometry for vector PDFs, render image
       setStep('extracting');
-      setAnalysisSubStep('Renderowanie strony...');
-      await new Promise(r => setTimeout(r, 0));
-      const imageBase64 = await renderPageToBase64(page);
-
-      // Step 3: For vector PDFs — extract geometry in parallel for precise measurements
-      let geometryContext = '';
       let styleGroups: Awaited<ReturnType<typeof groupPathsByStyle>> | null = null;
       let extraction: Awaited<ReturnType<typeof extractPageGeometry>> | null = null;
+      let structuredData: any = undefined;
+      const isVector = cls.contentType === 'vector' || cls.contentType === 'mixed';
 
-      if (cls.contentType === 'vector' || cls.contentType === 'mixed') {
-        setAnalysisSubStep('Ekstrakcja geometrii...');
+      if (isVector) {
+        // For vector PDFs: extract all geometry data (this is lossless, no quality loss)
+        setAnalysisSubStep('Ekstrakcja geometrii z wektorowego PDF...');
+        await new Promise(r => setTimeout(r, 0));
         extraction = await extractPageGeometry(page, (pct) => setExtractionProgress(pct));
         styleGroups = groupPathsByStyle(extraction.paths);
         const scaleInfo = detectScale(extraction.texts, scaleRatio);
@@ -108,38 +112,93 @@ export default function PdfAnalysisModal({
           sg.totalLengthM = sg.totalLengthPx * scaleInfo.scaleFactor;
         }
 
-        // Build rich context: ALL extracted texts from PDF (legend, labels, annotations)
-        // Group texts by position to reconstruct legend and labels
-        const allTexts = extraction.texts
+        // Detect symbols (clusters of small graphic shapes)
+        setAnalysisSubStep('Wykrywanie symboli...');
+        await new Promise(r => setTimeout(r, 0));
+        const symbols = detectSymbols(extraction.paths, styleGroups, extraction.texts);
+
+        // Build cluster summary: group symbols by clusterId and count
+        const clusterMap = new Map<string, { shape: string; color: string; centerX: number; centerY: number; radius: number; count: number }>();
+        for (const sym of symbols) {
+          const existing = clusterMap.get(sym.clusterId);
+          if (!existing) {
+            const p = extraction.paths.find((_, idx) =>
+              styleGroups!.some(sg => sg.id === sym.styleGroupId && sg.pathIndices.includes(idx))
+            );
+            const color = sym.styleGroupId
+              ? (styleGroups.find(sg => sg.id === sym.styleGroupId)?.strokeColor || '#000')
+              : '#000';
+            clusterMap.set(sym.clusterId, {
+              shape: sym.shape,
+              color,
+              centerX: sym.centerX,
+              centerY: sym.centerY,
+              radius: sym.radius,
+              count: 1,
+            });
+          } else {
+            existing.count++;
+          }
+        }
+
+        // Build texts list (filtered, sorted by position)
+        const texts = extraction.texts
           .filter(t => t.text.trim().length >= 2)
           .sort((a, b) => a.y - b.y || a.x - b.x)
-          .map(t => t.text.trim());
-        // Deduplicate while preserving order
-        const uniqueTexts = [...new Set(allTexts)];
-        const textsBlock = uniqueTexts.slice(0, 500).join('\n'); // limit to 500 unique texts
+          .map(t => ({
+            text: t.text.trim(),
+            x: t.x,
+            y: t.y,
+            fontSize: t.fontSize,
+          }));
 
-        const topGroups = [...styleGroups]
+        // Build style groups summary
+        const sgData = [...styleGroups]
           .sort((a, b) => b.totalLengthPx - a.totalLengthPx)
-          .slice(0, 10)
-          .map(sg => `${sg.name}: ${sg.pathCount} elementów, ${sg.totalLengthM.toFixed(1)}m`)
-          .join('; ');
+          .slice(0, 30) // top 30 groups
+          .map(sg => ({
+            name: sg.name,
+            color: sg.strokeColor,
+            lineWidth: sg.lineWidth,
+            dashPattern: sg.dashPattern.length ? sg.dashPattern.map(v => v.toFixed(0)).join('-') : 'solid',
+            pathCount: sg.pathCount,
+            totalLengthM: sg.totalLengthM,
+          }));
 
-        geometryContext = `WEKTOROWY PDF — poniżej DOKŁADNY tekst wyekstrahowany z pliku PDF (nie OCR, 100% dokładny):
+        // Also include individual symbol positions (up to 2000)
+        const symbolPositions = symbols.slice(0, 2000).map(s => ({
+          shape: s.shape,
+          centerX: s.centerX,
+          centerY: s.centerY,
+          radius: s.radius,
+          color: s.styleGroupId
+            ? (styleGroups!.find(sg => sg.id === s.styleGroupId)?.strokeColor || '#000')
+            : '#000',
+          clusterId: s.clusterId,
+          count: clusterMap.get(s.clusterId)?.count || 1,
+        }));
 
-=== TEKST Z PDF (${uniqueTexts.length} fragmentów) ===
-${textsBlock}
-=== KONIEC TEKSTU ===
-
-Grupy stylów graficznych: ${topGroups}
-Skala: ${scaleInfo.scaleText || 'domyślna 1:100'}`;
+        structuredData = {
+          texts: texts.slice(0, 1000), // limit to 1000 text fragments
+          symbols: symbolPositions,
+          styleGroups: sgData,
+          pageWidth: extraction.pageWidth,
+          pageHeight: extraction.pageHeight,
+          scale: scaleInfo.scaleText || '1:100',
+        };
       }
 
-      // Step 4: AI analyzes the full drawing
+      // Render image: low-res for vector (just for visual context), high-res for raster
+      setAnalysisSubStep('Renderowanie strony...');
+      await new Promise(r => setTimeout(r, 0));
+      const imageBase64 = await renderPageToBase64(page, isVector ? 1.5 : undefined);
+
+      // Step 3: AI analyzes the drawing
       setStep('analyzing');
       setAnalysisSubStep('AI analizuje rysunek...');
       await new Promise(r => setTimeout(r, 0));
 
-      const aiResult = await analyzeDrawingWithAI(imageBase64, pageNumber, geometryContext);
+      const aiResult = await analyzeDrawingWithAI(imageBase64, pageNumber, structuredData);
 
       // Step 5: Merge AI results with geometry for precise measurements
       setAnalysisSubStep('Łączenie wyników...');
