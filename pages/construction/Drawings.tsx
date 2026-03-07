@@ -28,6 +28,7 @@ import type { DxfAnalysis } from '../../lib/dxfAnalyzer';
 import type { TakeoffRule, TakeoffResult } from '../../lib/dxfTakeoff';
 import { applyRules, getDefaultElectricalRules, getDefaultPdfElectricalRules } from '../../lib/dxfTakeoff';
 import DxfSearchPanel from '../../components/construction/DxfSearchPanel';
+import DrawingSearchPanel, { type DrawingSearchResult } from '../../components/construction/DrawingSearchPanel';
 import DxfPropertiesPanel from '../../components/construction/DxfPropertiesPanel';
 import DxfTakeoffPanel from '../../components/construction/DxfTakeoffPanel';
 import DxfTakeoffRulesModal from '../../components/construction/DxfTakeoffRulesModal';
@@ -369,6 +370,8 @@ export const DrawingsPage: React.FC = () => {
   const [pdfHighlightPoints, setPdfHighlightPoints] = useState<{ x: number; y: number; label: string }[]>([]);
   const [pdfHighlightLabel, setPdfHighlightLabel] = useState('');
   const [showPdfMappingDict, setShowPdfMappingDict] = useState(false);
+  const [showDrawingSearch, setShowDrawingSearch] = useState(false);
+  const [searchHighlightRects, setSearchHighlightRects] = useState<DrawingSearchResult[]>([]);
 
   // Annotations
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -519,9 +522,11 @@ export const DrawingsPage: React.FC = () => {
       }
       // F3 — toggle SNAP
       if (e.key === 'F3') { e.preventDefault(); setDxfSnapEnabled(prev => !prev); return; }
-      // Ctrl+F — DXF search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f' && fileType === 'dxf' && dxfData) {
-        e.preventDefault(); setShowDxfSearch(prev => !prev); return;
+      // Ctrl+F — search text in drawing
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        if ((fileType === 'dxf' && dxfData) || (fileType === 'pdf' && pdfDoc)) {
+          e.preventDefault(); setShowDrawingSearch(prev => !prev); return;
+        }
       }
       // Tool shortcuts (no modifier keys)
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1903,8 +1908,8 @@ export const DrawingsPage: React.FC = () => {
                       className={`p-1.5 rounded-lg transition ${dxfSnapEnabled ? 'bg-green-100 text-green-700' : 'hover:bg-white text-slate-600'}`} title={`SNAP (F3) — ${dxfSnapEnabled ? 'WŁ' : 'WYŁ'}`}>
                       <Magnet className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setShowDxfSearch(!showDxfSearch)}
-                      className={`p-1.5 rounded-lg transition ${showDxfSearch ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Szukaj w DXF (Ctrl+F)">
+                    <button onClick={() => setShowDrawingSearch(!showDrawingSearch)}
+                      className={`p-1.5 rounded-lg transition ${showDrawingSearch ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Szukaj tekst (Ctrl+F)">
                       <FileSearch className="w-4 h-4" />
                     </button>
                     <button onClick={() => setShowDxfProperties(!showDxfProperties)}
@@ -1936,6 +1941,10 @@ export const DrawingsPage: React.FC = () => {
                 {fileType === 'pdf' && pdfDoc && (
                   <>
                     <div className="w-px h-5 bg-slate-200 mx-0.5" />
+                    <button onClick={() => setShowDrawingSearch(!showDrawingSearch)}
+                      className={`p-1.5 rounded-lg transition ${showDrawingSearch ? 'bg-blue-100 text-blue-700' : 'hover:bg-white text-slate-600'}`} title="Szukaj tekst (Ctrl+F)">
+                      <FileSearch className="w-4 h-4" />
+                    </button>
                     <button onClick={() => setShowPdfAnalysis(true)}
                       className="p-1.5 rounded-lg transition hover:bg-white text-slate-600" title="Analiza AI rysunku PDF">
                       <Sparkles className="w-4 h-4" />
@@ -2178,6 +2187,14 @@ export const DrawingsPage: React.FC = () => {
                             <text x={item.x} y={item.y + 5} fill="#f97316" fontSize="11" fontWeight="700" textAnchor="middle" fontFamily="Arial" paintOrder="stroke" stroke="white" strokeWidth={3}>{i + 1}</text>
                           </g>
                         ))}
+                        {/* DXF search highlight markers */}
+                        {searchHighlightRects.filter(r => r.dxfResult && dxfViewBox).map((r, i) => {
+                          const pt = dxfToScreenCoords(r.dxfResult!.position, planNatW, planNatH, dxfViewBox!);
+                          return (
+                            <rect key={`dxfsrch-${i}`} x={pt.x - 30} y={pt.y - 8} width={60} height={16}
+                              fill="#fbbf24" fillOpacity={0.35} stroke="#f59e0b" strokeWidth={1.5} rx={3} />
+                          );
+                        })}
                         {/* PDF visible style groups overlay */}
                         {showPdfStyleGroups && pdfStyleGroups.filter(g => g.visible).map(sg => {
                           // When pdfAnalysisExtra is available (fresh analysis), use extraction.paths
@@ -2221,6 +2238,11 @@ export const DrawingsPage: React.FC = () => {
                             <circle cx={pt.x} cy={pt.y} r={14} fill="#f97316" fillOpacity={0.25} stroke="#f97316" strokeWidth={2} />
                             <text x={pt.x} y={pt.y + 4} fill="#f97316" fontSize="10" fontWeight="700" textAnchor="middle" fontFamily="Arial" paintOrder="stroke" stroke="white" strokeWidth={3}>{i + 1}</text>
                           </g>
+                        ))}
+                        {/* Search highlight rectangles */}
+                        {searchHighlightRects.filter(r => !r.dxfResult && (!r.page || r.page === pdfPage)).map((r, i) => (
+                          <rect key={`srch-${i}`} x={r.x} y={r.y} width={Math.max(r.width, 20)} height={Math.max(r.height, 10)}
+                            fill="#fbbf24" fillOpacity={0.35} stroke="#f59e0b" strokeWidth={1} rx={2} />
                         ))}
                         {/* SNAP indicator */}
                         {dxfSnapEnabled && dxfSnapPoint && dxfViewBox && (() => {
@@ -2994,29 +3016,47 @@ export const DrawingsPage: React.FC = () => {
         </div>
       )}
 
-      {/* DXF Search Panel */}
-      {showDxfSearch && dxfData && (
-        <DxfSearchPanel
-          dxf={dxfData}
-          hiddenLayers={dxfHiddenLayers}
-          onResultClick={(result: DxfSearchResult) => {
-            if (dxfViewBox) {
-              const screenPt = dxfToScreenCoords(result.position, planNatW, planNatH, dxfViewBox);
-              // Scroll to entity position
-              const viewer = viewerRef.current;
-              if (viewer) {
-                const scale = zoom / 100;
-                viewer.scrollTo({
-                  left: screenPt.x * scale - viewer.clientWidth / 2,
-                  top: screenPt.y * scale - viewer.clientHeight / 2,
-                  behavior: 'smooth',
-                });
-              }
-              setDxfSelectedEntity(result.entity);
+      {/* Drawing Search Panel (PDF + DXF) */}
+      {showDrawingSearch && (
+        <DrawingSearchPanel
+          mode={fileType === 'dxf' ? 'dxf' : 'pdf'}
+          pdfDoc={pdfDoc}
+          pdfPage={pdfPage}
+          pdfPageWidth={planNatW}
+          pdfPageHeight={planNatH}
+          dxfData={dxfData}
+          dxfHiddenLayers={dxfHiddenLayers}
+          onResultSelect={(result) => {
+            const viewer = viewerRef.current;
+            if (!viewer) return;
+            const scale = zoom / 100;
+
+            if (result.dxfResult && dxfViewBox) {
+              // DXF: convert DXF coords to screen coords
+              const screenPt = dxfToScreenCoords(result.dxfResult.position, planNatW, planNatH, dxfViewBox);
+              viewer.scrollTo({
+                left: screenPt.x * scale - viewer.clientWidth / 2,
+                top: screenPt.y * scale - viewer.clientHeight / 2,
+                behavior: 'smooth',
+              });
+              setDxfSelectedEntity(result.dxfResult.entity);
               setShowDxfProperties(true);
+            } else {
+              // PDF: coordinates are already in page space
+              if (result.page && result.page !== pdfPage) {
+                setPdfPage(result.page);
+              }
+              viewer.scrollTo({
+                left: result.x * scale - viewer.clientWidth / 2,
+                top: result.y * scale - viewer.clientHeight / 2,
+                behavior: 'smooth',
+              });
             }
           }}
-          onClose={() => setShowDxfSearch(false)}
+          onHighlightResults={(results) => {
+            setSearchHighlightRects(results);
+          }}
+          onClose={() => { setShowDrawingSearch(false); setSearchHighlightRects([]); }}
         />
       )}
 
