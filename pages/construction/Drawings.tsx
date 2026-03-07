@@ -26,7 +26,7 @@ import { findSnapPoints, getBestSnap, findIntersections, type SnapPoint, type Sn
 import type { DxfSearchResult } from '../../lib/dxfSearch';
 import type { DxfAnalysis } from '../../lib/dxfAnalyzer';
 import type { TakeoffRule, TakeoffResult } from '../../lib/dxfTakeoff';
-import { applyRules, getDefaultElectricalRules, getDefaultPdfElectricalRules } from '../../lib/dxfTakeoff';
+import { applyRules, getDefaultElectricalRules, getDefaultPdfElectricalRules, generateRulesFromAiAnalysis } from '../../lib/dxfTakeoff';
 import DxfSearchPanel from '../../components/construction/DxfSearchPanel';
 import DrawingSearchPanel, { type DrawingSearchResult } from '../../components/construction/DrawingSearchPanel';
 import DxfPropertiesPanel from '../../components/construction/DxfPropertiesPanel';
@@ -709,7 +709,7 @@ export const DrawingsPage: React.FC = () => {
                 // If full analysis with entities is available, restore takeoff
                 if (savedAnalysis?.entities && Array.isArray(savedAnalysis.entities)) {
                   setPdfAnalysis(savedAnalysis);
-                  const rulesToUse = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : getDefaultPdfElectricalRules();
+                  const rulesToUse = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : (() => { const aiRules = generateRulesFromAiAnalysis(savedAnalysis || pdfAnalysis!); return aiRules.length > 0 ? aiRules : getDefaultPdfElectricalRules(); })();
                   setPdfTakeoffRules(rulesToUse);
                   const result = applyRules(savedAnalysis, rulesToUse);
                   setPdfTakeoffResult(result);
@@ -1885,12 +1885,26 @@ export const DrawingsPage: React.FC = () => {
                   <button onClick={e => { e.stopPropagation(); setShowUpdateDropdown(!showUpdateDropdown); }}
                     className="p-1.5 hover:bg-white rounded-lg text-slate-600" title="Prześlij nową wersję pliku"><Upload className="w-4 h-4" /></button>
                   {showUpdateDropdown && (
-                    <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
-                      <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                        onClick={() => { setShowUpdateDropdown(false); updateFileInputRef.current?.click(); }}>
-                        <CloudUpload className="w-4 h-4 text-slate-400" /> Prześlij nową wersję
-                      </button>
-                    </div>
+                    <>
+                      <div className="fixed inset-0 z-[99]" onClick={() => setShowUpdateDropdown(false)} />
+                      <div className="fixed z-[100] w-52 bg-white border border-slate-200 rounded-xl shadow-xl py-1"
+                        style={{ top: 'auto', right: 'auto' }}
+                        ref={el => {
+                          if (el && el.parentElement) {
+                            const btn = el.parentElement.querySelector('button');
+                            if (btn) {
+                              const r = btn.getBoundingClientRect();
+                              el.style.top = `${r.bottom + 4}px`;
+                              el.style.left = `${r.right - 208}px`;
+                            }
+                          }
+                        }}>
+                        <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                          onClick={() => { setShowUpdateDropdown(false); updateFileInputRef.current?.click(); }}>
+                          <CloudUpload className="w-4 h-4 text-slate-400" /> Prześlij nową wersję
+                        </button>
+                      </div>
+                    </>
                   )}
                 </div>
                 <a href={selectedPlan!.file_url} download={selectedPlan!.original_filename || selectedPlan!.name}
@@ -3164,7 +3178,7 @@ export const DrawingsPage: React.FC = () => {
               if (extra.legend) setPdfLegend(extra.legend);
             }
             // Auto-apply rules and show takeoff
-            const rules = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : getDefaultPdfElectricalRules();
+            const rules = pdfTakeoffRules.length > 0 ? pdfTakeoffRules : (() => { const aiRules = generateRulesFromAiAnalysis(analysis); return aiRules.length > 0 ? aiRules : getDefaultPdfElectricalRules(); })();
             if (pdfTakeoffRules.length === 0) {
               setPdfTakeoffRules(rules);
             }

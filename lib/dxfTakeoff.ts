@@ -370,6 +370,39 @@ export function getDefaultElectricalRules(): TakeoffRule[] {
   ];
 }
 
+/** Auto-generate rules from AI-analyzed PDF — one rule per unique layer (element type) */
+export function generateRulesFromAiAnalysis(analysis: DxfAnalysis): TakeoffRule[] {
+  const rules: TakeoffRule[] = [];
+  const seenLayers = new Set<string>();
+
+  for (const layer of analysis.layers) {
+    if (seenLayers.has(layer.name)) continue;
+    seenLayers.add(layer.name);
+
+    // Determine category from layer name (format: "Category — Element name")
+    const dashIdx = layer.name.indexOf(' — ');
+    const category = dashIdx > 0 ? layer.name.substring(0, dashIdx) : 'Inne';
+    const elementName = dashIdx > 0 ? layer.name.substring(dashIdx + 3) : layer.name;
+
+    // Determine if this is a route (length-based) or symbol (count-based)
+    const isRoute = category.toLowerCase().includes('kable') || category.toLowerCase().includes('przewod') || category.toLowerCase().includes('trasy');
+
+    rules.push({
+      id: `ai_${rules.length}`,
+      name: elementName,
+      category,
+      matchType: 'layer_exact',
+      matchPattern: layer.name,
+      quantitySource: isRoute ? 'group_length_m' : 'count',
+      unit: isRoute ? 'm' : 'szt.',
+      multiplier: 1,
+      isDefault: true,
+    });
+  }
+
+  return rules;
+}
+
 /** Default rules for PDF electrical drawings (matched by color/shape) */
 export function getDefaultPdfElectricalRules(): TakeoffRule[] {
   return [
