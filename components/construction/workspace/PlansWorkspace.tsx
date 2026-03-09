@@ -1,9 +1,9 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
-import type { Project } from '../../../types';
+import type { Project, ProjectStatus, ProjectBillingType, ProjectNameMode } from '../../../types';
 import {
   workspaceReducer, INITIAL_WORKSPACE_STATE,
   type WorkspaceState, type DrawingObject, type BoqRow, type AiSuggestion,
@@ -93,8 +93,8 @@ export const PlansWorkspace: React.FC = () => {
 
   // ---- Data state ----
   const [projects, setProjects] = useState<Project[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string; address_city?: string }[]>([]);
-  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; nip?: string; address_city?: string }[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string; kod_obiektu?: string; rodzaj?: string; typ?: string; address_street?: string; address_city?: string; address_postal_code?: string; client_id?: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [folders, setFolders] = useState<FolderWithPlans[]>([]);
   const [allPlans, setAllPlans] = useState<PlanRecord[]>([]);
@@ -104,6 +104,20 @@ export const PlansWorkspace: React.FC = () => {
   const [projectSort, setProjectSort] = useState<{ key: string; asc: boolean }>({ key: 'created_at', asc: false });
   const [fileSearch, setFileSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // ---- Project create modal state ----
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const emptyProjectForm = {
+    name: '', description: '', customer_id: '', department_id: '',
+    name_mode: 'custom' as ProjectNameMode, status: 'active' as ProjectStatus,
+    color: '#3B82F6', billing_type: 'ryczalt' as ProjectBillingType,
+    budget_hours: '', budget_amount: '', hourly_rate: '',
+    start_date: '', end_date: '',
+  };
+  const [projectForm, setProjectForm] = useState(emptyProjectForm);
 
   // ---- Viewer state ----
   const [zoom, setZoom] = useState(100);
@@ -259,8 +273,8 @@ export const PlansWorkspace: React.FC = () => {
     try {
       const [projRes, custRes, deptRes] = await Promise.all([
         supabase.from('projects').select('*').eq('company_id', currentUser.company_id).order('created_at', { ascending: false }),
-        supabase.from('contractors_clients').select('id, name, address_city').eq('company_id', currentUser.company_id).eq('is_archived', false),
-        supabase.from('departments').select('id, name').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('contractors_clients').select('id, name, nip, address_city').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('departments').select('id, name, kod_obiektu, rodzaj, typ, address_street, address_city, address_postal_code, client_id').eq('company_id', currentUser.company_id).eq('is_archived', false),
       ]);
       if (projRes.data) setProjects(projRes.data);
       if (custRes.data) setCustomers(custRes.data);
@@ -269,6 +283,61 @@ export const PlansWorkspace: React.FC = () => {
       console.error('Load projects error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveNewProject = async () => {
+    if (!currentUser?.company_id) return;
+    const nameToUse = projectForm.name_mode === 'object'
+      ? departments.find(d => d.id === projectForm.department_id)?.name || projectForm.name
+      : projectForm.name;
+    if (!nameToUse.trim()) return;
+    setSavingProject(true);
+    try {
+      const payload: any = {
+        company_id: currentUser.company_id,
+        name: nameToUse.trim(),
+        description: projectForm.description.trim() || null,
+        status: projectForm.status,
+        color: projectForm.color,
+        start_date: projectForm.start_date || null,
+        end_date: projectForm.end_date || null,
+        updated_at: new Date().toISOString(),
+        name_mode: projectForm.name_mode,
+        department_id: projectForm.department_id || null,
+        billing_type: projectForm.billing_type,
+        contractor_client_id: projectForm.customer_id || null,
+      };
+      if (projectForm.billing_type === 'ryczalt') {
+        payload.budget_hours = projectForm.budget_hours ? parseFloat(projectForm.budget_hours) : null;
+        payload.budget_amount = projectForm.budget_amount ? parseFloat(projectForm.budget_amount) : null;
+      } else {
+        payload.hourly_rate = projectForm.hourly_rate ? parseFloat(projectForm.hourly_rate) : null;
+      }
+
+      let resultData: any = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const { data, error } = await supabase.from('projects').insert(payload).select().single();
+        if (!error && data) { resultData = data; break; }
+        const colMatch = error?.message?.match(/Could not find the '(\w+)' column/);
+        const fkMatch = error?.message?.match(/violates foreign key constraint/);
+        if (colMatch) { delete payload[colMatch[1]]; }
+        else if (fkMatch && payload.contractor_client_id) { payload.contractor_client_id = null; }
+        else { console.error('Save project error:', error); break; }
+      }
+
+      if (resultData) {
+        setProjects(prev => [resultData, ...prev]);
+        setShowProjectModal(false);
+        setProjectForm(emptyProjectForm);
+        notify('Projekt utworzony');
+      } else {
+        notify('Nie udalo sie utworzyc projektu', 'error');
+      }
+    } catch (err: any) {
+      notify(err.message || 'Blad tworzenia projektu', 'error');
+    } finally {
+      setSavingProject(false);
     }
   };
 
@@ -1785,6 +1854,13 @@ export const PlansWorkspace: React.FC = () => {
             </div>
             {/* Count */}
             <span className="text-xs text-slate-400">{sorted.length} z {projects.length} projektow</span>
+            {/* New project button */}
+            <button
+              onClick={() => { setProjectForm(emptyProjectForm); setShowProjectModal(true); }}
+              className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Nowy projekt
+            </button>
           </div>
         </div>
 
@@ -1875,6 +1951,216 @@ export const PlansWorkspace: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* ===== NEW PROJECT MODAL ===== */}
+        {showProjectModal && (() => {
+          const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';
+          const labelCls = 'text-[9px] font-medium text-slate-500 uppercase tracking-wide block mb-0.5';
+          const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#6366F1', '#14B8A6'];
+          const STATUS_CFG: Record<string, string> = { active: 'Aktywny', completed: 'Zakonczony', archived: 'Zarchiwizowany', on_hold: 'Wstrzymany' };
+
+          const selectedClient = customers.find(c => c.id === projectForm.customer_id);
+          const filteredClients = customers.filter(c => {
+            if (!clientSearchTerm) return true;
+            const q = clientSearchTerm.toLowerCase();
+            return c.name.toLowerCase().includes(q) || ((c as any).nip || '').includes(q);
+          });
+          const filteredDepts = departments.filter(d => {
+            if (!projectForm.customer_id) return true;
+            return (d as any).client_id === projectForm.customer_id || !(d as any).client_id;
+          });
+
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowProjectModal(false)} />
+              <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                {/* Header */}
+                <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-4 py-2 border-b border-slate-100">
+                  <h2 className="text-sm font-semibold text-slate-900">Nowy projekt</h2>
+                  <button onClick={() => setShowProjectModal(false)} className="p-1 rounded-lg hover:bg-slate-100 -mr-1">
+                    <X className="w-4 h-4 text-slate-400" />
+                  </button>
+                </div>
+                {/* Form */}
+                <div className="px-4 py-2.5 space-y-2">
+                  {/* Client */}
+                  <div className="relative">
+                    <label className={labelCls}>Klient</label>
+                    {selectedClient ? (
+                      <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-blue-50/50">
+                        <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{selectedClient.name}</p>
+                          {(selectedClient as any).nip && <p className="text-[11px] text-slate-400 font-mono">{(selectedClient as any).nip}</p>}
+                        </div>
+                        <button onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '', department_id: '' })); setClientSearchTerm(''); }} className="p-0.5 text-slate-400 hover:text-red-500">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          type="text" value={clientSearchTerm}
+                          onChange={e => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }}
+                          onFocus={() => setShowClientDropdown(true)}
+                          placeholder="Szukaj po nazwie lub NIP..."
+                          className="w-full pl-8 pr-3 border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+                        />
+                        {showClientDropdown && (
+                          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl max-h-44 overflow-y-auto">
+                            <button onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '' })); setShowClientDropdown(false); setClientSearchTerm(''); }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-b border-slate-100">-- Brak klienta --</button>
+                            {filteredClients.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-slate-400">Brak wynikow</p>
+                            ) : filteredClients.map(client => (
+                              <button key={client.id} onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0">
+                                <p className="text-sm text-slate-800 truncate">{client.name}</p>
+                                {(client as any).nip && <p className="text-[11px] text-slate-400 font-mono">{(client as any).nip}</p>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Name source toggle */}
+                  <div>
+                    <label className={labelCls}>Zrodlo nazwy</label>
+                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
+                      <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Nazwa wlasna</button>
+                      <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Wybrac obiekt</button>
+                    </div>
+                  </div>
+
+                  {/* Name or Object */}
+                  {projectForm.name_mode === 'custom' ? (
+                    <div>
+                      <label className={labelCls}>Nazwa projektu *</label>
+                      <input type="text" value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className={inputCls} placeholder="Nazwa projektu" />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className={labelCls}>Obiekt *</label>
+                      <div className="flex gap-2">
+                        <select value={projectForm.department_id} onChange={e => {
+                          const dept = departments.find(d => d.id === e.target.value);
+                          setProjectForm(prev => ({
+                            ...prev,
+                            department_id: e.target.value,
+                            customer_id: (dept as any)?.client_id || prev.customer_id,
+                          }));
+                        }} className={`flex-1 ${inputCls}`}>
+                          <option value="">-- Wybierz --</option>
+                          {filteredDepts.map(d => <option key={d.id} value={d.id}>{d.name} {(d as any).kod_obiektu ? `(${(d as any).kod_obiektu})` : ''}</option>)}
+                        </select>
+                        <a href="#/company/departments" className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 whitespace-nowrap">
+                          <Plus className="w-3.5 h-3.5" /> Nowy
+                        </a>
+                      </div>
+                      {projectForm.department_id && (() => {
+                        const dept = departments.find(d => d.id === projectForm.department_id) as any;
+                        if (!dept) return null;
+                        return (
+                          <div className="mt-1.5 px-3 py-2 bg-slate-50 rounded-lg text-[11px] text-slate-500 leading-relaxed">
+                            {dept.kod_obiektu && <span className="mr-3"><b>Kod:</b> {dept.kod_obiektu}</span>}
+                            {dept.rodzaj && <span className="mr-3"><b>Rodzaj:</b> {dept.rodzaj}</span>}
+                            {dept.typ && <span className="mr-3"><b>Typ:</b> {dept.typ}</span>}
+                            {(dept.address_street || dept.address_city) && <><br /><b>Adres:</b> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</>}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  <div>
+                    <label className={labelCls}>Opis</label>
+                    <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className={inputCls} placeholder="Opis projektu..." />
+                  </div>
+
+                  {/* Status + Color */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label className={labelCls}>Status</label>
+                      <select value={projectForm.status} onChange={e => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))} className={inputCls}>
+                        {Object.entries(STATUS_CFG).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Kolor</label>
+                      <div className="flex flex-wrap gap-1">
+                        {COLOR_OPTIONS.map(color => (
+                          <button key={color} onClick={() => setProjectForm(prev => ({ ...prev, color }))}
+                            className={`w-5 h-5 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-slate-700 scale-110' : 'border-transparent hover:scale-105'}`}
+                            style={{ backgroundColor: color }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Billing type */}
+                  <div>
+                    <label className={labelCls}>Forma wynagrodzenia</label>
+                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
+                      <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Ryczalt</button>
+                      <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Roboczogodziny</button>
+                    </div>
+                  </div>
+
+                  {projectForm.billing_type === 'ryczalt' ? (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className={labelCls}>Budzet godzin</label>
+                        <input type="number" value={projectForm.budget_hours} onChange={e => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className={inputCls} placeholder="np. 100" />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Budzet netto (PLN)</label>
+                        <input type="number" value={projectForm.budget_amount} onChange={e => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className={inputCls} placeholder="np. 50000" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className={labelCls}>Stawka netto (PLN/godz.)</label>
+                      <input type="number" value={projectForm.hourly_rate} onChange={e => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={inputCls} placeholder="np. 65" />
+                    </div>
+                  )}
+
+                  {/* Dates */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label className={labelCls}>Data rozpoczecia</label>
+                      <input type="date" value={projectForm.start_date} onChange={e => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Data zakonczenia</label>
+                      <input type="date" value={projectForm.end_date} onChange={e => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className={inputCls} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-4 py-2 border-t border-slate-100">
+                  <button onClick={() => setShowProjectModal(false)} className="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 rounded-lg">Anuluj</button>
+                  <button
+                    onClick={saveNewProject}
+                    disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)}
+                    className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {savingProject && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Utworz
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
