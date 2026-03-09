@@ -147,11 +147,6 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
         </button>
       )}
 
-      {/* Left panel toggle */}
-      <button onClick={props.onToggleLeftPanel} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Panel plikow">
-        {props.leftPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
-      </button>
-
       <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
       {/* File identity — inline editable */}

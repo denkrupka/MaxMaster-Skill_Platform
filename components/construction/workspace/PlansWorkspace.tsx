@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload, Ruler, Sparkles, PanelLeftOpen } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
@@ -176,6 +176,8 @@ export const PlansWorkspace: React.FC = () => {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<DrawPoint[]>([]);
   const [calibrationInput, setCalibrationInput] = useState<{ pixelDist: number; show: boolean }>({ pixelDist: 0, show: false });
+  const [showScaleSettings, setShowScaleSettings] = useState(false);
+  const [aiScaleLoading, setAiScaleLoading] = useState(false);
 
   // ---- Photo pins (each pin can have multiple photos) ----
   type PhotoItem = { id: string; url: string; label?: string; authorName?: string; createdAt?: string };
@@ -1208,6 +1210,69 @@ export const PlansWorkspace: React.FC = () => {
     setCalibrationPoints([]);
     setCalibrationInput({ pixelDist: 0, show: false });
   }, [calibrationInput, selectedPlan, notify]);
+
+  const handleAiScaleDetect = useCallback(async () => {
+    if (!activeFile) return;
+    setAiScaleLoading(true);
+    try {
+      // AI attempts to detect scale from the drawing legend or dimension annotations
+      // It looks for text like "1:50", "1:100", "SKALA 1:200", or measures known element sizes
+      const format = getFileFormat(activeFile.original_filename || activeFile.name, activeFile.mime_type);
+      let detectedScale: number | null = null;
+
+      // Check for scale text in DXF data
+      if (format === 'dxf' && dxfData) {
+        const entities = dxfData.entities || [];
+        for (const ent of entities) {
+          if (ent.type === 'TEXT' || ent.type === 'MTEXT') {
+            const txt = (ent as any).text || '';
+            // Match patterns like "1:50", "1:100", "SKALA 1:200"
+            const m = txt.match(/1\s*:\s*(\d+)/);
+            if (m) {
+              const denom = parseInt(m[1]);
+              if (denom >= 10 && denom <= 1000) {
+                // scale_ratio = real mm per pixel. For 1:N, 1px on screen ≈ N mm
+                // But we need to account for DXF units → typically mm
+                detectedScale = denom;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // For PDF — we can parse text content for scale annotations
+      if (format === 'pdf') {
+        // Common architectural scales
+        // Try to detect from the rendered page text
+        const pdfDoc = await pdfjsLib.getDocument(activeFile.file_url).promise;
+        const page = await pdfDoc.getPage(pdfPage || 1);
+        const textContent = await page.getTextContent();
+        const allText = textContent.items.map((item: any) => item.str).join(' ');
+        const m = allText.match(/(?:skala|scale|ma[sß]stab|echelle)?\s*1\s*:\s*(\d+)/i);
+        if (m) {
+          const denom = parseInt(m[1]);
+          if (denom >= 10 && denom <= 2000) {
+            // PDF points = 1/72 inch = 0.3528mm. At scale 1:N, 1pt = 0.3528 * N mm real
+            detectedScale = 0.3528 * denom;
+          }
+        }
+      }
+
+      if (detectedScale !== null && detectedScale > 0 && selectedPlan) {
+        await supabase.from('plans').update({ scale_ratio: detectedScale }).eq('id', selectedPlan.id);
+        setSelectedPlan(prev => prev ? { ...prev, scale_ratio: detectedScale! } : prev);
+        notify(`AI wykryl skale: 1px = ${detectedScale.toFixed(2)} mm`);
+        setShowScaleSettings(false);
+      } else {
+        notify('AI nie znalazl informacji o skali. Ustaw recznie.', 'error');
+      }
+    } catch (err: any) {
+      notify('Blad detekcji skali AI: ' + (err.message || ''), 'error');
+    } finally {
+      setAiScaleLoading(false);
+    }
+  }, [activeFile, dxfData, selectedPlan, pdfPage, notify]);
 
   // ---- Photo Upload Handler ----
 
@@ -2850,13 +2915,24 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Render ----
 
   return (
-    <div className={`flex h-full bg-slate-100 relative ${ws.isFullscreen ? 'fixed inset-0 z-[80]' : ''}`}>
+    <div className={`flex h-full bg-slate-100 relative ${ws.isFullscreen ? 'fixed inset-0 z-[9999] bg-white' : ''}`}>
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" className="hidden"
         accept=".dwg,.dxf,.pdf,.ifc,.rvt,.png,.jpg,.jpeg,.gif,.bmp,.webp,.svg"
         onChange={handleFileUpload} />
 
       {/* Left Sidebar */}
+      {!ws.leftPanelOpen && (
+        <div className="flex-shrink-0 flex flex-col items-center py-2 bg-white border-r border-slate-200 w-10">
+          <button
+            onClick={() => dispatch({ type: 'TOGGLE_LEFT_PANEL' })}
+            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+            title="Pokaz panel plikow"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {ws.leftPanelOpen && (
         <div className="w-64 flex-shrink-0">
           <PlansSidebar
@@ -2874,6 +2950,7 @@ export const PlansWorkspace: React.FC = () => {
             onCreateSubfolder={handleCreateSubfolder}
             onMoveFileToFolder={handleMoveFileToFolder}
             onReorderFile={handleReorderFile}
+            onCollapse={() => dispatch({ type: 'TOGGLE_LEFT_PANEL' })}
           />
         </div>
       )}
@@ -3241,6 +3318,7 @@ export const PlansWorkspace: React.FC = () => {
             onWidthChange={setStrokeWidth}
             hasScale={!!(selectedPlan?.scale_ratio)}
             onCalibrateScale={handleCalibrateScale}
+            onOpenScaleSettings={() => setShowScaleSettings(true)}
             countValue={countMarkers.length > 0 ? countMarkers.length : undefined}
             onClearCount={() => setCountMarkers([])}
           />
@@ -3793,6 +3871,121 @@ export const PlansWorkspace: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* Scale Settings Modal */}
+      {showScaleSettings && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={() => setShowScaleSettings(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">Ustawienia skali</h3>
+              <button onClick={() => setShowScaleSettings(false)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Current scale info */}
+              {selectedPlan?.scale_ratio ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                    <Ruler className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-green-800">Skala skalibrowana</p>
+                    <p className="text-[11px] text-green-600">1 px = {selectedPlan.scale_ratio.toFixed(3)} mm</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                    <Ruler className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-amber-800">Skala nie jest skalibrowana</p>
+                    <p className="text-[11px] text-amber-600">Pomiary beda w pikselach</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual calibration */}
+              <button
+                onClick={() => {
+                  setShowScaleSettings(false);
+                  handleCalibrateScale();
+                }}
+                className="w-full flex items-center gap-3 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                  <Ruler className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Kalibracja reczna</p>
+                  <p className="text-[11px] text-slate-500">Kliknij dwa punkty o znanej odleglosci i wpisz wymiar</p>
+                </div>
+              </button>
+
+              {/* AI scale detection */}
+              <button
+                onClick={handleAiScaleDetect}
+                disabled={aiScaleLoading}
+                className="w-full flex items-center gap-3 p-3 border border-purple-200 rounded-xl hover:bg-purple-50 transition text-left disabled:opacity-50"
+              >
+                <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 flex-shrink-0">
+                  {aiScaleLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Wykryj skale AI</p>
+                  <p className="text-[11px] text-slate-500">
+                    {aiScaleLoading ? 'Analizowanie rysunku...' : 'Automatyczne wykrycie z legendy lub wymiarow'}
+                  </p>
+                </div>
+              </button>
+
+              {/* Manual input */}
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider mb-2">Lub wpisz skale recznie</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600">1 :</span>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="np. 50, 100, 200"
+                    className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const val = parseInt((e.target as HTMLInputElement).value);
+                        if (val > 0 && selectedPlan) {
+                          const scaleRatio = 0.3528 * val; // PDF points to mm
+                          supabase.from('plans').update({ scale_ratio: scaleRatio }).eq('id', selectedPlan.id)
+                            .then(() => {
+                              setSelectedPlan(prev => prev ? { ...prev, scale_ratio: scaleRatio } : prev);
+                              notify(`Skala ustawiona: 1:${val}`);
+                              setShowScaleSettings(false);
+                            });
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.querySelector<HTMLInputElement>('[placeholder="np. 50, 100, 200"]');
+                      if (!input) return;
+                      const val = parseInt(input.value);
+                      if (val > 0 && selectedPlan) {
+                        const scaleRatio = 0.3528 * val;
+                        supabase.from('plans').update({ scale_ratio: scaleRatio }).eq('id', selectedPlan.id)
+                          .then(() => {
+                            setSelectedPlan(prev => prev ? { ...prev, scale_ratio: scaleRatio } : prev);
+                            notify(`Skala ustawiona: 1:${val}`);
+                            setShowScaleSettings(false);
+                          });
+                      }
+                    }}
+                    className="px-3 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >Ustaw</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Unsaved changes modal */}
       {showUnsavedModal && (

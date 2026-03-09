@@ -3,7 +3,7 @@ import {
   MousePointer, Hand, Ruler, Square, Hash, Type, MessageSquare,
   Camera, Scissors, PenTool, Pencil, Circle, ArrowUpRight, Minus,
   CloudLightning, MessageCircleWarning, Link2, Sparkles, Eraser,
-  ChevronDown, X, Crosshair, Image
+  ChevronDown, X, Settings2
 } from 'lucide-react';
 import type { BottomTool } from './WorkspaceTypes';
 
@@ -26,6 +26,7 @@ interface ViewerBottomToolbarProps {
   // Scale
   hasScale?: boolean;
   onCalibrateScale?: () => void;
+  onOpenScaleSettings?: () => void;
 }
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#000000', '#ffffff'];
@@ -34,7 +35,7 @@ const WIDTHS = [1, 2, 4, 6, 10];
 export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
   activeTool, onSetTool, strokeColor, strokeWidth, onColorChange, onWidthChange,
   countValue, countLabel, onClearCount, highlightLabel, highlightCount, onClearHighlight,
-  hasScale, onCalibrateScale,
+  hasScale, onCalibrateScale, onOpenScaleSettings,
 }) => {
   const [showPenMenu, setShowPenMenu] = useState(false);
   const [showShapeMenu, setShowShapeMenu] = useState(false);
@@ -51,7 +52,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
   }> = ({ tool, icon, title, shortcut, active, className }) => (
     <button
       onClick={() => onSetTool(tool)}
-      className={`p-2 rounded-lg transition ${
+      className={`p-1.5 rounded-lg transition ${
         (active ?? activeTool === tool)
           ? 'bg-blue-100 text-blue-700 shadow-inner'
           : `hover:bg-slate-100 text-slate-600 ${className || ''}`
@@ -62,13 +63,14 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
     </button>
   );
 
-  const Separator = () => <div className="w-px h-6 bg-slate-200 mx-1" />;
+  const Separator = () => <div className="w-px h-5 bg-slate-200 mx-0.5" />;
+  const iconSize = "w-4 h-4";
 
   return (
-    <div className="px-3 py-1.5 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 relative" onClick={e => e.stopPropagation()}>
+    <div className="px-2 py-1 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 relative" onClick={e => e.stopPropagation()}>
       {/* Select & Pan */}
-      <ToolBtn tool="select" icon={<MousePointer className="w-5 h-5" />} title="Zaznacz" shortcut="V" />
-      <ToolBtn tool="pan" icon={<Hand className="w-5 h-5" />} title="Raczka — przesun" shortcut="G" />
+      <ToolBtn tool="select" icon={<MousePointer className={iconSize} />} title="Zaznacz" shortcut="V" />
+      <ToolBtn tool="pan" icon={<Hand className={iconSize} />} title="Raczka — przesun" shortcut="G" />
 
       <Separator />
 
@@ -76,12 +78,12 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       <div className="relative">
         <button
           onClick={e => { e.stopPropagation(); setShowPenMenu(!showPenMenu); }}
-          className={`p-2 rounded-lg flex items-center gap-0.5 transition ${
+          className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['pen', 'highlighter'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
           title="Rysowanie"
         >
-          <PenTool className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
+          <PenTool className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
         {showPenMenu && (
           <div className="absolute left-0 bottom-full mb-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
@@ -101,12 +103,12 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       <div className="relative">
         <button
           onClick={e => { e.stopPropagation(); setShowShapeMenu(!showShapeMenu); }}
-          className={`p-2 rounded-lg flex items-center gap-0.5 transition ${
+          className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['rectangle', 'ellipse', 'arrow', 'line'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
           title="Ksztalty"
         >
-          <Square className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
+          <Square className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
         {showShapeMenu && (
           <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
@@ -126,12 +128,10 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
         )}
       </div>
 
-      {/* Text */}
-      <ToolBtn tool="text-annotation" icon={<Type className="w-5 h-5" />} title="Tekst" shortcut="T" />
-      {/* Cloud */}
-      <ToolBtn tool="issue-cloud" icon={<CloudLightning className="w-5 h-5" />} title="Chmura rewizyjna" shortcut="K" />
-      {/* Callout */}
-      <ToolBtn tool="callout" icon={<MessageCircleWarning className="w-5 h-5" />} title="Odnosnik z tekstem" shortcut="B" />
+      {/* Text, Cloud, Callout */}
+      <ToolBtn tool="text-annotation" icon={<Type className={iconSize} />} title="Tekst" shortcut="T" />
+      <ToolBtn tool="issue-cloud" icon={<CloudLightning className={iconSize} />} title="Chmura rewizyjna" shortcut="K" />
+      <ToolBtn tool="callout" icon={<MessageCircleWarning className={iconSize} />} title="Odnosnik z tekstem" shortcut="B" />
 
       <Separator />
 
@@ -139,12 +139,12 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       <div className="relative">
         <button
           onClick={e => { e.stopPropagation(); setShowMeasureMenu(!showMeasureMenu); }}
-          className={`p-2 rounded-lg flex items-center gap-0.5 transition ${
+          className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['measure-length', 'measure-area', 'measure-polyline'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
           title={hasScale ? 'Pomiar' : 'Pomiar — skalibruj skale'}
         >
-          <Ruler className="w-5 h-5" /><ChevronDown className="w-3 h-3 opacity-50" />
+          <Ruler className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
         {showMeasureMenu && (
           <div className="absolute left-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
@@ -154,62 +154,56 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
             </button>
             <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-area' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
               onClick={() => { onSetTool('measure-area'); setShowMeasureMenu(false); }}>
-              <Square className="w-4 h-4" /> Obszar (zamkniety kontur)
+              <Square className="w-4 h-4" /> Powierzchnia
             </button>
-            {!hasScale && (
-              <>
-                <div className="border-t border-slate-100 my-1" />
-                <button onClick={() => { onCalibrateScale?.(); setShowMeasureMenu(false); }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-amber-600 hover:bg-amber-50">
-                  <Ruler className="w-4 h-4" /> Kalibruj skale
-                </button>
-              </>
-            )}
+            <div className="border-t border-slate-100 my-1" />
+            <button onClick={() => { onOpenScaleSettings?.(); setShowMeasureMenu(false); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
+              <Settings2 className="w-4 h-4" /> Ustawienia skali
+              {hasScale && <span className="ml-auto text-[9px] text-green-600 font-medium">OK</span>}
+              {!hasScale && <span className="ml-auto text-[9px] text-amber-500 font-medium">brak</span>}
+            </button>
           </div>
         )}
       </div>
 
       {/* Count */}
-      <ToolBtn tool="count-marker" icon={<Hash className="w-5 h-5" />} title="Licznik elementow" shortcut="N"
-        className={activeTool === 'count-marker' ? 'bg-amber-100 text-amber-700' : ''} />
+      <ToolBtn tool="count-marker" icon={<Hash className={iconSize} />} title="Licznik elementow" shortcut="N" />
       {(countValue !== undefined && countValue > 0) && (
-        <div className="flex items-center gap-1 ml-1">
-          <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full truncate max-w-[200px]" title={countLabel}>
-            {countLabel ? `${countLabel}: ` : 'E '}{countValue}
+        <div className="flex items-center gap-0.5 ml-0.5">
+          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full truncate max-w-[140px]" title={countLabel}>
+            {countLabel ? `${countLabel}: ` : ''}{countValue}
           </span>
-          <button onClick={onClearCount} className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-500" title="Wyczysc licznik">
-            <X className="w-3.5 h-3.5" />
+          <button onClick={onClearCount} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-500" title="Wyczysc licznik">
+            <X className="w-3 h-3" />
           </button>
         </div>
       )}
 
       {highlightLabel && highlightCount !== undefined && highlightCount > 0 && (
-        <div className="flex items-center gap-1 ml-1">
-          <span className="text-xs font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full truncate max-w-[250px]" title={highlightLabel}>
+        <div className="flex items-center gap-0.5 ml-0.5">
+          <span className="text-[10px] font-bold text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded-full truncate max-w-[160px]" title={highlightLabel}>
             {highlightLabel}: {highlightCount}
           </span>
-          <button onClick={onClearHighlight} className="p-1 hover:bg-red-50 rounded text-slate-400 hover:text-red-500">
-            <X className="w-3.5 h-3.5" />
+          <button onClick={onClearHighlight} className="p-0.5 hover:bg-red-50 rounded text-slate-400 hover:text-red-500">
+            <X className="w-3 h-3" />
           </button>
         </div>
       )}
 
       <Separator />
 
-      {/* BOQ link */}
-      <ToolBtn tool="link-boq" icon={<Link2 className="w-5 h-5" />} title="Polacz z pozycja BOQ" />
-      {/* AI classify selection */}
-      <ToolBtn tool="ai-classify-selection" icon={<Sparkles className="w-5 h-5" />} title="Klasyfikuj zaznaczenie AI" />
+      {/* BOQ link & AI */}
+      <ToolBtn tool="link-boq" icon={<Link2 className={iconSize} />} title="Polacz z pozycja BOQ" />
+      <ToolBtn tool="ai-classify-selection" icon={<Sparkles className={iconSize} />} title="Klasyfikuj zaznaczenie AI" />
 
       <Separator />
 
-      {/* Comment & Camera */}
-      <ToolBtn tool="comment" icon={<MessageSquare className="w-5 h-5" />} title="Komentarz" shortcut="C" />
-      <ToolBtn tool="camera" icon={<Camera className="w-5 h-5" />} title="Zdjecie — przypnij do planu" />
-      {/* Eraser */}
-      <ToolBtn tool="erase" icon={<Eraser className="w-5 h-5" />} title="Gumka" shortcut="E" />
-      {/* Snapshot */}
-      <ToolBtn tool="snapshot" icon={<Scissors className="w-5 h-5" />} title="Zrzut ekranu wybranego obszaru" />
+      {/* Comment, Camera, Eraser, Snapshot */}
+      <ToolBtn tool="comment" icon={<MessageSquare className={iconSize} />} title="Komentarz" shortcut="C" />
+      <ToolBtn tool="camera" icon={<Camera className={iconSize} />} title="Zdjecie" />
+      <ToolBtn tool="erase" icon={<Eraser className={iconSize} />} title="Gumka" shortcut="E" />
+      <ToolBtn tool="snapshot" icon={<Scissors className={iconSize} />} title="Zrzut ekranu" />
 
       <div className="flex-1" />
 
@@ -217,11 +211,11 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       <div className="relative">
         <button
           onClick={() => setShowColorPicker(!showColorPicker)}
-          className="p-1.5 hover:bg-slate-100 rounded-lg flex items-center gap-1"
+          className="p-1 hover:bg-slate-100 rounded-lg flex items-center gap-1"
           title="Kolor i grubosc"
         >
-          <div className="w-5 h-5 rounded-full border-2 border-slate-300" style={{ backgroundColor: strokeColor }} />
-          <span className="text-[10px] text-slate-500">{strokeWidth}px</span>
+          <div className="w-4 h-4 rounded-full border-2 border-slate-300" style={{ backgroundColor: strokeColor }} />
+          <span className="text-[9px] text-slate-500">{strokeWidth}px</span>
         </button>
         {showColorPicker && (
           <div className="absolute right-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3" onClick={e => e.stopPropagation()}>

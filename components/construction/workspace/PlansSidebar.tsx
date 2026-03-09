@@ -3,7 +3,8 @@ import {
   Search, Upload, ChevronRight, FileImage, FolderPlus,
   MoreVertical, Eye, Trash2, Copy, History, BarChart3,
   Sparkles, BookOpen, AlertTriangle, CheckCircle2, GripVertical,
-  File, FileType2, Image, FileText, X, Download, Pencil, Plus
+  File, FileType2, Image, FileText, X, Download, Pencil, Plus,
+  PanelLeftClose,
 } from 'lucide-react';
 import type { FileStatus } from './WorkspaceTypes';
 
@@ -46,6 +47,7 @@ interface PlansSidebarProps {
   onCreateSubfolder?: (parentFolderId: string, name: string) => void;
   onMoveFileToFolder?: (fileId: string, folderId: string) => void;
   onReorderFile?: (fileId: string, targetFileId: string, position: 'before' | 'after') => void;
+  onCollapse?: () => void;
 }
 
 const STATUS_BADGE: Record<FileStatus, { color: string; label: string }> = {
@@ -74,6 +76,7 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
   folders, activeFileId, searchQuery, onSearchChange,
   onSelectFile, onImport, onCreateFolder, onFileAction, onToggleFolder, onDragDrop,
   onRenameFolder, onDeleteFolder, onCreateSubfolder, onMoveFileToFolder, onReorderFile,
+  onCollapse,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ fileId: string; x: number; y: number } | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -112,6 +115,12 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
               className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="Nowy folder">
               <FolderPlus className="w-4 h-4" />
             </button>
+            {onCollapse && (
+              <button onClick={onCollapse}
+                className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600" title="Ukryj panel">
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         {/* Search */}
