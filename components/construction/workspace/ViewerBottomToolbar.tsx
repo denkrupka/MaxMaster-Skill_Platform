@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MousePointer, Hand, Ruler, Square, Hash, Type, MessageSquare,
   Camera, Scissors, PenTool, Pencil, Circle, ArrowUpRight, Minus,
@@ -37,10 +37,21 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
   countValue, countLabel, onClearCount, highlightLabel, highlightCount, onClearHighlight,
   hasScale, onCalibrateScale, onOpenScaleSettings,
 }) => {
-  const [showPenMenu, setShowPenMenu] = useState(false);
-  const [showShapeMenu, setShowShapeMenu] = useState(false);
-  const [showMeasureMenu, setShowMeasureMenu] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
+  type MenuName = 'pen' | 'shape' | 'measure' | 'color' | null;
+  const [openMenu, setOpenMenu] = useState<MenuName>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking anywhere outside the toolbar
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMenu]);
 
   const ToolBtn: React.FC<{
     tool: BottomTool;
@@ -51,7 +62,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
     className?: string;
   }> = ({ tool, icon, title, shortcut, active, className }) => (
     <button
-      onClick={() => onSetTool(tool)}
+      onClick={() => { setOpenMenu(null); onSetTool(tool); }}
       className={`p-1.5 rounded-lg transition ${
         (active ?? activeTool === tool)
           ? 'bg-blue-100 text-blue-700 shadow-inner'
@@ -67,7 +78,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
   const iconSize = "w-4 h-4";
 
   return (
-    <div className="px-2 py-1 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 relative" onClick={e => e.stopPropagation()}>
+    <div ref={toolbarRef} className="px-2 py-1 border-t border-slate-200 bg-white flex items-center gap-0.5 flex-shrink-0 relative" onClick={e => e.stopPropagation()}>
       {/* Select & Pan */}
       <ToolBtn tool="select" icon={<MousePointer className={iconSize} />} title="Zaznacz" shortcut="V" />
       <ToolBtn tool="pan" icon={<Hand className={iconSize} />} title="Raczka — przesun" shortcut="G" />
@@ -77,7 +88,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       {/* Pen/Highlighter dropdown */}
       <div className="relative">
         <button
-          onClick={e => { e.stopPropagation(); setShowPenMenu(!showPenMenu); }}
+          onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === 'pen' ? null : 'pen'); }}
           className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['pen', 'highlighter'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
@@ -85,14 +96,14 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
         >
           <PenTool className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
-        {showPenMenu && (
+        {openMenu === 'pen' && (
           <div className="absolute left-0 bottom-full mb-1 w-44 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
             <button className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === 'pen' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-              onClick={() => { onSetTool('pen'); setShowPenMenu(false); }}>
+              onClick={() => { onSetTool('pen'); setOpenMenu(null); }}>
               <PenTool className="w-4 h-4" /> Pioro <span className="ml-auto text-[10px] text-slate-400 font-mono">P</span>
             </button>
             <button className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === 'highlighter' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-              onClick={() => { onSetTool('highlighter'); setShowPenMenu(false); }}>
+              onClick={() => { onSetTool('highlighter'); setOpenMenu(null); }}>
               <Pencil className="w-4 h-4" /> Zakreslacz <span className="ml-auto text-[10px] text-slate-400 font-mono">H</span>
             </button>
           </div>
@@ -102,7 +113,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       {/* Shape dropdown */}
       <div className="relative">
         <button
-          onClick={e => { e.stopPropagation(); setShowShapeMenu(!showShapeMenu); }}
+          onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === 'shape' ? null : 'shape'); }}
           className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['rectangle', 'ellipse', 'arrow', 'line'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
@@ -110,7 +121,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
         >
           <Square className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
-        {showShapeMenu && (
+        {openMenu === 'shape' && (
           <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
             {([
               { tool: 'rectangle' as BottomTool, label: 'Prostokat', icon: Square, key: 'R' },
@@ -120,7 +131,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
             ]).map(item => (
               <button key={item.tool}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-sm ${activeTool === item.tool ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-                onClick={() => { onSetTool(item.tool); setShowShapeMenu(false); }}>
+                onClick={() => { onSetTool(item.tool); setOpenMenu(null); }}>
                 <item.icon className="w-4 h-4" /> {item.label} <span className="ml-auto text-[10px] text-slate-400 font-mono">{item.key}</span>
               </button>
             ))}
@@ -138,7 +149,7 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       {/* Measure dropdown */}
       <div className="relative">
         <button
-          onClick={e => { e.stopPropagation(); setShowMeasureMenu(!showMeasureMenu); }}
+          onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === 'measure' ? null : 'measure'); }}
           className={`p-1.5 rounded-lg flex items-center gap-0.5 transition ${
             ['measure-length', 'measure-area', 'measure-polyline'].includes(activeTool) ? 'bg-blue-100 text-blue-700 shadow-inner' : 'hover:bg-slate-100 text-slate-600'
           }`}
@@ -146,18 +157,18 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
         >
           <Ruler className={iconSize} /><ChevronDown className="w-2.5 h-2.5 opacity-50" />
         </button>
-        {showMeasureMenu && (
+        {openMenu === 'measure' && (
           <div className="absolute left-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
             <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-length' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-              onClick={() => { onSetTool('measure-length'); setShowMeasureMenu(false); }}>
+              onClick={() => { onSetTool('measure-length'); setOpenMenu(null); }}>
               <Ruler className="w-4 h-4" /> Polilinia
             </button>
             <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-area' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-              onClick={() => { onSetTool('measure-area'); setShowMeasureMenu(false); }}>
+              onClick={() => { onSetTool('measure-area'); setOpenMenu(null); }}>
               <Square className="w-4 h-4" /> Powierzchnia
             </button>
             <div className="border-t border-slate-100 my-1" />
-            <button onClick={() => { onOpenScaleSettings?.(); setShowMeasureMenu(false); }}
+            <button onClick={() => { onOpenScaleSettings?.(); setOpenMenu(null); }}
               className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
               <Settings2 className="w-4 h-4" /> Ustawienia skali
               {hasScale && <span className="ml-auto text-[9px] text-green-600 font-medium">OK</span>}
@@ -210,14 +221,14 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
       {/* Color picker */}
       <div className="relative">
         <button
-          onClick={() => setShowColorPicker(!showColorPicker)}
+          onClick={() => setOpenMenu(openMenu === 'color' ? null : 'color')}
           className="p-1 hover:bg-slate-100 rounded-lg flex items-center gap-1"
           title="Kolor i grubosc"
         >
           <div className="w-4 h-4 rounded-full border-2 border-slate-300" style={{ backgroundColor: strokeColor }} />
           <span className="text-[9px] text-slate-500">{strokeWidth}px</span>
         </button>
-        {showColorPicker && (
+        {openMenu === 'color' && (
           <div className="absolute right-0 bottom-full mb-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3" onClick={e => e.stopPropagation()}>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {COLORS.map(c => (
