@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
@@ -189,6 +189,15 @@ export const PlansWorkspace: React.FC = () => {
   const [boxSelectStart, setBoxSelectStart] = useState<{ x: number; y: number } | null>(null);
   const [boxSelectEnd, setBoxSelectEnd] = useState<{ x: number; y: number } | null>(null);
 
+  // ---- Pan state ----
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+
+  // ---- Screenshot area selection ----
+  const [isSelectingScreenshotArea, setIsSelectingScreenshotArea] = useState(false);
+  const [screenshotStart, setScreenshotStart] = useState<{ x: number; y: number } | null>(null);
+  const [screenshotEnd, setScreenshotEnd] = useState<{ x: number; y: number } | null>(null);
+
   // ---- Version history ----
   const [versionHistory, setVersionHistory] = useState<PlanRecord[]>([]);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
@@ -265,7 +274,11 @@ export const PlansWorkspace: React.FC = () => {
   }, [currentUser]);
 
   useEffect(() => {
-    if (selectedProject) loadPlansData();
+    if (selectedProject) {
+      loadPlansData();
+      // Auto-collapse portal sidebar when entering project workspace
+      window.dispatchEvent(new Event('sidebar-collapse'));
+    }
   }, [selectedProject]);
 
   const loadProjects = async () => {
@@ -951,41 +964,84 @@ export const PlansWorkspace: React.FC = () => {
     if (boqRows.length > 0) api.exportBoqCsv(boqRows);
   }, [boqRows]);
 
+  // ---- Back to projects ----
+
+  const handleBackToProjects = useCallback(() => {
+    setSelectedProject(null);
+    setSelectedPlan(null);
+    setFolders([]);
+    setAllPlans([]);
+    dispatch({ type: 'RESET_WORKSPACE' });
+    // Re-expand portal sidebar
+    window.dispatchEvent(new Event('sidebar-expand'));
+  }, []);
+
   // ---- Snapshot ----
 
   const handleSnapshot = useCallback(() => {
-    const container = viewerContainerRef.current;
-    if (!container) return;
+    // Start area selection mode instead of capturing full screen
+    setIsSelectingScreenshotArea(true);
+    setScreenshotStart(null);
+    setScreenshotEnd(null);
+    notify('Zaznacz obszar do zrzutu ekranu');
+  }, [notify]);
 
-    // Use canvas if PDF, or capture the viewer area
-    const canvas = pdfCanvasRef.current;
-    if (canvas && fileFormat === 'pdf') {
+  const captureScreenshotArea = useCallback(() => {
+    if (!screenshotStart || !screenshotEnd) return;
+    const x = Math.min(screenshotStart.x, screenshotEnd.x);
+    const y = Math.min(screenshotStart.y, screenshotEnd.y);
+    const w = Math.abs(screenshotEnd.x - screenshotStart.x);
+    const h = Math.abs(screenshotEnd.y - screenshotStart.y);
+    if (w < 10 || h < 10) { setIsSelectingScreenshotArea(false); return; }
+
+    // Create a canvas to capture the selected area
+    const canvas = document.createElement('canvas');
+    canvas.width = w * 2; // retina
+    canvas.height = h * 2;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(2, 2);
+
+    // Try PDF canvas first
+    const srcCanvas = pdfCanvasRef.current;
+    if (srcCanvas && fileFormat === 'pdf') {
+      const scaleX = srcCanvas.width / (parseFloat(srcCanvas.style.width) || srcCanvas.width);
+      const scaleY = srcCanvas.height / (parseFloat(srcCanvas.style.height) || srcCanvas.height);
+      ctx.drawImage(srcCanvas, x * scaleX, y * scaleY, w * scaleX, h * scaleY, 0, 0, w, h);
+    }
+
+    // Draw SVG annotations on top
+    const svg = svgOverlayRef.current;
+    if (svg) {
+      const svgClone = svg.cloneNode(true) as SVGSVGElement;
+      svgClone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+      svgClone.setAttribute('width', String(w));
+      svgClone.setAttribute('height', String(h));
+      const svgStr = new XMLSerializer().serializeToString(svgClone);
+      const img = new Image();
+      const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const link = document.createElement('a');
+        link.download = `screenshot_${activeFile?.name || 'plan'}_${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        notify('Zrzut ekranu zapisany');
+      };
+      img.src = url;
+    } else {
       const link = document.createElement('a');
-      link.download = `snapshot_${activeFile?.name || 'plan'}_${Date.now()}.png`;
+      link.download = `screenshot_${activeFile?.name || 'plan'}_${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
       notify('Zrzut ekranu zapisany');
-      return;
     }
 
-    // For other formats, use html2canvas-style approach via SVG overlay
-    const svg = svgOverlayRef.current;
-    if (svg) {
-      const serializer = new XMLSerializer();
-      const svgStr = serializer.serializeToString(svg);
-      const blob = new Blob([svgStr], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.download = `snapshot_${activeFile?.name || 'plan'}_${Date.now()}.svg`;
-      link.href = url;
-      link.click();
-      URL.revokeObjectURL(url);
-      notify('Zrzut ekranu zapisany (SVG)');
-      return;
-    }
-
-    notify('Brak widoku do zrzutu', 'error');
-  }, [fileFormat, activeFile, notify]);
+    setIsSelectingScreenshotArea(false);
+    setScreenshotStart(null);
+    setScreenshotEnd(null);
+  }, [screenshotStart, screenshotEnd, fileFormat, activeFile, notify]);
 
   // ---- Scale Calibration ----
 
@@ -1144,6 +1200,40 @@ export const PlansWorkspace: React.FC = () => {
     loadPlansData();
   }, [selectedProject, currentUser, folders.length]);
 
+  const handleRenameFolder = useCallback(async (folderId: string, newName: string) => {
+    if (folderId === '__default__') return;
+    await supabase.from('plan_folders').update({ name: newName }).eq('id', folderId);
+    setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName } : f));
+  }, []);
+
+  const handleDeleteFolder = useCallback(async (folderId: string) => {
+    if (folderId === '__default__') return;
+    // Move files from this folder to default, then soft-delete the folder
+    await supabase.from('plans').update({ folder_id: null }).eq('folder_id', folderId);
+    await supabase.from('plan_folders').update({ deleted_at: new Date().toISOString() }).eq('id', folderId);
+    loadPlansData();
+    notify('Folder usuniety');
+  }, [notify]);
+
+  const handleCreateSubfolder = useCallback(async (parentFolderId: string, name: string) => {
+    if (!selectedProject || !currentUser) return;
+    await supabase.from('plan_folders').insert({
+      project_id: selectedProject.id,
+      parent_id: parentFolderId === '__default__' ? null : parentFolderId,
+      name,
+      sort_order: folders.length,
+      created_by_id: currentUser.id,
+    });
+    loadPlansData();
+  }, [selectedProject, currentUser, folders.length]);
+
+  const handleMoveFileToFolder = useCallback(async (fileId: string, folderId: string) => {
+    const realFolderId = folderId === '__default__' ? null : folderId;
+    await supabase.from('plans').update({ folder_id: realFolderId }).eq('id', fileId);
+    loadPlansData();
+    notify('Plik przeniesiony');
+  }, [notify]);
+
   // ---- URN ready (from APS viewer) ----
 
   const handleUrnReady = useCallback(async (urn: string) => {
@@ -1197,9 +1287,27 @@ export const PlansWorkspace: React.FC = () => {
     const pt = getOverlayCoords(e);
     if (!pt) return;
 
+    // Screenshot area selection mode
+    if (isSelectingScreenshotArea) {
+      setScreenshotStart({ x: pt.x, y: pt.y });
+      setScreenshotEnd(null);
+      return;
+    }
+
     // Scale calibration mode intercepts clicks
     if (isCalibrating) {
       handleCalibrationClick(pt);
+      return;
+    }
+
+    // Pan tool: start panning by scrolling the parent container
+    if (ws.activeTool === 'pan') {
+      const container = viewerContainerRef.current;
+      if (container) {
+        setIsPanning(true);
+        setPanStart({ x: e.clientX, y: e.clientY, scrollLeft: container.scrollLeft, scrollTop: container.scrollTop });
+      }
+      e.preventDefault();
       return;
     }
 
@@ -1284,6 +1392,24 @@ export const PlansWorkspace: React.FC = () => {
   }, [ws.activeTool, getOverlayCoords, currentUser, activeFile]);
 
   const handleSvgMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    // Screenshot area selection
+    if (isSelectingScreenshotArea && screenshotStart) {
+      const pt = getOverlayCoords(e);
+      if (pt) setScreenshotEnd({ x: pt.x, y: pt.y });
+      return;
+    }
+
+    // Pan tool: scroll container
+    if (isPanning && panStart) {
+      const container = viewerContainerRef.current;
+      if (container) {
+        container.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
+        container.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
+      }
+      e.preventDefault();
+      return;
+    }
+
     const pt = getOverlayCoords(e);
     if (!pt) return;
 
@@ -1291,13 +1417,6 @@ export const PlansWorkspace: React.FC = () => {
     if (ws.activeTool === 'select' && boxSelectStart) {
       setBoxSelectEnd({ x: pt.x, y: pt.y });
       return;
-    }
-
-    // Hover tooltip for select/pan modes
-    if ((ws.activeTool === 'select' || ws.activeTool === 'pan') && !isDrawing) {
-      // Find nearest object by checking if any objects have geometry near point
-      // For now, check annotations/measurements near cursor
-      setHoverTooltip(null); // Clear — real hit-testing requires APS viewer integration
     }
 
     if (!isDrawing) return;
@@ -1308,9 +1427,26 @@ export const PlansWorkspace: React.FC = () => {
       // For shapes, only track start + current
       setDrawPoints(prev => [prev[0], pt]);
     }
-  }, [isDrawing, ws.activeTool, getOverlayCoords, boxSelectStart]);
+  }, [isDrawing, ws.activeTool, getOverlayCoords, boxSelectStart, isPanning, panStart, isSelectingScreenshotArea, screenshotStart]);
 
   const handleSvgMouseUp = useCallback(() => {
+    // Complete screenshot area selection
+    if (isSelectingScreenshotArea && screenshotStart && screenshotEnd) {
+      captureScreenshotArea();
+      return;
+    }
+    if (isSelectingScreenshotArea) {
+      setIsSelectingScreenshotArea(false);
+      return;
+    }
+
+    // Complete pan
+    if (isPanning) {
+      setIsPanning(false);
+      setPanStart(null);
+      return;
+    }
+
     // Complete box selection
     if (ws.activeTool === 'select' && boxSelectStart && boxSelectEnd) {
       const minX = Math.min(boxSelectStart.x, boxSelectEnd.x);
@@ -1384,7 +1520,7 @@ export const PlansWorkspace: React.FC = () => {
 
     setIsDrawing(false);
     setDrawPoints([]);
-  }, [isDrawing, drawPoints, ws.activeTool, strokeColor, strokeWidth, currentUser, activeFile, boxSelectStart, boxSelectEnd, annotations]);
+  }, [isDrawing, drawPoints, ws.activeTool, strokeColor, strokeWidth, currentUser, activeFile, boxSelectStart, boxSelectEnd, annotations, isPanning, isSelectingScreenshotArea, screenshotStart, screenshotEnd, captureScreenshotArea]);
 
   // ---- Text annotation submit ----
   const handleTextAnnotationSubmit = useCallback(() => {
@@ -1692,7 +1828,7 @@ export const PlansWorkspace: React.FC = () => {
 
   const renderOverlaySvg = (naturalW: number, naturalH: number) => {
     if (naturalW === 0 || naturalH === 0) return null;
-    const cursorStyle = isAnnotationTool(ws.activeTool) ? 'crosshair' : ws.activeTool === 'select' ? 'default' : ws.activeTool === 'pan' ? 'grab' : 'default';
+    const cursorStyle = isSelectingScreenshotArea ? 'crosshair' : isAnnotationTool(ws.activeTool) ? 'crosshair' : ws.activeTool === 'select' ? 'default' : ws.activeTool === 'pan' ? (isPanning ? 'grabbing' : 'grab') : 'default';
 
     return (
       <svg
@@ -1744,6 +1880,19 @@ export const PlansWorkspace: React.FC = () => {
             stroke="#3b82f6"
             strokeWidth={1}
             strokeDasharray="4 2"
+          />
+        )}
+        {/* Screenshot area selection */}
+        {isSelectingScreenshotArea && screenshotStart && screenshotEnd && (
+          <rect
+            x={Math.min(screenshotStart.x, screenshotEnd.x)}
+            y={Math.min(screenshotStart.y, screenshotEnd.y)}
+            width={Math.abs(screenshotEnd.x - screenshotStart.x)}
+            height={Math.abs(screenshotEnd.y - screenshotStart.y)}
+            fill="rgba(239, 68, 68, 0.08)"
+            stroke="#ef4444"
+            strokeWidth={2}
+            strokeDasharray="6 3"
           />
         )}
       </svg>
@@ -1952,10 +2101,10 @@ export const PlansWorkspace: React.FC = () => {
           )}
         </div>
 
-        {/* ===== NEW PROJECT MODAL ===== */}
+        {/* ===== NEW PROJECT MODAL (matches "Nowy kosztorys" design) ===== */}
         {showProjectModal && (() => {
-          const inputCls = 'w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white';
-          const labelCls = 'text-[9px] font-medium text-slate-500 uppercase tracking-wide block mb-0.5';
+          const inputCls = 'w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-sm';
+          const labelCls = 'block text-sm font-medium text-slate-700 mb-1';
           const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316', '#6366F1', '#14B8A6'];
           const STATUS_CFG: Record<string, string> = { active: 'Aktywny', completed: 'Zakonczony', archived: 'Zarchiwizowany', on_hold: 'Wstrzymany' };
 
@@ -1971,190 +2120,268 @@ export const PlansWorkspace: React.FC = () => {
           });
 
           return (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowProjectModal(false)} />
-              <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-4 py-2 border-b border-slate-100">
-                  <h2 className="text-sm font-semibold text-slate-900">Nowy projekt</h2>
-                  <button onClick={() => setShowProjectModal(false)} className="p-1 rounded-lg hover:bg-slate-100 -mr-1">
-                    <X className="w-4 h-4 text-slate-400" />
+                <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-slate-900">Nowy projekt</h2>
+                  <button onClick={() => setShowProjectModal(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-                {/* Form */}
-                <div className="px-4 py-2.5 space-y-2">
-                  {/* Client */}
-                  <div className="relative">
-                    <label className={labelCls}>Klient</label>
-                    {selectedClient ? (
-                      <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-blue-50/50">
-                        <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">{selectedClient.name}</p>
-                          {(selectedClient as any).nip && <p className="text-[11px] text-slate-400 font-mono">{(selectedClient as any).nip}</p>}
-                        </div>
-                        <button onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '', department_id: '' })); setClientSearchTerm(''); }} className="p-0.5 text-slate-400 hover:text-red-500">
-                          <X className="w-3.5 h-3.5" />
+
+                {/* Form body */}
+                <div className="p-6 overflow-y-auto flex-1 space-y-6">
+
+                  {/* 1. Dane klienta */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-slate-400" />
+                      Dane klienta
+                    </h3>
+
+                    {/* NIP with GUS lookup */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className={labelCls}>NIP</label>
+                        <input
+                          type="text"
+                          value={(projectForm as any).nip || ''}
+                          onChange={e => setProjectForm(prev => ({ ...prev, nip: e.target.value } as any))}
+                          className={inputCls}
+                          placeholder="XXX-XXX-XX-XX"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const nip = ((projectForm as any).nip || '').replace(/[^0-9]/g, '');
+                            if (nip.length !== 10) { notify('Podaj prawidlowy NIP (10 cyfr)', 'error'); return; }
+                            try {
+                              const res = await fetch(`https://wl-api.mf.gov.pl/api/search/nip/${nip}?date=${new Date().toISOString().split('T')[0]}`);
+                              const data = await res.json();
+                              if (data.result?.subject) {
+                                const s = data.result.subject;
+                                setClientSearchTerm(s.name || '');
+                                // Try to match existing client
+                                const match = customers.find(c => (c as any).nip?.replace(/[^0-9]/g, '') === nip);
+                                if (match) {
+                                  setProjectForm(prev => ({ ...prev, customer_id: match.id } as any));
+                                }
+                                notify('Dane pobrane z GUS');
+                              } else {
+                                notify('Nie znaleziono danych w GUS', 'error');
+                              }
+                            } catch {
+                              notify('Blad pobierania z GUS', 'error');
+                            }
+                          }}
+                          disabled={!((projectForm as any).nip || '').trim()}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 text-sm"
+                        >
+                          <Download className="w-4 h-4" />
+                          Pobierz z GUS
                         </button>
                       </div>
-                    ) : (
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                        <input
-                          type="text" value={clientSearchTerm}
-                          onChange={e => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }}
-                          onFocus={() => setShowClientDropdown(true)}
-                          placeholder="Szukaj po nazwie lub NIP..."
-                          className="w-full pl-8 pr-3 border border-slate-200 rounded-lg py-1.5 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-                        />
-                        {showClientDropdown && (
-                          <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-xl max-h-44 overflow-y-auto">
-                            <button onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '' })); setShowClientDropdown(false); setClientSearchTerm(''); }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-50 border-b border-slate-100">-- Brak klienta --</button>
-                            {filteredClients.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-slate-400">Brak wynikow</p>
-                            ) : filteredClients.map(client => (
-                              <button key={client.id} onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }}
-                                className="w-full text-left px-3 py-1.5 hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0">
-                                <p className="text-sm text-slate-800 truncate">{client.name}</p>
-                                {(client as any).nip && <p className="text-[11px] text-slate-400 font-mono">{(client as any).nip}</p>}
-                              </button>
-                            ))}
+                    </div>
+
+                    {/* Client name (with autocomplete) */}
+                    <div className="relative">
+                      <label className={labelCls}>Nazwa firmy *</label>
+                      {selectedClient ? (
+                        <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-2 bg-blue-50/50">
+                          <Building2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-900 truncate">{selectedClient.name}</p>
+                            {(selectedClient as any).nip && <p className="text-xs text-slate-400 font-mono">{(selectedClient as any).nip}</p>}
+                            {selectedClient.address_city && <p className="text-xs text-slate-400">{selectedClient.address_city}</p>}
                           </div>
-                        )}
+                          <button onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: '', department_id: '' })); setClientSearchTerm(''); }} className="p-0.5 text-slate-400 hover:text-red-500">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="text" value={clientSearchTerm}
+                            onChange={e => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); }}
+                            onFocus={() => setShowClientDropdown(true)}
+                            onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
+                            placeholder="Wyszukaj istniejacego lub wpisz nowa nazwe..."
+                            className={inputCls}
+                          />
+                          {showClientDropdown && (
+                            <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {filteredClients.length > 0 && (
+                                <div className="px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border-b">Kontrahenci z bazy</div>
+                              )}
+                              {filteredClients.map(client => (
+                                <button key={client.id} type="button"
+                                  onClick={() => { setProjectForm(prev => ({ ...prev, customer_id: client.id })); setShowClientDropdown(false); setClientSearchTerm(''); }}
+                                  className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-slate-100 last:border-0">
+                                  <div className="font-medium text-slate-900 text-sm">{client.name}</div>
+                                  <div className="text-xs text-slate-500 flex gap-2">
+                                    {(client as any).nip && <span>NIP: {(client as any).nip}</span>}
+                                    {client.address_city && <span>{client.address_city}</span>}
+                                  </div>
+                                </button>
+                              ))}
+                              {filteredClients.length === 0 && clientSearchTerm.length >= 2 && (
+                                <div className="px-3 py-3 text-sm text-slate-500 text-center">
+                                  Nie znaleziono klienta. Mozesz wyszukac w GUS.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2. Obiekt */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Building2 className="w-5 h-5 text-slate-400" />
+                      Obiekt
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Name mode toggle */}
+                      <div className="col-span-2">
+                        <label className={labelCls}>Zrodlo nazwy</label>
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
+                          <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Nazwa wlasna</button>
+                          <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Wybrac obiekt</button>
+                        </div>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Name source toggle */}
-                  <div>
-                    <label className={labelCls}>Zrodlo nazwy</label>
-                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
-                      <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'custom' }))}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'custom' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Nazwa wlasna</button>
-                      <button onClick={() => setProjectForm(prev => ({ ...prev, name_mode: 'object' }))}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.name_mode === 'object' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Wybrac obiekt</button>
+                      {projectForm.name_mode === 'custom' ? (
+                        <div className="col-span-2">
+                          <label className={labelCls}>Nazwa projektu *</label>
+                          <input type="text" value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className={inputCls} placeholder="np. Osiedle Sloneczne — Etap II" />
+                        </div>
+                      ) : (
+                        <div className="col-span-2">
+                          <label className={labelCls}>Obiekt *</label>
+                          <div className="flex gap-2">
+                            <select value={projectForm.department_id} onChange={e => {
+                              const dept = departments.find(d => d.id === e.target.value);
+                              setProjectForm(prev => ({
+                                ...prev,
+                                department_id: e.target.value,
+                                customer_id: (dept as any)?.client_id || prev.customer_id,
+                              }));
+                            }} className={`flex-1 ${inputCls}`}>
+                              <option value="">-- Wybierz --</option>
+                              {filteredDepts.map(d => <option key={d.id} value={d.id}>{d.name} {d.kod_obiektu ? `(${d.kod_obiektu})` : ''}</option>)}
+                            </select>
+                            <a href="#/company/departments" className="inline-flex items-center gap-1 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 whitespace-nowrap">
+                              <Plus className="w-4 h-4" /> Nowy
+                            </a>
+                          </div>
+                          {projectForm.department_id && (() => {
+                            const dept = departments.find(d => d.id === projectForm.department_id);
+                            if (!dept) return null;
+                            return (
+                              <div className="mt-2 px-3 py-2 bg-slate-50 rounded-lg text-xs text-slate-500 leading-relaxed">
+                                {dept.kod_obiektu && <span className="mr-3"><b>Kod:</b> {dept.kod_obiektu}</span>}
+                                {dept.rodzaj && <span className="mr-3"><b>Rodzaj:</b> {dept.rodzaj}</span>}
+                                {dept.typ && <span className="mr-3"><b>Typ:</b> {dept.typ}</span>}
+                                {(dept.address_street || dept.address_city) && <><br /><b>Adres:</b> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</>}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      <div className="col-span-2">
+                        <label className={labelCls}>Opis projektu</label>
+                        <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className={inputCls} placeholder="Opis projektu..." />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Name or Object */}
-                  {projectForm.name_mode === 'custom' ? (
-                    <div>
-                      <label className={labelCls}>Nazwa projektu *</label>
-                      <input type="text" value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className={inputCls} placeholder="Nazwa projektu" />
-                    </div>
-                  ) : (
-                    <div>
-                      <label className={labelCls}>Obiekt *</label>
-                      <div className="flex gap-2">
-                        <select value={projectForm.department_id} onChange={e => {
-                          const dept = departments.find(d => d.id === e.target.value);
-                          setProjectForm(prev => ({
-                            ...prev,
-                            department_id: e.target.value,
-                            customer_id: (dept as any)?.client_id || prev.customer_id,
-                          }));
-                        }} className={`flex-1 ${inputCls}`}>
-                          <option value="">-- Wybierz --</option>
-                          {filteredDepts.map(d => <option key={d.id} value={d.id}>{d.name} {(d as any).kod_obiektu ? `(${(d as any).kod_obiektu})` : ''}</option>)}
+                  {/* 3. Parametry projektu */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-slate-400" />
+                      Parametry projektu
+                    </h3>
+
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="col-span-2">
+                        <label className={labelCls}>Status</label>
+                        <select value={projectForm.status} onChange={e => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))} className={inputCls}>
+                          {Object.entries(STATUS_CFG).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                         </select>
-                        <a href="#/company/departments" className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 whitespace-nowrap">
-                          <Plus className="w-3.5 h-3.5" /> Nowy
-                        </a>
                       </div>
-                      {projectForm.department_id && (() => {
-                        const dept = departments.find(d => d.id === projectForm.department_id) as any;
-                        if (!dept) return null;
-                        return (
-                          <div className="mt-1.5 px-3 py-2 bg-slate-50 rounded-lg text-[11px] text-slate-500 leading-relaxed">
-                            {dept.kod_obiektu && <span className="mr-3"><b>Kod:</b> {dept.kod_obiektu}</span>}
-                            {dept.rodzaj && <span className="mr-3"><b>Rodzaj:</b> {dept.rodzaj}</span>}
-                            {dept.typ && <span className="mr-3"><b>Typ:</b> {dept.typ}</span>}
-                            {(dept.address_street || dept.address_city) && <><br /><b>Adres:</b> {[dept.address_street, dept.address_postal_code, dept.address_city].filter(Boolean).join(', ')}</>}
+                      <div className="col-span-2">
+                        <label className={labelCls}>Kolor</label>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {COLOR_OPTIONS.map(color => (
+                            <button key={color} onClick={() => setProjectForm(prev => ({ ...prev, color }))}
+                              className={`w-6 h-6 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-slate-700 scale-110' : 'border-transparent hover:scale-105'}`}
+                              style={{ backgroundColor: color }} />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="col-span-4">
+                        <label className={labelCls}>Forma wynagrodzenia</label>
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
+                          <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))}
+                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Ryczalt</button>
+                          <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))}
+                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Roboczogodziny</button>
+                        </div>
+                      </div>
+
+                      {projectForm.billing_type === 'ryczalt' ? (
+                        <>
+                          <div className="col-span-2">
+                            <label className={labelCls}>Budzet godzin</label>
+                            <input type="number" value={projectForm.budget_hours} onChange={e => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className={inputCls} placeholder="np. 100" />
                           </div>
-                        );
-                      })()}
-                    </div>
-                  )}
+                          <div className="col-span-2">
+                            <label className={labelCls}>Budzet netto (PLN)</label>
+                            <input type="number" value={projectForm.budget_amount} onChange={e => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className={inputCls} placeholder="np. 50000" />
+                          </div>
+                        </>
+                      ) : (
+                        <div className="col-span-2">
+                          <label className={labelCls}>Stawka netto (PLN/godz.)</label>
+                          <input type="number" value={projectForm.hourly_rate} onChange={e => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={inputCls} placeholder="np. 65" />
+                        </div>
+                      )}
 
-                  {/* Description */}
-                  <div>
-                    <label className={labelCls}>Opis</label>
-                    <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className={inputCls} placeholder="Opis projektu..." />
-                  </div>
-
-                  {/* Status + Color */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <label className={labelCls}>Status</label>
-                      <select value={projectForm.status} onChange={e => setProjectForm(prev => ({ ...prev, status: e.target.value as ProjectStatus }))} className={inputCls}>
-                        {Object.entries(STATUS_CFG).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className={labelCls}>Kolor</label>
-                      <div className="flex flex-wrap gap-1">
-                        {COLOR_OPTIONS.map(color => (
-                          <button key={color} onClick={() => setProjectForm(prev => ({ ...prev, color }))}
-                            className={`w-5 h-5 rounded-full border-2 transition-transform ${projectForm.color === color ? 'border-slate-700 scale-110' : 'border-transparent hover:scale-105'}`}
-                            style={{ backgroundColor: color }} />
-                        ))}
+                      <div className="col-span-2">
+                        <label className={labelCls}>Data rozpoczecia</label>
+                        <input type="date" value={projectForm.start_date} onChange={e => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className={inputCls} />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={labelCls}>Data zakonczenia</label>
+                        <input type="date" value={projectForm.end_date} onChange={e => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className={inputCls} />
                       </div>
                     </div>
                   </div>
 
-                  {/* Billing type */}
-                  <div>
-                    <label className={labelCls}>Forma wynagrodzenia</label>
-                    <div className="flex items-center bg-slate-100 rounded-lg p-0.5 w-fit">
-                      <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'ryczalt' }))}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'ryczalt' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Ryczalt</button>
-                      <button onClick={() => setProjectForm(prev => ({ ...prev, billing_type: 'hourly' }))}
-                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${projectForm.billing_type === 'hourly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>Roboczogodziny</button>
-                    </div>
-                  </div>
-
-                  {projectForm.billing_type === 'ryczalt' ? (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <div>
-                        <label className={labelCls}>Budzet godzin</label>
-                        <input type="number" value={projectForm.budget_hours} onChange={e => setProjectForm(prev => ({ ...prev, budget_hours: e.target.value }))} className={inputCls} placeholder="np. 100" />
-                      </div>
-                      <div>
-                        <label className={labelCls}>Budzet netto (PLN)</label>
-                        <input type="number" value={projectForm.budget_amount} onChange={e => setProjectForm(prev => ({ ...prev, budget_amount: e.target.value }))} className={inputCls} placeholder="np. 50000" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className={labelCls}>Stawka netto (PLN/godz.)</label>
-                      <input type="number" value={projectForm.hourly_rate} onChange={e => setProjectForm(prev => ({ ...prev, hourly_rate: e.target.value }))} className={inputCls} placeholder="np. 65" />
-                    </div>
-                  )}
-
-                  {/* Dates */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <label className={labelCls}>Data rozpoczecia</label>
-                      <input type="date" value={projectForm.start_date} onChange={e => setProjectForm(prev => ({ ...prev, start_date: e.target.value }))} className={inputCls} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Data zakonczenia</label>
-                      <input type="date" value={projectForm.end_date} onChange={e => setProjectForm(prev => ({ ...prev, end_date: e.target.value }))} className={inputCls} />
-                    </div>
-                  </div>
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 bg-white flex justify-end gap-2 px-4 py-2 border-t border-slate-100">
-                  <button onClick={() => setShowProjectModal(false)} className="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 rounded-lg">Anuluj</button>
+                <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                  <button onClick={() => setShowProjectModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">
+                    Anuluj
+                  </button>
                   <button
                     onClick={saveNewProject}
                     disabled={savingProject || (projectForm.name_mode === 'custom' ? !projectForm.name.trim() : !projectForm.department_id)}
-                    className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                   >
-                    {savingProject && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    Utworz
+                    {savingProject && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Utworz projekt
                   </button>
                 </div>
               </div>
@@ -2179,7 +2406,7 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Render ----
 
   return (
-    <div className={`flex h-full bg-slate-100 ${ws.isFullscreen ? 'fixed inset-0 z-[80]' : ''}`}>
+    <div className={`flex h-full bg-slate-100 relative ${ws.isFullscreen ? 'fixed inset-0 z-[80]' : ''}`}>
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" className="hidden"
         accept=".dwg,.dxf,.pdf,.ifc,.rvt,.png,.jpg,.jpeg,.gif,.bmp,.webp,.svg"
@@ -2198,15 +2425,31 @@ export const PlansWorkspace: React.FC = () => {
             onCreateFolder={handleCreateFolder}
             onFileAction={handleFileAction}
             onToggleFolder={handleToggleFolder}
+            onRenameFolder={handleRenameFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onCreateSubfolder={handleCreateSubfolder}
+            onMoveFileToFolder={handleMoveFileToFolder}
           />
         </div>
       )}
 
       {/* Center workspace */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Project header bar when no file selected */}
+        {!activeFile && (
+          <div className="px-3 py-1.5 border-b border-slate-200 flex items-center gap-2 bg-white flex-shrink-0">
+            <button onClick={handleBackToProjects} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Powrot do listy projektow">
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-medium text-slate-600 truncate">{selectedProject?.name}</span>
+          </div>
+        )}
         {/* Top Toolbar */}
         {activeFile && (
           <WorkspaceTopToolbar
+            onBackToProjects={handleBackToProjects}
+            canOpenInAutodesk={!!(activeFile && !activeFile.aps_urn && ['pdf', 'dxf', 'dwg', 'cad', 'ifc', 'rvt'].includes(fileFormat))}
+            onOpenInAutodesk={handleOpenInAps}
             fileName={activeFile.original_filename || activeFile.name}
             fileFormat={fileFormat}
             zoom={zoom}
@@ -2303,7 +2546,7 @@ export const PlansWorkspace: React.FC = () => {
         )}
 
         {/* Viewer Area */}
-        <div ref={viewerContainerRef} className="flex-1 overflow-hidden relative bg-slate-200">
+        <div ref={viewerContainerRef} className="flex-1 overflow-auto relative bg-slate-200">
           {!activeFile ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-300/50 flex items-center justify-center mb-4">
@@ -2360,28 +2603,15 @@ export const PlansWorkspace: React.FC = () => {
               )}
             </div>
           ) : showPdfViewer ? (
-            <div className="w-full h-full overflow-auto flex flex-col items-center p-4">
+            <div className="w-full h-full overflow-auto flex items-start justify-center p-4">
               <div className="relative inline-block">
                 <canvas ref={pdfCanvasRef} className="shadow-lg rounded-lg bg-white" />
                 {/* Annotation SVG overlay on top of PDF canvas */}
                 {pdfNaturalSize.w > 0 && renderOverlaySvg(pdfNaturalSize.w, pdfNaturalSize.h)}
               </div>
-              <div className="flex items-center gap-3 mt-3 flex-shrink-0">
-                <button onClick={() => setShowPdfAnalysis(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 shadow-sm">
-                  Analizuj PDF (AI)
-                </button>
-                <button onClick={handleOpenInAps}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 shadow-sm">
-                  Otworz w Autodesk Viewer
-                </button>
-                <a href={activeFile.file_url} download className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50">
-                  Pobierz PDF
-                </a>
-              </div>
             </div>
           ) : showDxfViewer ? (
-            <div className="w-full h-full overflow-auto flex flex-col items-center p-4">
+            <div className="w-full h-full overflow-auto flex items-start justify-center p-4">
               <div className="relative inline-block">
                 <img
                   src={dxfBlobUrl!}
@@ -2399,19 +2629,6 @@ export const PlansWorkspace: React.FC = () => {
                 />
                 {/* Annotation SVG overlay on top of DXF image */}
                 {dxfNaturalSize.w > 0 && renderOverlaySvg(dxfNaturalSize.w, dxfNaturalSize.h)}
-              </div>
-              <div className="flex items-center gap-3 mt-3 flex-shrink-0">
-                <button onClick={() => setShowDxfAnalysis(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 shadow-sm">
-                  Analizuj DXF (AI)
-                </button>
-                <button onClick={handleOpenInAps}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 shadow-sm">
-                  Otworz w Autodesk Viewer
-                </button>
-                <a href={activeFile.file_url} download className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50">
-                  Pobierz DXF
-                </a>
               </div>
             </div>
           ) : showImageViewer ? (

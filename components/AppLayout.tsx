@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { NotificationBell, Toast } from './NotificationSystem';
@@ -11,6 +11,18 @@ export const AppLayout = ({ children }: { children?: React.ReactNode }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { state, getEffectiveRole } = useAppContext();
+
+  // Listen for external collapse/expand requests (e.g. from workspace views)
+  useEffect(() => {
+    const handleCollapse = () => setIsSidebarCollapsed(true);
+    const handleExpand = () => setIsSidebarCollapsed(false);
+    window.addEventListener('sidebar-collapse', handleCollapse);
+    window.addEventListener('sidebar-expand', handleExpand);
+    return () => {
+      window.removeEventListener('sidebar-collapse', handleCollapse);
+      window.removeEventListener('sidebar-expand', handleExpand);
+    };
+  }, []);
   const effectiveRole = getEffectiveRole();
   const isSimulating = state.simulatedRole !== null;
 

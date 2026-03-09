@@ -41,6 +41,10 @@ interface PlansSidebarProps {
   onFileAction: (fileId: string, action: string) => void;
   onToggleFolder: (folderId: string) => void;
   onDragDrop?: (fileId: string, targetId: string) => void;
+  onRenameFolder?: (folderId: string, newName: string) => void;
+  onDeleteFolder?: (folderId: string) => void;
+  onCreateSubfolder?: (parentFolderId: string, name: string) => void;
+  onMoveFileToFolder?: (fileId: string, folderId: string) => void;
 }
 
 const STATUS_BADGE: Record<FileStatus, { color: string; label: string }> = {
@@ -68,12 +72,18 @@ const FORMAT_ICON: Record<string, React.ReactNode> = {
 export const PlansSidebar: React.FC<PlansSidebarProps> = ({
   folders, activeFileId, searchQuery, onSearchChange,
   onSelectFile, onImport, onCreateFolder, onFileAction, onToggleFolder, onDragDrop,
+  onRenameFolder, onDeleteFolder, onCreateSubfolder, onMoveFileToFolder,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ fileId: string; x: number; y: number } | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState('');
+  const [folderContextMenu, setFolderContextMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
+  const [addSubfolderTo, setAddSubfolderTo] = useState<string | null>(null);
+  const [subfolderName, setSubfolderName] = useState('');
 
   const filteredFolders = folders.map(f => ({
     ...f,
@@ -91,7 +101,7 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-slate-200" onClick={() => setContextMenu(null)}>
+    <div className="flex flex-col h-full bg-white border-r border-slate-200" onClick={() => { setContextMenu(null); setFolderContextMenu(null); }}>
       {/* Header */}
       <div className="p-3 border-b border-slate-200 space-y-2 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -161,13 +171,85 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
           <div key={folder.id}>
             {/* Folder header */}
             <div
-              className="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition"
+              className="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-slate-100 bg-slate-50 hover:bg-slate-100 transition group/folder"
               onClick={() => onToggleFolder(folder.id)}
+              onContextMenu={e => {
+                if (folder.id === '__default__') return;
+                e.preventDefault();
+                e.stopPropagation();
+                setFolderContextMenu({ folderId: folder.id, x: e.clientX, y: e.clientY });
+              }}
+              onDragOver={e => { e.preventDefault(); setDragOverId(folder.id); }}
+              onDragLeave={() => setDragOverId(null)}
+              onDrop={() => {
+                if (draggedId && onMoveFileToFolder) {
+                  onMoveFileToFolder(draggedId, folder.id);
+                }
+                setDraggedId(null);
+                setDragOverId(null);
+              }}
             >
               <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform ${folder.isExpanded ? 'rotate-90' : ''}`} />
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex-1 truncate">{folder.name}</span>
+              {editingFolderId === folder.id ? (
+                <input
+                  type="text"
+                  value={editingFolderName}
+                  onChange={e => setEditingFolderName(e.target.value)}
+                  onKeyDown={e => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter' && editingFolderName.trim()) {
+                      onRenameFolder?.(folder.id, editingFolderName.trim());
+                      setEditingFolderId(null);
+                    }
+                    if (e.key === 'Escape') setEditingFolderId(null);
+                  }}
+                  onBlur={() => {
+                    if (editingFolderName.trim() && editingFolderName !== folder.name) {
+                      onRenameFolder?.(folder.id, editingFolderName.trim());
+                    }
+                    setEditingFolderId(null);
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  className="flex-1 text-xs font-bold text-slate-700 uppercase tracking-wider bg-white border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+              ) : (
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex-1 truncate">{folder.name}</span>
+              )}
               <span className="text-[10px] text-slate-400">{folder.files.length}</span>
+              {folder.id !== '__default__' && (
+                <button
+                  onClick={e => { e.stopPropagation(); setFolderContextMenu({ folderId: folder.id, x: e.clientX, y: e.clientY }); }}
+                  className="p-0.5 rounded hover:bg-slate-200 text-slate-400 opacity-0 group-hover/folder:opacity-100 transition"
+                >
+                  <MoreVertical className="w-3 h-3" />
+                </button>
+              )}
             </div>
+
+            {/* Subfolder input */}
+            {addSubfolderTo === folder.id && (
+              <div className="px-5 py-1.5 bg-blue-50 border-b border-slate-100 flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={subfolderName}
+                  onChange={e => setSubfolderName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && subfolderName.trim()) {
+                      onCreateSubfolder?.(folder.id, subfolderName.trim());
+                      setSubfolderName('');
+                      setAddSubfolderTo(null);
+                    }
+                    if (e.key === 'Escape') { setAddSubfolderTo(null); setSubfolderName(''); }
+                  }}
+                  placeholder="Nazwa podfolderu..."
+                  className="flex-1 px-2 py-0.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                />
+                <button onClick={() => { setAddSubfolderTo(null); setSubfolderName(''); }}
+                  className="text-slate-400 hover:text-slate-600"><X className="w-3 h-3" /></button>
+              </div>
+            )}
 
             {/* Files */}
             {folder.isExpanded && folder.files.map(file => (
@@ -216,7 +298,7 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
         ))}
       </div>
 
-      {/* Context menu */}
+      {/* File Context menu */}
       {contextMenu && (
         <>
           <div className="fixed inset-0 z-[98]" onClick={() => setContextMenu(null)} />
@@ -244,6 +326,47 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
                 <item.icon className="w-3.5 h-3.5" /> {item.label}
               </button>
             ))}
+          </div>
+        </>
+      )}
+
+      {/* Folder Context menu */}
+      {folderContextMenu && (
+        <>
+          <div className="fixed inset-0 z-[98]" onClick={() => setFolderContextMenu(null)} />
+          <div
+            className="fixed z-[99] w-48 bg-white border border-slate-200 rounded-xl shadow-xl py-1"
+            style={{ top: folderContextMenu.y, left: folderContextMenu.x }}
+          >
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                const folder = folders.find(f => f.id === folderContextMenu.folderId);
+                if (folder) { setEditingFolderId(folder.id); setEditingFolderName(folder.name); }
+                setFolderContextMenu(null);
+              }}
+            >
+              <FileText className="w-3.5 h-3.5" /> Zmien nazwe
+            </button>
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setAddSubfolderTo(folderContextMenu.folderId);
+                setSubfolderName('');
+                setFolderContextMenu(null);
+              }}
+            >
+              <FolderPlus className="w-3.5 h-3.5" /> Dodaj podfolder
+            </button>
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2 text-xs text-red-500 hover:bg-red-50"
+              onClick={() => {
+                if (confirm('Usunac folder?')) onDeleteFolder?.(folderContextMenu.folderId);
+                setFolderContextMenu(null);
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Usun folder
+            </button>
           </div>
         </>
       )}

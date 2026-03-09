@@ -4,7 +4,7 @@ import {
   RefreshCw, Sparkles, BookOpen, GitCompare, Download, BarChart3,
   Filter, Layers, Eye, EyeOff, Upload, History, Loader2,
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, ChevronDown,
-  Pencil, Check,
+  Pencil, Check, ArrowLeft, Box,
 } from 'lucide-react';
 import type { ViewerMode, AsyncStatus, WorkspaceFilters } from './WorkspaceTypes';
 
@@ -63,6 +63,11 @@ interface WorkspaceTopToolbarProps {
   fileCreatedAt?: string;
   fileUpdatedAt?: string;
   onRenameFile?: (newName: string) => void;
+  // Back to project list
+  onBackToProjects?: () => void;
+  // Open in Autodesk
+  canOpenInAutodesk?: boolean;
+  onOpenInAutodesk?: () => void;
 }
 
 const MODE_OPTIONS: { mode: ViewerMode; label: string; icon: React.ReactNode }[] = [
@@ -131,13 +136,20 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
   );
 
   return (
-    <div className="px-3 py-1.5 border-b border-slate-200 flex items-center gap-1 flex-shrink-0 bg-white overflow-x-auto">
+    <div className="px-2 py-1 border-b border-slate-200 flex items-center gap-0.5 flex-shrink-0 bg-white min-h-[40px]">
+      {/* Back to projects */}
+      {props.onBackToProjects && (
+        <button onClick={props.onBackToProjects} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Powrot do listy projektow">
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Left panel toggle */}
       <button onClick={props.onToggleLeftPanel} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Panel plikow">
         {props.leftPanelOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
       </button>
 
-      <div className="w-px h-5 bg-slate-200 mx-1" />
+      <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
       {/* File identity — inline editable */}
       <div className="flex flex-col min-w-0 max-w-[240px]">
@@ -221,7 +233,14 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
       <ActionButton onClick={props.onCompare} disabled={!props.canCompare}
         loading={false} icon={<GitCompare className="w-3.5 h-3.5" />} label="Porownaj" />
 
-      <div className="w-px h-5 bg-slate-200 mx-1" />
+      {/* Open in Autodesk */}
+      {props.canOpenInAutodesk && props.onOpenInAutodesk && (
+        <ActionButton onClick={props.onOpenInAutodesk} disabled={false}
+          loading={false} icon={<Box className="w-3.5 h-3.5" />} label="Autodesk"
+          color="text-teal-700 hover:bg-teal-50" />
+      )}
+
+      <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
       {/* Mode switcher */}
       <div className="relative">
@@ -235,8 +254,8 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
         </button>
         {showModeMenu && (
           <>
-            <div className="fixed inset-0 z-[98]" onClick={() => setShowModeMenu(false)} />
-            <div className="absolute top-full mt-1 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[99] py-1">
+            <div className="fixed inset-0 z-[200]" onClick={() => setShowModeMenu(false)} />
+            <div className="absolute top-full mt-1 left-0 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-[201] py-1">
               {MODE_OPTIONS.map(opt => (
                 <button
                   key={opt.mode}
@@ -264,8 +283,8 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
 
       {showFilters && (
         <>
-          <div className="fixed inset-0 z-[97]" onClick={() => setShowFilters(false)} />
-          <div className="absolute top-full right-20 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-[98] p-3 space-y-3 max-h-[70vh] overflow-y-auto">
+          <div className="fixed inset-0 z-[200]" onClick={() => setShowFilters(false)} />
+          <div className="absolute top-full right-20 mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-[201] p-3 space-y-3 max-h-[70vh] overflow-y-auto">
             <h4 className="text-xs font-bold text-slate-700">Filtry wyswietlania</h4>
 
             {/* Search within objects */}
@@ -358,27 +377,24 @@ export const WorkspaceTopToolbar: React.FC<WorkspaceTopToolbarProps> = (props) =
         </>
       )}
 
-      <div className="flex-1" />
+      <div className="flex-1 min-w-[8px]" />
 
       {/* Right side actions */}
-      <button onClick={props.onHistory} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Historia wersji">
-        <History className="w-4 h-4" />
+      <button onClick={props.onHistory} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500" title="Historia wersji">
+        <History className="w-3.5 h-3.5" />
       </button>
-      <button onClick={props.onUploadNewVersion} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Przeslij nowa wersje">
-        <Upload className="w-4 h-4" />
+      <button onClick={props.onUploadNewVersion} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500" title="Przeslij nowa wersje">
+        <Upload className="w-3.5 h-3.5" />
       </button>
-      <button onClick={props.onDownload} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Pobierz">
-        <Download className="w-4 h-4" />
-      </button>
-      <button onClick={props.onExport} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Eksportuj BOQ">
-        <Download className="w-4 h-4" />
+      <button onClick={props.onDownload} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500" title="Pobierz">
+        <Download className="w-3.5 h-3.5" />
       </button>
 
-      <div className="w-px h-5 bg-slate-200 mx-1" />
+      <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
       {/* Right panel toggle */}
-      <button onClick={props.onToggleRightPanel} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500" title="Panel prawy">
-        {props.rightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+      <button onClick={props.onToggleRightPanel} className="p-1 hover:bg-slate-100 rounded-lg text-slate-500" title="Panel prawy">
+        {props.rightPanelOpen ? <PanelRightClose className="w-3.5 h-3.5" /> : <PanelRightOpen className="w-3.5 h-3.5" />}
       </button>
     </div>
   );
