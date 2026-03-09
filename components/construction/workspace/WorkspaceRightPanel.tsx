@@ -138,36 +138,38 @@ export const WorkspaceRightPanel: React.FC<WorkspaceRightPanelProps> = (props) =
 
   return (
     <div className="flex flex-col h-full bg-white border-l border-slate-200 w-[360px] flex-shrink-0">
-      {/* Tab bar */}
-      <div className="flex items-center border-b border-slate-200 bg-slate-50 flex-shrink-0">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          const hasData = tab.id === 'errors' ? props.errors.length > 0
-            : tab.id === 'ai' ? props.aiSuggestions.length > 0
-            : tab.id === 'boq' ? props.boqRows.length > 0
-            : tab.id === 'compare' ? props.compareResult !== null
-            : false;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onSetTab(tab.id)}
-              className={`flex flex-col items-center justify-center px-1 py-1 flex-1 min-w-0 border-b-2 transition text-[9px] leading-tight ${
-                isActive
-                  ? 'border-blue-600 text-blue-700 bg-white'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-              }`}
-              title={tab.label}
-            >
-              <div className="relative">
-                <Icon className="w-3 h-3" />
-                {hasData && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />}
-              </div>
-              <span className="mt-0.5 truncate w-full text-center">{tab.shortLabel}</span>
-            </button>
-          );
-        })}
-        <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded text-slate-400 mx-0.5 flex-shrink-0">
+      {/* Tab bar — 2 rows */}
+      <div className="border-b border-slate-200 bg-slate-50 flex-shrink-0 relative">
+        <div className="grid grid-cols-6 gap-0">
+          {TABS.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const hasData = tab.id === 'errors' ? props.errors.length > 0
+              : tab.id === 'ai' ? props.aiSuggestions.length > 0
+              : tab.id === 'boq' ? props.boqRows.length > 0
+              : tab.id === 'compare' ? props.compareResult !== null
+              : false;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onSetTab(tab.id)}
+                className={`flex flex-col items-center justify-center py-1.5 transition text-[10px] leading-tight ${
+                  isActive
+                    ? 'text-blue-700 bg-blue-50 font-semibold'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                }`}
+                title={tab.label}
+              >
+                <div className="relative">
+                  <Icon className="w-3.5 h-3.5" />
+                  {hasData && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />}
+                </div>
+                <span className="mt-0.5">{tab.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onClose} className="absolute top-1 right-1 p-1 hover:bg-slate-200 rounded text-slate-400">
           <X className="w-3 h-3" />
         </button>
       </div>

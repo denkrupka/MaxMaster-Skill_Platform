@@ -989,14 +989,24 @@ export const PlansWorkspace: React.FC = () => {
   const handleHistory = useCallback(async () => {
     if (!selectedPlan) return;
     try {
-      const { data } = await supabase.from('plans').select('*, users:created_by_id(first_name, last_name)')
+      const { data, error } = await supabase.from('plans').select('*')
         .eq('project_id', selectedPlan.project_id)
         .eq('name', selectedPlan.name)
         .order('version', { ascending: false })
         .limit(50);
-      if (data) setVersionHistory(data);
-    } catch {
-      // ignore
+      if (error) {
+        console.error('handleHistory error:', error);
+      }
+      console.log('handleHistory data:', data);
+      if (data && data.length > 0) {
+        setVersionHistory(data);
+      } else if (!data || data.length === 0) {
+        // If no versions found by name, show at least the current plan
+        setVersionHistory([selectedPlan]);
+      }
+    } catch (err) {
+      console.error('handleHistory exception:', err);
+      setVersionHistory([selectedPlan]);
     }
     setVersionHistoryTab('versions');
     setShowVersionHistory(true);
@@ -1033,6 +1043,7 @@ export const PlansWorkspace: React.FC = () => {
         parent_plan_id: selectedPlan.id,
         sort_order: selectedPlan.sort_order,
         created_by_id: currentUser?.id || selectedPlan.created_by_id,
+        saved_by_name: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || null,
         scale_ratio: selectedPlan.scale_ratio || null,
       }).select().single();
 
@@ -1088,8 +1099,13 @@ export const PlansWorkspace: React.FC = () => {
 
       // Update local state to point to new version
       if (newPlan) {
+        console.log('New version saved successfully:', newPlan.id, 'version:', newPlan.version);
         setSelectedPlan(newPlan);
-        setAllPlans(prev => [...prev.filter(p => p.id !== selectedPlan.id), newPlan]);
+        // Keep old version in list (marked not current), add new version
+        setAllPlans(prev => [
+          ...prev.map(p => p.id === selectedPlan.id ? { ...p, is_current_version: false } : p),
+          newPlan,
+        ]);
       }
 
       setIsDirty(false);
@@ -1207,13 +1223,15 @@ export const PlansWorkspace: React.FC = () => {
 
   const handleCalibrationClick = useCallback((pt: DrawPoint) => {
     if (!isCalibrating) return;
-    const pts = [...calibrationPoints, pt];
-    setCalibrationPoints(pts);
-    if (pts.length === 2) {
-      const pixelDist = Math.sqrt((pts[1].x - pts[0].x) ** 2 + (pts[1].y - pts[0].y) ** 2);
-      setCalibrationInput({ pixelDist, show: true });
-    }
-  }, [isCalibrating, calibrationPoints]);
+    setCalibrationPoints(prev => {
+      const pts = [...prev, pt];
+      if (pts.length === 2) {
+        const pixelDist = Math.sqrt((pts[1].x - pts[0].x) ** 2 + (pts[1].y - pts[0].y) ** 2);
+        setCalibrationInput({ pixelDist, show: true });
+      }
+      return pts;
+    });
+  }, [isCalibrating]);
 
   const handleCalibrationSubmit = useCallback((realMm: number) => {
     if (calibrationInput.pixelDist <= 0 || realMm <= 0) return;
@@ -2413,6 +2431,42 @@ export const PlansWorkspace: React.FC = () => {
         </defs>
         {renderSvgAnnotations()}
 
+        {/* Calibration points and line */}
+        {isCalibrating && calibrationPoints.length > 0 && (
+          <g>
+            {/* First point */}
+            <circle cx={calibrationPoints[0].x} cy={calibrationPoints[0].y} r={8} fill="rgba(234,179,8,0.3)" stroke="#eab308" strokeWidth={3}>
+              <animate attributeName="r" values="8;12;8" dur="1s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={calibrationPoints[0].x} cy={calibrationPoints[0].y} r={3} fill="#eab308" />
+            {/* Crosshair */}
+            <line x1={calibrationPoints[0].x - 14} y1={calibrationPoints[0].y} x2={calibrationPoints[0].x + 14} y2={calibrationPoints[0].y} stroke="#eab308" strokeWidth={1.5} />
+            <line x1={calibrationPoints[0].x} y1={calibrationPoints[0].y - 14} x2={calibrationPoints[0].x} y2={calibrationPoints[0].y + 14} stroke="#eab308" strokeWidth={1.5} />
+
+            {/* Second point and line */}
+            {calibrationPoints.length >= 2 && (
+              <>
+                <line x1={calibrationPoints[0].x} y1={calibrationPoints[0].y}
+                      x2={calibrationPoints[1].x} y2={calibrationPoints[1].y}
+                      stroke="#eab308" strokeWidth={3} strokeDasharray="8 4" />
+                <circle cx={calibrationPoints[1].x} cy={calibrationPoints[1].y} r={8} fill="rgba(234,179,8,0.3)" stroke="#eab308" strokeWidth={3} />
+                <circle cx={calibrationPoints[1].x} cy={calibrationPoints[1].y} r={3} fill="#eab308" />
+                <line x1={calibrationPoints[1].x - 14} y1={calibrationPoints[1].y} x2={calibrationPoints[1].x + 14} y2={calibrationPoints[1].y} stroke="#eab308" strokeWidth={1.5} />
+                <line x1={calibrationPoints[1].x} y1={calibrationPoints[1].y - 14} x2={calibrationPoints[1].x} y2={calibrationPoints[1].y + 14} stroke="#eab308" strokeWidth={1.5} />
+                {/* Distance label */}
+                <text
+                  x={(calibrationPoints[0].x + calibrationPoints[1].x) / 2}
+                  y={(calibrationPoints[0].y + calibrationPoints[1].y) / 2 - 12}
+                  textAnchor="middle" fontSize="14" fill="#eab308" fontWeight="bold"
+                  stroke="white" strokeWidth={3} paintOrder="stroke"
+                >
+                  {Math.round(Math.sqrt((calibrationPoints[1].x - calibrationPoints[0].x) ** 2 + (calibrationPoints[1].y - calibrationPoints[0].y) ** 2))} px
+                </text>
+              </>
+            )}
+          </g>
+        )}
+
         {/* Text input marker */}
         {textInput && (
           <circle cx={textInput.x} cy={textInput.y} r={4} fill="#3b82f6" stroke="white" strokeWidth={2} />
@@ -2955,7 +3009,7 @@ export const PlansWorkspace: React.FC = () => {
   // ---- Render ----
 
   return (
-    <div className={`flex h-full bg-slate-100 relative ${ws.isFullscreen ? 'fixed inset-0 z-[9999] bg-white' : ''}`}>
+    <div data-workspace-root className={`flex h-full bg-slate-100 relative ${ws.isFullscreen ? 'fixed inset-0 z-[9999] bg-white' : ''}`}>
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" className="hidden"
         accept=".dwg,.dxf,.pdf,.ifc,.rvt,.png,.jpg,.jpeg,.gif,.bmp,.webp,.svg"
@@ -3020,7 +3074,18 @@ export const PlansWorkspace: React.FC = () => {
             onZoomReset={() => setZoom(100)}
             onZoomFit={() => setZoom(100)}
             isFullscreen={ws.isFullscreen}
-            onToggleFullscreen={() => dispatch({ type: 'TOGGLE_FULLSCREEN' })}
+            onToggleFullscreen={() => {
+              dispatch({ type: 'TOGGLE_FULLSCREEN' });
+              // Also try browser Fullscreen API
+              const el = document.querySelector('[data-workspace-root]') as HTMLElement;
+              if (el) {
+                if (!document.fullscreenElement) {
+                  el.requestFullscreen?.().catch(() => {});
+                } else {
+                  document.exitFullscreen?.().catch(() => {});
+                }
+              }
+            }}
             leftPanelOpen={ws.leftPanelOpen}
             rightPanelOpen={ws.rightPanelOpen}
             onToggleLeftPanel={() => dispatch({ type: 'TOGGLE_LEFT_PANEL' })}
@@ -3127,7 +3192,7 @@ export const PlansWorkspace: React.FC = () => {
                 versionHistory.length === 0 ? (
                   <p className="px-4 py-6 text-xs text-slate-400 text-center">Brak historii wersji</p>
                 ) : versionHistory.map(v => {
-                  const authorInfo = (v as any).saved_by_name || ((v as any).users ? `${(v as any).users.first_name || ''} ${(v as any).users.last_name || ''}`.trim() : null);
+                  const authorInfo = (v as any).saved_by_name || null;
                   return (
                   <div
                     key={v.id}
