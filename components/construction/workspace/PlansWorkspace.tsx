@@ -221,12 +221,13 @@ export const PlansWorkspace: React.FC = () => {
 
   // ---- Dirty (unsaved changes) tracking ----
   const [isDirty, setIsDirty] = useState(false);
-  const [changeLog, setChangeLog] = useState<{ action: string; time: string }[]>([]);
+  const [changeLog, setChangeLog] = useState<{ action: string; time: string; annotationId?: string }[]>([]);
   const [showUnsavedModal, setShowUnsavedModal] = useState<{ action: 'switch'; fileId?: string } | { action: 'back' } | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
-  const markDirty = useCallback((action: string) => {
+  const markDirty = useCallback((action: string, annotationId?: string) => {
     setIsDirty(true);
-    setChangeLog(prev => [...prev, { action, time: new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }]);
+    setChangeLog(prev => [...prev, { action, time: new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), annotationId }]);
   }, []);
 
   // ---- Version comparison ----
@@ -986,8 +987,7 @@ export const PlansWorkspace: React.FC = () => {
   const handleHistory = useCallback(async () => {
     if (!selectedPlan) return;
     try {
-      // Load version history for THIS specific file (by original_filename or name within the same project)
-      const { data } = await supabase.from('plans').select('*')
+      const { data } = await supabase.from('plans').select('*, users:created_by_id(first_name, last_name)')
         .eq('project_id', selectedPlan.project_id)
         .eq('name', selectedPlan.name)
         .order('version', { ascending: false })
@@ -1010,36 +1010,77 @@ export const PlansWorkspace: React.FC = () => {
 
   const handleSave = useCallback(async () => {
     if (!selectedPlan || !isDirty) return;
+    const authorName = `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User';
     try {
-      // Update the plan's updated_at timestamp
-      await supabase.from('plans').update({
-        updated_at: new Date().toISOString(),
-      }).eq('id', selectedPlan.id);
+      // Mark current version as not current
+      await supabase.from('plans').update({ is_current_version: false }).eq('id', selectedPlan.id);
 
-      // Save all annotations to DB (bulk upsert)
-      if (activeFile?.id) {
-        for (const ann of annotations) {
-          await supabase.from('plan_annotations').upsert({
-            id: ann.id,
-            plan_id: activeFile.id,
-            type: ann.type,
-            geometry: ann.geometry,
-            text: ann.text || null,
-            stroke_color: ann.strokeColor,
-            stroke_width: ann.strokeWidth,
-            created_by: ann.createdBy,
-            created_at: ann.createdAt,
-          }, { onConflict: 'id' });
-        }
+      // Create new version record
+      const newVersion = selectedPlan.version + 1;
+      const { data: newPlan, error: insertErr } = await supabase.from('plans').insert({
+        component_id: selectedPlan.component_id,
+        project_id: selectedPlan.project_id,
+        name: selectedPlan.name,
+        description: selectedPlan.description || null,
+        file_url: selectedPlan.file_url,
+        thumbnail_url: selectedPlan.thumbnail_url || null,
+        original_filename: selectedPlan.original_filename || null,
+        mime_type: selectedPlan.mime_type || null,
+        file_size: selectedPlan.file_size || null,
+        version: newVersion,
+        is_current_version: true,
+        parent_plan_id: selectedPlan.id,
+        sort_order: selectedPlan.sort_order,
+        created_by_id: currentUser?.id || selectedPlan.created_by_id,
+        saved_by_name: authorName,
+        scale_ratio: selectedPlan.scale_ratio || null,
+      }).select().single();
+
+      if (insertErr) throw insertErr;
+      const newPlanId = newPlan?.id || selectedPlan.id;
+
+      // Save all annotations to the new version
+      for (const ann of annotations) {
+        await supabase.from('plan_annotations').upsert({
+          id: ann.id,
+          plan_id: newPlanId,
+          type: ann.type,
+          geometry: ann.geometry,
+          text: ann.text || null,
+          stroke_color: ann.strokeColor,
+          stroke_width: ann.strokeWidth,
+          created_by: ann.createdBy,
+          created_at: ann.createdAt,
+        }, { onConflict: 'id' });
+      }
+
+      // Save comments to new version
+      for (const c of comments) {
+        await supabase.from('plan_comments').upsert({
+          id: c.id,
+          plan_id: newPlanId,
+          position_x: c.positionX,
+          position_y: c.positionY,
+          author_id: c.authorId,
+          author_name: c.authorName,
+          content: c.content,
+          is_resolved: c.isResolved,
+        }, { onConflict: 'id' });
+      }
+
+      // Update local state to point to new version
+      if (newPlan) {
+        setSelectedPlan(newPlan);
+        setAllPlans(prev => [...prev.filter(p => p.id !== selectedPlan.id), newPlan]);
       }
 
       setIsDirty(false);
       setChangeLog([]);
-      notify('Zmiany zapisane');
+      notify(`Zapisano jako wersja ${newVersion}`);
     } catch (err: any) {
       notify(err.message || 'Blad zapisu', 'error');
     }
-  }, [selectedPlan, isDirty, activeFile, annotations, notify]);
+  }, [selectedPlan, isDirty, activeFile, annotations, comments, currentUser, notify]);
 
   // ---- Export ----
 
@@ -1176,6 +1217,7 @@ export const PlansWorkspace: React.FC = () => {
     if (!pendingPhotoPoint && !pendingPhotoPinId) return;
 
     const authorName = `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User';
+    setPhotoUploading(true);
 
     try {
       const newPhotos: PhotoItem[] = [];
@@ -1229,6 +1271,8 @@ export const PlansWorkspace: React.FC = () => {
       notify(`${newPhotos.length > 1 ? newPhotos.length + ' zdjec dodanych' : 'Zdjecie dodane'}`);
     } catch (err: any) {
       notify(err.message || 'Blad przesylania zdjecia', 'error');
+    } finally {
+      setPhotoUploading(false);
     }
 
     setPendingPhotoPoint(null);
@@ -1561,6 +1605,8 @@ export const PlansWorkspace: React.FC = () => {
     }
 
     if (ws.activeTool === 'text-annotation' || ws.activeTool === 'callout') {
+      e.preventDefault();
+      e.stopPropagation();
       setTextInput({ x: pt.x, y: pt.y, text: '', toolType: ws.activeTool === 'callout' ? 'callout' : 'text' });
       return;
     }
@@ -1736,13 +1782,16 @@ export const PlansWorkspace: React.FC = () => {
     };
     setMeasurements(prev => [...prev, measurement]);
     if (activeFile?.id) api.saveMeasurement(measurement, activeFile.id);
-    markDirty(`Dodano pomiar: ${measurement.value} ${measurement.unit}`);
+    markDirty(`Dodano pomiar: ${measurement.value} ${measurement.unit}`, measurement.id);
     setIsDrawing(false);
     setDrawPoints([]);
     setCursorPt(null);
   }, [drawPoints, ws.activeTool, activeFile, currentUser, markDirty]);
 
   const handleSvgMouseUp = useCallback(() => {
+    // Don't interfere with text input
+    if (textInput) return;
+
     // Complete screenshot area selection
     if (isSelectingScreenshotArea && screenshotStart && screenshotEnd) {
       captureScreenshotArea();
@@ -1813,11 +1862,11 @@ export const PlansWorkspace: React.FC = () => {
     };
     setAnnotations(prev => [...prev, annotation]);
     if (activeFile?.id) api.saveAnnotation(annotation, activeFile.id);
-    markDirty(`Dodano adnotacje: ${annotationType}`);
+    markDirty(`Dodano adnotacje: ${annotationType}`, annotation.id);
 
     setIsDrawing(false);
     setDrawPoints([]);
-  }, [isDrawing, drawPoints, ws.activeTool, strokeColor, strokeWidth, currentUser, activeFile, boxSelectStart, boxSelectEnd, annotations, isPanning, isSelectingScreenshotArea, screenshotStart, screenshotEnd, captureScreenshotArea, markDirty]);
+  }, [isDrawing, drawPoints, ws.activeTool, strokeColor, strokeWidth, currentUser, activeFile, boxSelectStart, boxSelectEnd, annotations, isPanning, isSelectingScreenshotArea, screenshotStart, screenshotEnd, captureScreenshotArea, markDirty, textInput]);
 
   // ---- Text annotation submit ----
   const handleTextAnnotationSubmit = useCallback(() => {
@@ -1834,7 +1883,7 @@ export const PlansWorkspace: React.FC = () => {
     };
     setAnnotations(prev => [...prev, annotation]);
     setTextInput(null);
-    markDirty(`Dodano tekst: "${annotation.text}"`);
+    markDirty(`Dodano tekst: "${annotation.text}"`, annotation.id);
   }, [textInput, strokeColor, strokeWidth, currentUser, markDirty]);
 
   // ---- Keyboard shortcuts ----
@@ -1912,7 +1961,8 @@ export const PlansWorkspace: React.FC = () => {
       const sc = ann.strokeColor;
       const sw = ann.strokeWidth;
       const hovered = isEraseHovered(ann.id);
-      const hoverFilter = hovered ? 'drop-shadow(0 0 6px rgba(239,68,68,0.8))' : undefined;
+      const isSelected = ws.selectedObjectIds.includes(ann.id);
+      const hoverFilter = hovered ? 'drop-shadow(0 0 6px rgba(239,68,68,0.8))' : isSelected ? 'drop-shadow(0 0 8px rgba(59,130,246,0.9))' : undefined;
       const hoverOpacity = hovered ? 0.5 : undefined;
 
       switch (ann.type) {
@@ -2879,6 +2929,26 @@ export const PlansWorkspace: React.FC = () => {
             onHistory={handleHistory}
             onDownload={async () => {
               if (!activeFile) return;
+              // If there are annotations/measurements, capture viewer with overlays
+              if (annotations.length > 0 || measurements.length > 0 || comments.length > 0) {
+                try {
+                  const { default: html2canvas } = await import('html2canvas');
+                  const container = viewerContainerRef.current;
+                  if (container) {
+                    const canvas = await html2canvas(container, { useCORS: true, allowTaint: true, scale: 2 });
+                    const url = canvas.toDataURL('image/png');
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const baseName = (activeFile.original_filename || activeFile.name).replace(/\.[^.]+$/, '');
+                    a.download = `${baseName}_v${selectedPlan?.version || 1}_annotated.png`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    return;
+                  }
+                } catch { /* fallback to raw file */ }
+              }
+              // No annotations — download raw file
               try {
                 const resp = await fetch(activeFile.file_url);
                 const blob = await resp.blob();
@@ -2939,7 +3009,9 @@ export const PlansWorkspace: React.FC = () => {
               {versionHistoryTab === 'versions' ? (
                 versionHistory.length === 0 ? (
                   <p className="px-4 py-6 text-xs text-slate-400 text-center">Brak historii wersji</p>
-                ) : versionHistory.map(v => (
+                ) : versionHistory.map(v => {
+                  const authorInfo = (v as any).saved_by_name || ((v as any).users ? `${(v as any).users.first_name || ''} ${(v as any).users.last_name || ''}`.trim() : null);
+                  return (
                   <div
                     key={v.id}
                     className={`px-4 py-2.5 border-b border-slate-50 flex items-center gap-3 ${
@@ -2957,6 +3029,7 @@ export const PlansWorkspace: React.FC = () => {
                         <span className="text-[10px] text-slate-400">
                           {new Date(v.created_at).toLocaleDateString('pl-PL')} {new Date(v.created_at).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}
                         </span>
+                        {authorInfo && <span className="text-[10px] text-slate-500 font-medium">· {authorInfo}</span>}
                         {v.file_size && (
                           <span className="text-[10px] text-slate-400">{(v.file_size / 1024 / 1024).toFixed(1)} MB</span>
                         )}
@@ -2969,16 +3042,48 @@ export const PlansWorkspace: React.FC = () => {
                       >Otworz</button>
                     )}
                   </div>
-                ))
+                  );
+                })
               ) : (
                 changeLog.length === 0 ? (
                   <p className="px-4 py-6 text-xs text-slate-400 text-center">Brak zmian w tej sesji</p>
                 ) : (
                   <div className="divide-y divide-slate-50">
                     {changeLog.map((entry, i) => (
-                      <div key={i} className="px-4 py-2 flex items-center gap-3">
+                      <div key={i}
+                        className={`px-4 py-2 flex items-center gap-3 ${entry.annotationId ? 'cursor-pointer hover:bg-blue-50 transition' : ''}`}
+                        onClick={() => {
+                          if (!entry.annotationId) return;
+                          // Find annotation or measurement and scroll to it
+                          const ann = annotations.find(a => a.id === entry.annotationId);
+                          const meas = measurements.find(m => m.id === entry.annotationId);
+                          const pts = ann?.geometry?.points || meas?.points;
+                          if (pts && pts.length > 0) {
+                            const firstPt = pts[0] as DrawPoint;
+                            // Highlight it
+                            dispatch({ type: 'SET_SELECTED_OBJECTS', ids: [entry.annotationId!] });
+                            // Scroll viewer to center on this point
+                            const container = viewerContainerRef.current;
+                            const svg = svgOverlayRef.current;
+                            if (container && svg) {
+                              const svgRect = svg.getBoundingClientRect();
+                              const containerRect = container.getBoundingClientRect();
+                              const scaleX = svgRect.width / (svg.viewBox?.baseVal?.width || svgRect.width);
+                              const scaleY = svgRect.height / (svg.viewBox?.baseVal?.height || svgRect.height);
+                              const screenX = firstPt.x * scaleX;
+                              const screenY = firstPt.y * scaleY;
+                              container.scrollTo({
+                                left: screenX - containerRect.width / 2,
+                                top: screenY - containerRect.height / 2,
+                                behavior: 'smooth',
+                              });
+                            }
+                          }
+                        }}
+                      >
                         <span className="text-[10px] text-slate-400 font-mono w-14 flex-shrink-0">{entry.time}</span>
-                        <span className="text-[11px] text-slate-600">{entry.action}</span>
+                        <span className="text-[11px] text-slate-600 flex-1">{entry.action}</span>
+                        {entry.annotationId && <span className="text-[9px] text-blue-400">↗</span>}
                       </div>
                     ))}
                   </div>
@@ -2991,26 +3096,6 @@ export const PlansWorkspace: React.FC = () => {
         {/* Viewer Area */}
         <div ref={viewerContainerRef} className="flex-1 overflow-auto relative bg-slate-200"
           style={{ cursor: ws.activeTool === 'pan' ? (isPanning ? 'grabbing' : 'grab') : undefined }}
-          onMouseDown={e => {
-            if (ws.activeTool === 'pan') {
-              const container = viewerContainerRef.current;
-              if (container) {
-                setIsPanning(true);
-                setPanStart({ x: e.clientX, y: e.clientY, scrollLeft: container.scrollLeft, scrollTop: container.scrollTop });
-              }
-              e.preventDefault();
-            }
-          }}
-          onMouseMove={e => {
-            if (isPanning && panStart) {
-              const container = viewerContainerRef.current;
-              if (container) {
-                container.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
-                container.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
-              }
-              e.preventDefault();
-            }
-          }}
           onMouseUp={() => {
             if (isPanning) { setIsPanning(false); setPanStart(null); }
           }}
@@ -3574,27 +3659,34 @@ export const PlansWorkspace: React.FC = () => {
       })()}
 
       {/* ===== PHOTO UPLOAD MODAL ===== */}
-      {showPhotoModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => { setShowPhotoModal(false); setPendingPhotoPoint(null); setPendingPhotoPinId(null); }}>
+      {(showPhotoModal || photoUploading) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => { if (!photoUploading) { setShowPhotoModal(false); setPendingPhotoPoint(null); setPendingPhotoPinId(null); } }}>
           <div className="bg-white rounded-xl shadow-2xl w-80" onClick={e => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-800">Dodaj zdjecie</h3>
-              <button onClick={() => { setShowPhotoModal(false); setPendingPhotoPoint(null); setPendingPhotoPinId(null); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+              <h3 className="text-sm font-bold text-slate-800">{photoUploading ? 'Przesylanie...' : 'Dodaj zdjecie'}</h3>
+              {!photoUploading && <button onClick={() => { setShowPhotoModal(false); setPendingPhotoPoint(null); setPendingPhotoPinId(null); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>}
             </div>
-            <div className="p-4 space-y-3">
-              <button
-                onClick={() => { photoInputRef.current?.setAttribute('capture', 'environment'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-              >
-                <Camera className="w-4 h-4" /> Zrob zdjecie
-              </button>
-              <button
-                onClick={() => { photoInputRef.current?.removeAttribute('capture'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
-              >
-                <Upload className="w-4 h-4" /> Zaladuj z urzadzenia
-              </button>
-            </div>
+            {photoUploading ? (
+              <div className="p-6 flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <p className="text-xs text-slate-500">Przesylanie zdjec...</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                <button
+                  onClick={() => { photoInputRef.current?.setAttribute('capture', 'environment'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                >
+                  <Camera className="w-4 h-4" /> Zrob zdjecie
+                </button>
+                <button
+                  onClick={() => { photoInputRef.current?.removeAttribute('capture'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+                >
+                  <Upload className="w-4 h-4" /> Zaladuj z urzadzenia
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
