@@ -413,7 +413,7 @@ export function workspaceReducer(state: WorkspaceState, action: WorkspaceAction)
     case 'SET_FILTERS':
       return { ...state, filters: { ...state.filters, ...action.filters } };
     case 'SET_ACTIVE_TOOL':
-      return { ...state, activeTool: action.tool };
+      return { ...state, activeTool: action.tool, selectedObjectIds: [] };
     case 'SET_STATUS':
       return { ...state, [action.key]: action.status };
     case 'SET_PROGRESS':

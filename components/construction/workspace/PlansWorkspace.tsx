@@ -1012,7 +1012,6 @@ export const PlansWorkspace: React.FC = () => {
 
   const handleSave = useCallback(async () => {
     if (!selectedPlan || !isDirty) return;
-    const authorName = `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User';
     try {
       // Mark current version as not current
       await supabase.from('plans').update({ is_current_version: false }).eq('id', selectedPlan.id);
@@ -1034,40 +1033,57 @@ export const PlansWorkspace: React.FC = () => {
         parent_plan_id: selectedPlan.id,
         sort_order: selectedPlan.sort_order,
         created_by_id: currentUser?.id || selectedPlan.created_by_id,
-        saved_by_name: authorName,
         scale_ratio: selectedPlan.scale_ratio || null,
       }).select().single();
 
-      if (insertErr) throw insertErr;
+      if (insertErr) {
+        console.error('Save version error:', insertErr);
+        throw insertErr;
+      }
       const newPlanId = newPlan?.id || selectedPlan.id;
 
-      // Save all annotations to the new version
+      // Save annotations to the new version (insert new rows, don't upsert client IDs into UUID column)
       for (const ann of annotations) {
-        await supabase.from('plan_annotations').upsert({
-          id: ann.id,
+        const { error: annErr } = await supabase.from('plan_annotations').insert({
           plan_id: newPlanId,
           type: ann.type,
           geometry: ann.geometry,
           text: ann.text || null,
           stroke_color: ann.strokeColor,
           stroke_width: ann.strokeWidth,
-          created_by: ann.createdBy,
+          created_by: ann.createdBy || null,
           created_at: ann.createdAt,
-        }, { onConflict: 'id' });
+        });
+        if (annErr) console.error('Save annotation error:', annErr);
+      }
+
+      // Save measurements to the new version
+      for (const m of measurements) {
+        const { error: measErr } = await supabase.from('plan_measurements').insert({
+          plan_id: newPlanId,
+          type: m.type,
+          value: m.value,
+          unit: m.unit,
+          label: m.label || null,
+          points: m.points || null,
+          created_by: m.createdBy || null,
+          created_at: m.createdAt,
+        });
+        if (measErr) console.error('Save measurement error:', measErr);
       }
 
       // Save comments to new version
       for (const c of comments) {
-        await supabase.from('plan_comments').upsert({
-          id: c.id,
+        const { error: cmtErr } = await supabase.from('plan_comments').insert({
           plan_id: newPlanId,
           position_x: c.positionX,
           position_y: c.positionY,
-          author_id: c.authorId,
+          author_id: c.authorId || null,
           author_name: c.authorName,
           content: c.content,
           is_resolved: c.isResolved,
-        }, { onConflict: 'id' });
+        });
+        if (cmtErr) console.error('Save comment error:', cmtErr);
       }
 
       // Update local state to point to new version
@@ -1080,9 +1096,12 @@ export const PlansWorkspace: React.FC = () => {
       setChangeLog([]);
       notify(`Zapisano jako wersja ${newVersion}`);
     } catch (err: any) {
+      console.error('handleSave error:', err);
+      // Revert: mark original as current again
+      await supabase.from('plans').update({ is_current_version: true }).eq('id', selectedPlan.id).catch(() => {});
       notify(err.message || 'Blad zapisu', 'error');
     }
-  }, [selectedPlan, isDirty, activeFile, annotations, comments, currentUser, notify]);
+  }, [selectedPlan, isDirty, activeFile, annotations, measurements, comments, currentUser, notify]);
 
   // ---- Export ----
 
@@ -2027,8 +2046,29 @@ export const PlansWorkspace: React.FC = () => {
       const sw = ann.strokeWidth;
       const hovered = isEraseHovered(ann.id);
       const isSelected = ws.selectedObjectIds.includes(ann.id);
-      const hoverFilter = hovered ? 'drop-shadow(0 0 6px rgba(239,68,68,0.8))' : isSelected ? 'drop-shadow(0 0 8px rgba(59,130,246,0.9))' : undefined;
+      const hoverFilter = hovered
+        ? 'drop-shadow(0 0 6px rgba(239,68,68,0.8))'
+        : isSelected
+          ? 'drop-shadow(0 0 12px rgba(59,130,246,1)) drop-shadow(0 0 24px rgba(59,130,246,0.7)) drop-shadow(0 0 4px rgba(255,255,0,0.9))'
+          : undefined;
       const hoverOpacity = hovered ? 0.5 : undefined;
+      const selectedStrokeExtra = isSelected ? 4 : 0;
+
+      // Render bright pulsing highlight behind selected annotations
+      if (isSelected && pts.length > 0) {
+        const allX = pts.map(p => p.x);
+        const allY = pts.map(p => p.y);
+        const bx = Math.min(...allX) - 10;
+        const by = Math.min(...allY) - 10;
+        const bw = Math.max(...allX) - bx + 20;
+        const bh = Math.max(...allY) - by + 20;
+        parts.push(
+          <rect key={`sel-${key}`} x={bx} y={by} width={bw} height={bh} rx={6}
+            fill="rgba(59,130,246,0.15)" stroke="#3b82f6" strokeWidth={3} strokeDasharray="8 4">
+            <animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />
+          </rect>
+        );
+      }
 
       switch (ann.type) {
         case 'freehand': {
