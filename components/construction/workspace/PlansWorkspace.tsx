@@ -1,5 +1,5 @@
-import React, { useReducer, useState, useCallback, useEffect, useRef } from 'react';
-import { Loader2, X } from 'lucide-react';
+import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
@@ -93,11 +93,15 @@ export const PlansWorkspace: React.FC = () => {
 
   // ---- Data state ----
   const [projects, setProjects] = useState<Project[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; address_city?: string }[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [folders, setFolders] = useState<FolderWithPlans[]>([]);
   const [allPlans, setAllPlans] = useState<PlanRecord[]>([]);
   const [selectedPlan, setSelectedPlan] = useState<PlanRecord | null>(null);
   const [projectSearch, setProjectSearch] = useState('');
+  const [projectStatusFilter, setProjectStatusFilter] = useState<string>('all');
+  const [projectSort, setProjectSort] = useState<{ key: string; asc: boolean }>({ key: 'created_at', asc: false });
   const [fileSearch, setFileSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -253,12 +257,14 @@ export const PlansWorkspace: React.FC = () => {
   const loadProjects = async () => {
     if (!currentUser?.company_id) return;
     try {
-      const { data } = await supabase.from('projects').select('*')
-        .eq('company_id', currentUser.company_id).order('name');
-      if (data) {
-        setProjects(data);
-        if (data.length > 0 && !selectedProject) setSelectedProject(data[0]);
-      }
+      const [projRes, custRes, deptRes] = await Promise.all([
+        supabase.from('projects').select('*').eq('company_id', currentUser.company_id).order('created_at', { ascending: false }),
+        supabase.from('contractors_clients').select('id, name, address_city').eq('company_id', currentUser.company_id).eq('is_archived', false),
+        supabase.from('departments').select('id, name').eq('company_id', currentUser.company_id).eq('is_archived', false),
+      ]);
+      if (projRes.data) setProjects(projRes.data);
+      if (custRes.data) setCustomers(custRes.data);
+      if (deptRes.data) setDepartments(deptRes.data);
     } catch (err) {
       console.error('Load projects error:', err);
     } finally {
@@ -531,9 +537,26 @@ export const PlansWorkspace: React.FC = () => {
 
       const { data: urlData } = supabase.storage.from('plan-files').getPublicUrl(path);
 
+      // Ensure a plan_component exists for this project
+      let componentId: string;
+      const { data: existingComp } = await supabase.from('plan_components').select('id')
+        .eq('project_id', selectedProject.id).limit(1).single();
+      if (existingComp) {
+        componentId = existingComp.id;
+      } else {
+        const { data: newComp, error: compErr } = await supabase.from('plan_components').insert({
+          project_id: selectedProject.id,
+          name: 'Glowny',
+          sort_order: 0,
+          created_by_id: currentUser.id,
+        }).select('id').single();
+        if (compErr || !newComp) throw compErr || new Error('Nie udalo sie utworzyc komponentu');
+        componentId = newComp.id;
+      }
+
       const { error: insertErr } = await supabase.from('plans').insert({
         project_id: selectedProject.id,
-        component_id: selectedProject.id,
+        component_id: componentId,
         name: file.name.replace(/\.[^.]+$/, ''),
         file_url: urlData.publicUrl,
         original_filename: file.name,
@@ -1669,21 +1692,188 @@ export const PlansWorkspace: React.FC = () => {
   }
 
   if (!selectedProject) {
-    const filteredProjects = projects.filter(p =>
-      !projectSearch || p.name.toLowerCase().includes(projectSearch.toLowerCase())
+    const q = projectSearch.toLowerCase();
+    const filtered = projects.filter(p => {
+      if (projectStatusFilter !== 'all' && p.status !== projectStatusFilter) return false;
+      if (!q) return true;
+      const customerName = customers.find(c => c.id === p.customer_id)?.name || '';
+      const deptName = departments.find(d => d.id === p.department_id)?.name || '';
+      return p.name.toLowerCase().includes(q)
+        || customerName.toLowerCase().includes(q)
+        || deptName.toLowerCase().includes(q)
+        || (p.description || '').toLowerCase().includes(q)
+        || ((p as any).project_type || '').toLowerCase().includes(q);
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      const k = projectSort.key;
+      let va: any = (a as any)[k] || '';
+      let vb: any = (b as any)[k] || '';
+      if (k === 'customer') {
+        va = customers.find(c => c.id === a.customer_id)?.name || '';
+        vb = customers.find(c => c.id === b.customer_id)?.name || '';
+      }
+      if (k === 'department') {
+        va = departments.find(d => d.id === a.department_id)?.name || '';
+        vb = departments.find(d => d.id === b.department_id)?.name || '';
+      }
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : (va > vb ? 1 : va < vb ? -1 : 0);
+      return projectSort.asc ? cmp : -cmp;
+    });
+
+    const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
+      e.stopPropagation();
+      if (!confirm('Czy na pewno chcesz usunac ten projekt z widoku planow?')) return;
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+    };
+
+    const SortHeader: React.FC<{ label: string; sortKey: string; className?: string }> = ({ label, sortKey, className }) => (
+      <th
+        className={`px-3 py-2.5 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-700 select-none ${className || ''}`}
+        onClick={() => setProjectSort(prev => ({ key: sortKey, asc: prev.key === sortKey ? !prev.asc : true }))}
+      >
+        <div className="flex items-center gap-1">
+          {label}
+          <ArrowUpDown className={`w-3 h-3 ${projectSort.key === sortKey ? 'text-blue-500' : 'text-slate-300'}`} />
+        </div>
+      </th>
     );
+
+    const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+      active: { label: 'Aktywny', color: 'bg-green-100 text-green-700' },
+      completed: { label: 'Zakonczony', color: 'bg-blue-100 text-blue-700' },
+      archived: { label: 'Archiwum', color: 'bg-slate-100 text-slate-500' },
+      on_hold: { label: 'Wstrzymany', color: 'bg-amber-100 text-amber-700' },
+    };
+
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8">
-        <h2 className="text-lg font-bold text-slate-800 mb-4">Wybierz projekt</h2>
-        <input type="text" value={projectSearch} onChange={e => setProjectSearch(e.target.value)}
-          placeholder="Szukaj projektu..." className="px-4 py-2 border border-slate-300 rounded-lg text-sm w-80 mb-4" />
-        <div className="w-80 max-h-96 overflow-y-auto space-y-1">
-          {filteredProjects.map(p => (
-            <button key={p.id} onClick={() => setSelectedProject(p)}
-              className="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-slate-200 text-sm font-medium text-slate-700">
-              {p.name}
-            </button>
-          ))}
+      <div className="flex flex-col h-full bg-slate-50">
+        {/* Header */}
+        <div className="px-6 py-4 bg-white border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-800 mb-3">Plany i rzuty — wybierz projekt</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[250px] max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={projectSearch}
+                onChange={e => setProjectSearch(e.target.value)}
+                placeholder="Szukaj projektu, klienta, dzial..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {projectSearch && (
+                <button onClick={() => setProjectSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {/* Status filter */}
+            <div className="relative">
+              <select
+                value={projectStatusFilter}
+                onChange={e => setProjectStatusFilter(e.target.value)}
+                className="appearance-none pl-3 pr-8 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="all">Wszystkie statusy</option>
+                <option value="active">Aktywne</option>
+                <option value="completed">Zakonczone</option>
+                <option value="on_hold">Wstrzymane</option>
+                <option value="archived">Archiwum</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+            {/* Count */}
+            <span className="text-xs text-slate-400">{sorted.length} z {projects.length} projektow</span>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto px-6 py-4">
+          {sorted.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <FolderOpen className="w-12 h-12 text-slate-300 mb-3" />
+              <p className="text-sm text-slate-500 font-medium mb-1">
+                {projects.length === 0 ? 'Brak projektow' : 'Nie znaleziono projektow'}
+              </p>
+              <p className="text-xs text-slate-400">
+                {projects.length === 0 ? 'Utworz projekt w zakladce Projekty, aby rozpoczac prace z planami.' : 'Zmien kryteria wyszukiwania.'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <SortHeader label="Projekt" sortKey="name" />
+                    <SortHeader label="Klient" sortKey="customer" />
+                    <SortHeader label="Dzial" sortKey="department" />
+                    <SortHeader label="Typ" sortKey="project_type" />
+                    <SortHeader label="Status" sortKey="status" />
+                    <SortHeader label="Utworzony" sortKey="created_at" />
+                    <SortHeader label="Aktualizacja" sortKey="updated_at" />
+                    <th className="px-3 py-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sorted.map(p => {
+                    const customer = customers.find(c => c.id === p.customer_id);
+                    const dept = departments.find(d => d.id === p.department_id);
+                    const st = STATUS_LABELS[p.status] || { label: p.status, color: 'bg-slate-100 text-slate-500' };
+                    return (
+                      <tr
+                        key={p.id}
+                        className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
+                        onClick={() => setSelectedProject(p)}
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color || '#94a3b8' }} />
+                            <div>
+                              <p className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">{p.name}</p>
+                              {p.description && <p className="text-[11px] text-slate-400 truncate max-w-[300px]">{p.description}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          {customer ? (
+                            <div>
+                              <p className="text-xs text-slate-700">{customer.name}</p>
+                              {customer.address_city && <p className="text-[10px] text-slate-400">{customer.address_city}</p>}
+                            </div>
+                          ) : <span className="text-[10px] text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-xs text-slate-600">{dept?.name || <span className="text-slate-300">—</span>}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-xs text-slate-600">{(p as any).project_type || <span className="text-slate-300">—</span>}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${st.color}`}>{st.label}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-xs text-slate-500">{new Date(p.created_at).toLocaleDateString('pl-PL')}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span className="text-xs text-slate-500">{new Date(p.updated_at).toLocaleDateString('pl-PL')}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <button
+                            onClick={(e) => handleDeleteProject(e, p.id)}
+                            className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                            title="Usun z widoku"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     );
