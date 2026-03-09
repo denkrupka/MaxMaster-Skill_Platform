@@ -176,6 +176,7 @@ export const PlansWorkspace: React.FC = () => {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<DrawPoint[]>([]);
   const [calibrationInput, setCalibrationInput] = useState<{ pixelDist: number; show: boolean }>({ pixelDist: 0, show: false });
+  const [calibrationUnit, setCalibrationUnit] = useState<'mm' | 'cm' | 'm'>('mm');
   const [showScaleSettings, setShowScaleSettings] = useState(false);
   const [aiScaleLoading, setAiScaleLoading] = useState(false);
 
@@ -1015,6 +1016,10 @@ export const PlansWorkspace: React.FC = () => {
   const handleSwitchVersion = useCallback((plan: PlanRecord) => {
     setSelectedPlan(plan);
     setShowVersionHistory(false);
+    setIsDirty(false);
+    setChangeLog([]);
+    // Reload all annotations/measurements/comments/photos for this version
+    loadPersistedData(plan.id);
     notify(`Przelaczono na wersje ${plan.version}`);
   }, [notify]);
 
@@ -1097,6 +1102,21 @@ export const PlansWorkspace: React.FC = () => {
         if (cmtErr) console.error('Save comment error:', cmtErr);
       }
 
+      // Save photos to new version
+      for (const pin of photoPins) {
+        for (const photo of pin.photos) {
+          const { error: photoErr } = await supabase.from('plan_photos').insert({
+            plan_id: newPlanId,
+            position_x: pin.x,
+            position_y: pin.y,
+            photo_url: photo.url,
+            label: photo.label || null,
+            created_by: currentUser?.id || null,
+          });
+          if (photoErr) console.error('Save photo error:', photoErr);
+        }
+      }
+
       // Update local state to point to new version
       if (newPlan) {
         console.log('New version saved successfully:', newPlan.id, 'version:', newPlan.version);
@@ -1117,7 +1137,7 @@ export const PlansWorkspace: React.FC = () => {
       await supabase.from('plans').update({ is_current_version: true }).eq('id', selectedPlan.id).catch(() => {});
       notify(err.message || 'Blad zapisu', 'error');
     }
-  }, [selectedPlan, isDirty, activeFile, annotations, measurements, comments, currentUser, notify]);
+  }, [selectedPlan, isDirty, activeFile, annotations, measurements, comments, photoPins, currentUser, notify]);
 
   // ---- Export ----
 
@@ -1233,9 +1253,10 @@ export const PlansWorkspace: React.FC = () => {
     });
   }, [isCalibrating]);
 
-  const handleCalibrationSubmit = useCallback((realMm: number) => {
-    if (calibrationInput.pixelDist <= 0 || realMm <= 0) return;
-    const scaleRatio = realMm / calibrationInput.pixelDist;
+  const handleCalibrationSubmit = useCallback((realValue: number, unit: 'mm' | 'cm' | 'm') => {
+    if (calibrationInput.pixelDist <= 0 || realValue <= 0) return;
+    const toMm = unit === 'm' ? realValue * 1000 : unit === 'cm' ? realValue * 10 : realValue;
+    const scaleRatio = toMm / calibrationInput.pixelDist;
     if (selectedPlan) {
       supabase.from('plans').update({ scale_ratio: scaleRatio }).eq('id', selectedPlan.id)
         .then(() => {
@@ -1246,6 +1267,7 @@ export const PlansWorkspace: React.FC = () => {
     setIsCalibrating(false);
     setCalibrationPoints([]);
     setCalibrationInput({ pixelDist: 0, show: false });
+    setCalibrationUnit('mm');
   }, [calibrationInput, selectedPlan, notify]);
 
   const handleAiScaleDetect = useCallback(async () => {
@@ -3677,24 +3699,36 @@ export const PlansWorkspace: React.FC = () => {
             <p className="text-xs text-slate-500 mb-3">
               Odleglosc w pikselach: {Math.round(calibrationInput.pixelDist)} px
             </p>
-            <label className="block text-xs text-slate-600 mb-1">Rzeczywista odleglosc (mm):</label>
-            <input
-              type="number"
-              autoFocus
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-4"
-              placeholder="np. 1000"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = parseFloat((e.target as HTMLInputElement).value);
-                  if (val > 0) handleCalibrationSubmit(val);
-                }
-                if (e.key === 'Escape') {
-                  setIsCalibrating(false);
-                  setCalibrationPoints([]);
-                  setCalibrationInput({ pixelDist: 0, show: false });
-                }
-              }}
-            />
+            <label className="block text-xs text-slate-600 mb-1">Rzeczywista odleglosc:</label>
+            <div className="flex gap-2 mb-4">
+              <input
+                id="cal-value-input"
+                type="number"
+                autoFocus
+                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+                placeholder={calibrationUnit === 'm' ? 'np. 5' : calibrationUnit === 'cm' ? 'np. 100' : 'np. 1000'}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = parseFloat((e.target as HTMLInputElement).value);
+                    if (val > 0) handleCalibrationSubmit(val, calibrationUnit);
+                  }
+                  if (e.key === 'Escape') {
+                    setIsCalibrating(false);
+                    setCalibrationPoints([]);
+                    setCalibrationInput({ pixelDist: 0, show: false });
+                  }
+                }}
+              />
+              <select
+                value={calibrationUnit}
+                onChange={(e) => setCalibrationUnit(e.target.value as 'mm' | 'cm' | 'm')}
+                className="px-2 py-2 border border-slate-300 rounded-lg text-sm bg-white"
+              >
+                <option value="mm">mm</option>
+                <option value="cm">cm</option>
+                <option value="m">m</option>
+              </select>
+            </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => {
                 setIsCalibrating(false);
@@ -3702,6 +3736,13 @@ export const PlansWorkspace: React.FC = () => {
                 setCalibrationInput({ pixelDist: 0, show: false });
               }} className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">
                 Anuluj
+              </button>
+              <button onClick={() => {
+                const input = document.getElementById('cal-value-input') as HTMLInputElement;
+                const val = parseFloat(input?.value || '0');
+                if (val > 0) handleCalibrationSubmit(val, calibrationUnit);
+              }} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                Zastosuj
               </button>
             </div>
           </div>
