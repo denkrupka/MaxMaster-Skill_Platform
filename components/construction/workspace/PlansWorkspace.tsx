@@ -1,5 +1,5 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft } from 'lucide-react';
+import { Loader2, X, Search, ChevronDown, Trash2, ArrowUpDown, FolderOpen, Plus, Building2, Settings, Download, ArrowLeft, Camera, Upload } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useAppContext } from '../../../context/AppContext';
 import { supabase } from '../../../lib/supabase';
@@ -178,9 +178,19 @@ export const PlansWorkspace: React.FC = () => {
   const [calibrationInput, setCalibrationInput] = useState<{ pixelDist: number; show: boolean }>({ pixelDist: 0, show: false });
 
   // ---- Photo pins ----
-  const [photoPins, setPhotoPins] = useState<{ id: string; x: number; y: number; url: string; label?: string }[]>([]);
+  const [photoPins, setPhotoPins] = useState<{ id: string; x: number; y: number; url: string; label?: string; authorName?: string; createdAt?: string }[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [pendingPhotoPoint, setPendingPhotoPoint] = useState<DrawPoint | null>(null);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [showPhotoGallery, setShowPhotoGallery] = useState<{ pinId: string } | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+
+  // ---- Comment modal ----
+  const [commentModal, setCommentModal] = useState<{ mode: 'create'; x: number; y: number } | { mode: 'view'; commentId: string } | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [replyText, setReplyText] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   // ---- Hover tooltip ----
   const [hoverTooltip, setHoverTooltip] = useState<{ x: number; y: number; obj: DrawingObject } | null>(null);
@@ -1336,54 +1346,71 @@ export const PlansWorkspace: React.FC = () => {
     }
 
     if (ws.activeTool === 'comment') {
-      const commentText = prompt('Dodaj komentarz:');
-      if (!commentText) return;
-      const newComment: CommentThread = {
-        id: `comment-${Date.now()}`,
-        fileId: activeFile?.id || '',
-        positionX: pt.x,
-        positionY: pt.y,
-        authorId: currentUser?.id || '',
-        authorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User',
-        content: commentText,
-        isResolved: false,
-        replies: [],
-        createdAt: new Date().toISOString(),
-      };
-      setComments(prev => [...prev, newComment]);
-      // Persist comment
-      if (activeFile?.id) {
-        supabase.from('plan_comments').insert({
-          plan_id: activeFile.id,
-          position_x: pt.x,
-          position_y: pt.y,
-          author_id: currentUser?.id,
-          content: commentText,
-          is_resolved: false,
-        }).then(() => {});
+      // Check if clicking on existing comment pin
+      const clickedComment = comments.find(c =>
+        c.positionX != null && c.positionY != null &&
+        Math.sqrt((c.positionX - pt.x) ** 2 + (c.positionY - pt.y) ** 2) < 20
+      );
+      if (clickedComment) {
+        setCommentModal({ mode: 'view', commentId: clickedComment.id });
+      } else {
+        setCommentModal({ mode: 'create', x: pt.x, y: pt.y });
+        setCommentText('');
       }
       return;
     }
 
     if (ws.activeTool === 'camera') {
-      setPendingPhotoPoint(pt);
-      photoInputRef.current?.click();
+      // Check if clicking on existing photo pin
+      const clickedPin = photoPins.find(p =>
+        Math.sqrt((p.x - pt.x) ** 2 + (p.y - pt.y) ** 2) < 20
+      );
+      if (clickedPin) {
+        setShowPhotoGallery({ pinId: clickedPin.id });
+        setGalleryIndex(0);
+      } else {
+        setPendingPhotoPoint(pt);
+        setShowPhotoModal(true);
+      }
       return;
     }
 
     if (ws.activeTool === 'erase') {
-      // Find and remove nearest annotation
-      const threshold = 20;
+      // Find and remove nearest annotation — check ALL points, not just first
+      const threshold = 25;
+      let removedAnn = false;
       setAnnotations(prev => {
         const remaining = prev.filter(ann => {
           const geom = ann.geometry;
           if (!geom || !geom.points || geom.points.length === 0) return true;
-          const firstPt = geom.points[0];
-          const dist = Math.sqrt((firstPt.x - pt.x) ** 2 + (firstPt.y - pt.y) ** 2);
-          return dist > threshold;
+          // Check if click is near ANY point of the annotation
+          const isNear = geom.points.some((p: DrawPoint) => {
+            const dist = Math.sqrt((p.x - pt.x) ** 2 + (p.y - pt.y) ** 2);
+            return dist <= threshold;
+          });
+          if (isNear) removedAnn = true;
+          return !isNear;
         });
         return remaining;
       });
+      // Also check measurements
+      if (!removedAnn) {
+        setMeasurements(prev => prev.filter(m => {
+          if (!m.points || m.points.length === 0) return true;
+          return !m.points.some((p: DrawPoint) => Math.sqrt((p.x - pt.x) ** 2 + (p.y - pt.y) ** 2) <= threshold);
+        }));
+      }
+      // Also check comments
+      if (!removedAnn) {
+        const removedComment = comments.find(c =>
+          c.positionX != null && c.positionY != null &&
+          Math.sqrt((c.positionX - pt.x) ** 2 + (c.positionY - pt.y) ** 2) <= threshold
+        );
+        if (removedComment) {
+          setComments(prev => prev.filter(c => c.id !== removedComment.id));
+          if (activeFile?.id) supabase.from('plan_comments').delete().eq('id', removedComment.id).then(() => {});
+        }
+      }
       return;
     }
 
@@ -1421,7 +1448,8 @@ export const PlansWorkspace: React.FC = () => {
 
     if (!isDrawing) return;
 
-    if (ws.activeTool === 'pen' || ws.activeTool === 'highlighter') {
+    if (ws.activeTool === 'pen' || ws.activeTool === 'highlighter' || ws.activeTool === 'measure-area' || ws.activeTool === 'measure-length') {
+      // Freehand / polyline tools — accumulate points
       setDrawPoints(prev => [...prev, pt]);
     } else {
       // For shapes, only track start + current
@@ -1486,19 +1514,41 @@ export const PlansWorkspace: React.FC = () => {
     else if (tool === 'issue-cloud') annotationType = 'issue-cloud';
 
     if (['measure-length', 'measure-area', 'measure-polyline'].includes(tool)) {
-      // Create measurement
-      const p0 = drawPoints[0];
-      const p1 = drawPoints[drawPoints.length - 1];
-      const pixelDist = Math.sqrt((p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2);
       const scaleFactor = activeFile?.scale_ratio || 1;
-      const realValue = pixelDist * scaleFactor;
+      let realValue: number;
+      let unit: string;
+      let measureType: 'length' | 'area';
+      const pts = [...drawPoints];
+
+      if (tool === 'measure-area') {
+        // Close the contour — add first point to end
+        if (pts.length >= 3) pts.push(pts[0]);
+        // Calculate area using Shoelace formula (in pixels), then scale
+        let pixelArea = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          pixelArea += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y;
+        }
+        pixelArea = Math.abs(pixelArea) / 2;
+        realValue = Math.round(pixelArea * scaleFactor * scaleFactor) / 100; // convert mm2 to cm2 roughly
+        unit = 'm2';
+        measureType = 'area';
+      } else {
+        // Length: sum all segment lengths for polyline
+        let totalPixelDist = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+          totalPixelDist += Math.sqrt((pts[i + 1].x - pts[i].x) ** 2 + (pts[i + 1].y - pts[i].y) ** 2);
+        }
+        realValue = Math.round(totalPixelDist * scaleFactor * 100) / 100;
+        unit = 'mm';
+        measureType = 'length';
+      }
 
       const measurement: MeasurementItem = {
         id: `meas-${Date.now()}`,
-        type: tool === 'measure-area' ? 'area' : 'length',
-        value: Math.round(realValue * 100) / 100,
-        unit: tool === 'measure-area' ? 'm2' : 'mm',
-        points: [...drawPoints],
+        type: measureType,
+        value: realValue,
+        unit,
+        points: pts,
         createdBy: currentUser?.id || '',
         createdAt: new Date().toISOString(),
       };
@@ -2546,7 +2596,34 @@ export const PlansWorkspace: React.FC = () => {
         )}
 
         {/* Viewer Area */}
-        <div ref={viewerContainerRef} className="flex-1 overflow-auto relative bg-slate-200">
+        <div ref={viewerContainerRef} className="flex-1 overflow-auto relative bg-slate-200"
+          style={{ cursor: ws.activeTool === 'pan' ? (isPanning ? 'grabbing' : 'grab') : undefined }}
+          onMouseDown={e => {
+            if (ws.activeTool === 'pan') {
+              const container = viewerContainerRef.current;
+              if (container) {
+                setIsPanning(true);
+                setPanStart({ x: e.clientX, y: e.clientY, scrollLeft: container.scrollLeft, scrollTop: container.scrollTop });
+              }
+              e.preventDefault();
+            }
+          }}
+          onMouseMove={e => {
+            if (isPanning && panStart) {
+              const container = viewerContainerRef.current;
+              if (container) {
+                container.scrollLeft = panStart.scrollLeft - (e.clientX - panStart.x);
+                container.scrollTop = panStart.scrollTop - (e.clientY - panStart.y);
+              }
+              e.preventDefault();
+            }
+          }}
+          onMouseUp={() => {
+            if (isPanning) { setIsPanning(false); setPanStart(null); }
+          }}
+          onMouseLeave={() => {
+            if (isPanning) { setIsPanning(false); setPanStart(null); }
+          }}>
           {!activeFile ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center">
               <div className="w-16 h-16 rounded-2xl bg-slate-300/50 flex items-center justify-center mb-4">
@@ -2964,6 +3041,225 @@ export const PlansWorkspace: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ===== COMMENT MODAL ===== */}
+      {commentModal && commentModal.mode === 'create' && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setCommentModal(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-96 max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">Nowy komentarz</h3>
+              <button onClick={() => setCommentModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4">
+              <textarea
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                rows={4}
+                autoFocus
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                placeholder="Wpisz komentarz..."
+              />
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => setCommentModal(null)} className="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 rounded-lg">Anuluj</button>
+              <button
+                disabled={!commentText.trim()}
+                onClick={() => {
+                  if (!commentText.trim()) return;
+                  const newComment: CommentThread = {
+                    id: `comment-${Date.now()}`, fileId: activeFile?.id || '',
+                    positionX: commentModal.x, positionY: commentModal.y,
+                    authorId: currentUser?.id || '',
+                    authorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User',
+                    content: commentText.trim(), isResolved: false, replies: [], createdAt: new Date().toISOString(),
+                  };
+                  setComments(prev => [...prev, newComment]);
+                  if (activeFile?.id) {
+                    supabase.from('plan_comments').insert({
+                      plan_id: activeFile.id, position_x: commentModal.x, position_y: commentModal.y,
+                      author_id: currentUser?.id, author_name: newComment.authorName, content: commentText.trim(), is_resolved: false,
+                    }).then(() => {});
+                  }
+                  setCommentModal(null);
+                  setCommentText('');
+                  notify('Komentarz dodany');
+                }}
+                className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >Dodaj</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== COMMENT VIEW MODAL ===== */}
+      {commentModal && commentModal.mode === 'view' && (() => {
+        const c = comments.find(x => x.id === commentModal.commentId);
+        if (!c) return null;
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setCommentModal(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-[420px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-800">Komentarz</h3>
+                <button onClick={() => setCommentModal(null)} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+              </div>
+              <div className="p-4 space-y-3 overflow-y-auto max-h-[60vh]">
+                {/* Main comment */}
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-slate-700">{c.authorName}</span>
+                    <span className="text-[10px] text-slate-400">{new Date(c.createdAt).toLocaleString('pl-PL')}</span>
+                  </div>
+                  {editingCommentId === c.id ? (
+                    <div className="space-y-2">
+                      <textarea value={editingCommentText} onChange={e => setEditingCommentText(e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg" rows={3} />
+                      <div className="flex gap-1">
+                        <button onClick={() => {
+                          setComments(prev => prev.map(x => x.id === c.id ? { ...x, content: editingCommentText.trim() } : x));
+                          if (activeFile?.id) supabase.from('plan_comments').update({ content: editingCommentText.trim() }).eq('id', c.id).then(() => {});
+                          setEditingCommentId(null);
+                        }} className="px-2 py-1 text-xs bg-blue-600 text-white rounded">Zapisz</button>
+                        <button onClick={() => setEditingCommentId(null)} className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded">Anuluj</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap">{c.content}</p>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => { setEditingCommentId(c.id); setEditingCommentText(c.content); }}
+                      className="text-[10px] text-blue-600 hover:text-blue-800">Edytuj</button>
+                    <button onClick={() => {
+                      setComments(prev => prev.filter(x => x.id !== c.id));
+                      if (activeFile?.id) supabase.from('plan_comments').delete().eq('id', c.id).then(() => {});
+                      setCommentModal(null);
+                      notify('Komentarz usuniety');
+                    }} className="text-[10px] text-red-500 hover:text-red-700">Usun</button>
+                    <button onClick={() => {
+                      setComments(prev => prev.map(x => x.id === c.id ? { ...x, isResolved: !x.isResolved } : x));
+                      if (activeFile?.id) supabase.from('plan_comments').update({ is_resolved: !c.isResolved }).eq('id', c.id).then(() => {});
+                    }} className="text-[10px] text-green-600 hover:text-green-800">{c.isResolved ? 'Otworz ponownie' : 'Rozwiaz'}</button>
+                  </div>
+                </div>
+                {/* Replies */}
+                {c.replies.map((r: any, i: number) => (
+                  <div key={i} className="ml-4 bg-blue-50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-700">{r.authorName || 'User'}</span>
+                      <span className="text-[10px] text-slate-400">{r.createdAt ? new Date(r.createdAt).toLocaleString('pl-PL') : ''}</span>
+                    </div>
+                    <p className="text-sm text-slate-800">{r.content}</p>
+                  </div>
+                ))}
+                {/* Reply input */}
+                <div className="flex gap-2">
+                  <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && replyText.trim()) {
+                        const reply = { id: crypto.randomUUID(), authorId: currentUser?.id || '', authorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User', content: replyText.trim(), createdAt: new Date().toISOString() };
+                        setComments(prev => prev.map(x => x.id === c.id ? { ...x, replies: [...x.replies, reply] } : x));
+                        setReplyText('');
+                      }
+                    }}
+                    className="flex-1 px-3 py-1.5 text-sm border border-slate-200 rounded-lg" placeholder="Odpowiedz..." />
+                  <button disabled={!replyText.trim()} onClick={() => {
+                    if (!replyText.trim()) return;
+                    const reply = { id: crypto.randomUUID(), authorId: currentUser?.id || '', authorName: `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() || 'User', content: replyText.trim(), createdAt: new Date().toISOString() };
+                    setComments(prev => prev.map(x => x.id === c.id ? { ...x, replies: [...x.replies, reply] } : x));
+                    setReplyText('');
+                  }} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-50">Wyslij</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== PHOTO UPLOAD MODAL ===== */}
+      {showPhotoModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => { setShowPhotoModal(false); setPendingPhotoPoint(null); }}>
+          <div className="bg-white rounded-xl shadow-2xl w-80" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">Dodaj zdjecie</h3>
+              <button onClick={() => { setShowPhotoModal(false); setPendingPhotoPoint(null); }} className="p-1 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <button
+                onClick={() => { photoInputRef.current?.setAttribute('capture', 'environment'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              >
+                <Camera className="w-4 h-4" /> Zrob zdjecie
+              </button>
+              <button
+                onClick={() => { photoInputRef.current?.removeAttribute('capture'); photoInputRef.current?.click(); setShowPhotoModal(false); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                <Upload className="w-4 h-4" /> Zaladuj z urzadzenia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== PHOTO GALLERY MODAL ===== */}
+      {showPhotoGallery && (() => {
+        const allPhotos = photoPins;
+        const startIdx = allPhotos.findIndex(p => p.id === showPhotoGallery.pinId);
+        const idx = galleryIndex >= 0 && galleryIndex < allPhotos.length ? galleryIndex : (startIdx >= 0 ? startIdx : 0);
+        const photo = allPhotos[idx];
+        if (!photo) return null;
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80" onClick={() => setShowPhotoGallery(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-[700px] max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Zdjecie {idx + 1} z {allPhotos.length}</h3>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
+                    {photo.authorName && <span>Dodal: {photo.authorName}</span>}
+                    {photo.createdAt && <span>{new Date(photo.createdAt).toLocaleString('pl-PL')}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <a href={photo.url} download className="p-1.5 hover:bg-slate-100 rounded text-slate-500" title="Pobierz"><Download className="w-4 h-4" /></a>
+                  <button onClick={() => {
+                    setPhotoPins(prev => prev.filter(p => p.id !== photo.id));
+                    if (activeFile?.id) supabase.from('plan_photos').delete().eq('id', photo.id).then(() => {});
+                    if (allPhotos.length <= 1) setShowPhotoGallery(null);
+                    else setGalleryIndex(Math.min(idx, allPhotos.length - 2));
+                    notify('Zdjecie usuniete');
+                  }} className="p-1.5 hover:bg-red-50 rounded text-slate-500 hover:text-red-500" title="Usun"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => setShowPhotoGallery(null)} className="p-1.5 hover:bg-slate-100 rounded"><X className="w-4 h-4" /></button>
+                </div>
+              </div>
+              <div className="flex-1 flex items-center justify-center bg-slate-900 relative min-h-[400px]">
+                {allPhotos.length > 1 && (
+                  <button onClick={() => setGalleryIndex((idx - 1 + allPhotos.length) % allPhotos.length)}
+                    className="absolute left-2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-black/70">
+                    <ChevronDown className="w-5 h-5 rotate-90" />
+                  </button>
+                )}
+                <img src={photo.url} alt={photo.label || 'Zdjecie'} className="max-w-full max-h-[70vh] object-contain" />
+                {allPhotos.length > 1 && (
+                  <button onClick={() => setGalleryIndex((idx + 1) % allPhotos.length)}
+                    className="absolute right-2 z-10 p-2 bg-black/50 text-white rounded-full hover:bg-black/70">
+                    <ChevronDown className="w-5 h-5 -rotate-90" />
+                  </button>
+                )}
+              </div>
+              {/* Thumbnails */}
+              {allPhotos.length > 1 && (
+                <div className="px-3 py-2 bg-slate-50 border-t border-slate-200 flex gap-2 overflow-x-auto">
+                  {allPhotos.map((p, i) => (
+                    <button key={p.id} onClick={() => setGalleryIndex(i)}
+                      className={`w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 border-2 ${i === idx ? 'border-blue-500' : 'border-transparent hover:border-slate-300'}`}>
+                      <img src={p.url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Notification toast */}
       {notification && (

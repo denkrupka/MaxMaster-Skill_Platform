@@ -3,7 +3,7 @@ import {
   Search, Upload, ChevronRight, FileImage, FolderPlus,
   MoreVertical, Eye, Trash2, Copy, History, BarChart3,
   Sparkles, BookOpen, AlertTriangle, CheckCircle2, GripVertical,
-  File, FileType2, Image, FileText, X, Download
+  File, FileType2, Image, FileText, X, Download, Pencil, Plus
 } from 'lucide-react';
 import type { FileStatus } from './WorkspaceTypes';
 
@@ -45,6 +45,7 @@ interface PlansSidebarProps {
   onDeleteFolder?: (folderId: string) => void;
   onCreateSubfolder?: (parentFolderId: string, name: string) => void;
   onMoveFileToFolder?: (fileId: string, folderId: string) => void;
+  onReorderFile?: (fileId: string, targetFileId: string, position: 'before' | 'after') => void;
 }
 
 const STATUS_BADGE: Record<FileStatus, { color: string; label: string }> = {
@@ -72,7 +73,7 @@ const FORMAT_ICON: Record<string, React.ReactNode> = {
 export const PlansSidebar: React.FC<PlansSidebarProps> = ({
   folders, activeFileId, searchQuery, onSearchChange,
   onSelectFile, onImport, onCreateFolder, onFileAction, onToggleFolder, onDragDrop,
-  onRenameFolder, onDeleteFolder, onCreateSubfolder, onMoveFileToFolder,
+  onRenameFolder, onDeleteFolder, onCreateSubfolder, onMoveFileToFolder, onReorderFile,
 }) => {
   const [contextMenu, setContextMenu] = useState<{ fileId: string; x: number; y: number } | null>(null);
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -218,12 +219,36 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
               )}
               <span className="text-[10px] text-slate-400">{folder.files.length}</span>
               {folder.id !== '__default__' && (
-                <button
-                  onClick={e => { e.stopPropagation(); setFolderContextMenu({ folderId: folder.id, x: e.clientX, y: e.clientY }); }}
-                  className="p-0.5 rounded hover:bg-slate-200 text-slate-400 opacity-0 group-hover/folder:opacity-100 transition"
-                >
-                  <MoreVertical className="w-3 h-3" />
-                </button>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover/folder:opacity-100 transition">
+                  <button
+                    onClick={e => { e.stopPropagation(); setAddSubfolderTo(folder.id); setSubfolderName(''); }}
+                    className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500"
+                    title="Dodaj podfolder"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      setEditingFolderId(folder.id);
+                      setEditingFolderName(folder.name);
+                    }}
+                    className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-blue-500"
+                    title="Edytuj folder"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (confirm('Usunac folder?')) onDeleteFolder?.(folder.id);
+                    }}
+                    className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-red-500"
+                    title="Usun folder"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               )}
             </div>
 
@@ -260,7 +285,16 @@ export const PlansSidebar: React.FC<PlansSidebarProps> = ({
                 onDragOver={e => { e.preventDefault(); setDragOverId(file.id); }}
                 onDragLeave={() => setDragOverId(null)}
                 onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
-                onDrop={() => { if (draggedId && onDragDrop) onDragDrop(draggedId, file.id); }}
+                onDrop={e => {
+                  e.stopPropagation();
+                  if (draggedId && draggedId !== file.id) {
+                    // If dragged into a different folder, move to that folder
+                    if (onReorderFile) onReorderFile(draggedId, file.id, 'before');
+                    else if (onDragDrop) onDragDrop(draggedId, file.id);
+                  }
+                  setDraggedId(null);
+                  setDragOverId(null);
+                }}
                 onContextMenu={e => handleContextMenu(e, file.id)}
                 className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-slate-50 transition-colors ${
                   activeFileId === file.id

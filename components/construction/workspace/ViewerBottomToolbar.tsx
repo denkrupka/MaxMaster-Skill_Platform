@@ -150,15 +150,11 @@ export const ViewerBottomToolbar: React.FC<ViewerBottomToolbarProps> = ({
           <div className="absolute left-0 bottom-full mb-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1" onClick={e => e.stopPropagation()}>
             <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-length' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
               onClick={() => { onSetTool('measure-length'); setShowMeasureMenu(false); }}>
-              <Crosshair className="w-4 h-4" /> Odcinek
-            </button>
-            <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-polyline' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-              onClick={() => { onSetTool('measure-polyline'); setShowMeasureMenu(false); }}>
-              <Ruler className="w-4 h-4" /> Polilinia — lamana
+              <Ruler className="w-4 h-4" /> Polilinia
             </button>
             <button className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm ${activeTool === 'measure-area' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
               onClick={() => { onSetTool('measure-area'); setShowMeasureMenu(false); }}>
-              <Square className="w-4 h-4" /> Obszar
+              <Square className="w-4 h-4" /> Obszar (zamkniety kontur)
             </button>
             {!hasScale && (
               <>
