@@ -504,6 +504,183 @@ function parseXmlPosition(el: Element): KosztorysPosition {
 }
 
 // =====================================================
+// XLSX PARSER
+// =====================================================
+
+/**
+ * Parse an XLSX file (przedmiar / kosztorys) into KosztorysCostEstimateData.
+ *
+ * Heuristics:
+ * 1. Scans rows for columns: Lp/Nr, Podstawa, Opis/Nazwa, j.m., Ilość/Nakład
+ * 2. Rows with short Lp like "1", "2" etc. and no sub-number are sections (działy)
+ * 3. Rows with compound Lp like "1.1", "2.3" are positions (pozycje)
+ * 4. Falls back: if no sections detected, creates one "Dział 1" and puts all rows as positions
+ */
+export function parseXlsxFile(buffer: ArrayBuffer): KosztorysCostEstimateData {
+  // Dynamic import — xlsx is already in dependencies
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const XLSX = require('xlsx');
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) throw new Error('Plik XLSX nie zawiera żadnych arkuszy');
+  const sheet = workbook.Sheets[sheetName];
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  if (rows.length < 2) throw new Error('Plik XLSX jest pusty lub zawiera zbyt mało danych');
+
+  // ---- Detect header row and column indices ----
+  let headerRowIdx = -1;
+  let colLp = -1, colBase = -1, colName = -1, colUnit = -1, colQty = -1;
+
+  const lpPatterns = /^(lp\.?|nr\.?|l\.p\.?|numer|poz\.?)$/i;
+  const basePatterns = /^(podstawa|baza|base|katalog|knnr?|knr)$/i;
+  const namePatterns = /^(opis|nazwa|name|description|pozycja|tytul|tytuł)$/i;
+  const unitPatterns = /^(j\.?\s?m\.?|jedn\.?|jednostka|unit)$/i;
+  const qtyPatterns = /^(ilo[sś][cć]|nakład|naklad|quantity|qty|ilosc|przedmiar|obmiar)$/i;
+
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    const row = rows[r];
+    if (!row || row.length < 3) continue;
+    let matchCount = 0;
+    for (let c = 0; c < row.length; c++) {
+      const cell = String(row[c]).trim();
+      if (!cell) continue;
+      if (lpPatterns.test(cell)) { colLp = c; matchCount++; }
+      else if (basePatterns.test(cell)) { colBase = c; matchCount++; }
+      else if (namePatterns.test(cell)) { colName = c; matchCount++; }
+      else if (unitPatterns.test(cell)) { colUnit = c; matchCount++; }
+      else if (qtyPatterns.test(cell)) { colQty = c; matchCount++; }
+    }
+    if (matchCount >= 2) {
+      headerRowIdx = r;
+      break;
+    }
+    // Reset if not enough matches
+    colLp = -1; colBase = -1; colName = -1; colUnit = -1; colQty = -1;
+  }
+
+  // Fallback: no header detected — assume first row is header or use positional columns
+  if (headerRowIdx === -1) {
+    headerRowIdx = 0;
+    // Try positional: Lp=0, Podstawa=1, Opis=2, Jm=3, Ilość=4
+    colLp = 0;
+    colBase = rows[0]?.length > 4 ? 1 : -1;
+    colName = rows[0]?.length > 4 ? 2 : 1;
+    colUnit = rows[0]?.length > 4 ? 3 : 2;
+    colQty = rows[0]?.length > 4 ? 4 : 3;
+  }
+
+  // If colName still -1, try to find the widest text column
+  if (colName === -1) {
+    let maxLen = 0;
+    for (let c = 0; c < (rows[headerRowIdx + 1]?.length || 0); c++) {
+      const len = String(rows[headerRowIdx + 1]?.[c] || '').length;
+      if (len > maxLen && c !== colLp && c !== colUnit && c !== colQty && c !== colBase) {
+        maxLen = len;
+        colName = c;
+      }
+    }
+  }
+
+  // ---- Parse data rows ----
+  interface RawRow {
+    lp: string;
+    base: string;
+    name: string;
+    unit: string;
+    qty: number;
+    rowIdx: number;
+  }
+
+  const dataRows: RawRow[] = [];
+  for (let r = headerRowIdx + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const name = colName >= 0 ? String(row[colName] ?? '').trim() : '';
+    if (!name) continue; // skip empty rows
+
+    const lp = colLp >= 0 ? String(row[colLp] ?? '').trim() : '';
+    const base = colBase >= 0 ? String(row[colBase] ?? '').trim() : '';
+    const unit = colUnit >= 0 ? String(row[colUnit] ?? '').trim() : '';
+    const qtyRaw = colQty >= 0 ? row[colQty] : 0;
+    const qty = typeof qtyRaw === 'number' ? qtyRaw : parsePolishNumber(String(qtyRaw));
+
+    dataRows.push({ lp, base, name, unit, qty, rowIdx: r });
+  }
+
+  if (dataRows.length === 0) throw new Error('Nie znaleziono danych w pliku XLSX');
+
+  // ---- Classify rows into sections and positions ----
+  // Section heuristic: row has Lp that is a simple integer (no dot), no unit, OR name looks like a header
+  const result: KosztorysCostEstimateData = {
+    root: {
+      sectionIds: [],
+      positionIds: [],
+      factors: createDefaultFactors(),
+      overheads: [
+        createDefaultIndirectCostsOverhead(65),
+        createDefaultProfitOverhead(10),
+        createDefaultPurchaseCostsOverhead(5),
+      ],
+    },
+    sections: {},
+    positions: {},
+  };
+
+  let currentSection: KosztorysSection | null = null;
+  let sectionCounter = 0;
+
+  const isSectionRow = (row: RawRow): boolean => {
+    // Simple integer Lp without unit and qty — likely a section header
+    if (/^\d+$/.test(row.lp) && !row.unit && row.qty === 0 && !row.base) return true;
+    // Roman numeral
+    if (/^[IVXLCDM]+\.?$/i.test(row.lp) && !row.unit) return true;
+    // Name starts with "Dział", "Rozdział", "Element"
+    if (/^(dzia[lł]|rozdzia[lł]|element)\s/i.test(row.name) && !row.unit) return true;
+    return false;
+  };
+
+  for (const row of dataRows) {
+    if (isSectionRow(row)) {
+      sectionCounter++;
+      const section = createNewSection(row.name, row.lp || String(sectionCounter));
+      result.sections[section.id] = section;
+      result.root.sectionIds.push(section.id);
+      currentSection = section;
+    } else {
+      // It's a position
+      if (!currentSection) {
+        // Create default section
+        sectionCounter++;
+        const section = createNewSection('Dział 1', '1');
+        result.sections[section.id] = section;
+        result.root.sectionIds.push(section.id);
+        currentSection = section;
+      }
+
+      const position = createNewPosition(
+        row.base || '',
+        row.name,
+        row.unit || 'szt.'
+      );
+
+      if (row.qty > 0) {
+        position.measurements = addMeasurementEntry(
+          position.measurements,
+          String(row.qty),
+          null
+        );
+      }
+
+      result.positions[position.id] = position;
+      currentSection.positionIds.push(position.id);
+    }
+  }
+
+  return result;
+}
+
+// =====================================================
 // GEMINI RESPONSE CONVERTER
 // =====================================================
 

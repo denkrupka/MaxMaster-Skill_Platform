@@ -41,6 +41,7 @@ import {
   parseAthFile,
   parseJsonFile,
   parseXmlFile,
+  parseXlsxFile,
   convertGeminiResponseToEstimate,
 } from '../../lib/kosztorysImportParsers';
 import type {
@@ -3166,6 +3167,10 @@ export const KosztorysEditorPage: React.FC = () => {
         setImportProgress('Parsowanie pliku XML...');
         const text = await file.text();
         importedData = parseXmlFile(text);
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        setImportProgress('Parsowanie pliku Excel...');
+        const buffer = await file.arrayBuffer();
+        importedData = parseXlsxFile(buffer);
       } else if (['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
         setImportProgress('Przesyłanie do AI (Gemini)...');
         const buffer = await file.arrayBuffer();
@@ -3195,7 +3200,7 @@ export const KosztorysEditorPage: React.FC = () => {
         setImportProgress('Konwertowanie wyników...');
         importedData = convertGeminiResponseToEstimate(funcData.data);
       } else {
-        throw new Error(`Nieobsługiwany format pliku: .${ext}. Obsługiwane: .ath, .json, .xml, .pdf, .jpg, .png`);
+        throw new Error(`Nieobsługiwany format pliku: .${ext}. Obsługiwane: .ath, .xlsx, .json, .xml, .pdf, .jpg, .png`);
       }
 
       // Count imported items
@@ -13248,7 +13253,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   if (importLoading) return;
                   const input = document.createElement('input');
                   input.type = 'file';
-                  input.accept = '.ath,.xml,.json,.pdf,.jpg,.jpeg,.png,.webp';
+                  input.accept = '.ath,.xlsx,.xls,.xml,.json,.pdf,.jpg,.jpeg,.png,.webp';
                   input.onchange = (e) => {
                     const file = (e.target as HTMLInputElement).files?.[0];
                     if (file) { setImportFile(file); setImportError(null); }
@@ -13261,7 +13266,7 @@ export const KosztorysEditorPage: React.FC = () => {
                   Przeciągnij plik tutaj lub <span className="text-blue-600 font-medium">wybierz z dysku</span>
                 </p>
                 <p className="text-xs text-gray-400">
-                  Obsługiwane formaty: .ath, .xml, .json, .pdf, .jpg, .png
+                  Obsługiwane formaty: .ath, .xlsx, .xml, .json, .pdf, .jpg, .png
                 </p>
               </div>
 
